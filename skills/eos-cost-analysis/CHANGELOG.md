@@ -21,3 +21,10 @@
 - Clarified EKS $0.50 is the avoidable ES premium (standard $0.10 applies regardless)
 - Added `pricing:GetProducts` / `pricing:GetAttributeValues` to prerequisites
 - Added response-size guardrail: extract only pricePerUnit, never dump full PriceList
+
+## 1.2.0 (2026-08-20)
+
+- Added per-version EOS date verification discipline to prevent "date bleed" (applying one version's EOS date to a different version/engine)
+- Added sanity checks: chronological consistency and "clearly outdated version reported as supported" red flags
+- Reinforced that services with multiple engine families have separate lifecycles — each must be looked up independently
+- Explicit rule: never substitute a similar version's date as a proxy; mark UNVERIFIED instead
