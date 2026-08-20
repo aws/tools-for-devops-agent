@@ -57,6 +57,8 @@ Create a custom agent for scheduled runs that produce reports on a weekly or mon
   - `lambda:ListFunctions`
   - `elasticache:DescribeCacheClusters`
   - `opensearch:ListDomainNames`, `opensearch:DescribeDomains`
+- IAM permissions for live pricing (attach managed policy `AWSPriceListServiceFullAccess`):
+  - `pricing:GetProducts`, `pricing:GetAttributeValues`
 - For multi-account analysis: associate secondary accounts in DevOps Agent settings
 - AWS Support plan: Business, Enterprise On-Ramp, or Enterprise (required for DevOps Agent)
 
