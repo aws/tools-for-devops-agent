@@ -8,7 +8,7 @@ description: Discovers AWS resources approaching or past End of Standard Support
   the AWS Pricing API, and produces a cost-impact report with per-resource breakdown.
 metadata:
   author: rajatgoy
-  version: "1.1.0"
+  version: "1.2.0"
   aws-devops-agent-skills.agent-types: "Chat tasks, Custom agents"
   aws-devops-agent-skills.aws-services: "Amazon EKS, Amazon RDS, AWS Lambda, Amazon ElastiCache, Amazon OpenSearch Service, AWS Health"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
@@ -60,7 +60,8 @@ After Year 3, AWS may force-upgrade the resource.
 
 ## Constraints
 
-- NEVER guess or estimate EOS dates — always verify from AWS documentation
+- NEVER guess or estimate EOS dates — always verify from AWS documentation, per exact engine + version
+- NEVER reuse one version's EOS date for another version, even within the same service — verify each version independently
 - NEVER fabricate pricing rates — retrieve live rates from the AWS Pricing API (Step 3.2)
 - When calling the Pricing API, ALWAYS extract only `pricePerUnit` — never dump the full PriceList (responses are very large)
 - If a version's EOS date is not found, mark it as "UNVERIFIED — check AWS docs"
@@ -173,15 +174,26 @@ After discovery completes, present:
 
 ### Step 3.1 — Validate EOS Dates
 
-For each unique version discovered, verify its End of Standard Support date:
+For each unique version discovered, verify its End of Standard Support date independently:
 
-1. Search AWS documentation: "[service] [version] end of standard support date"
-2. Search AWS documentation: "[service] version lifecycle calendar"
+1. Search AWS documentation for the EXACT engine + version combination discovered (e.g., the specific engine family AND version number as reported by the discovery API — do not generalize).
+2. Search AWS documentation: "[service] version lifecycle" / "[service] supported versions calendar"
 3. Extract: `eos_date` (end of standard support), `es_end_date` (end of extended support)
 
-If documentation search returns no result for a version:
+**CRITICAL — Per-version verification (avoid date bleed):**
+- Verify the EOS date for EACH distinct version SEPARATELY. Never reuse one version's date for another version, even within the same service.
+- Many AWS services have MULTIPLE engine families or generations with completely different lifecycles (for example, a service may have a legacy engine line and a newer engine line that share a console but have separate support calendars). Treat each engine family + version as its own lookup.
+- Match the EOS date to the EXACT version string returned by discovery. If discovery returns an engine name and a version number, both must match the documentation entry you cite.
+- If two versions appear to have the same EOS date, double-check — identical dates across clearly different versions/engines is a red flag that a date was incorrectly copied.
+
+**Sanity checks before accepting an EOS date:**
+- Does the date make chronological sense given the version's release date? (Older versions should have earlier EOS dates than newer ones of the same engine.)
+- Is a version that is clearly several generations behind the current release being reported as "supported with a future EOS date"? If so, re-verify — it may already be past EOS.
+
+If documentation search returns no result for a specific version:
 - Mark as `UNVERIFIED`
-- Note in the report: "EOS date could not be confirmed from AWS documentation"
+- Note in the report: "EOS date could not be confirmed from AWS documentation — verify manually"
+- Do NOT substitute a similar version's date as a proxy
 
 ### Step 3.2 — Get Extended Support Pricing (AWS Pricing API)
 
