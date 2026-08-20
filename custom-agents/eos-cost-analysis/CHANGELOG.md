@@ -10,3 +10,7 @@
 - CSV artifact generation with per-resource cost breakdown
 - Upgrade recommendations with AWS documentation links
 - Lambda deprecated runtime flagging (security risk, no ES cost)
+
+## 1.2.0 (2026-08-20)
+
+- Reinforced per-version EOS date verification in constraints (never reuse one version's date for another, even within the same service) — aligns with skill v1.2.0
