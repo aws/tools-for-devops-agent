@@ -25,6 +25,8 @@ A dedicated custom agent that discovers AWS resources approaching or past End of
   - `lambda:ListFunctions`
   - `elasticache:DescribeCacheClusters`
   - `opensearch:ListDomainNames`, `opensearch:DescribeDomains`
+- IAM permissions for live pricing (managed policy `AWSPriceListServiceFullAccess`):
+  - `pricing:GetProducts`, `pricing:GetAttributeValues`
 - For multi-account analysis: associate secondary accounts in DevOps Agent settings
 
 ## Creating the Agent

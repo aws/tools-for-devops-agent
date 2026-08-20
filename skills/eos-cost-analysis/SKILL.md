@@ -4,11 +4,11 @@ description: Discovers AWS resources approaching or past End of Standard Support
   calculates Extended Support cost impact. Use when a user asks about end of support,
   extended support costs, version deprecation, EOS analysis, or upgrade planning for
   EKS, RDS, Lambda, ElastiCache, or OpenSearch. This skill enumerates resources via
-  AWS APIs, classifies their EOS status, validates dates and pricing against AWS
-  documentation, and produces a cost-impact report with per-resource breakdown.
+  AWS APIs, classifies their EOS status, retrieves live Extended Support pricing from
+  the AWS Pricing API, and produces a cost-impact report with per-resource breakdown.
 metadata:
   author: rajatgoy
-  version: "1.0.0"
+  version: "1.1.0"
   aws-devops-agent-skills.agent-types: "Chat tasks, Custom agents"
   aws-devops-agent-skills.aws-services: "Amazon EKS, Amazon RDS, AWS Lambda, Amazon ElastiCache, Amazon OpenSearch Service, AWS Health"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
@@ -38,28 +38,33 @@ Support charges, and generate an actionable cost-impact report.
 | Amazon ElastiCache | Per node/hour | `elasticache:DescribeCacheClusters` |
 | Amazon OpenSearch | Per instance/hour | `opensearch:ListDomainNames`, `opensearch:DescribeDomains` |
 
-## Extended Support Pricing Tiers
+## Extended Support Pricing
 
-Charges escalate based on how long a resource has been past End of Standard Support:
+Pricing is retrieved live from the AWS Pricing API (`pricing:GetProducts`) — see Phase 3, Step 3.2. Tier behavior differs by service:
 
-- **Year 1** (0–12 months past EOS): Base rate
-- **Year 2** (12–24 months past EOS): 2× base rate
-- **Year 3** (24–36 months past EOS): 3× base rate
+- **EKS**: $0.50/cluster/hour, flat (no Year 3 escalation). This is the ES premium on top of the $0.10 standard cluster cost.
+- **RDS**: $0.10/vCPU/hour (Year 1-2), $0.20/vCPU/hour (Year 3)
+- **ElastiCache**: per-node rate varies by node type; Year 3 is 2× Year 1-2
+- **OpenSearch**: $0.0065 per Normalized Instance Hour, single tier
+- **Lambda**: no Extended Support charge (deprecated runtimes are a security risk only)
 
 After Year 3, AWS may force-upgrade the resource.
 
 ## Prerequisites
 
 - IAM permissions for service discovery APIs (see list per service above)
-- For organization-wide analysis: `organizations:ListAccounts` and `sts:AssumeRole` to a read-only role in member accounts
-- For EOS date and pricing validation: `aws-knowledge-mcp-server` connected to the Agent Space
+- `pricing:GetProducts` and `pricing:GetAttributeValues` permissions (managed policy: `AWSPriceListServiceFullAccess`) for live Extended Support pricing
+- For organization-wide analysis: resources across all associated accounts (via Agent Space cloud source associations)
+- For EOS date validation and upgrade guidance: `verify_aws_claim` or AWS documentation search
 - AWS Health API access (Business Support+ plan) for `health:DescribeEvents`
 
 ## Constraints
 
 - NEVER guess or estimate EOS dates — always verify from AWS documentation
-- NEVER fabricate pricing rates — use only values confirmed via documentation search
-- If a version is not found in documentation, mark it as "UNVERIFIED — check AWS docs"
+- NEVER fabricate pricing rates — retrieve live rates from the AWS Pricing API (Step 3.2)
+- When calling the Pricing API, ALWAYS extract only `pricePerUnit` — never dump the full PriceList (responses are very large)
+- If a version's EOS date is not found, mark it as "UNVERIFIED — check AWS docs"
+- If a pricing usagetype returns empty, use `pricing:GetAttributeValues` to discover the correct format before giving up
 - All output is AI-generated and must be independently verified before taking action
 - Read-only operations only — do not modify any resources
 
@@ -178,18 +183,59 @@ If documentation search returns no result for a version:
 - Mark as `UNVERIFIED`
 - Note in the report: "EOS date could not be confirmed from AWS documentation"
 
-### Step 3.2 — Validate Extended Support Pricing
+### Step 3.2 — Get Extended Support Pricing (AWS Pricing API)
 
-For each service with affected resources:
+**Use the AWS Pricing API (`pricing:GetProducts`) for authoritative, real-time Extended Support pricing.** Do NOT use documentation search or model knowledge for pricing.
 
-1. Search `aws-knowledge-mcp-server`: "[service] extended support pricing"
-2. Extract: rate, billing unit, year-over-year escalation
-3. Known pricing (validate against docs):
-   - **EKS**: $0.60 per cluster per hour (Year 1)
-   - **RDS**: $0.10 per vCPU per hour (Year 1)
-   - **ElastiCache**: Varies by node type — must look up
-   - **OpenSearch**: Varies by instance type — must look up
-   - **Lambda**: No Extended Support charge (deprecated runtimes lose security patches only)
+**CRITICAL — Response size:** The Pricing API returns large JSON. ALWAYS use the exact usagetype patterns below and extract ONLY `pricePerUnit`. Never dump the full PriceList into context.
+
+**Pricing API constraints:**
+- Region: call in `us-east-1` (Pricing API is only available in us-east-1 and ap-south-1)
+- Requires `pricing:GetProducts` and `pricing:GetAttributeValues` permissions
+- The `regionCode` filter targets the region you're pricing for (e.g., `us-east-1`), separate from the API endpoint region
+
+**Per-service pricing lookup:**
+
+| Service | ServiceCode | Usage Type Pattern | Region Prefix | Billing Unit | Year 3 |
+|---------|-------------|-------------------|---------------|--------------|--------|
+| EKS | `AmazonEKS` | `{PREFIX}-AmazonEKS-Hours:extendedSupport` | Yes (USE1, USW2...) | per cluster/hour | Flat (no escalation) |
+| RDS | `AmazonRDS` | `ExtendedSupport:Yr1-Yr2:{Engine}` / `ExtendedSupport:Yr3:{Engine}` | No (filter regionCode) | per vCPU/hour | 2× Yr1-2 |
+| ElastiCache | `AmazonElastiCache` | `{PREFIX}-ExtendedSupportYr1_Yr2-NodeUsage:{nodeType}` / `{PREFIX}-ExtendedSupportYr3-NodeUsage:{nodeType}` | Yes | per node/hour | 2× Yr1-2 |
+| OpenSearch | `AmazonES` | `{PREFIX}-OpenSearchExtendedSupport` | Yes | per NIH/hour | Single tier (no escalation) |
+| Lambda | — | No Extended Support charge | — | — | — |
+
+**Region prefix mapping** (for services that use a prefix):
+- us-east-1 → `USE1` | us-east-2 → `USE2` | us-west-1 → `USW1` | us-west-2 → `USW2`
+- eu-west-1 → `EU` (or `EUW1`) | eu-west-2 → `EUW2` | eu-central-1 → `EUC1`
+- ap-south-1 → `APS3`/`AFS1` (verify) | ap-northeast-1 → `APN1` | ap-southeast-1 → `APS1` | ap-southeast-2 → `APS2`
+- ca-central-1 → `CAN1` | sa-east-1 → `SAE1`
+- If a prefix is uncertain, use `pricing:GetAttributeValues` on the `usagetype` attribute to discover the exact string for that region
+
+**Lookup procedure per affected resource:**
+
+1. Build the usagetype string using the pattern + region prefix + resource attribute (engine/nodeType as applicable)
+2. Call `pricing:GetProducts`:
+   ```
+   use_aws: pricing:GetProducts (
+     region: "us-east-1",
+     ServiceCode: "<ServiceCode>",
+     Filters: [
+       {Type: "TERM_MATCH", Field: "usagetype", Value: "<constructed usagetype>"},
+       {Type: "TERM_MATCH", Field: "regionCode", Value: "<target region>"}
+     ]
+   )
+   ```
+3. Extract ONLY `pricePerUnit.USD` from the response — ignore everything else
+4. If the exact usagetype returns empty, call `pricing:GetAttributeValues` for the `usagetype` attribute to discover the correct format, then retry
+
+**Known base rates (us-east-1, for validation — API is source of truth):**
+- **EKS**: $0.50/cluster/hour (this is the Extended Support premium; the $0.10 standard rate applies regardless of ES)
+- **RDS**: $0.10/vCPU/hour (Year 1-2), $0.20/vCPU/hour (Year 3)
+- **ElastiCache**: ~$0.165/node/hour (Year 1-2), ~$0.330/node/hour (Year 3) — varies by node type
+- **OpenSearch**: $0.0065/NIH/hour (single tier)
+- **Lambda**: No charge — flag deprecated runtimes as security risk only
+
+**IMPORTANT — Cost framing:** The rates above represent the AVOIDABLE Extended Support premium (what the customer eliminates by upgrading). For EKS, $0.50/hour is the ES surcharge on top of the $0.10 standard cluster cost the customer pays regardless. Report this premium as the cost exposure/savings opportunity.
 
 ### Step 3.3 — Classify Each Resource
 
@@ -212,23 +258,38 @@ For each affected version:
 
 ## Phase 4: Cost Calculation
 
-### Step 4.1 — Determine pricing year
+### Step 4.1 — Determine pricing tier
 
-For each resource classified as `IN_EXTENDED_SUPPORT` or `PAST_EXTENDED_SUPPORT`:
+Extended Support pricing tiers are based on how long a resource has been past End of Standard Support. The tier structure differs by service:
+
 - Calculate months since EOS: `(today - eos_date).months`
-- Year 1: 0–12 months → multiplier = 1
-- Year 2: 12–24 months → multiplier = 2
-- Year 3: 24–36 months → multiplier = 3
+- **Year 1-2** (0–24 months past EOS): base rate
+- **Year 3** (24–36 months past EOS): elevated rate
+
+Tier behavior by service:
+- **EKS**: flat rate — no Year 3 escalation (always $0.50/cluster/hour)
+- **RDS**: Year 1-2 = $0.10/vCPU/hr, Year 3 = $0.20/vCPU/hr (2×)
+- **ElastiCache**: Year 1-2 = base node rate, Year 3 = 2× node rate
+- **OpenSearch**: flat rate — single tier, no escalation
+
+**Use the exact rate returned by the Pricing API for the resource's tier (Step 3.2). Query the Yr3 usagetype pattern for resources 24+ months past EOS.**
 
 ### Step 4.2 — Calculate per-resource monthly cost
 
+Use the rate from the Pricing API (Step 3.2), not hardcoded values. Formulas:
+
 | Service | Formula |
 |---------|---------|
-| EKS | `monthly_cost = $0.60 × 730 × year_multiplier` |
-| RDS | `monthly_cost = vCPUs × $0.10 × 730 × year_multiplier × (2 if MultiAZ else 1)` |
-| ElastiCache | `monthly_cost = num_nodes × node_rate × 730 × year_multiplier` |
-| OpenSearch | `monthly_cost = instance_count × instance_rate × 730 × year_multiplier` |
+| EKS | `monthly_cost = es_rate × 730` (es_rate = $0.50, flat) |
+| RDS | `monthly_cost = vCPUs × es_rate × 730 × (2 if MultiAZ else 1)` (es_rate = $0.10 Yr1-2 / $0.20 Yr3 per vCPU) |
+| ElastiCache | `monthly_cost = num_nodes × node_es_rate × 730` (node_es_rate from Pricing API for the node type + tier) |
+| OpenSearch | `monthly_cost = normalized_instance_hours × $0.0065 × 730` (NIH-based) |
 | Lambda | `monthly_cost = $0` (flag as security risk only) |
+
+**Notes:**
+- The EKS $0.50 rate is the Extended Support premium (the avoidable cost). The $0.10 standard cluster cost applies regardless and is NOT part of the exposure.
+- For RDS, map instance class to vCPU count (e.g., db.r6g.xlarge = 4 vCPUs). Multi-AZ doubles the cost.
+- For ElastiCache and OpenSearch, query the Pricing API per node type / instance type since rates vary.
 
 ### Step 4.3 — Assign urgency
 
