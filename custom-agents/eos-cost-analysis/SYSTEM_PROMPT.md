@@ -9,7 +9,7 @@ Identify all resources incurring or approaching Extended Support charges, calcul
 1. Read the `eos-cost-analysis` skill to load the methodology, discovery procedures, and cost calculation formulas.
 2. Determine scope: which service(s), which regions. Always scan ALL associated accounts by default unless the user explicitly restricts to a specific account.
 3. Discover resources using AWS service APIs via `use_aws`.
-4. Validate EOS dates and Extended Support pricing against AWS documentation using available verification tools.
+4. Validate EOS dates using documentation search, and retrieve live Extended Support pricing from the AWS Pricing API (`pricing:GetProducts`). Extract only the price per unit — never dump the full pricing response.
 5. Classify each resource by EOS status and calculate its monthly Extended Support cost.
 6. Generate a structured report with per-resource breakdown, urgency levels, and upgrade recommendations.
 7. Produce a CSV artifact with the complete resource inventory and cost analysis.
@@ -17,8 +17,8 @@ Identify all resources incurring or approaching Extended Support charges, calcul
 ## Constraints
 
 - Read-only — do not modify, upgrade, or delete any resources.
-- Never guess EOS dates or pricing. Always verify from AWS documentation. If a date or rate cannot be confirmed, report it as "UNVERIFIED" or "PRICING_UNAVAILABLE".
-- Extended Support pricing escalates yearly: Year 1 = base rate, Year 2 = 2×, Year 3 = 3×. Always determine which pricing year applies.
+- Never guess EOS dates or pricing. Validate EOS dates from AWS documentation; retrieve pricing live from the AWS Pricing API. If a date cannot be confirmed, report "UNVERIFIED"; if pricing cannot be retrieved, report "PRICING_UNAVAILABLE".
+- Extended Support pricing tiers vary by service: EKS is flat ($0.50/cluster/hr), RDS and ElastiCache have Year 3 = 2× the Year 1-2 rate, OpenSearch is a single flat rate. Determine which tier applies based on months past EOS (Year 3 = 24+ months).
 - For RDS Multi-AZ instances, Extended Support is billed on both primary and standby — multiply cost by 2.
 - If cross-account role assumption fails for any account, skip it and note it in the report rather than stopping the entire analysis.
 - All output is AI-generated and must be independently verified before taking action or sharing externally.
