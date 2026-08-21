@@ -32,6 +32,7 @@ Metadata:
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
+          - EnableEosCostAnalysis
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -175,6 +176,15 @@ Parameters:
       (testing only — not recommended).
     Default: ''
 
+  EnableEosCostAnalysis:
+    Type: String
+    Description: >
+      EOS Cost Analysis skill. Resource discovery (EKS/RDS/Lambda/ElastiCache/OpenSearch
+      read-only) is already covered by AIDevOpsAgentAccessPolicy; this parameter adds only
+      the AWS Pricing API permissions for live Extended Support pricing.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -189,6 +199,7 @@ Conditions:
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
+  SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -553,6 +564,30 @@ Resources:
               - !Sub '${ConfigDataBucketArn}/*'
               - '*'
 
+  # eos-cost-analysis: adds ONLY the AWS Pricing API permissions for live Extended Support
+  # pricing. Resource discovery (eks:ListClusters/DescribeCluster, rds:DescribeDBInstances/
+  # DescribeDBClusters, lambda:ListFunctions, elasticache:DescribeCacheClusters/
+  # DescribeReplicationGroups/DescribeServerlessCaches, es:ListDomainNames/DescribeDomain/
+  # DescribeDomains) is already granted by AIDevOpsAgentAccessPolicy, so no discovery
+  # statement is added here.
+  PolicyEosCostAnalysis:
+    Type: AWS::IAM::Policy
+    Condition: SkillEosCostAnalysis
+    Properties:
+      PolicyName: DevOpsAgentSkill-EosCostAnalysis
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EosPricingApi
+            Effect: Allow
+            Action:
+              - pricing:GetProducts
+              - pricing:GetAttributeValues
+              - pricing:DescribeServices
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -629,8 +664,10 @@ Outputs:
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
+        - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
+        - eos-cost-analysis resource discovery (eks/rds/lambda/elasticache/es List/Describe already granted on * by the managed policy; only the Pricing API needs the add-on above)
       No IAM required:
         - skip-scheduled-maintenance
