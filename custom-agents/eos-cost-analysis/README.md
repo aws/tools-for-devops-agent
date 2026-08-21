@@ -69,5 +69,4 @@ No additional configuration needed in the skill or agent — DevOps Agent handle
 ## Related
 
 - [eos-cost-analysis skill](../../skills/eos-cost-analysis/) — the domain knowledge skill this agent uses (also works standalone in Chat)
-- [aws-health-events skill](../../skills/aws-health-events/) — for correlating with Health Dashboard deprecation events
 - [AWS DevOps Agent custom agents documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-custom-agents-index.html)
