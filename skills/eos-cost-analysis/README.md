@@ -73,7 +73,7 @@ Create a custom agent for scheduled runs that produce reports on a weekly or mon
 ## Related
 
 - [eos-cost-analysis custom agent](../../custom-agents/eos-cost-analysis/) — system prompt and setup guide for the dedicated agent
-- [aws-health-events skill](../aws-health-events/) — for correlating with Health Dashboard deprecation notifications
-- [eks-operation-review skill](../eks-operation-review/) — comprehensive EKS operational review (broader than EOS)
 - [AWS EKS Version Lifecycle](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html)
 - [Amazon RDS Extended Support](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/extended-support.html)
+- [Amazon ElastiCache Extended Support](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/extended-support-versions.html)
+- [Amazon OpenSearch Service version support](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/what-is.html#choosing-version)
