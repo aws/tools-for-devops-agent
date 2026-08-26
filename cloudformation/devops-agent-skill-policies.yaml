@@ -27,6 +27,7 @@ Metadata:
           - EnableMskOperations
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
+          - EnableAgentCoreObservabilitySetup
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -111,6 +112,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAgentCoreObservabilitySetup:
+    Type: String
+    Description: AgentCore Observability Setup skill (adds read-only bedrock-agentcore, X-Ray, log-delivery, and Lambda/ECS/EKS host-config permissions).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -120,6 +127,7 @@ Conditions:
   SkillMskOperations: !Equals [!Ref EnableMskOperations, 'true']
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
+  SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -302,6 +310,44 @@ Resources:
               - dms:TestConnection
             Resource: '*'
 
+  # agentcore-observability-setup: adds read-only AgentCore control-plane, X-Ray Transaction Search,
+  # log-delivery/resource-policy describes, and Lambda/ECS/EKS host-config reads (Tier 2 + Tier 3).
+  # Tier 1 (CloudWatch Logs/Metrics telemetry-arrival reads) is covered by AIDevOpsAgentAccessPolicy.
+  PolicyAgentCoreObservabilitySetup:
+    Type: AWS::IAM::Policy
+    Condition: SkillAgentCoreObservabilitySetup
+    Properties:
+      PolicyName: DevOpsAgentSkill-AgentCoreObservabilitySetup
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AgentCoreRuntimeConfigRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListAgentRuntimes
+            Resource: '*'
+          - Sid: XRayTransactionSearchAndDeliveries
+            Effect: Allow
+            Action:
+              - xray:GetTraceSegmentDestination
+              - logs:DescribeDeliveries
+              - logs:DescribeDeliverySources
+              - logs:DescribeDeliveryDestinations
+              - logs:DescribeResourcePolicies
+            Resource: '*'
+          - Sid: NonRuntimeHostConfigRead
+            Effect: Allow
+            Action:
+              - lambda:GetFunctionConfiguration
+              - ecs:DescribeTaskDefinition
+              - ecs:DescribeServices
+              - ecs:ListTasks
+              - eks:DescribeCluster
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -349,6 +395,7 @@ Outputs:
         - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
+        - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
