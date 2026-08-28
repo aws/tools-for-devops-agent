@@ -45,6 +45,8 @@ This skill has two phases:
 - **Phase 2 - CA/Browser Forum readiness (apply when the operator asks about
   strategic impact, validity reductions, automation readiness, or cost).**
   See `references/cab-forum-readiness.md`.
+  Note: the migration decision tree covers TWO automation paths for workloads
+  outside integrated AWS services: ACM ACME and AWS Workload Credentials Provider.
 
 Threshold values, risk levels, and the required report layout are defined in
 the reference files. Read them when you reach the step that needs them.
@@ -101,10 +103,23 @@ For each account and region in scope:
    key type, be aware new key types (for example post-quantum algorithms) can
    be missed - when in doubt, omit the key-type filter so every certificate is
    returned regardless of algorithm.
+   **IMPORTANT:** Include all certificate key-pair origins in the filter:
+   `AWS_MANAGED`, `CUSTOMER_PROVIDED`, AND `ACME` (via the
+   `CertificateKeyPairOrigins` parameter — a separate top-level filter, not
+   inside `Includes`). By default, ListCertificates excludes ACME-issued certs.
+   ALSO include ALL key types in the `Includes.keyTypes` filter:
+   `RSA_1024`, `RSA_2048`, `RSA_3072`, `RSA_4096`, `EC_prime256v1`,
+   `EC_secp384r1`, `EC_secp521r1`. By default, only RSA_1024 and RSA_2048
+   are returned — ACME certs often use ECDSA (EC_prime256v1) and will be
+   silently excluded without this. Always include every known key type and
+   every known key-pair origin to avoid missing certificates. Check current
+   ACM docs for any newly added values (e.g. post-quantum algorithms).
 2. For each certificate ARN, call `acm:DescribeCertificate` to retrieve
-   `Status`, `NotAfter`, `NotBefore`, `Type` (`AMAZON_ISSUED` vs `IMPORTED`),
+   `Status`, `NotAfter`, `NotBefore`, `Type` (`AMAZON_ISSUED`, `IMPORTED`, or
+   other values including ACME-origin certs which may show a distinct key source),
    `RenewalEligibility`, `RenewalSummary`, `KeyAlgorithm`, `InUseBy`,
-   `DomainValidationOptions`, and `SubjectAlternativeNames`.
+   `DomainValidationOptions`, `SubjectAlternativeNames`, and key source
+   (check for ACME-issued certs which appear alongside standard types).
 3. For imported certificates, `InUseBy` and `NotAfter` are still available;
    note that ACM cannot auto-renew imported certificates.
 4. Present a short inventory summary (account, region, certificate count)
@@ -129,13 +144,53 @@ risk levels in `references/acm-thresholds.md`.
 4. **Imported certificates in use** - flag `Type = IMPORTED` with a non-empty
    `InUseBy`, since these will not auto-renew and are an outage risk.
 5. **Weak or legacy keys** - flag `KeyAlgorithm` of `RSA_1024` (and any
-   algorithm below current best practice).
+   algorithm below current best practice). When flagging, recommend the
+   stronger alternative:
+   - RSA_1024 → recommend minimum RSA_2048 (or ECDSA P-256 for better
+     performance and smaller key size)
+   - RSA_2048 is acceptable today but note that ECDSA P-256 (EC_prime256v1)
+     or P-384 (EC_secp384r1) are the modern best practice (faster TLS
+     handshake, stronger security per bit, and the default for ACME clients).
+   Always verify the current list of algorithms ACM supports at runtime
+   (check ACM docs / API for supported keyTypes). When new algorithms are
+   added (e.g. post-quantum), include them in the recommendation if they
+   offer stronger security. Do not limit recommendations to a static list.
 6. **Unused certificates** - flag issued certificates with an empty `InUseBy`
    as cleanup or cost-optimization candidates (do not auto-delete).
-7. **Missing expiry monitoring** - for in-use certificates, check for a
+7. **ACME-issued certificates** - identify certificates with key source ACME
+   (visible in ListCertificates / DescribeCertificate). These auto-renew via
+   the ACME client and have short validity (currently 45 days). Classify as
+   GREEN if the ACME client is active; flag as RED if the cert is expired
+   (suggests the client stopped renewing).
+   When ACME certs are found, run these additional sub-checks to verify the
+   renewal pipeline is healthy:
+   - **7a. ACME endpoint health** - retrieve the ACME endpoint that issued the
+     cert (endpoint ID is in the cert metadata or DescribeAcmeEndpoint). Confirm
+     it is enabled/active. If disabled or deleted, flag RED - renewals will fail.
+   - **7b. EAB status** - check if the External Account Binding credential used
+     to register the ACME account is still valid (not revoked, not expired). Use
+     ListAcmeExternalAccountBindings for the endpoint. If the EAB is revoked or
+     expired, flag AMBER (existing accounts still work, but no new registrations
+     possible - note: revoking an EAB does NOT affect already-registered accounts).
+   - **7c. ACME account status** - check if the registered ACME account is active
+     or revoked. Use ListAcmeAccounts or DescribeAcmeAccount. If revoked, flag
+     RED - this is irreversible, the client can no longer issue or renew certs.
+   If endpoint is disabled OR account is revoked, override the cert classification
+   to RED regardless of current expiry date - the renewal pipeline is broken and
+   the cert will silently expire without renewal.
+8. **Missing expiry monitoring** - for in-use certificates, check for a
    CloudWatch alarm on the ACM `DaysToExpiry` metric
    (`AWS/CertificateManager`, dimension `CertificateArn`) via
    `cloudwatch:DescribeAlarmsForMetric`. Flag certificates with no alarm.
+   Two monitoring options exist (recommend both where possible):
+   - **CloudWatch DaysToExpiry alarm** (per-cert, self-managed) - works for
+     ALL certificate types (imported, ACM-issued, and ACME). Recommended
+     threshold: <= 30 days, period 1 day, statistic Minimum.
+   - **EventBridge `ACM Certificate Approaching Expiration`** (automatic,
+     no per-cert setup) - fires daily starting 30 days before expiry for
+     public certs. NOTE: `ACM Certificate Expired` events are NOT available
+     for imported certificates - so CloudWatch alarms are the only safety
+     net for imported certs.
 8. **Stale endpoint after renewal** - if a certificate was renewed or
    re-issued but a dependent endpoint still serves the old certificate,
    confirm the resource references the new certificate ARN and that the
@@ -171,12 +226,28 @@ Reporting rules:
 - If this report may be shared outside the operations team, keep it factual
   and free of internal-only identifiers.
 
-## Step 5 (optional): CA/Browser Forum readiness
+## Step 5: CA/B Readiness Snapshot (always run)
 
-If the operator asks about the CA/Browser Forum validity reductions, strategic
-posture, renewal automation readiness, DV vs OV/EV strategy, or cost impact,
-continue with the procedure in `references/cab-forum-readiness.md`, which uses
-the Phase 1 inventory as its input.
+After the findings report, ALWAYS append a brief CA/B readiness snapshot
+using the Phase 1 inventory. Classify each in-use certificate into:
+- GREEN: fully automated renewal in place (ACM-managed on integrated services,
+  or ACME-issued with active client). No action needed as validity shrinks.
+- AMBER: partially automated or has a constraint (e.g. email validation,
+  exportable cert without Workload Credentials Provider configured).
+- RED: manual renewal process (imported certs with no automation path).
+
+Present as a 3-line summary:
+- GREEN count, AMBER count, RED count
+- One-sentence risk statement (e.g. "X of Y active certificates will require
+  manual rotation at 47-day intervals by March 2029 without remediation.")
+- Offer: "For detailed migration paths and automation options, ask for the
+  full CA/B Forum readiness assessment."
+
+## Step 6 (on request): Full CA/B Forum readiness
+
+If the operator asks for the full assessment (migration paths, gap analysis,
+automation options, cost), continue with `references/cab-forum-readiness.md`,
+which uses the Phase 1 inventory as its input.
 
 ## Required IAM permissions
 
