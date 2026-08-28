@@ -1,0 +1,122 @@
+name: Skill Staleness Reminder
+
+# Reminds skill authors to verify their skill is still fresh when its directory
+# has had no commit for >= 60 days (~2 months).
+#
+# Runs on the 1st of every other month via a plain cron expression. `*/2` on the
+# month field steps from January, so scheduled runs land on Jan, Mar, May, Jul,
+# Sep, and Nov. workflow_dispatch allows manual runs on demand.
+
+on:
+  schedule:
+    # 15:00 UTC on the 1st of every other (odd) month.
+    - cron: "0 15 1 */2 *"
+  workflow_dispatch:
+    inputs:
+      max_age_days:
+        description: "Staleness threshold in days"
+        required: false
+        default: "60"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: skill-staleness-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so `git log` per skill directory can find the last commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Detect stale skills and render issue content
+        id: detect
+        run: |
+          MAX_AGE="${{ github.event.inputs.max_age_days }}"
+          MAX_AGE="${MAX_AGE:-60}"
+          python3 .github/scripts/check_skill_staleness.py \
+            --max-age-days "$MAX_AGE" \
+            --output stale.json \
+            --render-dir reminders
+          echo "count=$(python3 -c 'import json;print(len(json.load(open("stale.json"))))')" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update reminder issues
+        if: steps.detect.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Ensure the reminder label exists (idempotent).
+          gh label create skill-freshness \
+            --description "Periodic reminder to verify a skill is still current" \
+            --color BFD4F2 2>/dev/null || true
+
+          # Build the triage pool: collaborators with admin or maintain permission.
+          # A random one is assigned per issue to spread triage load. They can then
+          # reassign to the actual skill author (see body). The frontmatter author
+          # is NOT used as an assignee — it is an internal alias, not a GitHub login.
+          gh api "repos/${GITHUB_REPOSITORY}/collaborators?per_page=100" \
+            --jq '.[] | select(.permissions.admin or .permissions.maintain) | .login' \
+            > maintainers.txt
+          pool_size=$(wc -l < maintainers.txt | tr -d ' ')
+          echo "Triage pool: $pool_size maintainer(s)."
+
+          # The script rendered one <id>.title / <id>.body per stale skill and an
+          # index.txt of ids — no shell heredocs, no leading-whitespace issues.
+          while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            title="$(cat "reminders/$id.title")"
+            body_file="reminders/$id.body"
+            echo "Processing stale skill: $id"
+
+            # Dedup: reuse an open issue with the same title if one exists.
+            # Title is matched exactly via a standalone jq using env.TITLE, which
+            # avoids depending on `gh` forwarding a --arg to its embedded jq.
+            existing=$(gh issue list --state open --label skill-freshness \
+              --json number,title \
+              | TITLE="$title" jq -r '.[] | select(.title == env.TITLE) | .number' \
+              | head -n1)
+
+            if [ -n "$existing" ]; then
+              # Already tracked — just add a fresh comment; leave the existing
+              # assignee in place so an in-progress triage isn't disrupted.
+              echo "  updating existing issue #$existing"
+              gh issue comment "$existing" --body-file "$body_file"
+              continue
+            fi
+
+            # New issue: pick a random maintainer from the pool (if any).
+            # Python's random.choice is used instead of `shuf` for portability.
+            assignee=""
+            if [ "$pool_size" -gt 0 ]; then
+              assignee=$(python3 -c "import random,sys; lines=[l.strip() for l in open('maintainers.txt') if l.strip()]; print(random.choice(lines))")
+            fi
+
+            if [ -n "$assignee" ]; then
+              echo "  opening new issue, assigning to $assignee"
+              gh issue create --title "$title" --body-file "$body_file" \
+                --label skill-freshness --assignee "$assignee"
+            else
+              echo "  opening new issue (no assignable maintainer found)"
+              gh issue create --title "$title" --body-file "$body_file" \
+                --label skill-freshness
+            fi
+          done < reminders/index.txt
+
+      - name: Summary
+        run: |
+          echo "Stale skills this run: ${{ steps.detect.outputs.count }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f stale.json ]; then
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat stale.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
