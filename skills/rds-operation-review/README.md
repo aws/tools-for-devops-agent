@@ -176,7 +176,3 @@ rds-operation-review/
 | MEDIUM | Notable improvement opportunity | 30 days |
 | LOW | Minor optimization or hardening | When convenient |
 | INFO | Observation, no action required | N/A |
-
-## License
-
-Internal use.

@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  rds-aidba MCP Server — Aurora MySQL/PostgreSQL read-only diagnostics via
+  RDS Data API. Custom FastMCP server behind mcp-proxy, fronted by an
+  API Gateway REST API (AWS_IAM/SigV4). Register the API Gateway endpoint
+  with DevOps Agent using Service Name = execute-api. Data-plane tools
+  auto-discover the target cluster's engine and credentials — deploy once,
+  diagnose any allowlisted Aurora cluster.
+
+Globals:
+  Function:
+    Timeout: 29
+    Runtime: python3.12
+    MemorySize: 1024
+
+Parameters:
+  StageName:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: >
+      Environment for allowlist enforcement (prod requires an explicit
+      AllowedClusters list) and resource naming (function/layer names,
+      STAGE_NAME env var). The API Gateway stage path is always /Prod/
+      regardless of this value.
+  AllowedClusters:
+    Type: String
+    Default: '*'
+    Description: Comma-separated cluster identifiers. Use '*' for dev only (prod requires explicit list).
+  AllowedDatabases:
+    Type: String
+    Default: '*'
+    Description: Comma-separated database names. Use '*' for dev only.
+  DefaultDatabase:
+    Type: String
+    Default: ''
+    Description: Optional default database override (else information_schema/postgres per engine).
+  ExistingApiGatewayCloudWatchRoleArn:
+    Type: String
+    Default: ''
+    Description: Optional existing API GW CloudWatch role ARN. Leave empty to create one.
+
+Conditions:
+  ShouldCreateApiGatewayCloudWatchRole: !Equals [!Ref ExistingApiGatewayCloudWatchRoleArn, '']
+
+Rules:
+  ProdRequiresExplicitClusterList:
+    RuleCondition: !Equals [!Ref StageName, prod]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AllowedClusters, '*']]
+        AssertDescription: >
+          When StageName is 'prod', AllowedClusters must be an explicit
+          comma-separated list of cluster identifiers, not '*'. Wildcard
+          cluster access is only permitted for dev/staging.
+
+Resources:
+  RdsAidbaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub rds-aidba-mcp-${StageName}
+      Handler: run.sh
+      CodeUri: src/
+      Architectures: [x86_64]
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+        - !Ref DependenciesLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          AWS_LWA_PORT: "8000"
+          AWS_LWA_READINESS_CHECK_PATH: /mcp
+          PYTHONPATH: /opt/python
+          STAGE_NAME: !Ref StageName
+          ALLOWED_CLUSTERS: !Ref AllowedClusters
+          ALLOWED_DATABASES: !Ref AllowedDatabases
+          DATABASE_NAME: !Ref DefaultDatabase
+      Events:
+        McpApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RdsAidbaApi
+            Path: /mcp
+            Method: POST
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [rds-data:ExecuteStatement, rds-data:BatchExecuteStatement]
+              Resource: !Sub 'arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:*'
+        - Statement:
+            - Effect: Allow
+              Action: [secretsmanager:GetSecretValue]
+              Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds!cluster-*'
+        - Statement:
+            - Effect: Allow
+              Action: [rds:DescribeDBClusters, rds:DescribeDBInstances, rds:DescribeDBEngineVersions, rds:DescribeDBProxies, rds:DescribeDBProxyTargets]
+              Resource: '*'
+        - Statement:
+            - Effect: Allow
+              Action: [cloudwatch:GetMetricStatistics, cloudwatch:GetMetricData, pi:GetResourceMetrics, pi:DescribeDimensionKeys]
+              Resource: '*'
+
+  RdsAidbaApi:
+    Type: AWS::Serverless::Api
+    DependsOn: ApiGatewayAccount
+    Properties:
+      Name: !Sub ${AWS::StackName}-rds-aidba-api
+      StageName: Prod
+      Auth:
+        DefaultAuthorizer: AWS_IAM
+      MethodSettings:
+        - ResourcePath: /*
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          MetricsEnabled: true
+
+  ApiGatewayCloudWatchRole:
+    Type: AWS::IAM::Role
+    Condition: ShouldCreateApiGatewayCloudWatchRole
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: apigateway.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !If
+        - ShouldCreateApiGatewayCloudWatchRole
+        - !GetAtt ApiGatewayCloudWatchRole.Arn
+        - !Ref ExistingApiGatewayCloudWatchRoleArn
+
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub rds-aidba-mcp-deps-${StageName}
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes: [python3.12]
+      CompatibleArchitectures: [x86_64]
+    Metadata:
+      BuildMethod: makefile
+
+Outputs:
+  McpEndpointUrl:
+    Description: Register in DevOps Agent — Service Name = execute-api, Auth = SigV4
+    Value: !Sub 'https://${RdsAidbaApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/mcp'
+  FunctionArn:
+    Value: !GetAtt RdsAidbaFunction.Arn

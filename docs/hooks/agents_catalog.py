@@ -180,7 +180,7 @@ def _format_name(agent_id: str) -> str:
 
 def _generate_agent_stub(doc_path: Path, agent: dict, config_dir: str):
     """Generate a custom agent doc page from its README (only if changed)."""
-    repo_url = "https://github.com/aws-samples/sample-devops-agent-tools"
+    repo_url = "https://github.com/aws/tools-for-devops-agent"
     github_link = (
         f'<a href="{repo_url}/tree/main/custom-agents/{agent["id"]}" '
         f'target="_blank" rel="noopener" class="md-button">'

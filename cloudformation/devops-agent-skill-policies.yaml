@@ -24,7 +24,9 @@ Metadata:
           - EnableEnrichWithSecurityAgent
           - EnableCrmInvestigationGuidelines
           - EnableSkipScheduledMaintenance
+          - EnableMskOperations
           - EnableServiceQuotaCheck
+          - EnableDmsOperationReview
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -91,9 +93,21 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableMskOperations:
+    Type: String
+    Description: MSK Operations skill (adds kafka:GetBootstrapBrokers).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableServiceQuotaCheck:
     Type: String
     Description: Service Quota Check skill (Service Quotas + CloudWatch).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableDmsOperationReview:
+    Type: String
+    Description: DMS Operational Review skill (adds dms:TestConnection).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -103,7 +117,9 @@ Conditions:
   SkillSupportCases: !Equals [!Ref EnableSupportCases, 'true']
   SkillRdsOperationReview: !Equals [!Ref EnableRdsOperationReview, 'true']
   SkillInvestigationCostGuardrail: !Equals [!Ref EnableInvestigationCostGuardrail, 'true']
+  SkillMskOperations: !Equals [!Ref EnableMskOperations, 'true']
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
+  SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -221,6 +237,23 @@ Resources:
               - pricing:GetProducts
             Resource: '*'
 
+  # msk-operations: adds kafka:GetBootstrapBrokers
+  PolicyMskOperations:
+    Type: AWS::IAM::Policy
+    Condition: SkillMskOperations
+    Properties:
+      PolicyName: DevOpsAgentSkill-MskOperations
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MskBootstrapBrokers
+            Effect: Allow
+            Action:
+              - kafka:GetBootstrapBrokers
+            Resource: '*'
+
   # service-quota-check: adds servicequotas:* and cloudwatch:GetMetricData/GetMetricStatistics
   PolicyServiceQuotaCheck:
     Type: AWS::IAM::Policy
@@ -250,6 +283,23 @@ Resources:
             Action:
               - cloudwatch:GetMetricData
               - cloudwatch:GetMetricStatistics
+            Resource: '*'
+
+  # database-migration-service-expertise: adds dms:TestConnection
+  PolicyDmsOperationReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillDmsOperationReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-DmsOperationReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DmsTestConnection
+            Effect: Allow
+            Action:
+              - dms:TestConnection
             Resource: '*'
 
   # Optional: restrict agent to specific regions
@@ -296,7 +346,9 @@ Outputs:
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
+        - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
+        - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:

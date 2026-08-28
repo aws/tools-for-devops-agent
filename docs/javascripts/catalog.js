@@ -67,7 +67,9 @@
     // Title with link
     var h3 = document.createElement("h3");
     var link = document.createElement("a");
-    link.href = escapeText(skill.id) + "/";
+    var rawId = String(skill && skill.id != null ? skill.id : "");
+    var safeId = /^[A-Za-z0-9_-]+$/.test(rawId) ? rawId : ".";
+    link.href = encodeURIComponent(safeId) + "/";
     link.textContent = skill.name;
     h3.appendChild(link);
     card.appendChild(h3);
@@ -252,7 +254,9 @@
     // Title with link
     var h3 = document.createElement("h3");
     var link = document.createElement("a");
-    link.href = escapeText(agent.id) + "/";
+    var rawId = String(agent && agent.id != null ? agent.id : "");
+    var safeId = /^[A-Za-z0-9_-]+$/.test(rawId) ? rawId : ".";
+    link.href = encodeURIComponent(safeId) + "/";
     link.textContent = agent.name;
     h3.appendChild(link);
     card.appendChild(h3);
@@ -287,11 +291,60 @@
     container.appendChild(catalogEl);
   }
 
+  // === MCP Servers Catalog ===
+
+  function initMcpCatalog() {
+    var container = document.getElementById("mcp-catalog-root");
+    if (!container) return;
+
+    var dataUrl = container.getAttribute("data-source");
+    if (!dataUrl) return;
+
+    fetch(dataUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (servers) { renderMcpServers(container, servers); })
+      .catch(function (err) { console.error("MCP servers catalog:", err); });
+  }
+
+  function createMcpCard(server) {
+    var card = document.createElement("div");
+    card.className = "skill-card";
+
+    // Title with link
+    var h3 = document.createElement("h3");
+    var link = document.createElement("a");
+    var rawId = String(server && server.id != null ? server.id : "");
+    var safeId = /^[A-Za-z0-9_-]+$/.test(rawId) ? rawId : ".";
+    link.href = encodeURIComponent(safeId) + "/";
+    link.textContent = server.name;
+    h3.appendChild(link);
+    card.appendChild(h3);
+
+    // Description
+    var desc = document.createElement("p");
+    desc.innerHTML = sanitizeHTML(server.description);
+    card.appendChild(desc);
+
+    return card;
+  }
+
+  function renderMcpServers(container, servers) {
+    container.textContent = "";
+
+    var catalogEl = document.createElement("div");
+    catalogEl.id = "mcp-catalog";
+    servers.forEach(function (server) {
+      catalogEl.appendChild(createMcpCard(server));
+    });
+    container.appendChild(catalogEl);
+  }
+
   // === Initialize ===
 
   function initAll() {
     initSkillCatalog();
     initAgentsCatalog();
+    initMcpCatalog();
     fixRepoLink();
   }
 

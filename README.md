@@ -19,8 +19,8 @@ See the [LICENSE](LICENSE) file for terms of use.
 
 This repository contains:
 
-- **Skills** — Domain-specific knowledge, decision trees, and step-by-step runbooks that the agent follows during investigations. Use them as-is or as templates for writing your own. Browse the [Skills Catalog](https://aws-samples.github.io/sample-devops-agent-tools/skills/).
-- **Custom Agents** — Pre-built agent configurations with system prompts and tool assignments for recurring operational workflows like health reports and operational reviews. Browse the [Custom Agents Catalog](https://aws-samples.github.io/sample-devops-agent-tools/custom-agents/).
+- **Skills** — Domain-specific knowledge, decision trees, and step-by-step runbooks that the agent follows during investigations. Use them as-is or as templates for writing your own. Browse the [Skills Catalog](https://aws.github.io/tools-for-devops-agent/skills/).
+- **Custom Agents** — Pre-built agent configurations with system prompts and tool assignments for recurring operational workflows like health reports and operational reviews. Browse the [Custom Agents Catalog](https://aws.github.io/tools-for-devops-agent/custom-agents/).
 - **CloudFormation Templates** — Infrastructure-as-code for provisioning IAM permissions that skills require.
 
 All tools are contributed and tested according to the [contribution guidelines](CONTRIBUTING.md).
@@ -33,7 +33,7 @@ All tools are contributed and tested according to the [contribution guidelines](
 
 ## Getting Started
 
-See the [Getting Started guide](https://aws-samples.github.io/sample-devops-agent-tools/getting-started/) on the documentation site for step-by-step instructions on deploying skills and custom agents to your Agent Space.
+See the [Getting Started guide](https://aws.github.io/tools-for-devops-agent/getting-started/) on the documentation site for step-by-step instructions on deploying skills and custom agents to your Agent Space.
 
 ## Skill Permissions
 
