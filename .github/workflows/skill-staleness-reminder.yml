@@ -17,6 +17,11 @@ on:
         description: "Staleness threshold in days"
         required: false
         default: "60"
+      dry_run:
+        description: "Log what would happen without creating/commenting on issues"
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: read
@@ -54,11 +59,20 @@ jobs:
         if: steps.detect.outputs.count != '0'
         env:
           GH_TOKEN: ${{ github.token }}
+          # Scheduled runs always act. Manual runs honor the dry_run input
+          # (default true), so a workflow_dispatch on a branch is safe to trigger.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
         run: |
-          # Ensure the reminder label exists (idempotent).
-          gh label create skill-freshness \
-            --description "Periodic reminder to verify a skill is still current" \
-            --color BFD4F2 2>/dev/null || true
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "::notice::DRY RUN — no issues will be created or commented on."
+          fi
+
+          # Ensure the reminder label exists (idempotent). Skipped in dry run.
+          if [ "$DRY_RUN" != "true" ]; then
+            gh label create skill-freshness \
+              --description "Periodic reminder to verify a skill is still current" \
+              --color BFD4F2 2>/dev/null || true
+          fi
 
           # Build the triage pool: collaborators with admin or maintain permission.
           # A random one is assigned per issue to spread triage load. They can then
@@ -89,8 +103,12 @@ jobs:
             if [ -n "$existing" ]; then
               # Already tracked — just add a fresh comment; leave the existing
               # assignee in place so an in-progress triage isn't disrupted.
-              echo "  updating existing issue #$existing"
-              gh issue comment "$existing" --body-file "$body_file"
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "  [dry-run] would comment on existing issue #$existing"
+              else
+                echo "  updating existing issue #$existing"
+                gh issue comment "$existing" --body-file "$body_file"
+              fi
               continue
             fi
 
@@ -99,6 +117,11 @@ jobs:
             assignee=""
             if [ "$pool_size" -gt 0 ]; then
               assignee=$(python3 -c "import random,sys; lines=[l.strip() for l in open('maintainers.txt') if l.strip()]; print(random.choice(lines))")
+            fi
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "  [dry-run] would open new issue, assignee=${assignee:-<none>}"
+              continue
             fi
 
             if [ -n "$assignee" ]; then
