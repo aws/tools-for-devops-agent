@@ -63,6 +63,12 @@ Start with the SKILL.md, as well as `references/` and and `assets/` if needed.
 
 See [Contributing via Pull Requests](CONTRIBUTING.md#contributing-via-pull-requests)
 
+### Keeping a Skill Fresh
+
+Skills reference AWS APIs, thresholds, and documentation that drift over time. A scheduled workflow ([`.github/workflows/skill-staleness-reminder.yml`](.github/workflows/skill-staleness-reminder.yml)) runs on the 1st of every other month and, for any skill whose `skills/<name>/` directory has had no commit in the last 60 days, opens a `skill-freshness` issue. Each new issue is assigned to a random repository maintainer to triage, and the issue body lists the skill's `SKILL.md` frontmatter `author` so the maintainer can reassign to the skill owner to verify.
+
+If an issue lands with you, verify the skill against the checklist in it. When it's still accurate, bump the patch version in `SKILL.md` and add a `CHANGELOG.md` line noting the review — any commit touching the skill directory resets the clock and stops the reminder next cycle.
+
 
 ## Reporting Bugs/Feature Requests
 
