@@ -27,6 +27,7 @@ Metadata:
           - EnableMskOperations
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
+          - EnableAwsBackupCoverageReview
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -111,6 +112,14 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAwsBackupCoverageReview:
+    Type: String
+    Description: >
+      AWS Backup Coverage Review skill (adds backup:GetSupportedResourceTypes,
+      config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -120,6 +129,7 @@ Conditions:
   SkillMskOperations: !Equals [!Ref EnableMskOperations, 'true']
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
+  SkillAwsBackupCoverageReview: !Equals [!Ref EnableAwsBackupCoverageReview, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -302,6 +312,38 @@ Resources:
               - dms:TestConnection
             Resource: '*'
 
+  # aws-backup-coverage-review: only the read actions NOT already granted by
+  # AIDevOpsAgentAccessPolicy. Verified with iam:SimulatePrincipalPolicy against a
+  # live agent role — 43 of the 49 actions the skill uses are already allowed by
+  # the managed policy, including every backup:List*/Describe* call. Strictly
+  # read-only; no Start*, Put*, Create*, Update*, or Delete* is granted, and the
+  # managed policy already implicitly denies backup:StartBackupJob and
+  # backup:DeleteRecoveryPoint.
+  # sts:GetCallerIdentity is intentionally omitted: it requires no IAM permission.
+  PolicyAwsBackupCoverageReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillAwsBackupCoverageReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-AwsBackupCoverageReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BackupCoverageReviewDelta
+            Effect: Allow
+            Action:
+              # Not covered by backup:List*/backup:Describe* in the managed policy
+              - backup:GetSupportedResourceTypes
+              # Managed policy grants SelectAggregateResourceConfig but not the
+              # single-account variant the skill uses when no aggregator exists
+              - config:SelectResourceConfig
+              # Resource types with no inventory read in the managed policy
+              - dsql:ListClusters
+              - storagegateway:ListFileShares
+              - storagegateway:ListVolumes
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -349,6 +391,7 @@ Outputs:
         - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
+        - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
