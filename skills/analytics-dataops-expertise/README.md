@@ -50,6 +50,10 @@ It is **100% control-plane / API-driven** — no data-plane access (no catalog/t
    - "How mature is our data pipeline observability and automation?"
 4. Review the agent's reasoning trace to confirm the skill activated and the checks ran. Start a new chat after re-uploading a changed version so the latest skill loads.
 
+### Report outputs
+
+By default the skill returns the scorecard as an in-chat **Markdown** report. If you want a **downloadable, styled HTML report** (executive score-card tiles, per-dimension cards with RAG summary, expandable per-question detail, and the full score matrix), ask for it explicitly — e.g. "…and generate the downloadable HTML report." The agent fills a static template (`assets/templates/dataops-maturity-report.html`) with the run's data and saves it as a chat artifact; open the **Artifacts** panel to download the `.html` file (self-contained, works offline). The Markdown report is always produced; the HTML is only generated on request.
+
 If the agent does not invoke the skill, refine the `description` field in `SKILL.md` (see "Optimizing description" in the Agent Skills specification).
 
 ## Non-production disclaimer

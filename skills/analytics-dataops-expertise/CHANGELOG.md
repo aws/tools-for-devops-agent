@@ -2,6 +2,35 @@
 
 All notable changes to the `analytics-dataops-expertise` skill are documented here.
 
+## [1.1.0] - 2026-08-28
+### Added
+- Optional downloadable **HTML report**: a self-contained, styled template at
+  `assets/templates/dataops-maturity-report.html` (executive score-card tiles, per-dimension
+  cards with RAG summary, per-question expandable detail blocks with confidence badges,
+  observed-metric tiles, and ⚠️/💬 callouts, the 26-row score matrix, and a self-download
+  button) that the agent fills with live data and saves as a chat artifact. Follows the
+  static-template pattern used by the redshift-support-specialist skill — no scripts, no
+  renderer; the agent substitutes values into the template.
+- Companion Markdown template `assets/templates/dataops-maturity-report.md` (the always-on
+  in-chat output) mirroring the HTML structure section-for-section.
+- SKILL.md rules for the HTML path: always produce the Markdown; generate HTML only on
+  request; HTML-escape all substituted values; template is structure-only, never a data
+  source; identical data across both outputs.
+
+## [1.0.3] - 2026-08-28
+### Added
+- Richer report format mirroring the reference pre-assessment layout: an Executive
+  Summary with an overall + per-dimension score-card row and a maturity tier; a
+  scoring-caveat banner listing any unavailable signal APIs; per-dimension RAG summary
+  bands (Strengths ≥3.0 / Watch 2.0–2.9 / Gaps <2.0); and a per-question detail block
+  for all 26 questions with a HIGH/MEDIUM confidence badge, a one-line rationale,
+  real observed metrics, an optional ⚠️ warning callout, and 💬 discussion-ask prompts
+  to drive the customer conversation. Added a Confidence column to the score matrix.
+### Changed
+- Output remains 100% markdown (no scripts, no HTML renderer) so the skill stays
+  within the DevOps Agent no-executable-content constraint; added a guard prohibiting
+  raw structure/dict/JSON dumps in observed-metric values (summarize in words instead).
+
 ## [1.0.2] - 2026-08-28
 ### Fixed
 - Dimension fidelity: pinned the scorecard to EXACTLY five dimensions (Architecture;
