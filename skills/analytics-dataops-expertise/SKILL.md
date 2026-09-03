@@ -2,7 +2,7 @@
 name: analytics-dataops-expertise
 description: "Amazon DataOps maturity assessment. Performs read-only, API-driven scoring of a customer's data platform across five fixed dimensions: Architecture, Security & Governance, Incident Management & Observability, Automation & Testing, and Cost. Activate this skill for requests about DataOps maturity, data-platform assessment, analytics maturity, data architecture review, data governance posture, pipeline/orchestration maturity, real-time/streaming data, or data cost optimization. Given an account ID and region, it scores 26 questions 1-5 from live account signals, rolls them up into those five dimensions, and produces a structured scorecard with prioritized recommendations. All checks use read-only AWS control-plane APIs (glue, kinesis, dms, rds, cloudwatch, kms, s3, iam, config, backup, mwaa, sfn, macie2, resourcegroupstaggingapi, costexplorer, costoptimizationhub) — no data-plane access required."
 metadata:
-  version: "1.0.2"
+  version: "1.1.0"
   author: prasadnu
 ---
 
@@ -401,10 +401,12 @@ Questions scored 4-5 get no remediation entry.
 > - The Score Matrix MUST have 26 fully-populated rows: every row states the actual
 >   Dimension, the numeric Score, the Cap, the real Observed signal (actual counts /
 >   config values from the API calls), and the Rating rule applied. No empty cells.
-> - Detailed Findings MUST list each question by name with its real observed signal
->   and score. Prioritized Recommendations MUST contain the actual verbatim
->   "Why it matters" + "Resolve" + "Dive deeper" text (see rule above) for every
->   question scored ≤ 3 — not a count of them.
+> - The Dimensions section MUST contain, for all 26 questions, a per-question detail
+>   block with the real score, confidence badge, one-line rationale, observed metrics
+>   (real values), optional ⚠️ warning, and 💬 discussion-ask prompt(s) — never a
+>   placeholder or a promise. Prioritized Recommendations + Remediation Detail MUST
+>   contain the actual verbatim "Why it matters" + "Resolve" + "Dive deeper" text
+>   (see rule above) for every question scored ≤ 3 — not a count of them.
 > - The report's FIRST content MUST be the `# DataOps Maturity Assessment` header
 >   and the Summary table, rendered literally with the real account ID, region,
 >   timestamp, and scores — not a description of the header.
@@ -419,45 +421,48 @@ Questions scored 4-5 get no remediation entry.
 > placeholder label or the matrix has fewer than 26 populated rows, rewrite it with
 > the real content before telling the user it is done.
 
-Structure the report as:
+**Load the report layout before writing the scorecard.** Call
+`read_skill_resource(skill_id='analytics-dataops-expertise', path='references/report-format.md')`
+— MANDATORY — and render the report in exactly that structure. It defines: the Executive
+Summary with an overall + per-dimension score-card row and a maturity tier; the scoring
+caveat banner; per-dimension RAG summary bands (Strengths ≥3.0 / Watch 2.0–2.9 / Gaps <2.0);
+a per-question detail block for all 26 questions (score, `HIGH`/`MEDIUM` confidence badge,
+one-line rationale, real observed metrics, optional ⚠️ warning, 💬 discussion-ask prompts);
+the prioritized Recommendations; the verbatim Remediation Detail; and the 26-row Score Matrix.
 
-```markdown
-# DataOps Maturity Assessment
-## Account: {account_id} | Region: {region} | Assessed: {timestamp}
+Confidence badge: **HIGH** when every API the question needs returned data; **MEDIUM** when
+the question is auto-score-capped or an API was denied/blocked/empty (capped questions are at
+most MEDIUM). Observed-metric values MUST be real numbers from the API calls — NEVER paste a
+raw dict/list/JSON structure (e.g. `{'postgres': ['unknown', ...]}`); summarize it in words.
 
-## Summary
-| Section | Avg (1-5) | Status |
-|---------|-----------|--------|
-| Architecture | {avg} | 🟢/🟡/🔴 |
-| Security & Governance | {avg} | 🟢/🟡/🔴 |
-| Incident Mgmt & Observability | {avg} | 🟢/🟡/🔴 |
-| Automation & Testing | {avg} | 🟢/🟡/🔴 |
-| Cost | {avg} | 🟢/🟡/🔴 |
-| **Overall** | **{avg}** | |
+### Output artifacts — Markdown always; HTML only on request
 
-Status heuristic: avg < 2 → 🔴, 2-3.5 → 🟡, > 3.5 → 🟢.
+There are two report templates under `assets/templates/` — both are STRUCTURE/CSS/JS only
+(placeholder `{{tokens}}`) and contain NO example data; never copy sample values out of them:
+- `assets/templates/dataops-maturity-report.md` — the in-chat Markdown report. ALWAYS produce
+  this. Fill every `{{token}}` from data collected in this run and post it as the chat response.
+- `assets/templates/dataops-maturity-report.html` — a downloadable, self-contained styled HTML
+  report (executive score-card tiles, per-dimension cards + RAG summary, per-question
+  `<details>` blocks with confidence badges / observed-metric tiles / ⚠️/💬 callouts, the
+  26-row matrix, and a self-download button). Produce this ONLY if the user asks for a
+  downloadable/HTML report.
 
-## Detailed Findings
-### 🔴 Lowest maturity (act now — scored 1)
-{questions}
-### 🟡 Developing (scored 2-3)
-{questions}
-### 🟢 Mature (scored 4-5)
-{questions}
-
-## Recommendations (prioritized)
-1. {highest-impact, lowest-score first}
-2. ...
-
-## Raw Data Reference
-{key config values and counts used for scoring, per question}
-
-## Score Matrix (REQUIRED — one row per question, all 26, in order)
-| Q | Dimension | Score (1-5) | Cap | Observed signal | Rating rule applied |
-|---|-----------|-------------|-----|-----------------|---------------------|
-| Q3 | Data Architecture | {n} | — | {value} | {rule} |
-| ... (every question through Q40 — SKIPPED rows must state the IAM reason) |
-```
+Rules for the HTML report:
+1. Ask (or honor the user's request) whether they want the downloadable HTML in addition to
+   the in-chat Markdown. If yes, load the HTML template via
+   `read_skill_resource(skill_id='analytics-dataops-expertise', path='assets/templates/dataops-maturity-report.html')`,
+   fill every `{{token}}`, and repeat the marked `<!-- REPEAT -->` blocks once per dimension /
+   per question / per matrix row. Do not alter the template's structure, CSS, or JS — only
+   substitute content.
+2. **HTML-escape every substituted value** (`<`→`&lt;`, `>`→`&gt;`, `&`→`&amp;`, `"`→`&quot;`,
+   `'`→`&#39;`) — especially observed values, resource names, and any quoted error text, which
+   come from the account and are untrusted. (This does NOT apply to the Markdown template.)
+3. Save the filled HTML as an artifact named `{account_id}-{region}-dataops-maturity.html`,
+   set the template's `{{report_filename}}` to that same name, and tell the user it is in the
+   chat's **Artifacts** panel (self-contained, works offline). Never paste raw HTML into the
+   chat body — it renders as inert code; the Markdown report is the in-chat output.
+4. The HTML and Markdown MUST carry identical data — same scores, same 26 questions, same
+   findings. The template is never a source of values; every value comes from this run.
 
 ## Error Handling
 
