@@ -15,7 +15,7 @@ required section.
 7. `## ⚠️ Tooling Availability Notice` (*conditional* — any `ToolingFailure`)
 8. `## ℹ️ Inventory Completeness Notice` (*conditional* — any `NotEnumerated`)
 9. `## Findings & Recommendations` (required)
-10. `## Check Coverage Matrix` (required — exactly 21 rows)
+10. `## Check Coverage Matrix` (required — exactly 23 rows)
 11. `## Next Steps` (required)
 12. `## References` (required)
 
@@ -194,7 +194,7 @@ the specific affected resource ARNs (up to 20, then `… and <N> more`).
 
 ## 10. Check Coverage Matrix
 
-**Exactly 21 rows, in ID order, always.** This is the anti-omission control.
+**Exactly 23 rows, in ID order, always.** This is the anti-omission control.
 
 ```markdown
 ## Check Coverage Matrix
@@ -222,6 +222,8 @@ the specific affected resource ARNs (up to 20, then `… and <N> more`).
 | 5.1 | Restore testing coverage | ⚠️ | none configured | ≥ 1 plan covering protected types |
 | 5.2 | Recent backup job failures | ❌ | 2 resources failing, 0 successes | 0 |
 | 5.3 | Recovery point encryption | ✅ | 0 unencrypted | 0 |
+| 5.4 | Audit Manager report plan per Region | ⚠️ | 0 report plans in 2 Regions with backup activity | ≥ 1 per Region with activity |
+| 5.5 | Audit Manager framework configured | ⚠️ | 0 frameworks; AWS Config not recording | ≥ 1 per Region with protected resources |
 ```
 
 ## 11. Next Steps
@@ -257,7 +259,7 @@ user.** If any check fails, fix the report and re-validate.
 
 **Structure**
 1. All 12 required sections present, in the specified order.
-2. The Check Coverage Matrix has exactly 21 rows, IDs `1.1`–`5.3`, in order, with
+2. The Check Coverage Matrix has exactly 23 rows, IDs `1.1`–`5.5`, in order, with
    no duplicates.
 3. Every conditional notice that should appear does, and none that should not.
 4. The Coverage Matrix has a row (or a collapsed-summary equivalent) for every

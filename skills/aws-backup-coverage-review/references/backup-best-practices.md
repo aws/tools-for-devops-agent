@@ -91,6 +91,8 @@ Use these in the Recommendation column, matched by check ID.
 | 5.1 | Create a restore testing plan covering every protected resource type, with a validation window long enough for the restore to complete. |
 | 5.2 | Review the failed jobs' status messages for the affected resources. Backup job failure triage is outside this skill's scope — investigate separately. |
 | 5.3 | Encrypt the source resources. For several resource types the recovery point inherits encryption from the source, so an unencrypted source cannot produce an encrypted recovery point. |
+| 5.4 | Create an AWS Backup Audit Manager report plan in each Region that has backup activity, scheduled daily, delivering to an S3 bucket. Report plans are per Region — creating one does not cover the others. |
+| 5.5 | Create an Audit Manager framework with the controls that match your policy, in each Region with protected resources. Framework controls require AWS Config resource recording, so enable that first where it is not already on. |
 
 ## Common misconceptions
 
@@ -143,6 +145,9 @@ documentation URL from any other source.**
 - Choosing your controls — https://docs.aws.amazon.com/aws-backup/latest/devguide/choosing-controls.html
 - Controls and remediation — https://docs.aws.amazon.com/aws-backup/latest/devguide/controls-and-remediation.html
 - Working with audit reports — https://docs.aws.amazon.com/aws-backup/latest/devguide/working-with-audit-reports.html
+- Creating a report plan — https://docs.aws.amazon.com/aws-backup/latest/devguide/create-report-plan-console.html
+- ListReportPlans — https://docs.aws.amazon.com/aws-backup/latest/APIReference/API_ListReportPlans.html
+- ListFrameworks — https://docs.aws.amazon.com/aws-backup/latest/APIReference/API_ListFrameworks.html
 
 **IAM and API reference**
 - AWS managed policies for AWS Backup — https://docs.aws.amazon.com/aws-backup/latest/devguide/security-iam-awsmanpol.html

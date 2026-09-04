@@ -37,7 +37,7 @@ accurate, however well organised — is a failed run.
 Every response must contain, in order: **Scope** (including Regions swept and not
 swept), **Coverage Rating** with a coverage percentage, **Executive Summary**,
 **Coverage Matrix**, **Findings & Recommendations**, a **Check Coverage Matrix with
-all 21 rows**, and **Next Steps**.
+all 23 rows**, and **Next Steps**.
 
 Two failure modes to avoid specifically, because both feel natural in a chat:
 
@@ -52,7 +52,7 @@ If you cannot complete a section, render it with the explicit status values defi
 below (`AccessDenied`, `ToolingFailure`, `NotEnumerated`) — never drop it.
 
 **Self-check before responding.** Count the rows in your Check Coverage Matrix. If
-the count is not exactly 21, or if the response contains no `## Coverage Rating`
+the count is not exactly 23, or if the response contains no `## Coverage Rating`
 heading and no coverage percentage, the response is incomplete — fix it before
 sending. Then verify the protected count and the coverage percentage are **identical
 everywhere they appear** — Coverage Rating, headline, and the by-type table. A report
@@ -92,7 +92,7 @@ read-only APIs, treating AWS Config as an optimization rather than a prerequisit
   error classification. Data is acquired with the agent's native `use_aws` tool
   under the assumed role in the target account. No credentials or profile are
   requested from the user.
-- **Coverage logic:** `references/coverage-logic.md` — all 21 checks, thresholds,
+- **Coverage logic:** `references/coverage-logic.md` — all 23 checks, thresholds,
   verdict rules, finding templates, and the rating roll-up.
 - **Report format:** `references/report-format.md` — report structure, the
   coverage matrix, the check coverage matrix, severity map, pre-render validation.
@@ -164,7 +164,7 @@ plainly and continue with the supported types rather than aborting.
    selections, vaults, protected resources, restore testing plans.
 4. Collect the eligible-resource inventory per Region using the chosen strategy.
 5. Resolve every eligible resource to one of the five coverage states.
-6. Load `references/coverage-logic.md` and evaluate all 21 checks.
+6. Load `references/coverage-logic.md` and evaluate all 23 checks.
 7. Evaluate pre-flight: inspect every `status` field in the collected data.
    - Any `AccessDenied` → present the permissions audit below.
    - Any `ToolingFailure` → present the tooling notice below.
@@ -299,7 +299,7 @@ matched selection; Protected rows may be collapsed to a count>
 | # | Check | Finding | Severity | Recommendation |
 
 ## Check Coverage Matrix
-<exactly 21 rows, IDs 1.1 through 5.3, in order, every one with a verdict>
+<exactly 23 rows, IDs 1.1 through 5.5, in order, every one with a verdict>
 
 ## Next Steps
 <bucketed Immediate / This week / This month, each citing a finding number>
@@ -314,7 +314,7 @@ Then:
    `aws-backup-coverage-review-<account-id>-<YYYY-MM-DD>.md`. If the runtime does
    not support persisted artifacts, skip artifact creation and rely on step 3.
 2. Include every required report section, the Coverage Matrix, the Check Coverage
-   Matrix with all 21 rows, every finding, the Coverage Rating, the inventory
+   Matrix with all 23 rows, every finding, the Coverage Rating, the inventory
    strategy disclosure, and all recommendations — exactly per
    `references/report-format.md`.
 3. Return the same complete report in the user-facing final response.
@@ -354,10 +354,10 @@ Then:
   content.
 - **Never ask the user for Region, account, or scope.** Discover it.
 - **Complete all checks before output.** Do not stream partial findings.
-- **Report exactly the 21 checks — no more, no fewer.** Adjacent observations that
+- **Report exactly the 23 checks — no more, no fewer.** Adjacent observations that
   are genuinely useful but outside the check matrix (resource-level encryption,
   snapshot hygiene, cost) may appear in at most one closing `## Adjacent
-  Observations` section, clearly marked as outside the 21 checks. Never let them
+  Observations` section, clearly marked as outside the 23 checks. Never let them
   displace a required section or silently become a finding row.
 - **S3 buckets are global in `ListBuckets` but protected per Region.** Resolve each
   bucket's Region with `GetBucketLocation` and evaluate it against **that** Region's
@@ -400,7 +400,7 @@ Then:
 - `references/data-collection.md` — Read-only API allowlist, hard denials, the
   per-Region and per-resource-type call plan, the Config fast path, resource type
   mapping, and error classification.
-- `references/coverage-logic.md` — All 21 checks across 5 dimensions, thresholds,
+- `references/coverage-logic.md` — All 23 checks across 5 dimensions, thresholds,
   verdict rules, finding templates, and the Coverage Rating roll-up.
 - `references/report-format.md` — Report structure, Coverage Matrix, Check
   Coverage Matrix, severity map, pre-render validation.

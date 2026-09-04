@@ -39,7 +39,7 @@ those looks healthy in the console.
   policies that block manual deletion, logically air-gapped vaults, and failure
   notifications
 - Checks that restore testing plans exist and cover the protected resource types
-- Runs 21 fixed, numbered checks across 5 dimensions, every one of which appears in
+- Runs 23 fixed, numbered checks across 5 dimensions, every one of which appears in
   the report with an explicit verdict — no check is ever silently omitted
 - Produces a Coverage Rating (High / Medium / Low / Indeterminate) with a coverage
   matrix, severity-ranked findings, and remediation bucketed by SLA
@@ -228,7 +228,7 @@ at upload time):
 - **Chat tasks** — conversational, on-demand reviews ("what isn't being backed up
   in this account?", "audit my backup plans").
 - **Evaluation** — proactive, best-practices coverage and posture reviews against
-  the 21 checks.
+  the 23 checks.
 
 Agent type names differ between DevOps Agent releases — newer Agent Spaces present
 options such as **All agent types**, **Chat tasks**, **Incident
@@ -290,7 +290,7 @@ Describe the task in natural language — you do not need to name the skill.
 - "Check whether our backup plans meet a 35-day retention and daily frequency bar."
 
 The agent gathers configuration via its `use_aws` tool under the assumed role in
-the target account, resolves each resource's coverage state, applies the 21 checks,
+the target account, resolves each resource's coverage state, applies the 23 checks,
 and returns a Markdown report artifact.
 
 ## Non-production disclaimer

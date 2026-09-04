@@ -6,13 +6,23 @@ All notable changes to this skill are documented here. New entries go at the top
 
 ### Added
 
+- Monitoring and observability checks in D5, following TFC domain review feedback:
+  **5.4** verifies an AWS Backup Audit Manager report plan is scheduled in each Region
+  with backup activity — report plans are per Region, so one does not cover the
+  others — and **5.5** verifies an Audit Manager framework is configured where
+  protected resources exist, since a report plan alone reports job activity without
+  evaluating control compliance. Both consume `ListReportPlans` and `ListFrameworks`,
+  which the data collection phase already gathered but no check previously used.
+  Coverage is a point-in-time state; these two ask whether a decline in it would be
+  noticed.
+
 - Initial release for AWS DevOps Agent.
 - Read-only AWS Backup coverage and posture review across all enabled Regions of a
   single account.
 - Five-state coverage model (`Protected`, `Stale`, `SelectedNotProtected`,
   `Unprotected`, `OptInBlocked`) that distinguishes backup plan membership from
   actual protection.
-- 21 fixed, numbered checks across 5 dimensions: service enablement, coverage,
+- 23 fixed, numbered checks across 5 dimensions: service enablement, coverage,
   plan quality, vault posture, and coverage integrity. Thresholds match the AWS
   Backup Audit Manager control defaults so results are comparable with Audit
   Manager output.
@@ -29,7 +39,7 @@ All notable changes to this skill are documented here. New entries go at the top
   at Medium rather than being scored as coverage gaps.
 - Coverage Rating roll-up (High / Medium / Low / Indeterminate) with deterministic
   criteria.
-- Report format with a Coverage Matrix, a mandatory 21-row Check Coverage Matrix,
+- Report format with a Coverage Matrix, a mandatory 23-row Check Coverage Matrix,
   severity-ranked findings, SLA-bucketed next steps, and 11 pre-render validation
   checks.
 - Final Delivery Contract so the full report is returned verbatim regardless of how

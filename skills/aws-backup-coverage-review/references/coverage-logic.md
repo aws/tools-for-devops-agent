@@ -1,6 +1,6 @@
 # Coverage Logic
 
-All 21 checks, their thresholds, verdict rules, and finding templates.
+All 23 checks, their thresholds, verdict rules, and finding templates.
 
 **MANDATORY COVERAGE RULE.** The report must evaluate and account for every check
 in this document. No check may be silently omitted. If a check cannot be
@@ -9,7 +9,7 @@ evaluated, render it with status `AccessDenied`, `ToolingFailure`, or
 
 **ID FIDELITY.** Use these exact IDs with these exact meanings. Never renumber,
 split, merge, or invent checks. Before finishing, count the rows in the Check
-Coverage Matrix: if the count is not exactly 21, the report is incomplete.
+Coverage Matrix: if the count is not exactly 23, the report is incomplete.
 
 **Use the finding templates verbatim.** Substitute only the `<placeholder>`
 values.
@@ -212,9 +212,15 @@ comparable with Audit Manager output.
 
 ## D5 · Coverage integrity
 
-These three checks exist because a resource can satisfy D2 and D3 and still not be
+These checks exist because a resource can satisfy D2 and D3 and still not be
 recoverable. Nominal coverage without verified recoverability overstates the
 account's true position.
+
+Checks 5.1 to 5.3 ask whether protection is *real*: has a restore ever been proven,
+are jobs succeeding, are recovery points encrypted. Checks 5.4 and 5.5 ask whether
+anyone would *notice it changing* — coverage is a point-in-time state, and without
+scheduled reporting or evaluated controls a decline surfaces only the next time
+someone runs a review by hand.
 
 ### 5.1 Restore testing plan exists and covers protected types
 
@@ -243,6 +249,32 @@ account's true position.
 - **Verdict:** Fail when any recovery point has `IsEncrypted == false`.
 - **Severity:** HIGH.
 - **Finding:** `<N> recovery point(s) in vault "<vault>" (<region>) are not encrypted. Encryption for some resource types is inherited from the source resource, so an unencrypted source produces an unencrypted recovery point regardless of the vault's own key.`
+
+### 5.4 Audit Manager report plan scheduled per Region
+
+- **Source:** `ListReportPlans`, per Region, cross-referenced with the Regions that
+  contain backup plans or protected resources.
+- **Verdict:** Fail when a Region contains protected resources or backup plans but
+  has no report plan. Report plans are **per Region**, so a plan in one Region gives
+  no visibility into another — evaluate each Region independently rather than
+  treating one report plan as account-wide coverage. Pass when every Region with
+  backup activity has at least one report plan.
+- **Severity:** MEDIUM.
+- **Finding:** `<N> Region(s) with backup activity have no AWS Backup Audit Manager report plan: <regions>. Backup, copy, and restore job activity in those Regions is not being reported on a schedule, so a decline in coverage or a rising job failure rate would not surface in any recurring artefact. Report plans are per Region — the <M> existing plan(s) in <regions-with-plans> do not cover the others.`
+
+### 5.5 Audit Manager framework configured
+
+- **Source:** `ListFrameworks`, per Region.
+- **Verdict:** Fail on zero frameworks in a Region that has protected resources.
+  When frameworks exist, report how many controls each carries. A report plan
+  without a framework reports **job activity only** — it does not evaluate control
+  compliance, so the two are complementary rather than alternatives.
+- **Severity:** MEDIUM.
+- **Finding:** `<N> Region(s) with protected resources have no AWS Backup Audit Manager framework: <regions>. Job reports alone show what ran; a framework evaluates whether coverage, retention, and vault configuration meet defined controls, and records the result continuously rather than only when this review is run.`
+- **Note:** Audit Manager controls depend on AWS Config resource recording. If the
+  inventory strategy for a Region was `direct-enumeration` because no recorder was
+  active, say so in the finding — enabling a framework there requires enabling AWS
+  Config first, and that dependency belongs in the recommendation.
 
 ## Unable-to-verify template
 
