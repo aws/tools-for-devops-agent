@@ -32,10 +32,14 @@ This custom agent determines which backup-eligible resources in an AWS account a
 2. Click "Create agent" (on the right side), then in the menu that appears, click "Form" (the left-most option)
 3. In the "Name" field, use "aws-backup-coverage-review"
 4. Copy the content of the "SYSTEM_PROMPT.md" file from this directory, and paste it into the "System prompt" field
-5. In the "Skills" drop-down list, select the "aws-backup-coverage-review" skill, and click "Create agent"
-6. Now add the `use_aws` tool — in the new custom agent's window, click "Edit"
-7. In the window that appears, select "Chat". A new chat will start on the left side. Wait for DevOps Agent to finish thinking, and it will ask what you would like to change
-8. Type "Add the `use_aws` tool to this custom agent". Once the chat finishes, verify that `use_aws` is shown under "Tools" on the custom agent's page
+5. In the "Skills" selector, select the "aws-backup-coverage-review" skill
+6. In the "Tools" selector on the same form, select `use_aws`
+7. Click "Create agent", then confirm the skill and `use_aws` both appear on the custom agent's page
+
+> **Older Agent Spaces:** if the creation form has no "Tools" selector, create the agent
+> with the skill only, then click "Edit" → "Chat", wait for the agent to finish thinking,
+> and type "Add the `use_aws` tool to this custom agent". Verify `use_aws` then appears
+> under "Tools".
 
 ## Executing the Agent
 
