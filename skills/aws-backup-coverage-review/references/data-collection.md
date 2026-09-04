@@ -120,6 +120,14 @@ on AWS Config being reachable.
 
 Skip a Region entirely once it returns no resources of any type.
 
+**Every type in this table must be queried in every in-scope Region, or explicitly
+recorded as `AccessDenied` / `ToolingFailure` / `NotEnumerated`.** "I did not get to
+this type" is not a permitted outcome — a type that was never queried is
+indistinguishable in the report from a type that has no resources, and the second
+reads as full coverage. If time or call budget is a constraint, query the cheap
+`List*` call for every type first to establish which types exist at all, then gather
+detail only for the types that returned resources.
+
 | AWS Backup resource type | Enumeration call | Filter / notes | ARN source |
 |---|---|---|---|
 | `EBS` | `ec2:DescribeVolumes` | Exclude `status: creating`/`deleting` | Construct `arn:<partition>:ec2:<region>:<account>:volume/<VolumeId>` |

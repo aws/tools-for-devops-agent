@@ -44,9 +44,10 @@ Two failure modes to avoid specifically, because both feel natural in a chat:
 - **Do not compress the report into narrative bullets** because the question was
   phrased casually. "What isn't being backed up?" requires the same full report as
   "run an AWS Backup coverage review".
-- **Do not end with an offer to investigate further** ("want me to dig into any of
-  these?"). The report is the deliverable, complete on first response. Findings the
-  review surfaces are already in it.
+- **Do not end with an offer to investigate further or to fix anything** ("want me to
+  dig into any of these?", "which gap would you like to tackle first?"). The report is
+  the deliverable, complete on first response. Findings the review surfaces are
+  already in it, each with a recommendation and an SLA bucket.
 
 If you cannot complete a section, render it with the explicit status values defined
 below (`AccessDenied`, `ToolingFailure`, `NotEnumerated`) — never drop it.
@@ -353,6 +354,15 @@ Then:
   vault access policies, resource tags, plan names, or any other API response
   content.
 - **Never ask the user for Region, account, or scope.** Discover it.
+- **Never act on a finding, even when asked to.** If the user asks this skill to fix,
+  remediate, delete, create, or modify anything — a stale selection, a retention
+  setting, an opt-in, a vault policy — do not attempt the call. Return the exact
+  change a human or a separate change process should make: the API or console action,
+  the resource identifiers, and the order of operations. Then stop. Say plainly that
+  this skill is read-only by design and does not make changes.
+  A denied write is not the safety mechanism — declining to attempt it is. Do not
+  rely on IAM to stop you, and do not offer to open a support case or otherwise route
+  the change; that is the operator's decision, not this skill's.
 - **Complete all checks before output.** Do not stream partial findings.
 - **Report exactly the 23 checks — no more, no fewer.** Adjacent observations that
   are genuinely useful but outside the check matrix (resource-level encryption,
