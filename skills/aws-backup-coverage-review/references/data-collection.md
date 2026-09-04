@@ -118,8 +118,6 @@ on AWS Config being reachable.
 
 ## Phase 3 — Eligible inventory by direct enumeration (per Region)
 
-Skip a Region entirely once it returns no resources of any type.
-
 **Every type in this table must be queried in every in-scope Region, or explicitly
 recorded as `AccessDenied` / `ToolingFailure` / `NotEnumerated`.** "I did not get to
 this type" is not a permitted outcome — a type that was never queried is
@@ -127,6 +125,33 @@ indistinguishable in the report from a type that has no resources, and the secon
 reads as full coverage. If time or call budget is a constraint, query the cheap
 `List*` call for every type first to establish which types exist at all, then gather
 detail only for the types that returned resources.
+
+### A Region is only empty after the inventory calls have run
+
+**Never declare a Region empty on the basis of AWS Backup API results.**
+`ListBackupPlans`, `ListBackupVaults`, and `ListProtectedResources` returning nothing
+means only that AWS Backup is not configured there — which is the *finding*, not a
+reason to stop looking. A Region with no backup plans and 40 unprotected resources is
+the single most important case this review exists to surface, and probing it only with
+backup APIs makes it indistinguishable from a genuinely unused Region.
+
+A Region may be dropped from further work only after the Phase 3 enumeration calls
+have run and returned zero resources for every type. In practice:
+
+1. Run the cheap `List*`/`Describe*` inventory call for every type in the table.
+2. If all return zero, record the Region as empty and move on.
+3. If any returns resources, complete the Region normally.
+
+**Bulk types are the ones this trips on.** `cloudformation:ListStacks`,
+`s3:ListBuckets` with `GetBucketLocation`, and `ec2:DescribeVolumes` frequently return
+resources in Regions that have no backup configuration at all — StackSet instances,
+CDK bootstrap stacks, and replication buckets are commonly spread across every enabled
+Region. Query these in **every** in-scope Region, not only the Regions that showed
+backup activity.
+
+State in the Scope table how each Region was established as empty. "Probed with
+`ListBackupPlans` only" is not the same claim as "enumerated and found empty", and the
+report must not present the first as the second.
 
 | AWS Backup resource type | Enumeration call | Filter / notes | ARN source |
 |---|---|---|---|
