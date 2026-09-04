@@ -40,6 +40,22 @@ values.
   them. Pass when every type with matched resources is opted in. `INFO` when a
   type is opted out but no resources of that type exist in the Region.
 - **Severity:** CRITICAL when matched resources exist; INFO otherwise.
+- **Sourcing rule — quote the boolean, never infer it.** Opt-in state comes only from
+  `DescribeRegionSettings.ResourceTypeOptInPreference` for that specific Region, read
+  as the literal boolean. **Never infer opt-in from the absence of a backup selection,
+  from a plan's `AdvancedBackupSettings`, or from the fact that resources are
+  unprotected.** Those are independent facts: a type can be opted in and still have no
+  selection, and opted out while a selection exists.
+  For every Region and type you report on, state the observed value in the form
+  `<type> in <region>: ResourceTypeOptInPreference.<type> = <true|false>`. A type
+  absent from the map defaults to opted in; only an explicit `false` is opted out.
+  Getting the direction wrong sends the operator to change the wrong Region, so if you
+  cannot quote the boolean for a Region, mark the check `Unconfirmed` for that Region
+  rather than asserting a direction.
+- **On a re-run, never "correct" a prior value without the boolean in hand.** If this
+  review contradicts an earlier one, cite the `DescribeRegionSettings` response that
+  justifies the change. An unevidenced correction is worse than the original, because
+  it carries false confidence.
 - **Finding:** `<N> <type> resource(s) in <region> are matched by backup selection "<selection>" but the <type> resource type is not opted in for that Region. AWS Backup will never create recovery points for them. The plan and selection appear correctly configured in the console, which makes this gap easy to miss.`
 
 ### 1.2 Cross-account and global settings
