@@ -221,9 +221,11 @@ rules:
     gaps: [CA-01, DP-06]
     severity: LOW
     message: "No compliance or data classification tagging"
+```
 
-ASSESSMENT COMMANDS
+## ASSESSMENT COMMANDS
 # Core instance/cluster configuration
+```bash
 aws rds describe-db-instances --region {{REGION}}
 aws rds describe-db-clusters --region {{REGION}}
 
@@ -261,7 +263,9 @@ aws configservice describe-config-rules --region {{REGION}}
 
 # Account-level: public snapshot check
 aws rds describe-db-snapshots --snapshot-type manual --region {{REGION}}
-Safety
+```
+
+## Safety
 
 This skill operates read-only:
 

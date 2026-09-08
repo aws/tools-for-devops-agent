@@ -1,5 +1,3 @@
-
-```markdown
 # Security Gap Catalog — RDS/Aurora Security Constraints
 
 58 gaps across 8 categories. Referenced by `SKILL.md` detection rules via the ID column.

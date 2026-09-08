@@ -1,4 +1,3 @@
-```markdown
 # Blocker Catalog — RDS/Aurora Hidden Resilience Constraints
 
 66 blockers across 7 categories. Referenced by `SKILL.md` detection rules via the ID column.

@@ -220,9 +220,11 @@ rules:
     blockers: [QT-03, QT-04]
     severity: HIGH
     message: "DR target region has limited headroom — may not accommodate full failover"
+```
 
-QUOTA ASSESSMENT COMMANDS
+## QUOTA ASSESSMENT COMMANDS
 # Primary command — shows all RDS quota usage vs limits in one call
+```bash
 aws rds describe-account-attributes --region {{REGION}}
 
 # Detailed quota limits (if custom limits were requested)
@@ -236,7 +238,8 @@ aws service-quotas get-service-quota \
   --service-code kms \
   --quota-code L-6E388A8A \
   --region {{REGION}}
-Safety
+```
+## Safety
 
 This skill operates read-only:
 
