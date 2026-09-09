@@ -44,7 +44,9 @@ This skill has two phases:
   the core investigation runbook.
 - **Phase 2 - CA/Browser Forum readiness (apply when the operator asks about
   strategic impact, validity reductions, automation readiness, or cost).**
-  See `references/cab-forum-readiness.md`.
+  When the operator asks about strategic impact, validity reductions,
+  automation readiness, or cost, load
+  [references/cab-forum-readiness.md](references/cab-forum-readiness.md).
   Note: the migration decision tree covers TWO automation paths for workloads
   outside integrated AWS services: ACM ACME and AWS Workload Credentials Provider.
 
@@ -95,7 +97,7 @@ Guardrails:
   consecutive accounts return `AccessDenied`, stop and report only the
   accounts you could access.
 
-## Step 1: Inventory certificates
+- [ ] **Step 1: Inventory certificates**
 
 For each account and region in scope:
 
@@ -103,17 +105,20 @@ For each account and region in scope:
    key type, be aware new key types (for example post-quantum algorithms) can
    be missed - when in doubt, omit the key-type filter so every certificate is
    returned regardless of algorithm.
-   **IMPORTANT:** Include all certificate key-pair origins in the filter:
-   `AWS_MANAGED`, `CUSTOMER_PROVIDED`, AND `ACME` (via the
-   `CertificateKeyPairOrigins` parameter — a separate top-level filter, not
-   inside `Includes`). By default, ListCertificates excludes ACME-issued certs.
-   ALSO include ALL key types in the `Includes.keyTypes` filter:
-   `RSA_1024`, `RSA_2048`, `RSA_3072`, `RSA_4096`, `EC_prime256v1`,
-   `EC_secp384r1`, `EC_secp521r1`. By default, only RSA_1024 and RSA_2048
-   are returned — ACME certs often use ECDSA (EC_prime256v1) and will be
-   silently excluded without this. Always include every known key type and
-   every known key-pair origin to avoid missing certificates. Check current
-   ACM docs for any newly added values (e.g. post-quantum algorithms).
+   **CRITICAL - always open BOTH filter axes on EVERY `ListCertificates` call.**
+   `ListCertificates` silently drops certificates behind TWO independent default
+   filters, and a certificate is only returned when BOTH are broadened together:
+   - **Key-pair origin** - the `CertificateKeyPairOrigins` parameter defaults to
+     `AWS_MANAGED` + `CUSTOMER_PROVIDED`, so ACME-origin certs are excluded.
+   - **Key type** - the `Includes.keyTypes` parameter defaults to `RSA_1024` +
+     `RSA_2048`, so ECDSA (e.g. `EC_prime256v1`) certs are excluded.
+   Opening only one axis is the trap: an ACME cert with an ECDSA key stays
+   invisible until you expand BOTH in the same call. Never issue a default or
+   single-axis `ListCertificates` call. When running this step, load
+   [references/acm-detection-details.md](references/acm-detection-details.md)
+   for the exact origin and key-type values to pass.
+   **Do NOT conclude "no ACME certs" or "no ECDSA certs exist" from a call that
+   did not expand both axes** - that is a false negative, not an empty result.
 2. For each certificate ARN, call `acm:DescribeCertificate` to retrieve
    `Status`, `NotAfter`, `NotBefore`, `Type` (`AMAZON_ISSUED`, `IMPORTED`, or
    other values including ACME-origin certs which may show a distinct key source),
@@ -122,14 +127,22 @@ For each account and region in scope:
    (check for ACME-issued certs which appear alongside standard types).
 3. For imported certificates, `InUseBy` and `NotAfter` are still available;
    note that ACM cannot auto-renew imported certificates.
-4. Present a short inventory summary (account, region, certificate count)
+4. **Verify filter coverage before reporting.** Before presenting the inventory
+   or concluding a category is absent, confirm the `ListCertificates` call(s)
+   for each region expanded BOTH the key-pair origin axis (including `ACME`) and
+   the key-type axis (including the `EC_*` types). If either axis was left at its
+   default, re-run the call with both expanded. Only after this check may you
+   state whether ACME-origin or ECDSA certificates are present or absent.
+5. Present a short inventory summary (account, region, certificate count)
    before moving on, and skip account/region pairs that return zero
    certificates.
 
-## Step 2: Detect issues
+- [ ] **Step 2: Detect issues**
 
-Evaluate every certificate against the checks below. Use the thresholds and
-risk levels in `references/acm-thresholds.md`.
+Evaluate every certificate against the checks below. When evaluating
+certificates in this step, load
+[references/acm-thresholds.md](references/acm-thresholds.md) for the thresholds
+and risk levels.
 
 1. **Expiry** - compute days until `NotAfter`. Flag expired and
    soon-to-expire certificates, weighted higher when `InUseBy` is non-empty.
@@ -162,22 +175,11 @@ risk levels in `references/acm-thresholds.md`.
    the ACME client and have short validity (currently 45 days). Classify as
    GREEN if the ACME client is active; flag as RED if the cert is expired
    (suggests the client stopped renewing).
-   When ACME certs are found, run these additional sub-checks to verify the
-   renewal pipeline is healthy:
-   - **7a. ACME endpoint health** - retrieve the ACME endpoint that issued the
-     cert (endpoint ID is in the cert metadata or DescribeAcmeEndpoint). Confirm
-     it is enabled/active. If disabled or deleted, flag RED - renewals will fail.
-   - **7b. EAB status** - check if the External Account Binding credential used
-     to register the ACME account is still valid (not revoked, not expired). Use
-     ListAcmeExternalAccountBindings for the endpoint. If the EAB is revoked or
-     expired, flag AMBER (existing accounts still work, but no new registrations
-     possible - note: revoking an EAB does NOT affect already-registered accounts).
-   - **7c. ACME account status** - check if the registered ACME account is active
-     or revoked. Use ListAcmeAccounts or DescribeAcmeAccount. If revoked, flag
-     RED - this is irreversible, the client can no longer issue or renew certs.
-   If endpoint is disabled OR account is revoked, override the cert classification
-   to RED regardless of current expiry date - the renewal pipeline is broken and
-   the cert will silently expire without renewal.
+   When ACME certs are found, run the renewal-pipeline sub-checks (endpoint
+   health, EAB status, ACME account status) to verify renewals are healthy.
+   When running this check, load
+   [references/acm-detection-details.md](references/acm-detection-details.md)
+   for the full sub-check procedures and their RED/AMBER classification rules.
 8. **Missing expiry monitoring** - for in-use certificates, check for a
    CloudWatch alarm on the ACM `DaysToExpiry` metric
    (`AWS/CertificateManager`, dimension `CertificateArn`) via
@@ -200,17 +202,19 @@ risk levels in `references/acm-thresholds.md`.
    `EXPIRED`, or nearing expiry, since a CA problem affects every certificate
    it issued.
 
-## Step 3: Classify and prioritize
+- [ ] **Step 3: Classify and prioritize**
 
-Assign each finding a risk level (RED / AMBER / GREEN) using the criteria in
-`references/acm-thresholds.md`. Rank by risk, then by whether the certificate
+Assign each finding a risk level (RED / AMBER / GREEN). When classifying in
+this step, load [references/acm-thresholds.md](references/acm-thresholds.md)
+for the criteria. Rank by risk, then by whether the certificate
 is in use, then by days to expiry. In-use certificates always outrank unused
 ones at the same expiry distance.
 
-## Step 4: Produce the findings report
+- [ ] **Step 4: Produce the findings report**
 
-Generate a prioritized findings report using the structure in
-`references/report-format.md`. It must include:
+When producing the report in this step, load
+[references/report-format.md](references/report-format.md) and generate a
+prioritized findings report following its structure. It must include:
 
 - A one-paragraph executive summary (overall posture, count by risk level,
   most urgent item).
@@ -226,7 +230,7 @@ Reporting rules:
 - If this report may be shared outside the operations team, keep it factual
   and free of internal-only identifiers.
 
-## Step 5: CA/B Readiness Snapshot (always run)
+- [ ] **Step 5: CA/B Readiness Snapshot (always run)**
 
 After the findings report, ALWAYS append a brief CA/B readiness snapshot
 using the Phase 1 inventory. Classify each in-use certificate into:
@@ -243,11 +247,12 @@ Present as a 3-line summary:
 - Offer: "For detailed migration paths and automation options, ask for the
   full CA/B Forum readiness assessment."
 
-## Step 6 (on request): Full CA/B Forum readiness
+- [ ] **Step 6 (on request): Full CA/B Forum readiness**
 
 If the operator asks for the full assessment (migration paths, gap analysis,
-automation options, cost), continue with `references/cab-forum-readiness.md`,
-which uses the Phase 1 inventory as its input.
+automation options, cost), load
+[references/cab-forum-readiness.md](references/cab-forum-readiness.md), which
+uses the Phase 1 inventory as its input.
 
 ## Required IAM permissions
 
