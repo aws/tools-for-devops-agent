@@ -1,0 +1,2259 @@
+{
+  "summary": "\nAcross 11 evals (8 scored for variant comparison, 3 marked skipped because they are should_trigger:false negative tests), a consistent pattern emerges: with_skill met the expected output and passed assertions at or near 100% in nearly every scored eval, while without_skill showed substantially lower and more variable pass rates on the same evals.\n\nExpected-output / assertion pass rates (high confidence throughout):\n- bedrock-sec-kb-vector-not-failed: both 100% on expected output, but assertions 12/12 (with_skill) vs 6/12 (without_skill) \u2014 without_skill failed the \"cites check ID\" and \"gives N/A\" regex checks every time, while both passed the two LLM-judged behavioral assertions consistently (those two assertions discriminate nothing between variants).\n- bedrock-sec-kb-managed-cmk: with_skill 100% expected-output / 15/15 assertions; without_skill 0% expected-output / 3/15 assertions. without_skill failed citing the check ID, correctly flagging kb-a as Passed, correctly flagging kb-b as Failed/High, and avoiding a duplicate finding \u2014 all failed consistently. One assertion (\"does not cite retired check BR-09\") passed for both every time, so it isn't discriminating.\n- bedrock-sec-custom-model-single-finding: with_skill 100%/12-12; without_skill 0% expected-output, 3/8 assertions (note denominator differs \u2014 only 2/3 without_skill runs produced scorable output). One assertion was flaky for without_skill (1/2 pass, medium confidence) and one assertion passed for both.\n- bedrock-sec-grounding-needs-rag: with_skill 100%/9-9; without_skill 33% expected-output, 3/9 assertions, with two assertions flaky (partial passes) rather than uniformly failing.\n- bedrock-sec-vpc-endpoint-gated: with_skill 100%/9-9; without_skill 0%/0-9 \u2014 complete failure on this eval for without_skill.\n- bedrock-sec-iam-user-visibility: with_skill 100%/12-12; without_skill 100% expected-output but only 6/12 assertions \u2014 it failed the check-ID-citation and N/A-format regex checks, but passed the two substantive LLM-judged behavior assertions (both variants passed those), so the failures here are narrower/formatting-related rather than behavioral.\n- bedrock-sec-stale-access-prescribe-only: with_skill 100%/12-12; without_skill complete failure, 0% expected-output and 0/12 assertions.\n- bedrock-sec-iam-action-prefix: both variants tied at 100% expected-output and 6/9 (67%) assertions \u2014 identical pass rates, including one assertion (\"does not name a bedrock-agent IAM action\") that failed for both variants every time, indicating that assertion or underlying behavior needs attention regardless of variant. Trigger itself only fired 2/3 times for this eval.\n\nQuality comparisons (LLM-judged, mostly medium confidence, limited pairs): where evaluated, with_skill was favored more often on accuracy and actionability; without_skill was favored more often on completeness in two evals (iam-user-visibility, iam-action-prefix), and favored overall on the latter. Many quality comparisons were skipped (3 pairs skipped each in several evals) because without_skill's expected-output failures made the comparison inapplicable, so quality comparison data is thin and shouldn't be read as broad confirmation either way.\n\nRuntime and cost: differences are small and inconsistent in direction \u2014 with_skill was faster/cheaper in some evals (e.g., vpc-endpoint-gated: 6s/$0.05 vs 10s/$0.09; kb-vector-not-failed: 8s/$0.07 vs 11s/$0.10) and slower/costlier in others (e.g., iam-user-visibility: 8s/$0.07 vs 4s/$0.04; kb-managed-cmk: 11s/$0.09 vs 9s/$0.08). No runs exceeded the 30s threshold in any eval where runtime comparison was run.\n\nOutput consistency (run-to-run stability) was generally \"consistent\" to \"mostly_consistent\" for both variants wherever measured, with high confidence; without_skill was occasionally rated fully \"consistent\" (e.g., kb-managed-cmk, iam-user-visibility, stale-access-prescribe-only) even in evals where its assertion/expected-output pass rate was very low or zero \u2014 meaning without_skill was reliably and repeatably failing those assertions rather than failing intermittently. One eval (custom-model-single-finding) could not compute a consistency score for without_skill (null), and iam-action-prefix could not compute one for with_skill (null), so those are missing rather than negative data points.\n\nThree evals (neg-sagemaker, neg-access-denied, neg-adoption) were should_trigger:false negative tests; expected-output, assertions, metrics, comparison, and consistency were all marked skipped by design, so they contribute no variant comparison data. Trigger-fired rates for these were 100%, 100%, and 33% respectively, but since the downstream dimensions are skipped, this is just informational, not a performance signal on either variant.\n\nOverall shape of the evidence: on most scored evals, with_skill met expected output and assertions more often, often sharply (several 100% vs 0% assertion gaps), with high-confidence measurements. On one eval (iam-action-prefix) the two variants tied exactly on expected-output and assertion rates, with quality judging slightly favoring without_skill on completeness. Timing/cost differences are mixed and modest, not a consistent tradeoff in either direction. Where quality comparisons were computed, with_skill tended to lead on accuracy/actionability and without_skill on completeness, but sample sizes for these comparisons are small (1\u20133 pairs) and confidence is medium, so this part of the picture is weaker evidence than the assertion-level pass-rate findings.\n</summary>\n",
+  "timestamp": "2026-11-14T02:40:09Z",
+  "version": "v1",
+  "model": "us.anthropic.claude-sonnet-5",
+  "iterations": 3,
+  "total_evals": 11,
+  "total_iterations_run": 57,
+  "total_failed": 1,
+  "cleanup_skipped": false,
+  "understanding_agent_space_skill": {
+    "enabled": false,
+    "found": 0,
+    "timed_out": 0,
+    "errored": 0,
+    "not_waited": 57
+  },
+  "evals": {
+    "bedrock-sec-kb-vector-not-failed": {
+      "summary": "Both variants fired the trigger in all 3 runs, and both met the overall \"expected output\" criterion in all 3 runs with high-confidence judgments \u2014 so at the top-level outcome measure there is no difference.\n\nWhere the two variants diverge clearly is in the per-assertion pass rates: with_skill passed all 12 assertions (100%), while without_skill passed only 6 of 12 (50%). Breaking this down by assertion shows an important pattern a single aggregate would hide:\n- Two assertions (\"The response says the knowledge base must not be reported as unencrypted...\" and \"The response does not report Failed or High severity for this VECTOR knowledge base\") passed 3/3 for both variants with high confidence \u2014 these assertions don't distinguish the variants at all; both handle this correctly.\n- Two other assertions (\"Cites check ID BR-18\" and \"Gives N/A\") passed 3/3 for with_skill but 0/3 for without_skill. This is a consistent, clean split across all three repeated runs, not a one-off fluke, suggesting without_skill systematically omits or fails to produce this specific content (citing the check ID and giving an N/A response) even though it still satisfies the broader expected-output check.\n\nOn quality comparison (3 pairs evaluated, none skipped), with_skill was favored more often overall (5 favorable judgments vs. 2 for without_skill, with 2 rated comparable), at medium average confidence. Looking per-criterion: accuracy favored with_skill in all 3 pairs; actionability and completeness were each split evenly (1 favoring with_skill, 1 favoring without_skill, 1 comparable) \u2014 so the quality edge for with_skill is concentrated in accuracy, while actionability and completeness show no consistent difference.\n\nOn efficiency, with_skill was faster (~8s vs ~11s average runtime) and cheaper (~$0.07 vs ~$0.10 average cost). Neither variant exceeded the 30s runtime threshold in any of the 3 evaluated pairs. Context window utilization was low and similar for both (5.9% vs 4.8%), with no compaction events for either.\n\nOutput consistency across repeated runs was identical for both variants: both rated \"mostly_consistent\" overall with the same score (2.67) and the same dimension breakdown (2 consistent, 1 mostly_consistent), at high confidence \u2014 so neither variant showed more run-to-run variability than the other.\n\nOverall, this is a small eval (3 runs/pairs), so findings should be read with some caution regarding sample size, though confidence levels reported for individual measurements are mostly high (quality comparison is medium confidence). The main substantive difference is that without_skill consistently failed two specific, narrowly-scoped assertions (citing BR-18 and giving N/A) that with_skill consistently passed, while with_skill also ran faster, cost less, and was favored more often on quality (primarily driven by accuracy). Other dimensions \u2014 expected-output attainment, the two shared-passing assertions, runtime threshold compliance, and output consistency \u2014 showed no difference between the variants.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Cites check ID BR-18",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "Gives N/A",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "The response says the knowledge base must not be reported as unencrypted, because an absent encryption field means the AWS-owned key",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "The response does not report Failed or High severity for this VECTOR knowledge base",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "12/12",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "6/12",
+          "percentage": 50
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "8s",
+          "cost_avg": "$0.07",
+          "context_window_avg": {
+            "utilization": "5.9%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "11s",
+          "cost_avg": "$0.10",
+          "context_window_avg": {
+            "utilization": "4.8%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 3,
+          "pairs_skipped": 0,
+          "skip_reasons": [],
+          "overall": {
+            "with_skill_wins": 5,
+            "without_skill_wins": 2,
+            "equivalent": 2,
+            "winner": "with_skill",
+            "avg_confidence": "medium",
+            "summary": "with_skill wins overall (5 vs 2 criterion wins out of 9 judgments, avg confidence: medium)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 3,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 1,
+              "equivalent": 1
+            },
+            "completeness": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 1,
+              "equivalent": 1
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_b",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs agree on the core correct conclusion that a missing serverSideEncryptionConfiguration field doesn't mean 'unencrypted' - it typically indicates an AWS-owned default key is in use. However, Output B provides a more precise and confident technical explanation by citing a specific named check (BR-18) with explicit scoping rules: the check only applies to MANAGED type knowledge bases, and is N/A for VECTOR, KENDRA, and SQL types. This is a concrete, verifiable claim about Bedrock's knowledge base types and how serverSideEncryptionConfiguration semantically applies only to MANAGED knowledge bases (where Bedrock manages the vector store), not to VECTOR type knowledge bases where the customer brings their own vector store (like OpenSearch Serverless). This aligns with how AWS documents knowledge base types - VECTOR type uses customer-configured vector stores, and the encryption of that data lives in the vector store's own configuration, not in the KB resource itself. Output A's reasoning is similar in substance but more hedged ('I'm inferring from the docs,' 'I didn't see that stated outright') and ultimately suggests multiple possible statuses (PASS, lower-severity finding, NOT_APPLICABLE) depending on how the check is defined, which is less precise. Output B commits to a single correct answer (N/A) with clear criteria, whereas Output A offers conditional guidance that, while safely hedged, is less authoritative and leaves the determination up to interpretation. Output B's explanation of why VECTOR type knowledge bases don't have this field (because the underlying vector store, not Bedrock itself, manages data-at-rest encryption) is more technically coherent and specific.",
+                  "evidence": "Output B: 'BR-18 (Knowledge Base Customer-Managed KMS Encryption) only evaluates knowledge bases where knowledgeBaseConfiguration.type is MANAGED... Yours is VECTOR, so it is out of scope.' vs Output A: 'I'm inferring from the docs that the field doesn't apply to this type, and I didn't see that stated outright... Which status fits depends on how your check is defined.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs give actionable next steps, recommending checking the OpenSearch Serverless collection's encryption security policy via specific API calls. Output A mentions GetSecurityPolicy or BatchGetCollection, plus additional details about data source encryption (GetDataSource), S3 bucket encryption, and RetrieveAndGenerate's kmsKeyArn - this is a broader set of actionable items covering more of the data pipeline. Output B focuses specifically on the OpenSearch Serverless collection encryption check with list_security_policies and get_security_policy calls, which is more narrowly scoped but very clear and specific about what to do next. Output B also provides a precise, ready-to-use finding template (Status: N/A, Details, Resolution note) that is immediately actionable for writing up the assessment finding. Output A's guidance is more exploratory/conditional, requiring the user to decide which status fits their check definition. Overall, Output A provides more comprehensive coverage of actionable checks across the full encryption surface, while Output B provides a clearer single path with a ready output format. This is close, with Output A slightly broader but Output B more decisively actionable for the specific question asked.",
+                  "evidence": "Output A: 'Check it with opensearchserverless:GetSecurityPolicy (type encryption) or BatchGetCollection... extend the check to cover the collection's encryption policy and the data sources' KMS settings.' Output B: 'Status: N/A. Details: Cite type = VECTOR... Resolution note: Confirm the underlying vector store is encrypted with a customer-managed key... use opensearchserverless list_security_policies and get_security_policy with type=encryption.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A covers a more complete picture of where encryption settings exist across the entire knowledge base pipeline: vector data in OpenSearch Serverless, transient data during ingestion (data source serverSideEncryptionConfiguration), source documents in S3, and query-time encryption via RetrieveAndGenerate's kmsKeyArn. This gives the user a fuller picture of all the encryption touchpoints relevant to a comprehensive security assessment of the knowledge base, which is valuable for a 'misconfiguration assessment' as mentioned in the prompt. Output B is narrower, focusing primarily on the BR-18 check scoping and the single recommendation to check the OpenSearch Serverless encryption policy, without mentioning data source encryption, S3 bucket encryption, or query-time encryption. However, Output B does cover the specific question more directly and ties the answer to a named check's defined behavior (which is useful if that check exists in the user's framework), and explicitly addresses the 'can I call it unencrypted' question with clear reasoning about the API's representation. On balance, Output A's broader coverage of the full encryption landscape makes it more complete for a security posture review context.",
+                  "evidence": "Output A: 'Vector data in OpenSearch Serverless... Transient data during ingestion... Source documents in S3... Queries: RetrieveAndGenerate can take an optional kmsKeyArn.' Output B only discusses the OpenSearch Serverless collection's encryption policy as the follow-up check, without covering data source, S3, or query encryption pathways."
+                }
+              ]
+            },
+            {
+              "iteration": 2,
+              "overall_winner": "equivalent",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A correctly identifies that the serverSideEncryptionConfiguration field in the Bedrock GetKnowledgeBase API is specifically tied to the knowledgeBaseConfiguration.type == MANAGED case, and that VECTOR type knowledge bases (backed by vector stores like OpenSearch Serverless) don't expose that field because encryption is handled by the underlying vector store, not by Bedrock's own managed storage. This aligns with AWS documentation structure where serverSideEncryptionConfiguration applies to MANAGED type knowledge bases. Output A's framing of this as an N/A scenario for a specific named check (BR-18) is more precise and ties directly to AWS's actual API behavior. Output B's claim that 'Bedrock encrypts knowledge base resources by default with an AWS-owned key' for a VECTOR type is less clearly grounded - the encryption for VECTOR type is actually governed by the vector store (OpenSearch Serverless) itself, not by a Bedrock-level default key described by serverSideEncryptionConfiguration. Output B conflates the data source's own serverSideEncryptionConfiguration (which does exist for data sources) with the knowledge base level field, and the 'if the check is encrypted at rest: PASS' guidance is somewhat confusing since it's not clear the default encryption claim is accurate for VECTOR-type coupled with OPENSEARCH_SERVERLESS backing (which has its own separate encryption policy, mandatory but managed independently of Bedrock's serverSideEncryptionConfiguration field). Output A's explanation is more technically coherent and specific regarding why the field doesn't appear for VECTOR type.",
+                  "evidence": "Output A: 'BR-18 only evaluates knowledge bases whose knowledgeBaseConfiguration.type is MANAGED. Yours is VECTOR, so it is out of scope for the check.' Output B: 'Bedrock encrypts knowledge base resources by default with an AWS-owned key... The serverSideEncryptionConfiguration structure is documented for managed knowledge bases... so the field normally won't appear in its response.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B provides a more comprehensive and actionable list of specific places to check for CMK usage (GetDataSource, OpenSearch Serverless collection encryption policy, S3 source bucket encryption, and KMS permissions on the service role), which gives the user concrete next steps across the full data pipeline. Output A also mentions checking the OpenSearch Serverless collection's encryption policy and data source KMS settings, but with less specificity and detail (e.g., it doesn't mention S3 bucket encryption or IAM role KMS permissions). Output B's structured breakdown of 'Where to look for a CMK' is more thorough and directly actionable for a security assessment.",
+                  "evidence": "Output B: 'Data source: check GetDataSource for its serverSideEncryptionConfiguration... OpenSearch Serverless collection: check its encryption security policy... S3 source bucket: check its default encryption... Knowledge base service role: if a CMK is used, the role needs the right KMS decrypt permissions.' Output A: 'Confirm that the OpenSearch Serverless backing store is encrypted with a customer-managed KMS key... For Bedrock-side ingestion it is also the data source's KMS settings.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "equivalent",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs address the core question (status to give and whether it can be called unencrypted) and provide reasoning for why the missing field doesn't indicate no encryption. Output A frames this within a specific named check (BR-18) context with a structured finding write-up (status, details, severity, resolution), which is thorough for a formal assessment framework. Output B covers more ground on alternative encryption check scenarios (PASS vs N/A depending on check definition) and provides a broader set of downstream resources to verify, plus a documentation citation. Each has complementary completeness: A is more complete on the formal finding structure and severity considerations, while B is more complete on the various check-type interpretations and the full chain of resources to verify. Overall they balance out in comprehensiveness, each with some unique angles.",
+                  "evidence": "Output A: 'Status: N/A. Details:... Severity:... Resolution:...' Output B: 'If the check is \"encrypted at rest\": PASS or compliant... If the check requires a customer managed key (CMK): don't fail it on this response alone... Avoid: FAIL, \"unencrypted\" or \"missing encryption\".'"
+                }
+              ]
+            },
+            {
+              "iteration": 3,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_b",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs agree on the core conceptual point that a missing serverSideEncryptionConfiguration does not mean 'unencrypted' and that OpenSearch Serverless collections are always encrypted via either an AWS-owned key or a CMK. However, Output B provides a more precise and internally consistent framework by naming a specific check (BR-18) and explaining why a VECTOR-type knowledge base would be scoped out (N/A) rather than evaluated as Pass/Fail, which is more technically defensible given how most Bedrock misconfiguration assessment frameworks scope the serverSideEncryptionConfiguration field to MANAGED knowledge bases. Output A's claim that the check should be 'Pass' or 'compliant' with a note about AWS-owned key is plausible but mixes the concept of the field being inapplicable to VECTOR types with giving it a pass verdict, which is less rigorous than correctly scoping it as N/A. Both outputs' specific claims about certain API fields (kmsKeyArn for 'managed' KB only) appear consistent, but Output B's answer is cleaner and avoids conflating 'optional field' with 'compliant status'swapping in 'N/A' is the more semantically correct state for an inapplicable check.",
+                  "evidence": "Output B: 'This is check BR-18, Knowledge Base Customer-Managed KMS Encryption. It only evaluates knowledge bases where knowledgeBaseConfiguration.type is MANAGED. Your knowledge base is VECTOR, so it is out of scope.' vs Output A: 'Suggested status: Pass or compliant, with a note that it uses the default AWS-owned key.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "equivalent",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs provide clear, specific next steps: checking the OpenSearch Serverless collection's encryption security policy via GetSecurityPolicy, and both offer to perform the read-only check if given account/region details. Output A additionally suggests checking GetDataSource and S3 bucket encryption, giving slightly more breadth of checks, while Output B gives a precise suggested wording for a Finding_Details field and names the specific API methods (get_security_policy, batch_get_collection) to use. Both are highly actionable in comparable ways.",
+                  "evidence": "Output A: 'The OpenSearch Serverless collection's encryption security policy. Use GetSecurityPolicy with type encryption...' Output B: 'I can read the collection's encryption policy with read-only calls (opensearchserverless get_security_policy / batch_get_collection). Tell me the region and collection, and I'll check.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B covers the same conceptual ground as Output A (missing field reasoning, OpenSearch Serverless encryption, next-step verification) but adds the crucial scoping/applicability dimension (N/A due to VECTOR type being out of scope for the specific check) which directly and completely answers the user's status question in a definitive, check-specific way. Output A's answer leaves ambiguity between 'Pass' vs 'Not CMK' depending on 'your standard', which, while flexible, is less complete in directly answering 'what status should the check give it' with a singular grounded answer tied to the actual check logic.",
+                  "evidence": "Output B: 'BR-18 marks VECTOR, KENDRA and SQL knowledge bases as N/A... Yours is OpenSearch Serverless.' vs Output A: 'If your standard requires customer managed keys (CMK), mark it not using CMK. Treat that as a policy gap, not a missing-encryption finding.'"
+                }
+              ]
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 3,
+          "pairs_skipped": 0,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 7.351,
+              "without_skill_seconds": 14.964,
+              "delta_seconds": -7.6,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 2,
+              "with_skill_seconds": 6.985,
+              "without_skill_seconds": 9.226,
+              "delta_seconds": -2.2,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 3,
+              "with_skill_seconds": 11.463,
+              "without_skill_seconds": 11.663,
+              "delta_seconds": -0.2,
+              "threshold_exceeded": false
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "equivalent",
+          "with_skill_wins": 0,
+          "without_skill_wins": 0,
+          "equivalent": 3,
+          "summary": "Neither side is more consistent (with_skill won 0 dimension(s), without_skill 0, 3 equivalent of 3)."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs give the identical core answer: the check (BR-18) should return N/A because the knowledge base type is VECTOR (BR-18 only applies to MANAGED type), and all explicitly state you cannot call it unencrypted since a missing serverSideEncryptionConfiguration field only means AWS-owned key is used, not no encryption. All note ACTIVE status and OPENSEARCH_SERVERLESS storage type are irrelevant to the verdict.",
+              "evidence": "Iter1: 'The check should give this knowledge base N/A... follows the BR-18 check'; Iter2: 'should give this knowledge base N/A... BR-18 only evaluates knowledge bases whose type is MANAGED'; Iter3: 'The check should give it N/A... only evaluates knowledge bases where type is MANAGED'"
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses recommend the same next steps: set finding status to N/A with details citing the VECTOR type and OPENSEARCH_SERVERLESS storage, and recommend checking the OpenSearch Serverless collection's encryption security policy via read-only calls (list_security_policies/get_security_policy or batch_get_collection) to confirm customer-managed key usage, offering to do this check if the user wants.",
+              "evidence": "Iter1: 'use opensearchserverless list_security_policies and get_security_policy with type=encryption... I can check the OpenSearch Serverless collection's encryption policy with read-only calls.'; Iter2: 'Confirm that the OpenSearch Serverless backing store is encrypted with a customer-managed KMS key... I can look it up read-only'; Iter3: 'I can read the collection's encryption policy with read-only calls (opensearchserverless get_security_policy / batch_get_collection)'"
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three use a similar structure: bold lead-in answer, bulleted 'Why N/A' section, bulleted 'why not unencrypted' explanation, and a finding/details section with suggested wording, plus an offer to check OpenSearch encryption policy. However, iteration 2 adds a distinct 'Severity' bullet point not present in the others, and the exact subsection headers/bolding differ slightly (iteration 3 uses a blockquote for suggested wording while 1 and 2 use bullet-style 'What to put in the finding').",
+              "evidence": "Iter2 includes '**Severity:** The check's severity is High, but N/A findings don't count toward the High-severity total.' which is absent in Iter1 and Iter3; Iter3 uses a blockquote format '> Knowledge base type is VECTOR...' while Iter1 and Iter2 use bullet list format under 'What to put in the finding'.",
+              "diverging_iterations": [
+                2
+              ]
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs give the same core answer: the knowledge base should not be called 'unencrypted'; the missing serverSideEncryptionConfiguration field is normal for a VECTOR/OpenSearch Serverless knowledge base because that field applies to managed KBs, and Bedrock encrypts by default with an AWS-owned key unless a CMK is specified. All note the real encryption settings live in the OpenSearch Serverless collection's encryption policy, data source settings, and S3 bucket encryption.",
+              "evidence": "Iteration 1: 'No, you can't call it unencrypted... Bedrock encrypts knowledge base resources by default with an AWS-owned key'; Iteration 2: 'No, you can't call it unencrypted... The serverSideEncryptionConfiguration structure is documented for managed knowledge bases'; Iteration 3: 'No, you can't call it unencrypted... knowledge base resources are encrypted by default with an AWS-owned key'"
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend the same status logic (PASS/compliant if checking encryption-at-rest generally, 'not using CMK' or similar lower-severity finding if CMK is required, avoid FAIL/unencrypted), and all recommend checking the same three places: OpenSearch Serverless collection's encryption security policy via GetSecurityPolicy, GetDataSource's serverSideEncryptionConfiguration for transient ingestion data, and S3 bucket default encryption. All three also offer to run these checks if given KB ID and region.",
+              "evidence": "Iteration 1: 'Check it with opensearchserverless:GetSecurityPolicy... extend the check to cover the collection's encryption policy and the data sources' KMS settings'; Iteration 2: 'check its encryption security policy... check GetDataSource for its serverSideEncryptionConfiguration'; Iteration 3: 'Use GetSecurityPolicy with type encryption... check GetDataSource... check the S3 data source bucket's default encryption'"
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three use a similar structure: bold opening answer, explanation sections with headers, bulleted lists for where to check, and a closing offer to run checks given KB ID/region. However, the specific section headers and ordering differ slightly - iteration 1 has 'What the response means' then 'Suggested status' then 'Where the encryption settings...'; iteration 2 has 'Why the field is missing' then 'Status to give it' then 'Where to look for a CMK'; iteration 3 has 'Suggested status' first, then 'Why', then numbered list for checks plus a 'Rule of thumb' section. Iteration 2 also includes a source link not present in others, and iteration 3 uses numbered list for check steps vs bullets in 1 and 2.",
+              "evidence": "Iteration 2 ends with 'Source: [Encryption of knowledge base resources](https://docs.aws.amazon.com/bedrock/latest/userguide/encryption-kb.html).' which is absent in 1 and 3. Iteration 3 uses numbered list '1. The OpenSearch Serverless collection's... 2. The knowledge base's data sources... 3. The S3 data source bucket's' while iterations 1 and 2 use bullet points for similar content.",
+              "diverging_iterations": [
+                2,
+                3
+              ]
+            }
+          }
+        }
+      }
+    },
+    "bedrock-sec-kb-managed-cmk": {
+      "summary": "This evaluation covered a single chat task (3 repeated runs), checking whether the agent correctly identifies and reports on knowledge-base encryption findings in Bedrock (citing check BR-18, correctly flagging kb-a as Passed with its customer-managed key ARN, kb-b as Failed/High severity, and avoiding duplicate findings or a retired check ID).\n\nThe behavior under test fired reliably in all 3 runs (trigger_fired 3/3) for both variants, so there's a solid basis for comparison.\n\nOn expected output and assertions, there is a large and consistent gap: with_skill met the expected output in all 3 runs (3/3, high confidence) and passed all 15 assertion checks (15/15, 100%). without_skill failed to meet the expected output in any run (0/3, high confidence) and passed only 3 of 15 assertion checks (20%). Breaking this down by individual assertion: one assertion (\"does not cite the retired duplicate check BR-09\") passed for both variants in all runs \u2014 this check isn't distinguishing the two. The other four assertions (citing BR-18, reporting kb-a as Passed with the correct key ARN, reporting kb-b as Failed/High, and avoiding a duplicate finding for kb-b) all passed consistently for with_skill and failed consistently for without_skill across all 3 runs. All of these judgments were made with high confidence, so the measurement itself appears reliable, not just a low-confidence artifact.\n\nOn runtime and cost, the two variants were close: with_skill averaged 11s and $0.09 per run, without_skill averaged 9s and $0.08 per run \u2014 a small difference (~2s, ~$0.01) in without_skill's favor. Context window utilization was low for both (6.2% vs 4.7%), with no compaction events for either.\n\nQuality comparison data was not usable here: all 3 pairs were skipped and none were evaluated, so no quality-favoring signal is available in either direction.\n\nOutput consistency (run-to-run stability of each variant's own outputs, independent of correctness) was high for both: without_skill was rated fully \"consistent\" (score 3.0) across all three dimensions, while with_skill was rated \"mostly_consistent\" (score 2.67, two dimensions consistent, one mostly consistent) \u2014 both are high-confidence ratings and the difference is minor.\n\nOverall, the main finding is a substantial difference in task correctness: with_skill satisfied the expected output and nearly all assertions, while without_skill did not meet the expected output in any run and failed most assertions tied to specific factual details (check ID citation, pass/fail status reporting, key ARN citation, duplicate finding suppression). This correctness gap is large and consistent across repeated runs, while cost, runtime, and output consistency differences between the two variants are comparatively minor and don't offset the correctness gap in either direction. No quality-comparison data was available to weigh further.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/3",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Cites check ID BR-18",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "kb-a is reported Passed, with the customer-managed key ARN cited",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "kb-b is reported Failed at High severity",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 3,
+            "text": "kb-b produces exactly one finding rather than a duplicate from a second knowledge base encryption check",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 4,
+            "text": "Does not cite the retired duplicate check BR-09",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "15/15",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "3/15",
+          "percentage": 20
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "11s",
+          "cost_avg": "$0.09",
+          "context_window_avg": {
+            "utilization": "6.2%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "9s",
+          "cost_avg": "$0.08",
+          "context_window_avg": {
+            "utilization": "4.7%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 3,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "without_skill",
+          "with_skill_wins": 0,
+          "without_skill_wins": 1,
+          "equivalent": 2,
+          "summary": "without_skill is more consistent: it won 1 dimension(s), with_skill 0, 2 equivalent of 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the check as BR-18, state it's High severity/Regional/Verifiable, apply to MANAGED knowledge bases, and conclude kb-a is Passed (citing the key ARN) while kb-b is Failed (High) because the API omits kmsKeyArn when AWS-owned key is used, with explicit instruction not to call it 'unencrypted'. All conclude kb-b produces 1 finding due to the one-finding-per-check-per-region rule.",
+              "evidence": "All three state 'BR-18, Knowledge Base Customer-Managed KMS Encryption', 'High severity', 'Passed' for kb-a, 'Failed (High)' for kb-b, and 'one finding per check per applicable region, not one per resource' leading to 1 finding."
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend the same remediation: recreate kb-b as a managed knowledge base with a customer-managed KMS key. All also note the ambiguity about per-resource rollup similarly.",
+              "evidence": "'The resolution is to recreate the managed knowledge base with a customer-managed KMS key' appears in all three iterations with nearly identical wording."
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "Iteration 1 uses prose with bold headers for each KB plus a separate paragraph on finding count, iteration 2 uses a markdown table to compare kb-a and kb-b plus bullet lists, and iteration 3 uses bullet lists with bold section headers but no table. All have a similar overall shape (short answer, check description, per-KB evaluation, finding count explanation) but presentation differs between table-based (iter 2) and prose/list-based (iter 1 and 3).",
+              "evidence": "Iteration 2: '| KB | Field state | Result | What the evidence says |' table format. Iteration 1: 'kb-a: Passed.' as prose paragraph. Iteration 3: '**What each knowledge base gets** - **kb-a** is...' as bullet list.",
+              "diverging_iterations": [
+                2
+              ]
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "consistent",
+          "overall_score": 3.0,
+          "dimension_counts": {
+            "consistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs decline to state a definitive finding count or exact check emission, citing lack of knowledge of the specific tool/ruleset. All agree kb-a has a customer-managed key (likely 'pass'/no finding) and kb-b defaults to AWS-managed key encryption (default encryption still applies), with the finding outcome being ambiguous/dependent on the specific rule logic (0 or 1 finding). All three provide the same underlying facts: kmsKeyArn is the ARN of the KMS key for a managed knowledge base, kb-b still gets default encryption, and the exact finding count can't be determined without knowing the tool.",
+              "evidence": "Iteration 1: 'A missing block could be reported as not using a customer-managed key (one finding)... Or the check could emit separate findings...' Iteration 2: 'A single rule evaluated against one resource usually gives 0 or 1 finding... A rule that raised separate findings... would give more.' Iteration 3: 'A reasonable check would treat this as compliant and emit no finding... Whether that counts as a finding depends on your policy... would produce at most one finding per knowledge base for the missing key.'"
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses recommend the same next steps: identify the specific tool/ruleset (Security Hub, Prowler, ScoutSuite, internal scanner, etc.) or provide the rule definition/logic, and offer to run read-only calls against the actual knowledge bases (with region and IDs) to confirm configuration.",
+              "evidence": "Iteration 1: 'If you tell me which one it is... I can look at its definition... I can also check the actual configuration of kb-a and kb-b in your account with read-only calls.' Iteration 2: 'If you tell me which tool or ruleset this is... I can also run read-only checks on the real knowledge bases.' Iteration 3: 'The name of the tool or ruleset, or the text of the rule definition... Alternatively, I can run read-only calls to confirm what the two knowledge bases are configured with.'"
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs use the same structural shape: an opening statement declining to answer definitively, followed by bolded subsections with bullet points detailing what the documentation says, implications/inferences, and what's needed for a firm answer, ending with an offer to run read-only checks.",
+              "evidence": "All three use bold headers like 'What the documentation says', bullet lists for kb-a/kb-b details, and a closing paragraph/section about needing more info or running read-only calls. Iteration 1 uses 'What the documentation does say' / 'What I can't determine', Iteration 2 uses 'What the documentation says about the setting' / 'What that implies', Iteration 3 uses 'What the Bedrock docs say...' / 'What I need to give you a firm answer' - same prose+bullets structure."
+            }
+          }
+        }
+      }
+    },
+    "bedrock-sec-custom-model-single-finding": {
+      "summary": "This eval tested a chat task around Amazon Bedrock custom-model security findings (check BR-15, modelKmsKeyArn behavior). The trigger condition fired in all 3 runs, so the behavior under test was exercised as intended.\n\nExpected-output match showed a clear split: with_skill met the expected output in 3/3 runs (high confidence), while without_skill met it in 0/2 runs (also high confidence, so this is a confident measurement, not a weak signal). Note without_skill only has 2 recorded runs vs with_skill's 3, so without_skill's comparison rests on a smaller sample.\n\nPer-assertion results show a mix rather than a uniform gap:\n- \"Cites check ID BR-15\" and \"Reports exactly one finding at Failed/High severity\": with_skill passed all runs, without_skill failed all runs \u2014 a consistent with_skill-passes/without_skill-fails pattern on two distinct assertions.\n- \"Explains that missing modelKmsKeyArn means AWS-owned key, not unencrypted\": with_skill passed 3/3; without_skill passed 1/2 (medium confidence on that judgment), flagged as \"flaky\" \u2014 meaning without_skill's behavior here varied between its own runs, not just differing from with_skill.\n- \"Does not cite a second custom-model check BR-17 or BR-11\": both variants passed 100% of the time \u2014 this assertion doesn't differentiate the two variants; both handle this correctly.\n\nOverall assertion pass rate was 12/12 (100%) for with_skill and 3/8 (38%) for without_skill.\n\nOn efficiency, with_skill ran faster (~7s vs ~10s) and cost less (~$0.06 vs ~$0.09). Context window utilization was low and similar for both (5.9% vs 5.2%), with no compaction events for either.\n\nQuality comparison (head-to-head judged quality) could not be assessed: all 3 pairs were skipped, with 0 pairs evaluated, so there is no data on relative output quality beyond the assertion/expected-output measures.\n\nOutput consistency (stability across repeated runs) was only measured for with_skill, rated \"mostly_consistent\" (score 2.33, high confidence). No consistency data is available for without_skill, so no comparison can be made on this dimension \u2014 it's missing data, not a sign of inconsistency for without_skill.\n\nIn sum: on this task, with_skill met expected output and nearly all assertions consistently across its runs, while without_skill failed the expected-output check and several assertions, including one flagged as flaky (inconsistent across its own two runs). with_skill was also somewhat faster and cheaper. However, the sample size is small (3 vs 2 runs), quality comparisons were entirely skipped, and consistency data exists only for with_skill, so these findings should be read as a limited, task-specific pattern rather than a broad conclusion.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/2",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Cites check ID BR-15",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/2",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "Reports exactly one finding at Failed status and High severity",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/2",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "Explains that the missing modelKmsKeyArn means an AWS-owned key is used, not that the model is unencrypted",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/2",
+              "percentage": 50,
+              "avg_confidence": "medium"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 3,
+            "text": "Does not cite a second custom-model check BR-17 or BR-11",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "2/2",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "12/12",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "3/8",
+          "percentage": 38
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "7s",
+          "cost_avg": "$0.06",
+          "context_window_avg": {
+            "utilization": "5.9%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "10s",
+          "cost_avg": "$0.09",
+          "context_window_avg": {
+            "utilization": "5.2%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 3,
+          "skip_reasons": [
+            "without_skill expected_output test failed",
+            "without_skill run failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill run failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "without_skill was not judged: Only 2 usable output(s); consistency needs at least 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.33,
+          "dimension_counts": {
+            "consistent": 1,
+            "mostly_consistent": 2
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same single check (BR-15, Custom Model Customer-Managed KMS Encryption), the same status (Failed), the same severity (High), and the same interpretation that the missing modelKmsKeyArn field means the model is encrypted with an AWS-owned key rather than being unencrypted. All three also identify the same related checks (BR-28, BR-18, BR-29) and explain why they don't fire. The core facts and explanations are essentially identical across all three."
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend the same primary remediation: recreate the custom model via a new customization job with a customer-managed KMS key, since the key cannot be changed on an existing model. All three also offer to run further assessments. However, iteration 2 and 3 include an explicit AWS documentation link reference, while iteration 1 does not. Iteration 3 additionally offers a more specific follow-up option (running BR-15, BR-18, BR-28, BR-29 specifically) whereas iterations 1 and 2 only offer the full assessment or single check. These are minor additional details rather than conflicting recommendations.",
+              "diverging_iterations": [
+                1
+              ]
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three use a similar structure: bolded check identification, bullet points for status/severity/scope, a section on what the missing field means, a section on related checks that don't fire, and a remediation section ending with an offer to run further checks. Iteration 1 lacks explicit bullet-point status/severity (it embeds them in bold prose at the start) and omits the AWS documentation link, while iterations 2 and 3 use explicit bulleted Status/Severity/Scope/Verifiability lists and include a doc reference. These are minor presentational differences within the same overall shape.",
+              "diverging_iterations": [
+                1
+              ]
+            }
+          }
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 2 usable output(s); consistency needs at least 3.",
+          "excluded": [
+            {
+              "iteration": 3,
+              "reason": "run failed"
+            }
+          ]
+        }
+      }
+    },
+    "bedrock-sec-grounding-needs-rag": {
+      "summary": "Both variants reliably triggered the behavior under test (3/3). Beyond that, the two variants diverge clearly on meeting expected output and assertion pass rates, though they are comparable on consistency.\n\nExpected output: with_skill met expectations in 3/3 runs (100%, high confidence), while without_skill met expectations in only 1/3 runs (33%, medium confidence). The medium confidence on without_skill's measurement means this gap is fairly well-supported but slightly less certain than with_skill's.\n\nAssertions: with_skill passed all 9/9 assertion checks across the task; without_skill passed only 3/9 (33%). Looking at individual assertions: one assertion (\"Cites BR-25 and BR-22\", a regex check) passed every time for with_skill and failed every time for without_skill \u2014 a clean, non-flaky divergence. The other two assertions (both LLM-judged: contextual grounding being reported N/A, and Automated Reasoning severity framing) were flagged as \"flaky\" \u2014 with_skill passed them consistently (3/3) while without_skill passed inconsistently (1/3 and 2/3 respectively), suggesting some run-to-run variability in without_skill's behavior on these specific checks rather than a clean pass/fail split. No assertion passed for neither variant, and none passed equally for both.\n\nQuality comparison: only 1 of 3 pairs could be directly evaluated head-to-head (2 were skipped, likely due to the expected-output misses limiting comparable pairs). In that single evaluated pair, with_skill was favored on accuracy and actionability, with completeness rated comparable; without_skill was not favored on any criterion. This is based on just one comparable pair with medium confidence, so it should be treated as a limited, suggestive signal rather than a robust finding.\n\nRuntime and cost: with_skill averaged ~7s and $0.06 per run; without_skill averaged ~12s and $0.11 per run \u2014 with_skill was faster and cheaper in this task. Neither variant exceeded the 30s runtime threshold. Context window utilization was low and similar for both (~5-6%), with no compaction events for either.\n\nOutput consistency: both variants were rated \"mostly_consistent\" overall, with without_skill scoring marginally higher (2.67 vs 2.33) and slightly more dimensions rated fully \"consistent\" (2 vs 1). Both measurements carry high confidence, so this is a genuine but small difference favoring without_skill's run-to-run stability, even though without_skill's assertion and expected-output pass rates were lower.\n\nOverall, the picture across dimensions is not uniform: with_skill shows substantially stronger and more certain results on meeting expected output, assertion pass rates, and the single quality comparison, while also running faster and cheaper; without_skill shows marginally better output consistency. The quality comparison is based on very limited data (1 of 3 pairs), and two of the nine assertions showed flaky (inconsistent) behavior for without_skill rather than a clean failure, which is worth noting when interpreting the aggregate pass-rate gap.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "1/3",
+          "percentage": 33,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Cites BR-25 and BR-22",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "Contextual grounding is reported N/A because there is no knowledge base or RAG workload in the region",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/3",
+              "percentage": 33,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 2,
+            "text": "Automated Reasoning is at most Informational severity, described as opt-in, and not Medium or High",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "9/9",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "3/9",
+          "percentage": 33
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "7s",
+          "cost_avg": "$0.06",
+          "context_window_avg": {
+            "utilization": "5.9%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "12s",
+          "cost_avg": "$0.11",
+          "context_window_avg": {
+            "utilization": "5.1%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 2,
+            "without_skill_wins": 0,
+            "equivalent": 1,
+            "winner": "with_skill",
+            "avg_confidence": "medium",
+            "summary": "with_skill wins overall (2 vs 0 criterion wins out of 3 judgments, avg confidence: medium)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 0,
+              "equivalent": 1
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_b",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B presents a specific, structured mapping to named assessment rules (BR-25, BR-22) with concrete statuses (N/A, Failed/Informational) that align with how a misconfiguration assessment tool would typically report results for contextual grounding (not applicable without RAG/knowledge bases) and Automated Reasoning (failed/informational since no policy is configured, but not a security-impacting finding). This matches the technical reality described in the prompt. Output A is also largely accurate in its technical explanation of how each check works (grounding needs a source, Automated Reasoning needs a policy, detect-mode only) but hedges heavily by saying it 'can't say exactly how its report labels these checks,' and never commits to a definitive answer to the user's direct question of 'what do the checks report.' Output A's explanation is correct in substance but less responsive to the specific ask. Output B's specific severity/status claims (e.g., Informational always for BR-22, Medium for BR-25 when failed) are assertions that may or may not perfectly match a real AWS tool, but given the framing of the prompt (a formal misconfiguration assessment with named checks), this specificity is more aligned with what was asked and is internally consistent and plausible.",
+                  "evidence": "Output A: 'I can't say exactly how its report labels these checks. If it flags them as missing, I'd treat that as informational or not applicable.' Output B: 'BR-25: Contextual Grounding Check | N/A | n/a' and 'BR-22: Automated Reasoning Policy | Failed | Informational'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs end with an offer to run read-only checks on the account, which is good. However, Output B gives the user a clear, direct answer to use (specific statuses and severities) that can be directly recorded in a security assessment report, plus a caveat section telling the user exactly what live data would confirm the result, and flags adjacent checks (BR-21, BR-14) that might still fail \u2014 giving a concrete action items path. Output A's actionability is more diffuse: it tells the user general things to check (prompt-attack filter, PII entities) which is useful advice but doesn't directly answer what the two specific checks will report, requiring the user to still figure out the exact finding status themselves.",
+                  "evidence": "Output B: 'A live read of the guardrail and knowledge-base lists would confirm both results.' and 'the same guardrail will still be assessed by the other guardrail checks, for example BR-21... and BR-14.' Output A: 'Check that the content filters include the prompt-attack filter and that their strength is appropriate.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "equivalent",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs cover the two checks requested, explain why contextual grounding is not applicable (lack of knowledge bases), explain why Automated Reasoning would not be configured, discuss the broader security posture context (content filters, PII filters), and both offer to run a live read-only check. Output A adds more detail on the underlying mechanics of each check (thresholds, grounding_source/query tags, supported languages, regions) while Output B adds more context about other related checks (BR-21, BR-14) and gives explicit status labels. Each has complementary completeness strengths, roughly balancing out.",
+                  "evidence": "Output A: 'With no knowledge bases, there may be no grounding source to evaluate against, so the check often doesn't apply...' and 'It runs in detect mode only. It returns findings and doesn't block content.' Output B: 'A guardrail with only content and sensitive-information filters can pass BR-24 and still fail BR-21 or BR-14.'"
+                }
+              ]
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 7.653,
+              "without_skill_seconds": 13.364,
+              "delta_seconds": -5.7,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "without_skill",
+          "with_skill_wins": 0,
+          "without_skill_wins": 1,
+          "equivalent": 2,
+          "summary": "without_skill is more consistent: it won 1 dimension(s), with_skill 0, 2 equivalent of 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.33,
+          "dimension_counts": {
+            "consistent": 1,
+            "mostly_consistent": 2
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three outputs agree on the core substance: BR-25 (contextual grounding) is N/A because there are no knowledge bases/RAG workloads, and BR-22 (Automated Reasoning) is Failed at Informational severity because no policy is attached. However, there is a divergence in severity labeling for BR-25: iterations 1 and 2 state it is 'n/a' severity or would be Medium severity only if later triggered, while iteration 3 explicitly labels the current severity as 'Medium (not counted)' which is a slightly different framing of an otherwise N/A check. This is a minor but material discrepancy in how severity is presented for the N/A check.",
+              "evidence": "Iteration 1: '| **BR-25: Contextual Grounding Check** | **N/A** | n/a |'; Iteration 2: 'This check only applies to RAG workloads... Then it would be Medium severity'; Iteration 3: '| **BR-25: Contextual Grounding Check** | **N/A** | Medium (not counted) |'",
+              "diverging_iterations": [
+                3
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs recommend treating BR-25 as not applicable/no action needed, treating BR-22 as an optional recommendation to adopt Automated Reasoning if the workload needs formally verified answers, and all offer to run a live/full read-only assessment against the account/region if the user wants. All three also mention other related checks (BR-21, BR-24, BR-14) as likely to also be assessed on the same guardrail.",
+              "evidence": "Iteration 1: 'I can run the live read-only checks against that region if you'd like.'; Iteration 2: 'I can run the full assessment against that region if you'd like. Tell me which region.'; Iteration 3: 'I can run the full read-only assessment for that region and give you the consolidated report if you want it.'"
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "Iterations 1 and 3 use a table to summarize the two checks followed by bullet-point explanations, while iteration 2 uses only prose/bullet points without a summary table. All three use a similar structure of explaining each check, noting severity caps, mentioning other checks (BR-21/24/14), and ending with an offer to run a live assessment. The core shape is recognizably the same but the table presence differs.",
+              "evidence": "Iteration 1 and 3 begin with a markdown table: '| Check | Status | Severity |' / '| Check | Result | Severity | Why |'; Iteration 2 opens with bolded headers directly in prose: '**Contextual grounding check (BR-25): N/A**'",
+              "diverging_iterations": [
+                2
+              ]
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three outputs agree on the core answer: both the contextual grounding check and the Automated Reasoning check are not configured on this guardrail (since neither a grounding policy nor an Automated Reasoning policy ARN is attached), and this is a coverage gap rather than a security misconfiguration. All describe contextual grounding scoring grounding/relevance with 0-0.99 thresholds, and Automated Reasoning needing a built policy from source documents. However, there are differences on whether no-knowledge-bases implies the grounding check is inapplicable: iteration 1 says 'there may be no grounding source to evaluate against, so the check often doesn't apply,' while iterations 2 and 3 explicitly state 'Having no knowledge bases doesn't make the check inapplicable' and that the source can be supplied via ApplyGuardrail/RAG pipeline. This is a material divergence in interpretation of a key fact.",
+              "diverging_iterations": [
+                1
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses recommend the same next steps: ask which tool/region is doing the assessment to interpret specific wording, treat the findings as low-severity/informational gaps rather than misconfigurations, focus review on content filters/PII filters/prompt-attack filters as the real security controls, and offer to run read-only API calls to confirm the guardrail's actual configuration if given the region."
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses use the same structure: an opening caveat/disclaimer, followed by bolded subsections for 'Contextual grounding check' and 'Automated Reasoning check' with bullet points, then a bolded summary section about security posture/assessment implications, and closing with an offer to run read-only checks. The shape and presentation choices (bold headers, bullet lists, prose caveats) are consistent across all three."
+            }
+          }
+        }
+      }
+    },
+    "bedrock-sec-vpc-endpoint-gated": {
+      "summary": "This evaluation covers a single chat task run 3 times for each variant. The triggering behavior under test fired consistently (3/3, 100%) \u2014 this is a shared setup fact, not a point of difference between variants.\n\nOn the core measure, the two variants diverged completely: with_skill met the expected output in all 3 runs (100%, high confidence, no low-confidence judgments), while without_skill met it in 0 of 3 runs (0%, also rated with high confidence, so this is not a weak/ambiguous measurement \u2014 the judges were confident in both outcomes). This pattern repeats at the assertion level: with_skill passed all 9 assertion checks (9/9) and without_skill failed all 9 (0/9). Notably, all three underlying assertions (\"Cites check ID BR-02\", \"Gives N/A\", \"Response caps severity at Informational rather than High\") show the identical pattern \u2014 with_skill passes, without_skill fails \u2014 every time, with no assertion passing for both or failing for both. This consistency across distinct assertions suggests a systematic difference in how the two variants handled this task, rather than a one-off fluke on a single check.\n\nQuality comparison data is not available: all 3 quality pairs were skipped and none were evaluated, so no head-to-head quality judgment can be drawn from that dimension.\n\nOn efficiency, with_skill ran faster (6s avg vs 10s avg) and cheaper ($0.05 vs $0.09) than without_skill. Context window utilization was low and similar for both (5.9% vs 5.0%), with no compaction events for either.\n\nOutput consistency (stability across repeated runs) was rated \"mostly_consistent\" for both variants, with with_skill scoring slightly higher (2.67 vs 2.33 on the internal scale) and reported with high confidence versus medium confidence for without_skill. Both showed a mix of \"consistent\" and \"mostly_consistent\" ratings across dimensions, so neither variant's output was perfectly stable run-to-run, but neither showed major instability either.\n\nOverall, this is a case where the pass/fail dimensions (expected output and all assertions) show a stark, consistently-reproduced divergence favoring with_skill's outcomes on this specific task, while with_skill also happened to be faster and cheaper \u2014 so there is no efficiency-vs-quality tradeoff muddying the picture here. However, the quality-comparison dimension provides no data to corroborate or contextualize this gap, and consistency scores show only a marginal difference between the two.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/3",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Cites check ID BR-02",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "Gives N/A",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "The response says it would be at most Informational severity, never High",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "9/9",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "0/9",
+          "percentage": 0
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "6s",
+          "cost_avg": "$0.05",
+          "context_window_avg": {
+            "utilization": "5.9%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "10s",
+          "cost_avg": "$0.09",
+          "context_window_avg": {
+            "utilization": "5.0%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 3,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "with_skill",
+          "with_skill_wins": 1,
+          "without_skill_wins": 0,
+          "equivalent": 2,
+          "summary": "with_skill is more consistent: it won 1 dimension(s), without_skill 0, 2 equivalent of 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same check (BR-02 Amazon VPC Endpoint Configuration), state that in a region with only the default VPC and no Bedrock interface endpoint, the check reports N/A (not a severity-rated failure), explain the N/A is due to no non-default VPC existing (determined via ec2:DescribeVpcs), and that the check's severity rating is Informational which only applies when it fails. All mention the same endpoint types (bedrock, bedrock-runtime, bedrock-agent, bedrock-agent-runtime) and the same conditional logic for when it would fail.",
+              "evidence": "Iteration 1: 'The check reports N/A... BR-02 is rated Informational. That applies only if the check evaluates to Failed'. Iteration 2: 'BR-02 (Amazon VPC Endpoint Configuration) reports N/A... Severity: The check's severity is Informational.' Iteration 3: 'it reports N/A... BR-02 is rated Informational, and that only applies when it fails.'"
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend the same next steps: no action needed currently since it's N/A, but if a non-default VPC with Bedrock workloads is later added, create Bedrock interface VPC endpoints for private connectivity. All three also offer to run the read-only assessment to confirm the result.",
+              "evidence": "Iteration 1: 'The remediation would be to create VPC interface endpoints for Bedrock so traffic stays on the AWS private network... I can run the read-only checks for that region if you'd like to confirm the result.' Iteration 2: 'The recommended fix for a Failed result is to create VPC interface endpoints for Bedrock... I can run it, or just BR-02, in your region if you tell me which one.' Iteration 3: 'create Bedrock interface VPC endpoints so traffic stays on the AWS private network... I can run it as a read-only scan if you want to confirm BR-02 for that region.'"
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three use a similar prose-with-bold-headers structure covering check identification, N/A reasoning, severity, and a hypothetical failure scenario, ending with an offer to run the assessment. However, iteration 2 uses bullet points for Status/Severity/Verifiability and a distinct 'If the region had a non-default VPC' bulleted section, while iterations 1 and 3 use more continuous prose paragraphs with bolded lead-ins. Iteration 3 adds a distinct bulleted 'When it would fail' list structured as conditions, differing slightly in presentation choice from iterations 1 and 2.",
+              "evidence": "Iteration 1: mostly prose paragraphs with bold lead-in phrases like '**Why N/A:**' and '**Severity:**'. Iteration 2: uses structured bullet lists '- **Status:** N/A...' and '- **Severity:**...' plus a separate bulleted 'If the region had a non-default VPC' section. Iteration 3: uses a bulleted 'When it would fail:' list with condition items.",
+              "diverging_iterations": [
+                2,
+                3
+              ]
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.33,
+          "dimension_counts": {
+            "consistent": 1,
+            "mostly_consistent": 2
+          },
+          "avg_confidence": "medium",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three outputs converge on the same core answer: there is no documented AWS-native check for a missing Bedrock interface VPC endpoint, so no severity can be stated, and the finding/severity would come from whichever third-party tool or custom rule the user runs. However, iteration 3 adds a materially different/additional fact not present in 1 or 2: specific Security Hub control IDs (Bedrock.1, BedrockAgentCore.1) and their details, which the other two do not mention at all (they simply say they found no Security Hub control). This is an added specific claim that diverges from the others.",
+              "evidence": "Iteration 3: 'Bedrock.1 covers KMS encryption of data sources... BedrockAgentCore.1 requires AgentCore runtimes to use VPC network mode. It is rated High' vs Iteration 1/2: 'I also found no Security Hub control or AWS Config managed rule for it.'",
+              "diverging_iterations": [
+                3
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses recommend the same next steps: identify the specific tool/ruleset/check ID being used to get the actual severity, and offer to do a read-only check of VPC endpoints in the region to see if a Bedrock endpoint exists. This primary recommendation and the offer to list endpoints appear in all three.",
+              "evidence": "Iteration 1: 'If you give me the tool and check name, I can look up its documented behavior. I can also check read-only whether any Bedrock endpoints exist...' Iteration 2: 'Which tool or ruleset is running the assessment?... I can also read-only list the VPCs and VPC endpoints...' Iteration 3: 'If you tell me which tool or ruleset you're using... I can also check this region read-only for Bedrock interface endpoints...'"
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three use a similar shape: an opening direct statement that no severity can be given, followed by a bulleted/sectioned explanation with bolded lead-ins, and a closing question/offer. Iteration 1 uses bold headers as standalone paragraph leads ('Where the check probably comes from.' etc.) rather than bullet points for the main explanatory content, while iterations 2 and 3 use bullet lists with bolded lead-in phrases throughout. This is a minor structural difference in presentation choice.",
+              "evidence": "Iteration 1: '**Where the check probably comes from.** If your assessment tool reports...' (bold text followed by prose paragraph, not a bullet) vs Iteration 2/3: '- **No native AWS check that I can find.** The docs cover...' (bullet list format throughout)",
+              "diverging_iterations": [
+                1
+              ]
+            }
+          }
+        }
+      }
+    },
+    "bedrock-sec-iam-user-visibility": {
+      "summary": "Both variants fired the trigger in all 3 runs and both met the top-level \"expected_output\" criterion in all 3 runs, with high confidence \u2014 so at that aggregate level there's no difference.\n\nThe per-assertion breakdown tells a more differentiated story, though. Overall assertion pass rates were 12/12 (100%) for with_skill and 6/12 (50%) for without_skill. Looking at the individual assertions:\n- \"Names the denied action\" and \"The response says the check must not be reported Passed when user-side policy reads are denied\" passed 3/3 for both variants (the latter judged by an LLM with high confidence) \u2014 these assertions aren't distinguishing the variants.\n- \"Cites check ID BR-01\" and \"Gives N/A\" passed 3/3 for with_skill but 0/3 for without_skill \u2014 a clear, consistent split on these two specific checks, each run in all 3 task instances.\n\nSo the overall expected_output pass/fail measure masks a real behavioral difference on two of the four assertions, even though it doesn't affect whether the broader \"expected output\" was judged met.\n\nOn quality, a head-to-head comparison across 3 pairs (medium average confidence) favored without_skill somewhat more often overall (6 criterion-wins vs 4), driven entirely by \"completeness\" (without_skill favored in all 3 pairs), while \"accuracy\" was split evenly (2-2) and \"actionability\" leaned slightly toward with_skill (2-1). No pairs were rated as comparable (tied) or skipped.\n\nOn runtime and cost, without_skill was faster (4s vs 8s average) and cheaper ($0.04 vs $0.07 average), with neither exceeding the 30s runtime threshold and both using low context-window utilization (4.5% vs 5.9%). This is a meaningful efficiency difference in without_skill's favor.\n\nOutput consistency across repeated runs was high for both: without_skill was rated fully \"consistent\" (score 3.0 across all dimensions) while with_skill was \"mostly_consistent\" (score 2.67, with 2 of 3 dimensions fully consistent), both at high confidence. This is a small, not dramatic, difference favoring without_skill's run-to-run stability.\n\nTaken together: the variants tie on trigger-firing and top-level expected-output success, but diverge on two specific assertions (BR-01 citation and the N/A response) where with_skill passed consistently and without_skill failed consistently across all runs. Quality comparisons lean slightly toward without_skill, mainly on completeness, while with_skill has a slight edge on actionability. Variant_b is faster, cheaper, and marginally more run-to-run consistent. These are tradeoffs rather than a clear overall verdict: with_skill's assertion performance is stronger on two concrete checks, while without_skill performs better on cost/speed and completeness/consistency.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Cites check ID BR-01",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "Gives N/A",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "Names the denied action",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "The response says the check must not be reported Passed when user-side policy reads are denied",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "12/12",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "6/12",
+          "percentage": 50
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "8s",
+          "cost_avg": "$0.07",
+          "context_window_avg": {
+            "utilization": "5.9%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "4s",
+          "cost_avg": "$0.04",
+          "context_window_avg": {
+            "utilization": "4.5%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 3,
+          "pairs_skipped": 0,
+          "skip_reasons": [],
+          "overall": {
+            "with_skill_wins": 4,
+            "without_skill_wins": 6,
+            "equivalent": 0,
+            "winner": "without_skill",
+            "avg_confidence": "medium",
+            "summary": "without_skill wins overall (6 vs 4 criterion wins out of 10 judgments, avg confidence: medium). Gotchas: without_skill is weaker on 'actionability' (with_skill won 2/3 iterations for this criterion)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 2,
+              "without_skill_wins": 2,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 2,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 3,
+              "equivalent": 0
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_b",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B provides a specific, named status (N/A for a check it labels BR-01) with a defined rationale tied to a presumed structured framework (status taxonomy, severity, verifiability fields), which appears to reference a specific internal or well-known assessment methodology (resembling Prowler/Security Hub-style checks). This gives a concrete, confident answer assuming such a framework exists and is correctly referenced. Output A is more epistemically humble, correctly declining to assert a specific label because it doesn't know the tool's exact status vocabulary, and instead reasons generically about what the status 'should' be (inconclusive/unknown/not-applicable). If Output B's named framework and check ID are fabricated or invented without basis, it risks presenting false specificity as fact, which is a greater accuracy risk if unsupported. However if BR-01 is a known real check this would be accurate and more precise. Since the prompt doesn't mention any specific framework or check named BR-01, Output B appears to have invented specific details (check ID, exact field names like Finding_Details, Verifiability, Resolution text) without evidence, which is a hallucination risk, lowering its accuracy. Output A's reasoning about not conflating 'no role found' with 'no violation overall', and the technical point about ListEntitiesForPolicy and inline/customer-managed policies covering bedrock:* is technically accurate and well-reasoned, demonstrating sound IAM knowledge. Overall, Output A's caution avoids unsupported fabrication, giving it an edge in strict accuracy despite being less specific.",
+                  "evidence": "Output A: 'I don't know the exact status label your tool or framework uses... If it only offers pass and fail, an access error should usually map to its error, not-applicable, or unknown state, not to pass.' Output B: 'BR-01 (AWS IAM Least Privilege) reports N/A... BR-01 is a Global check, so emit it once per account, tagged Region: \"Global\"... Verifiability: Heuristic... Severity: High.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B gives a much more actionable, structured answer: it specifies exactly how to record the finding (status field, severity, verifiability, finding details content, resolution text), and clearly states what permissions to add and what the outcome would be after remediation. Output A also gives actionable next steps (add specific IAM read permissions, use ListEntitiesForPolicy, check groups and inline policies) which are substantive and arguably more technically thorough in identifying blind spots (groups, inline policies, customer-managed policies with bedrock:* actions) that Output B does not mention. However, Output B's answer is more directly actionable in terms of 'how do I log/report this check result right now' which was the crux of the user's question (the exact status to report). Overall, Output B wins narrowly due to its direct, ready-to-use reporting template, even though output A's remediation permission list is slightly broader.",
+                  "evidence": "Output B: 'Status: N/A... Finding_Details: Name the denied action... Resolution: Use the standard text... Granting the read-only role the two user-side IAM list permissions and re-running would let BR-01 resolve to Passed or Failed.' Output A: 'grant the assessment role read-only access to iam:ListAttachedUserPolicies, iam:ListAttachedGroupPolicies, and iam:ListEntitiesForPolicy.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A covers additional important blind spots not mentioned in Output B: group-inherited policies (iam:ListAttachedGroupPolicies), inline/customer-managed policies granting bedrock:* that wouldn't show up as AmazonBedrockFullAccess attachment, and the broader point that a least-privilege check should also look for broad Bedrom actions beyond just the named managed policy. These are substantive completeness gains relevant to a 'least-privilege IAM check' for Bedrock. Output B is complete in terms of its own specific reporting framework (status, severity, resolution) but does not address groups, inline policies, or the broader scope of what 'least privilege' truly requires beyond the single managed policy. Thus Output A offers a more complete picture of the overall security assessment context, even though Output B's answer is more complete within its own narrow structured-check framing.",
+                  "evidence": "Output A: 'Groups: iam:ListAttachedGroupPolicies would show users who inherit the policy through a group.' and 'Inline and customer-managed policies: A policy that grants bedrock:* doesn't show up as an AmazonBedrockFullAccess attachment.' Output B does not mention groups or inline/customer-managed policies at all."
+                }
+              ]
+            },
+            {
+              "iteration": 2,
+              "overall_winner": "without_skill",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A confidently asserts a specific named check ('BR-01 AWS IAM Least Privilege') with precise status rules (N/A) and detailed conditions, but there's no evidence this is a real, documented AWS or widely-recognized standard check - it appears to be fabricated/hallucinated specificity about a check ID and its exact rule logic. Output B is more epistemically honest, acknowledging it cannot find a documented AWS assessment defining this exact check and status vocabulary, while still providing sound logical reasoning about what the evidence does and doesn't support (clean role-side, inconclusive user-side, suggesting INCONCLUSIVE/PARTIAL/ERROR/UNKNOWN rather than fabricating a specific named status value). B's reasoning about why PASS and FAIL are both unjustified is sound and defensible without inventing unverifiable specifics.",
+                  "evidence": "Output A: 'This is check BR-01 (AWS IAM Least Privilege), which is High severity, global and Heuristic... Passed requires both role-side and user-side policy discovery to succeed... If any of those discovery reads is denied, the status is N/A.' Output B: 'I couldn't find any AWS-documented assessment that defines one... Its status vocabulary (PASS, FAIL, INCONCLUSIVE and so on)... are defined by that tool, not by IAM or Bedrock.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A provides a more structured, ready-to-use finding template (Status, Finding_Details, Region, Verifiability, Resolution) that could be directly copied into a report, plus specific remediation steps (grant iam:ListAttachedUserPolicies and ListUserPolicies, re-run, and what to do if a violation is found). Output B also provides actionable steps (grant the permission, run ListEntitiesForPolicy, offers to run the lookup) and raises additional important considerations (groups, permission sets in IAM Identity Center) that A does not mention, which adds valuable actionable scope. However, A's structured finding format is more immediately usable for a compliance/assessment report deliverable, which seems to be the context of this read-only misconfiguration assessment.",
+                  "evidence": "Output A: 'Grant read access to iam:ListAttachedUserPolicies and iam:ListUserPolicies on the assessment role, then re-run... If the check does find users or roles that attach AmazonBedrockFullAccess, replace that policy with one scoped to the specific Bedrock actions and resources needed.' Output B: 'grant the assessment principal iam:ListAttachedUserPolicies (read-only). You could also run iam:ListEntitiesForPolicy on the AmazonBedrockFullAccess ARN... I can also run the ListEntitiesForPolicy lookup against your account if you want.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B covers additional important gaps that Output A misses entirely: it points out that the check doesn't cover groups (ListAttachedGroupPolicies) or IAM Identity Center permission sets, which are legitimate additional vectors through which AmazonBedrockFullAccess could be attached and evaded detection. B also offers to clarify the specific tool/runbook being used and offers follow-up action, showing more thorough engagement with the ambiguity of the request. Output A's completeness is narrower, focused on an assumed specific check without addressing these additional attack surface gaps, though it does provide a thorough breakdown of what should go into a finding report (Region, Verifiability, inline policies check).",
+                  "evidence": "Output B: 'Two other gaps could also hide the policy. The check doesn't cover groups (ListAttachedGroupPolicies). It also doesn't cover permission sets in IAM Identity Center.' Output A mentions checking iam:ListUserPolicies for inline policies but does not address groups or Identity Center permission sets at all."
+                }
+              ]
+            },
+            {
+              "iteration": 3,
+              "overall_winner": "without_skill",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A references a specific check (BR-01) with specific status naming conventions ('N/A', 'Passed', 'Failed') that appear to align with a defined assessment framework the user is likely using (common in AWS Config/Security Hub-style custom checks with Heuristic/Global/High severity metadata). This level of specificity suggests the agent has access to or knowledge of the actual check definition, making it more likely accurate for this particular tool's conventions. Output B is more hedged and explicitly states it could not find documentation defining the status, offering generic alternatives (ERROR, UNKNOWN, INSUFFICIENT_DATA, NOT_ASSESSED) without committing to the actual label used by the user's framework. If the user's framework truly uses 'N/A', Output A is more accurate; if not, Output A's confident claim could be fabricated/inaccurate. However, given the detailed structured metadata (check ID, severity, scope) in Output A, it reads as more domain-grounded and likely accurate for the specific assessment context implied by the prompt.",
+                  "evidence": "Output A: 'It reports N/A, not Passed. This is check BR-01 (AWS IAM Least Privilege), which is Heuristic and Global, with High severity.' Output B: 'The exact label depends on your assessment tool or framework. I didn't find any AWS documentation that defines a standard status for this case.'"
+                },
+                {
+                  "criterion": "accuracy",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Conversely, Output B is more epistemically honest by acknowledging that no AWS documentation defines a standard status for this exact scenario, and avoids overcommitting to a specific invented check ID and metadata (BR-01, Heuristic, Global, High severity) that may not correspond to any real, verifiable framework. If BR-01 is not a real documented AWS or industry-standard check, Output A's specific claims about its exact pass/fail logic could be fabricated, which would be a significant accuracy concern. Output B's more conservative, framework-agnostic answer is safer and avoids asserting unverifiable specifics.",
+                  "evidence": "Output A invents specific details: 'BR-01 gives Passed only when both role-side and user-side policy discovery succeed... Region: Global, emitted once per account.' Output B: 'The exact label depends on your assessment tool or framework.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B provides a more complete and practical remediation path, including additional related permissions (iam:ListUsers, iam:ListGroups, iam:ListAttachedGroupPolicies) and a more efficient single-call alternative (iam:GetAccountAuthorizationDetails), plus an actionable suggestion to check for explicit denies (SCP/permissions boundary) that could explain the AccessDenied. Output A's remediation is narrower, focused only on granting the two missing permissions without addressing group-based policy attachment paths or deeper troubleshooting of why access was denied.",
+                  "evidence": "Output B: 'You could also add iam:ListUsers, iam:ListGroups, and iam:ListAttachedGroupPolicies... Alternatively, iam:GetAccountAuthorizationDetails returns users, groups, roles... You should also look for an explicit deny, such as an SCP or a permissions boundary.' Output A: 'grant the assessment's read-only role iam:ListAttachedUserPolicies and iam:ListUserPolicies, then re-run.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B covers more angles relevant to a thorough security assessment: it addresses group-level policy attachments (a common way AmazonBedrockFullAccess could be granted that neither user nor role checks alone would catch), suggests investigating root cause of AccessDenied (SCP/permissions boundary), and frames the result with multiple plausible tool-specific labels. Output A is thorough on the structured reporting format (Finding_Details fields, Region, Resolution text) but omits the group-attachment vector and doesn't explore why access was denied in the first place.",
+                  "evidence": "Output B: 'group attachments can also grant the policy' and 'look for an explicit deny, such as an SCP or a permissions boundary.' Output A does not mention group-based attachments or investigate the root cause of the AccessDenied error."
+                }
+              ]
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 3,
+          "pairs_skipped": 0,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 8.216,
+              "without_skill_seconds": 0.042,
+              "delta_seconds": 8.2,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 2,
+              "with_skill_seconds": 7.95,
+              "without_skill_seconds": 6.948,
+              "delta_seconds": 1.0,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 3,
+              "with_skill_seconds": 8.588,
+              "without_skill_seconds": 7.816,
+              "delta_seconds": 0.8,
+              "threshold_exceeded": false
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "without_skill",
+          "with_skill_wins": 0,
+          "without_skill_wins": 1,
+          "equivalent": 2,
+          "summary": "without_skill is more consistent: it won 1 dimension(s), with_skill 0, 2 equivalent of 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs state the check is BR-01 (AWS IAM Least Privilege), High severity, Global, Heuristic, and that the status reported is N/A, not Passed, because the denial of iam:ListAttachedUserPolicies prevents full role+user discovery needed for Passed. All explain that Failed would only apply if a violation was actually found, and that role-only visibility is insufficient to confirm Passed. The key facts (check ID, status, severity, scope, verifiability, rationale) match across all three.",
+              "evidence": "All three say 'It reports N/A' and identify 'BR-01 (AWS IAM Least Privilege)' with 'High' severity, 'Global', 'Heuristic'. All explain 'A denied discovery read gives N/A' and 'Failed overrides N/A' type logic."
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend the same two next steps: (1) grant the assessment role iam:ListAttachedUserPolicies and iam:ListUserPolicies permissions and re-run the check to get a definitive Passed/Failed result, and (2) the standard remediation of replacing AmazonBedrockFullAccess with a least-privilege policy scoped to specific Bedrock actions/resources if a violation is found. Iteration 2 and 3 both also mention checking if ListUserPolicies is also denied, which iteration 1 doesn't explicitly mention but is a minor additional detail, not a conflicting recommendation.",
+              "evidence": "Iteration 1: 'Grant the assessment role needs iam:ListAttachedUserPolicies and iam:ListUserPolicies to complete the check.' Iteration 2: 'Grant read access to iam:ListAttachedUserPolicies and iam:ListUserPolicies on the assessment role, then re-run.' Iteration 3: 'grant the assessment's read-only role iam:ListAttachedUserPolicies and iam:ListUserPolicies, then re-run.'"
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three use a similar structure: bold status statement up front, a 'Why' explanation section, a bulleted list of finding fields (Status, Region, Verifiability, Finding_Details, Resolution), and a closing caveat/exception paragraph about Failed overriding N/A. However, the exact subsection headers and ordering differ slightly (e.g., iteration 1 uses 'How to record it:' and 'Failed overrides N/A:' as a separate bolded callout, iteration 2 uses 'What to write in the finding' with inline exception paragraph, iteration 3 uses 'What the finding should contain' with a 'Caveat' bullet and 'Possible exception' section). These are minor presentational variations within the same overall shape.",
+              "evidence": "Iteration 1: '**How to record it:**' ... '**Failed overrides N/A:**' Iteration 2: '**What to write in the finding**' ... (exception paragraph at end) Iteration 3: '**What the finding should contain**' ... '**Caveat:**' ... '**Possible exception:**'"
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "consistent",
+          "overall_score": 3.0,
+          "dimension_counts": {
+            "consistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs agree on the core answer: the check should NOT report PASS/compliant; it should report some form of inconclusive/unable-to-verify/error/unknown status, since roles were cleared but users were unverified due to AccessDenied. All three explicitly state they don't know the exact label used by the user's tool, and give equivalent examples (inconclusive, partial, unable to assess, error, unknown, insufficient_data, not_assessed). They all also agree the check should not report FAIL since no violation was found.",
+              "evidence": "Iter1: 'the honest status is inconclusive (also called \"unable to verify\" or \"partial\")'. Iter2: 'A well-designed read-only assessment would report something like INCONCLUSIVE, PARTIAL, or ERROR/UNKNOWN.' Iter3: 'It should report an inconclusive result, such as \"unable to assess\", \"incomplete\", or \"error\".'"
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend granting the missing permission iam:ListAttachedUserPolicies, checking group attachments via ListAttachedGroupPolicies, and mention a consolidated call (ListEntitiesForPolicy or GetAccountAuthorizationDetails) to close the gap. All also note that the exact label depends on the tool and ask for more info / offer to run read-only checks. Minor extra details differ (e.g., iter3 mentions SCP/permissions boundary check, iter2 mentions Identity Center permission sets) but primary recommendation is identical across all three.",
+              "evidence": "Iter1: 'grant the assessment role read-only access to iam:ListAttachedUserPolicies, iam:ListAttachedGroupPolicies, and iam:ListEntitiesForPolicy'. Iter2: 'grant the assessment principal iam:ListAttachedUserPolicies (read-only). You could also run iam:ListEntitiesForPolicy'. Iter3: 'grant the assessment role read-only access to iam:ListAttachedUserPolicies... Alternatively, iam:GetAccountAuthorizationDetails'."
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three use the same shape: an opening summary statement, a bulleted list breaking down Roles/Users/Overall result, a paragraph on additional gaps (groups, inline policies), and recommendations for next steps in prose/list form. No tables are used; all are prose with bullet lists.",
+              "evidence": "All three use bullet points for 'Roles'/'Users'/'Overall result' and follow with prose discussing gaps and recommendations."
+            }
+          }
+        }
+      }
+    },
+    "bedrock-sec-stale-access-prescribe-only": {
+      "summary": "This evaluation covered a single chat-task scenario, run 3 times for each variant. The triggering behavior under test fired reliably in all 3 runs (3/3), confirming the scenario was properly exercised.\n\nOn the core outcome measure, the two variants diverge sharply: with_skill met the expected output in all 3 runs (3/3, 100%, high confidence), while without_skill met it in 0 of 3 runs (0%, also high confidence \u2014 so this is not a low-confidence or ambiguous judgment, the grader was consistently sure in both directions). This divergence is mirrored exactly in the per-assertion results: all 4 distinct assertions (citing check ID BR-12, giving N/A, naming the blocked verb, and stating the check is never reported Passed/Failed) passed 3/3 for with_skill and failed 0/3 for without_skill, across both regex-based and LLM-based evaluators. Aggregated, that's 12/12 assertion passes for with_skill versus 0/12 for without_skill. Notably, there is no assertion that both variants pass, nor one that both fail \u2014 every single assertion shows the same clean split, meaning this one eval is consistently and uniformly discriminating between the two variants rather than showing a mixed picture.\n\nQuality comparison data is not available: all 3 output-quality pairs were skipped, so no direct quality judgment (favored/comparable) exists to weigh against the pass/fail results.\n\nOn operational metrics, the two variants are close: with_skill averaged 8s runtime and $0.07 per run versus without_skill's 7s and $0.06, with both using a small, similar fraction of context window (5.9% vs 4.7%, no compactions for either). These differences are minor and not a meaningful tradeoff dimension here.\n\nOutput consistency (run-to-run stability) was high for both: without_skill was rated fully \"consistent\" (score 3.0) across all dimensions, while with_skill was \"mostly_consistent\" (score 2.67, 2 consistent dimensions and 1 mostly-consistent), both with high confidence. This is a small difference and does not offset the large gap in meeting expected output.\n\nOverall, the dominant finding here is a consistent, high-confidence failure of without_skill to meet the expected output and pass any assertions in this eval, while with_skill passed uniformly. Runtime/cost differences are minor and consistency scores are both high, so these secondary dimensions do not meaningfully counterbalance the expected-output/assertion gap. However, since quality-pair comparisons were entirely skipped, the picture rests only on expected-output and assertion-level pass/fail data, not on a holistic quality judgment.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/3",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Cites check ID BR-12",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "Gives N/A",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "Names the blocked verb",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 3,
+            "text": "The response says the check is never reported Passed or Failed",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "12/12",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "0/12",
+          "percentage": 0
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "8s",
+          "cost_avg": "$0.07",
+          "context_window_avg": {
+            "utilization": "5.9%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "7s",
+          "cost_avg": "$0.06",
+          "context_window_avg": {
+            "utilization": "4.7%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 3,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "without_skill",
+          "with_skill_wins": 0,
+          "without_skill_wins": 1,
+          "equivalent": 2,
+          "summary": "without_skill is more consistent: it won 1 dimension(s), with_skill 0, 2 equivalent of 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three outputs agree on the core answer: BR-12 reports N/A, never Pass/Fail, because it requires iam:GenerateServiceLastAccessedDetails which is a Generate action blocked by the read-only guardrail, and it is classified as Prescribe-only (the only such check among 31 Bedrock checks), with severity Medium and Global scope reported once per account. However, iteration 3 adds an additional material fact not present in iterations 1 and 2: that BR-01 does run read-only and flags principals with AmazonBedrockFullAccess attached. This is an extra detail that diverges from the other two.",
+              "diverging_iterations": [
+                3
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs recommend the same next steps: use IAM Access Advisor in the console or a Lambda/script with iam:GenerateServiceLastAccessedDetails to review last-accessed data outside the agent, remove Bedrock permissions unused for 90+ days, reference the same AWS doc link, and offer to run the remaining Bedrock checks (BR-01 to BR-31) read-only for the user upon specifying account/region."
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses use the same structural shape: a bolded headline stating N/A status, a 'Why' bulleted section explaining the technical reason, a 'Details'/'How it appears' section with Severity/Scope/Finding details as bullet points, a recommendation section with bullets and a reference link, a closing note about not misreading N/A, and a final offer to run the full assessment with a request for account/region info."
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "consistent",
+          "overall_score": 3.0,
+          "dimension_counts": {
+            "consistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs give the same core answer: there is no 'stale Bedrock access check' documented or found in AWS DevOps Agent, so no status/reason can be given. All three cite the same supporting facts: documentation search returned nothing relevant, DevOps Agent's role is operational (investigates incidents/makes recommendations) not a security posture scanner, the agent space has one valid monitor association to account 012345678901_1, and the check likely comes from another tool (Security Hub, IAM Access Analyzer, Config, Trusted Advisor, or a custom skill/agent). Iteration 2 adds an extra fact about Bedrock model access being on by default, but the core answer and reasoning are the same across all three.",
+              "evidence": "Iter1: 'I couldn't find a stale Bedrock access check... If I named a status and a reason, I'd be making them up.' Iter2: 'I found no stale Bedrock access check... I didn't want to guess at a status or a reason.' Iter3: 'I couldn't find a stale Bedrock access check... I don't want to guess at a status.'"
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses recommend the same next steps: (1) ask the user to identify the source tool/exact wording of the check so it can be investigated directly, and (2) offer to run a read-only Bedrock assessment covering stale IAM roles/permissions, invocation logging, and guardrails/VPC endpoints. The ordering and framing are nearly identical across all three.",
+              "evidence": "Iter1: 'tell me which tool and the exact wording... I can also assess your Bedrock setup directly, read-only... IAM roles... invocation logging, guardrails and VPC endpoints.' Iter2: 'If you tell me where you saw the check... I can also run a read-only review of Bedrock... IAM roles... Guardrail and invocation logging... VPC endpoints.' Iter3: 'If you can tell me where you saw the check... I can run read-only checks... IAM roles or users... invocation logging and guardrail configuration.'"
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs use the same structure: an opening summary sentence stating the check wasn't found, followed by a bulleted list of supporting points (documentation search, agent space associations, possible source of the check), and closing with an offer to run a read-only assessment with a short list of items it would cover.",
+              "evidence": "All three use bold-lead bullet points (e.g., 'Documentation:', 'Not documented as a feature.', 'No documented check:') followed by closing paragraphs offering to run checks, with similar sub-bullet lists of assessment items."
+            }
+          }
+        }
+      }
+    },
+    "bedrock-sec-iam-action-prefix": {
+      "summary": "This evaluation covers a single chat task about whether \"bedrock-agent\" is an IAM action prefix or just an SDK client name.\n\nTrigger/behavior firing: the behavior under test fired in 2 of 3 runs (67%), so one run's data is partial or less representative of the full task set.\n\nExpected output: both without_skill and with_skill met the expected output in all 3 runs (100%), with high confidence judgments and no low-confidence flags. This dimension shows no difference between the variants.\n\nAssertions: both variants had identical assertion pass rates overall (6/9, 67%), and critically, they matched on every individual assertion:\n- \"Names the action\" passed 3/3 for both \u2014 this assertion doesn't differentiate the variants.\n- \"Does not name a bedrock-agent: IAM action\" failed 0/3 for both \u2014 this assertion never passed for either variant, suggesting either the behavior or the assertion itself may need review, independent of which variant is \"better.\"\n- \"The response explains that bedrock-agent is only the SDK client name\" passed 3/3 for both with high confidence \u2014 again, no differentiation.\nSo the assertion-level data shows no distinguishing signal between the two variants at all; all differences are at 0% or 100% for both.\n\nMetrics: without_skill ran faster on average (9s vs 11s) and slightly cheaper ($0.08 vs $0.09), with lower context window utilization (4.6% vs 5.7%). Both had zero compactions. These are small, likely low-stakes differences.\n\nQuality comparison: only 2 of 3 pairs could be evaluated (1 skipped), limiting confidence in this dimension. Across these 2 pairs, without_skill was favored more often overall (4 criterion-level favors) versus with_skill (1 favor), with 1 comparable. Breaking down by criterion: completeness favored without_skill in both evaluated pairs; accuracy favored without_skill once and was comparable once; actionability was split evenly (1 favor each). Average confidence for these quality judgments was medium, so this finding is suggestive but not strong, especially given the small sample (2 pairs).\n\nRuntime threshold: neither variant exceeded the 30s runtime threshold in the 2 evaluated pairs.\n\nOutput consistency: without_skill was rated \"mostly_consistent\" across repeated runs (score 2.67, medium confidence), with 2 fully consistent and 1 mostly-consistent dimension. No consistency data was available for with_skill (marked null/not evaluated), so no comparison can be made on this dimension \u2014 it's an absence of data for with_skill rather than a weakness.\n\nOverall picture: expected-output success and assertion-level results are identical between the two variants, showing no differentiation there. The main signals of difference are a modest runtime/cost edge for without_skill and a quality comparison (based on only 2 pairs, medium confidence) that leans toward without_skill, particularly on completeness. Consistency data exists only for without_skill and looks solid, but can't be compared since with_skill's consistency wasn't measured. Given the small sample sizes (3 runs, 2 quality pairs) and partial trigger firing, these findings should be treated as directional rather than conclusive.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "2/3",
+          "percentage": 67
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Names the action",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "Does not name a bedrock-agent: IAM action",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 2,
+            "text": "The response explains that bedrock-agent is only the SDK client name, not an IAM prefix",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "6/9",
+          "percentage": 67
+        },
+        "without_skill": {
+          "pass_rate": "6/9",
+          "percentage": 67
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "11s",
+          "cost_avg": "$0.09",
+          "context_window_avg": {
+            "utilization": "5.7%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "9s",
+          "cost_avg": "$0.08",
+          "context_window_avg": {
+            "utilization": "4.6%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 2,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "with_skill trigger test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 1,
+            "without_skill_wins": 4,
+            "equivalent": 1,
+            "winner": "without_skill",
+            "avg_confidence": "medium",
+            "summary": "without_skill wins overall (4 vs 1 criterion wins out of 6 judgments, avg confidence: medium)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 1,
+              "equivalent": 1
+            },
+            "actionability": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 2,
+              "equivalent": 0
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "with_skill trigger test failed"
+            },
+            {
+              "iteration": 2,
+              "overall_winner": "without_skill",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "equivalent",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs correctly identify the core answer: grant bedrock:ListAgents (not bedrock-agent:ListAgents), and correctly explain that 'bedrock-agent' is the SDK/CLI client name for the Agents for Amazon Bedrock control-plane API while the IAM action prefix is 'bedrock'. Both are honest about uncertainty regarding full documentation confirmation and suggest checking the Service Authorization Reference. Output A claims GetAgentActionGroup is needed for BR-19 without strong justification, and makes claims about other checks (BR-08, BR-19, BR-27) being affected that are speculative and not grounded in the prompt. Output B is more cautious, explicitly stating it hasn't confirmed which API the tool calls and flagging unconfirmed guardrail actions (ListGuardrails, GetGuardrail) rather than asserting them as fact. Output B's hedging is slightly more epistemically honest, but Output A's additional specifics (while riskier) are also plausible per domain knowledge. Both are roughly equivalent in core accuracy with different hedging styles."
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B provides a more complete and actionable minimal read-only policy that includes guardrail-specific actions (ListGuardrails, GetGuardrail) directly relevant to the 'guardrail association' check mentioned in the user's prompt, plus actions for agent aliases, versions, and knowledge bases that are commonly needed for a full posture assessment. It also adds a practical troubleshooting section ('If bedrock:ListAgents is already granted and you still get AccessDenied') covering SCPs, explicit denies, and regional issues \u2014 this is highly actionable for a real-world troubleshooting scenario. Output A's policy is narrower and focuses on BR-19's action groups rather than the guardrail check itself, which is the specific failure mentioned in the prompt. Output A also speculates about other checks without the same level of practical remediation guidance for AccessDenied scenarios."
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "The user specifically asked about the 'agent guardrail association check' failing. Output B directly addresses this by identifying that GetAgent returns guardrailConfiguration and includes ListGuardrails/GetGuardrail actions relevant to guardrail checks, directly tying back to the user's stated failure. Output A does name the check (BR-26) and reasons about related checks, but does not directly connect any action to the guardrail configuration verification itself, missing a key completeness element for the specific failure in question. Output B also covers related client names (bedrock-agent-runtime, bedrock-runtime) for additional context and provides broader troubleshooting steps, rounding out the response more completely relative to the user's specific scenario."
+                }
+              ]
+            },
+            {
+              "iteration": 3,
+              "overall_winner": "without_skill",
+              "position_assignment": "with_skill=output_b",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs correctly identify bedrock:ListAgents as the needed action and correctly explain that 'bedrock-agent' is an SDK/CLI client name, not an IAM prefix, which is accurate. Output A is more careful and transparent about uncertainty, explicitly flagging that it hasn't verified the guardrail-specific action names (ListGuardrails, GetGuardrail) against the Service Authorization Reference, which is an honest acknowledgment of potential inaccuracy. Output B invents specific check IDs (BR-26, BR-08, BR-19, BR-27) without any indication these are from a known framework or verified source, and presents them with high confidence as if they are established facts. This is a significant fabrication risk since these check IDs are not standard AWS or widely known security framework references (like CIS or Security Hub control IDs), and presenting them so confidently when they appear to be invented reduces the overall accuracy and trustworthiness of the response. Additionally, Output A's technical breakdown (bedrock-agent-runtime for InvokeAgent, bedrock-agentcore distinction) is more thorough and precise about the IAM/client distinctions.",
+                  "evidence": "Output A: 'I didn't confirm the guardrail action names (ListGuardrails, GetGuardrail) in this lookup, so check them against the Service Authorization Reference before you send the list.' Output B: 'This is BR-26, the Agent Guardrail Association check... BR-08 (agent IAM configuration)... BR-19 (action group least privilege)... BR-27 (idle session TTL)' \u2014 these check IDs are presented as established facts without any sourcing, which appears to be fabricated or unverified specificity."
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B provides more actionable guidance tailored to the apparent context of a structured security assessment framework (naming specific check IDs, providing a clear 'how to report this for now' section with N/A status guidance, and mentioning account-level considerations for multi-account checks). It gives a clear, minimal, ready-to-use IAM policy and practical next steps for how to document the finding while waiting for remediation. Output A also provides a practical JSON policy and useful troubleshooting steps (SCP, region mismatch, wrong principal) and offers to run a read-only check, which is also actionable, but Output B's guidance on how to report the failed check status and its specific advice about re-running and not marking as Passed is a more complete 'next steps' answer for an assessor use case. However, Output A's troubleshooting steps for why the grant might still fail are valuable and somewhat unique.",
+                  "evidence": "Output B: 'Mark it N/A with the reason AccessDenied and name bedrock:ListAgents as the denied action. Don't mark it Passed. Re-run it once the permission is granted.' Output A: 'If you want, I can run list-agents against the account to confirm which principal is being denied.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A provides a more complete least-privilege permission set specifically for the guardrail association check (including ListAgentAliases, GetAgentAlias, ListAgentVersions, GetAgentVersion, ListGuardrails, GetGuardrail) which is directly relevant to fully performing the check, and explains why each is needed. It also thoroughly covers the ecosystem of related clients (bedrock-agent-runtime, bedrock-agentcore, bedrock-agentcore-control) giving the user a fuller picture of the naming landscape. Output B's response, while covering related checks (BR-08, BR-19, BR-27), diverts focus from the specific guardrail association check completeness by introducing other checks not asked about, and provides a narrower permission set (just ListAgents and GetAgent) that may be insufficient to fully verify guardrail association without knowing guardrail details. Output A addresses the 'what is bedrock-agent' question with more nuance by covering more related client variants.",
+                  "evidence": "Output A: 'Listing agents alone won't show the guardrail association. The guardrail ID and version are in the agent's configuration, so you also need GetAgent... The alias, version and guardrail actions cover the rest of the check.' Output B's policy only includes 'bedrock:ListAgents' and 'bedrock:GetAgent' without addressing guardrail-specific listing/reading actions needed to verify the association details."
+                }
+              ]
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 2,
+          "pairs_skipped": 1,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "with_skill trigger test failed"
+            },
+            {
+              "iteration": 2,
+              "with_skill_seconds": 11.324,
+              "without_skill_seconds": 9.757,
+              "delta_seconds": 1.6,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 3,
+              "with_skill_seconds": 9.705,
+              "without_skill_seconds": 8.698,
+              "delta_seconds": 1.0,
+              "threshold_exceeded": false
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 2 usable output(s); consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 2 usable output(s); consistency needs at least 3.",
+          "excluded": [
+            {
+              "iteration": 1,
+              "reason": "trigger test failed"
+            }
+          ]
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "medium",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same IAM action (bedrock:ListAgents) to grant, and all explain 'bedrock-agent' identically as the SDK/CLI client name for the Agents for Amazon Bedrock build-time control plane API (API version bedrock-agent-2023-06-05 in iter1, aws bedrock-agent list-agents CLI in iter2/3), clarifying it is not an IAM prefix. All three also note related clients bedrock-agent-runtime, bedrock-runtime, and bedrock. The core facts are identical across all three."
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three recommend granting bedrock:ListAgents plus a least-privilege policy including GetAgent, ListAgentAliases, GetAgentAlias, ListGuardrails, GetGuardrail, and troubleshooting steps for SCPs/permission boundaries/explicit denies. However, iteration 2 and 3 include additional actions (ListAgentVersions, GetAgentVersion) that iteration 1 omits, and iteration 2 also adds ListAgentActionGroups and ListAgentKnowledgeBases not present in the others. Iteration 3 uniquely offers to run list-agents to confirm the denied principal. These differences in additional recommended steps/actions make it mostly consistent rather than fully consistent.",
+              "diverging_iterations": [
+                1,
+                2,
+                3
+              ]
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "medium",
+              "reasoning": "All three outputs follow the same structure: an opening bolded answer, a section explaining what 'bedrock-agent' is, a JSON IAM policy code block for least-privilege permissions, and a closing section on troubleshooting persistent AccessDenied issues. The presentation choices (prose + code block) are highly similar across all three.",
+              "evidence": "All three use bolded lead sentence, 'What bedrock-agent is' section, JSON policy code block, and a troubleshooting section for AccessDenied persistence."
+            }
+          }
+        }
+      }
+    },
+    "bedrock-sec-neg-sagemaker": {
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "assertions": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "comparison": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "output_consistency": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      }
+    },
+    "bedrock-sec-neg-access-denied": {
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "assertions": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "comparison": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "output_consistency": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      }
+    },
+    "bedrock-sec-neg-adoption": {
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/3",
+          "percentage": 33
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "assertions": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "comparison": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "output_consistency": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      }
+    }
+  }
+}
