@@ -34,6 +34,7 @@ Metadata:
           - EnableSageMakerAIOpsReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
+          - EnableAIMLBedrockSecurityAssessment
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -202,6 +203,16 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAIMLBedrockSecurityAssessment:
+    Type: String
+    Description: >
+      AI/ML Bedrock Security Assessment skill. Adds only the reads
+      AIDevOpsAgentAccessPolicy does not grant: bedrock:GetFlow/GetPrompt/
+      GetImportedModel/GetModelCustomizationJob, iam:ListAttachedUserPolicies/
+      ListUserPolicies, and inspector2:BatchGetAccountStatus.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -219,6 +230,7 @@ Conditions:
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
+  SkillAIMLBedrockSecurityAssessment: !Equals [!Ref EnableAIMLBedrockSecurityAssessment, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -607,6 +619,45 @@ Resources:
               - pricing:DescribeServices
             Resource: '*'
 
+  # aiml-bedrock-security-assessment: adds ONLY the reads AIDevOpsAgentAccessPolicy does not
+  # grant. The managed policy already covers bedrock:List*, the other bedrock:Get* reads the
+  # skill uses, cloudtrail Get*/List* reads, servicequotas:Get*, and the IAM role/policy,
+  # Organizations, EC2, CloudWatch, S3, KMS and Lambda reads. Bedrock Agents, Knowledge Bases,
+  # Flows and Prompts use the `bedrock:` IAM prefix (`bedrock-agent` is only the SDK client).
+  # iam:ListAttachedUserPolicies/ListUserPolicies let BR-01 see user-attached policies; without
+  # them BR-01 reports N/A rather than Passed. BR-12 (stale access) is prescribe-only and
+  # intentionally NOT granted: it would need iam:GenerateServiceLastAccessedDetails, a
+  # Generate* verb blocked by the read-only guardrail.
+  PolicyAIMLBedrockSecurityAssessment:
+    Type: AWS::IAM::Policy
+    Condition: SkillAIMLBedrockSecurityAssessment
+    Properties:
+      PolicyName: DevOpsAgentSkill-AIMLBedrockSecurityAssessment
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BedrockControlPlaneRead
+            Effect: Allow
+            Action:
+              - bedrock:GetFlow
+              - bedrock:GetImportedModel
+              - bedrock:GetModelCustomizationJob
+              - bedrock:GetPrompt
+            Resource: '*'
+          - Sid: IamUserPolicyDiscoveryRead
+            Effect: Allow
+            Action:
+              - iam:ListAttachedUserPolicies
+              - iam:ListUserPolicies
+            Resource: '*'
+          - Sid: InspectorAccountStatusRead
+            Effect: Allow
+            Action:
+              - inspector2:BatchGetAccountStatus
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -758,6 +809,7 @@ Outputs:
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
+        - aiml-bedrock-security-assessment: ${EnableAIMLBedrockSecurityAssessment} (bedrock:GetFlow/GetPrompt/GetImportedModel/GetModelCustomizationJob, iam:ListAttachedUserPolicies/ListUserPolicies, inspector2:BatchGetAccountStatus — all other reads are covered by the managed policy)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
