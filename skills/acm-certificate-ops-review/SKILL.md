@@ -14,7 +14,7 @@ description: "Investigation and review procedures for AWS Certificate Manager (A
   \ strategy."
 metadata:
   author: majamuda, vmgaddam
-  version: "1.0.0"
+  version: "1.1.0"
   aws-devops-agent-skills.agent-types: "Chat tasks"
   aws-devops-agent-skills.aws-services: "AWS Certificate Manager, AWS Private CA"
   aws-devops-agent-skills.technical-domains: "Security"

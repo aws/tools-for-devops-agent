@@ -56,12 +56,11 @@ policy attached to the DevOps Agent role; add any that are missing.
 
 ## Agent Types
 
-- **Chat tasks** - posture reviews and reports (for example "review the ACM
-  certificate posture for account 1111...").
-- **Incident RCA** and **Incident Triage** - certificate-related incidents (for
-  example "investigate why example.com is serving an expired certificate").
+- **Chat tasks** - posture reviews, reports, and certificate-related
+  investigations (for example "review the ACM certificate posture for account
+  1111..." or "investigate why example.com is serving an expired certificate").
 
-Select these agent types when uploading the skill to your Agent Space.
+Select this agent type when uploading the skill to your Agent Space.
 
 ## Uploading to AWS DevOps Agent
 
@@ -85,16 +84,33 @@ are not already present.
 Operators do not need to name the skill; it activates from the description.
 Sample prompts:
 
-**Chat tasks**
+Posture reviews and reports:
 - "Review the ACM certificate posture for account 111122223333."
 - "Which certificates across my org expire in the next 30 days?"
 - "Are we ready for the CA/Browser Forum certificate validity reductions?"
 - "Do any of my in-use certificates lack an expiry alarm?"
 
-**Incident RCA / Incident Triage**
+Certificate-related investigations:
 - "Investigate why www.example.com is serving an expired certificate."
 - "A managed renewal failed for api.example.com; find the root cause."
 - "An endpoint is still presenting the old certificate after renewal."
+
+## Skill Structure
+
+```
+acm-certificate-ops-review/
+├── SKILL.md                        # Main skill instructions (6-step workflow)
+├── README.md                       # This file
+├── CHANGELOG.md                    # Version history
+├── .skilleval.yaml                 # Agent Skill Eval config
+├── evals/
+│   └── evals.json                  # Functional evaluation scenarios
+└── references/
+    ├── acm-thresholds.md           # Risk thresholds and RED/AMBER/GREEN criteria
+    ├── acm-detection-details.md    # ListCertificates dual-filter values, ACME sub-checks
+    ├── cab-forum-readiness.md      # CA/Browser Forum validity-reduction guidance
+    └── report-format.md            # Findings report layout
+```
 
 ## Disclaimer
 
