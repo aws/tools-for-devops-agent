@@ -69,13 +69,13 @@ storagegateway:ListVolumes
 `sts:GetCallerIdentity` is also used and requires no IAM permission.
 
 Deploy them with the `EnableAwsBackupCoverageReview` parameter in
-[cloudformation/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml).
+[cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
 **Each Agent Space has its own IAM role, so apply this to the role of every space
 where the skill is installed** — use one stack per role:
 
 ```bash
 aws cloudformation deploy \
-  --template-file cloudformation/devops-agent-skill-policies.yaml \
+  --template-file cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml \
   --stack-name devops-agent-skill-policies-<role-suffix> \
   --parameter-overrides ExistingRoleName=<DevOpsAgentRole-AgentSpace-XXXX> \
       EnableAwsBackupCoverageReview=true \

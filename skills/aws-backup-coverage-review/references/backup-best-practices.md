@@ -110,7 +110,7 @@ Use these in the Recommendation column, matched by check ID.
 The review is read-only. The baseline `AIDevOpsAgentAccessPolicy` covers most
 control-plane reads; the AWS-managed `AWSBackupAuditAccess` policy is the closest
 managed equivalent for the AWS Backup portion. See the skill README for the exact
-action list and `cloudformation/devops-agent-skill-policies.yaml` for the
+action list and `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml` for the
 deployable policy.
 
 ## Canonical AWS documentation URLs
