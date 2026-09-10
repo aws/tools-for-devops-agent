@@ -27,7 +27,7 @@ Only these operations may be called.
 | S3 | `ListBuckets`, `GetBucketLocation` |
 | Redshift | `DescribeClusters` |
 | Timestream | `ListDatabases`, `ListTables` |
-| Storage Gateway | `ListVolumes`, `ListFileShares` |
+| Storage Gateway | `ListGateways`, `ListVolumes`, `ListFileShares` |
 | CloudFormation | `ListStacks` |
 | EKS | `ListClusters`, `DescribeCluster` |
 
@@ -169,11 +169,36 @@ report must not present the first as the second.
 | `Redshift Serverless` | `redshift-serverless:ListNamespaces` | — | `namespaceArn` |
 | `DSQL` | `dsql:ListClusters` then `GetCluster` | Aurora DSQL; Region availability is limited | `arn` |
 | `Timestream` | `timestream:ListDatabases` then `ListTables` per database | — | `Arn` |
-| `Storage Gateway` | `storagegateway:ListVolumes` | — | `VolumeARN` |
+| `Storage Gateway` | `storagegateway:ListVolumes` | Volume gateways only — see the note below before recording a gap | `VolumeARN` |
 | `CloudFormation` | `cloudformation:ListStacks` | `StackStatus` in `CREATE_COMPLETE`, `UPDATE_COMPLETE`, `UPDATE_ROLLBACK_COMPLETE`, `IMPORT_COMPLETE` | `StackId` |
 | `EKS` | `eks:ListClusters` then `DescribeCluster` | — | `arn` |
 | `SAP HANA on Amazon EC2` | **none** | Requires SSM/backint discovery | Record as `NotEnumerated` |
 | `VirtualMachine` | **none** | Requires AWS Backup gateway and a hypervisor | Record as `NotEnumerated` |
+
+### Storage Gateway — establish the gateway type before recording a gap
+
+AWS Backup's `Storage Gateway` resource type covers **volume gateway volumes**. File
+gateways (`FILE_S3`, `FILE_FSX_SMB`) expose file shares, and their data lives in the
+backing S3 bucket or FSx file system — so it is covered by the `S3` or `FSx` resource
+type, not by `Storage Gateway`. Tape gateways are out of scope for AWS Backup.
+
+Therefore:
+
+1. Enumerate gateways first. If the account has **no volume gateway** in a Region,
+   there are no Storage Gateway volumes there — record zero eligible resources for the
+   type, not a gap.
+2. Only call `storagegateway:ListVolumes` for Regions that contain a volume gateway
+   (`STORED` or `CACHED`).
+3. If `ListVolumes` cannot be executed **and** a volume gateway exists, that is a
+   genuine `ToolingFailure` — record it and exclude the type from the denominator.
+4. If `ListVolumes` cannot be executed and **only file gateways exist**, do **not**
+   report a Storage Gateway gap. Note instead that the file gateways' data is assessed
+   under the `S3` or `FSx` type, and name the gateways so the reader can confirm.
+
+Never report `Storage Gateway` as unenumerable purely because `ListVolumes` was
+unavailable — an account can have active gateways and still legitimately have zero
+Storage Gateway resources in AWS Backup's sense, and reporting that as a blind spot
+overstates the unknown.
 
 Where the enumeration API already returns an ARN, use it verbatim. Construct an
 ARN only for the types marked "Construct" above, and use the partition from

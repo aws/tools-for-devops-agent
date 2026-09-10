@@ -51,10 +51,10 @@ those looks healthy in the console.
 The DevOps Agent role must have **read-only** permissions for the review to produce
 complete results.
 
-### Required: five actions to add
+### Required: six actions to add
 
-`AIDevOpsAgentAccessPolicy` already covers 43 of the 49 actions this skill uses —
-verified with `iam:SimulatePrincipalPolicy` against a live agent role. **These five
+`AIDevOpsAgentAccessPolicy` already covers 43 of the 50 actions this skill uses —
+verified with `iam:SimulatePrincipalPolicy` against a live agent role. **These six
 are not covered and must be added:**
 
 ```
@@ -62,6 +62,7 @@ backup:GetSupportedResourceTypes
 config:SelectResourceConfig
 dsql:ListClusters
 storagegateway:ListFileShares
+storagegateway:ListGateways
 storagegateway:ListVolumes
 ```
 
@@ -85,7 +86,7 @@ The template's other `Enable*` parameters default to `true`. Set the ones you do
 want to `false`, or you will also attach the other skills' policies — some of which
 grant write actions such as `servicequotas:RequestServiceQuotaIncrease`.
 
-**The skill still runs without these five.** Denied actions are reported as
+**The skill still runs without these six.** Denied actions are reported as
 "Unable to verify — access denied", excluded from the coverage denominator, and cap
 the Coverage Rating at Medium rather than being guessed at. What you lose is
 denominator completeness: Storage Gateway volumes and DSQL clusters cannot be
@@ -147,6 +148,7 @@ redshift:DescribeClusters
 s3:GetBucketLocation
 s3:ListAllMyBuckets
 storagegateway:ListFileShares
+storagegateway:ListGateways
 storagegateway:ListVolumes
 timestream:ListDatabases
 timestream:ListTables
