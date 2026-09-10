@@ -28,6 +28,7 @@ Metadata:
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
           - EnableAgentCoreObservabilitySetup
+          - EnableAIMLBedrockSecurityAssessment
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -118,6 +119,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAIMLBedrockSecurityAssessment:
+    Type: String
+    Description: AI/ML Bedrock Security Assessment skill (adds read-only bedrock control-plane, cloudtrail, servicequotas, and inspector2 permissions; IAM/Organizations/EC2/CloudWatch/S3/KMS/Lambda reads are covered by AIDevOpsAgentAccessPolicy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -128,6 +135,7 @@ Conditions:
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
+  SkillAIMLBedrockSecurityAssessment: !Equals [!Ref EnableAIMLBedrockSecurityAssessment, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -348,6 +356,60 @@ Resources:
               - eks:DescribeCluster
             Resource: '*'
 
+  # aiml-bedrock-security-assessment: adds read-only Bedrock control-plane reads plus
+  # cloudtrail, servicequotas, and inspector2 reads not in the managed policy. IAM,
+  # Organizations, EC2, CloudWatch, S3, KMS, and Lambda reads are covered by
+  # AIDevOpsAgentAccessPolicy. Note: Bedrock Agents, Knowledge Bases, Flows, and Prompts
+  # use the `bedrock:` IAM prefix (the `bedrock-agent` name is only the SDK client).
+  # BR-14 (stale access) is prescribe-only and intentionally NOT granted, since it would
+  # require iam:GenerateServiceLastAccessedDetails (a Generate* verb blocked read-only).
+  PolicyAIMLBedrockSecurityAssessment:
+    Type: AWS::IAM::Policy
+    Condition: SkillAIMLBedrockSecurityAssessment
+    Properties:
+      PolicyName: DevOpsAgentSkill-AIMLBedrockSecurityAssessment
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BedrockControlPlaneRead
+            Effect: Allow
+            Action:
+              - bedrock:GetAgent
+              - bedrock:GetAgentActionGroup
+              - bedrock:GetCustomModel
+              - bedrock:GetFlow
+              - bedrock:GetGuardrail
+              - bedrock:GetImportedModel
+              - bedrock:GetKnowledgeBase
+              - bedrock:GetModelCustomizationJob
+              - bedrock:GetModelInvocationLoggingConfiguration
+              - bedrock:GetPrompt
+              - bedrock:ListAgentActionGroups
+              - bedrock:ListAgents
+              - bedrock:ListCustomModels
+              - bedrock:ListEvaluationJobs
+              - bedrock:ListFlows
+              - bedrock:ListFoundationModels
+              - bedrock:ListGuardrails
+              - bedrock:ListImportedModels
+              - bedrock:ListKnowledgeBases
+              - bedrock:ListModelInvocationJobs
+              - bedrock:ListPrompts
+            Resource: '*'
+          - Sid: BedrockAuditAndAbuseControlsRead
+            Effect: Allow
+            Action:
+              - cloudtrail:GetEventSelectors
+              - cloudtrail:GetTrail
+              - cloudtrail:GetTrailStatus
+              - cloudtrail:ListTrails
+              - servicequotas:GetAWSDefaultServiceQuota
+              - servicequotas:GetServiceQuota
+              - inspector2:BatchGetAccountStatus
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -396,7 +458,9 @@ Outputs:
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
+        - aiml-bedrock-security-assessment: ${EnableAIMLBedrockSecurityAssessment} (bedrock:Get*/List* control-plane reads, cloudtrail:Get*/ListTrails, servicequotas:GetServiceQuota/GetAWSDefaultServiceQuota, inspector2:BatchGetAccountStatus)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
+        - aiml-bedrock-security-assessment relies on it for IAM/Organizations/EC2/CloudWatch/S3/KMS/Lambda reads (only the Bedrock/cloudtrail/servicequotas/inspector2 delta is added above)
       No IAM required:
         - skip-scheduled-maintenance
