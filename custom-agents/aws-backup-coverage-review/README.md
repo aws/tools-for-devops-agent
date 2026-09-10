@@ -20,6 +20,23 @@ This custom agent determines which backup-eligible resources in an AWS account a
 - IAM permissions for AWS Backup read APIs (`backup:List*`, `backup:Describe*`, `backup:GetBackupPlan`, `backup:GetBackupSelection`, `backup:GetSupportedResourceTypes`) and resource inventory read APIs across EC2, RDS, DynamoDB, EFS, FSx, S3, Redshift, Timestream, Storage Gateway, CloudFormation and EKS. Most are covered by `AIDevOpsAgentAccessPolicy`; the exact delta and a deployable CloudFormation policy are documented in the skill README
 - The [aws-backup-coverage-review skill](../../skills/aws-backup-coverage-review/) uploaded to your Agent Space. Important note: for the skill to be used by the custom agent, choose "All agents" in the "Agent Type" field when importing the skill, even though the skill's README instructs to choose specific agent types
 
+> **Each Agent Space provisions its own IAM role.** The permissions listed in the skill's
+> README are attached to a role, not to the account, so a newly created Agent Space starts
+> without them even if another space in the same account already has them. Apply the policy
+> to the new space's role before running the agent — otherwise
+> `backup:GetSupportedResourceTypes` and the Storage Gateway and DSQL inventory calls return
+> `AccessDenied`, and the report will show them as unverifiable rather than as findings.
+>
+> Find the role for a space with:
+>
+> ```bash
+> aws devops-agent list-associations --agent-space-id <space-id> --region <region> \
+>   --query "associations[].configuration.aws.assumableRoleArn" --output text
+> ```
+>
+> Then deploy the policy with one stack per role, as described under Prerequisites in the
+> [skill README](https://github.com/aws/tools-for-devops-agent/blob/main/skills/aws-backup-coverage-review/README.md).
+
 ## Limitations
 
 - Single account. Organization-wide review via a delegated administrator account is not supported.
