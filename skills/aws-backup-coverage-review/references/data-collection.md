@@ -250,6 +250,21 @@ Normalize ARNs before comparison: lowercase the partition, service, and Region
 segments; preserve case in the resource identifier. Some services return ARNs
 with differing case in the account or Region segment.
 
+## Error handling
+
+Apply these classifications to every call in the allowlist. The status recorded here
+is what the report renders, so the distinction between "absent" and "unreadable"
+starts at this table.
+
+| Error | Cause | Resolution |
+|---|---|---|
+| `AccessDeniedException` | Role lacks a read action | Record `AccessDenied` for that check, cap rating at Medium, list the missing action |
+| `ThrottlingException`, HTTP 429 | API throttling | Retry with exponential backoff: wait 1s → 2s → 4s (max 3 retries), then record `ToolingFailure` |
+| `ResourceNotFoundException` | Vault, plan, or policy does not exist | Classify as `NotConfigured` — this is a finding, not an error |
+| `InvalidParameterValueException` | Unsupported resource type or malformed ARN | Skip that item, note it in the report |
+| Region not enabled / endpoint unreachable | Region opted out at the account level | Exclude the Region from scope, note the exclusion |
+| `ServiceUnavailableException`, HTTP 5xx | Transient service failure | Retry per the backoff above, then `ToolingFailure` |
+
 ## Structured output
 
 Produce this object before evaluating any check. Every field carries a status.

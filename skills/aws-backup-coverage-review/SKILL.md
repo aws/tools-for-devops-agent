@@ -102,7 +102,7 @@ read-only APIs, treating AWS Config as an optimization rather than a prerequisit
 
 ## The Coverage Model
 
-Coverage is not binary. Every eligible resource resolves to exactly one of five
+Coverage is not binary. Every eligible resource resolves to exactly one of six
 states. Getting this distinction right is the whole value of the review — a
 resource can sit inside a backup plan and still be unrecoverable.
 
@@ -258,58 +258,12 @@ returns *data*, never the final answer. A subagent may not receive this skill's
   specific data or collect it directly. Do not omit a section because the data
   came back thin.
 
-### Minimum report skeleton
+### Delivery
 
-This skeleton is reproduced here so it survives even when `references/` is not
-loaded. `references/report-format.md` is authoritative when available; this is the
-floor, not the target.
-
-```markdown
-# AWS Backup Coverage Review — Account <account-id>
-
-## Scope
-| Field | Value |
-|---|---|
-| Account | <account-id> |
-| Regions swept | <list> (<N> of <M> enabled) |
-| Regions not swept | <list, or "none"> |
-| Inventory strategy | <config-fast-path | direct-enumeration | mixed> |
-| Eligible resources | <N> across <T> types |
-
-## Coverage Rating
-**<High | Medium | Low | Indeterminate>** — <driver in one sentence>
-Coverage: **~<pct>%** (<covered>/<eligible> with a current recovery point — indicative,
-see the by-type table)
-
-## Executive Summary
-| Dimension | Status | Findings |
-|---|---|---|
-| D1 Service enablement | <emoji status> | <n critical, n warnings> |
-| D2 Coverage | | |
-| D3 Plan quality | | |
-| D4 Vault posture | | |
-| D5 Coverage integrity | | |
-
-**Headline:** <the single most consequential fact>
-
-## Coverage Matrix
-<per Region: one row per non-Protected resource, with type, state, last backup,
-matched selection; Protected rows may be collapsed to a count>
-
-## Findings & Recommendations
-| # | Check | Finding | Severity | Recommendation |
-
-## Check Coverage Matrix
-<exactly 23 rows, IDs 1.1 through 5.5, in order, every one with a verdict>
-
-## Next Steps
-<bucketed Immediate / This week / This month, each citing a finding number>
-
-## References
-<only URLs from references/backup-best-practices.md>
-```
-
-Then:
+The report's required sections, tables and validation rules are defined in
+`references/report-format.md` — load it before rendering. When this skill is paired
+with the `aws-backup-coverage-review` custom agent, that agent's system prompt also
+carries the report structure.
 
 1. Create the complete report as a single artifact named
    `aws-backup-coverage-review-<account-id>-<YYYY-MM-DD>.md`. If the runtime does
@@ -394,20 +348,10 @@ Then:
 | Aurora, Neptune, and DocumentDB all surface via `rds:DescribeDBClusters` | Separate them by the `Engine` field before mapping to AWS Backup resource types |
 | Backup resource type names are not CloudFormation type names | `EBS`, not `AWS::EC2::Volume`. Map explicitly per `references/data-collection.md` |
 
-## Error Handling
-
-| Error | Cause | Resolution |
-|---|---|---|
-| `AccessDeniedException` | Role lacks a read action | Record `AccessDenied` for that check, cap rating at Medium, list the missing action |
-| `ThrottlingException`, HTTP 429 | API throttling | Retry with exponential backoff: wait 1s → 2s → 4s (max 3 retries), then record `ToolingFailure` |
-| `ResourceNotFoundException` | Vault, plan, or policy does not exist | Classify as `NotConfigured` — this is a finding, not an error |
-| `InvalidParameterValueException` | Unsupported resource type or malformed ARN | Skip that item, note it in the report |
-| Region not enabled / endpoint unreachable | Region opted out at the account level | Exclude the Region from scope, note the exclusion |
-| `ServiceUnavailableException`, HTTP 5xx | Transient service failure | Retry per the backoff above, then `ToolingFailure` |
-
 ## References
 
-- `references/data-collection.md` — Read-only API allowlist, hard denials, the
+- `references/data-collection.md` — Read-only API allowlist, hard denials, error
+  classification and retry behaviour, the
   per-Region and per-resource-type call plan, the Config fast path, resource type
   mapping, and error classification.
 - `references/coverage-logic.md` — All 23 checks across 5 dimensions, thresholds,

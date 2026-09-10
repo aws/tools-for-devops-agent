@@ -6,6 +6,14 @@ All notable changes to this skill are documented here. New entries go at the top
 
 ### Added
 
+- Moved the report skeleton and the error-handling table out of `SKILL.md` into
+  `references/`, following progressive disclosure. The skeleton was inlined earlier as
+  insurance against `references/` not loading; the paired custom agent now carries the
+  report structure, so it was redundant. `SKILL.md` is back under the 5,000-token
+  guidance. The API quirks table stays in the body deliberately — it prevents a silent
+  failure where reading the wrong `ListBackupSelections` response key makes every
+  resource appear unprotected, and that is worth keeping where it cannot be missed.
+
 - Monitoring and observability checks in D5, following TFC domain review feedback:
   **5.4** verifies an AWS Backup Audit Manager report plan is scheduled in each Region
   with backup activity — report plans are per Region, so one does not cover the
