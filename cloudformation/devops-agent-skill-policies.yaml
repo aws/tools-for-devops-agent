@@ -28,6 +28,7 @@ Metadata:
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
           - EnableAwsBackupCoverageReview
+          - EnableAgentCoreObservabilitySetup
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -120,6 +121,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAgentCoreObservabilitySetup:
+    Type: String
+    Description: AgentCore Observability Setup skill (adds read-only bedrock-agentcore, X-Ray, log-delivery, and Lambda/ECS/EKS host-config permissions).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -130,6 +137,7 @@ Conditions:
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAwsBackupCoverageReview: !Equals [!Ref EnableAwsBackupCoverageReview, 'true']
+  SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -314,7 +322,7 @@ Resources:
 
   # aws-backup-coverage-review: only the read actions NOT already granted by
   # AIDevOpsAgentAccessPolicy. Verified with iam:SimulatePrincipalPolicy against a
-  # live agent role — 43 of the 49 actions the skill uses are already allowed by
+  # live agent role — 45 of the 52 actions the skill uses are already allowed by
   # the managed policy, including every backup:List*/Describe* call. Strictly
   # read-only; no Start*, Put*, Create*, Update*, or Delete* is granted, and the
   # managed policy already implicitly denies backup:StartBackupJob and
@@ -343,6 +351,44 @@ Resources:
               - storagegateway:ListFileShares
               - storagegateway:ListGateways
               - storagegateway:ListVolumes
+            Resource: '*'
+
+  # agentcore-observability-setup: adds read-only AgentCore control-plane, X-Ray Transaction Search,
+  # log-delivery/resource-policy describes, and Lambda/ECS/EKS host-config reads (Tier 2 + Tier 3).
+  # Tier 1 (CloudWatch Logs/Metrics telemetry-arrival reads) is covered by AIDevOpsAgentAccessPolicy.
+  PolicyAgentCoreObservabilitySetup:
+    Type: AWS::IAM::Policy
+    Condition: SkillAgentCoreObservabilitySetup
+    Properties:
+      PolicyName: DevOpsAgentSkill-AgentCoreObservabilitySetup
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AgentCoreRuntimeConfigRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListAgentRuntimes
+            Resource: '*'
+          - Sid: XRayTransactionSearchAndDeliveries
+            Effect: Allow
+            Action:
+              - xray:GetTraceSegmentDestination
+              - logs:DescribeDeliveries
+              - logs:DescribeDeliverySources
+              - logs:DescribeDeliveryDestinations
+              - logs:DescribeResourcePolicies
+            Resource: '*'
+          - Sid: NonRuntimeHostConfigRead
+            Effect: Allow
+            Action:
+              - lambda:GetFunctionConfiguration
+              - ecs:DescribeTaskDefinition
+              - ecs:DescribeServices
+              - ecs:ListTasks
+              - eks:DescribeCluster
             Resource: '*'
 
   # Optional: restrict agent to specific regions
@@ -393,6 +439,7 @@ Outputs:
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
+        - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:

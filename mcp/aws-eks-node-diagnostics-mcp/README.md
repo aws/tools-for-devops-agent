@@ -1,4 +1,4 @@
-lets have two gates, # EKS Node Diagnostics MCP
+# EKS Node Diagnostics MCP
 
 > **⚠️ Proof of Concept (POC):** This project is a proof of concept and should be tested in non-production environments first. Validate thoroughly in a staging or development account before using with production workloads.
 
@@ -107,10 +107,10 @@ Select [1/2/3] (default: 1):
 ```
 Found 4 EKS cluster(s):
 
-  1) prod-cluster    (us-east-1)
-  2) dev-cluster     (us-east-1)
-  3) analytics        (us-west-2)
-  4) eu-cluster       (eu-west-1)
+  1) prod-cluster  (us-east-1)
+  2) dev-cluster  (us-east-1)
+  3) analytics  (us-west-2)
+  4) eu-cluster  (eu-west-1)
 
   a) All clusters
 

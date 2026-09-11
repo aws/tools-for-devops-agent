@@ -55,6 +55,10 @@ The template supports enabling/disabling policies per skill, optional region res
 
 We welcome contributions of new skills and improvements to existing ones. See [CONTRIBUTING](CONTRIBUTING.md) for guidelines.
 
+## Support
+
+Need help, found a bug, or want to suggest a new tool? See [SUPPORT](SUPPORT.md) for how to get support and where to file issues.
+
 ## References
 
 ### AWS Documentation
