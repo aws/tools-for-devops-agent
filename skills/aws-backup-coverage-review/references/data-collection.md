@@ -28,6 +28,7 @@ Only these operations may be called.
 | Redshift | `DescribeClusters` |
 | Timestream | `ListDatabases`, `ListTables` |
 | Storage Gateway | `ListGateways`, `ListVolumes`, `ListFileShares` |
+| AWS Backup gateway | `ListHypervisors`, `ListVirtualMachines` |
 | CloudFormation | `ListStacks` |
 | EKS | `ListClusters`, `DescribeCluster` |
 
@@ -173,7 +174,28 @@ report must not present the first as the second.
 | `CloudFormation` | `cloudformation:ListStacks` | `StackStatus` in `CREATE_COMPLETE`, `UPDATE_COMPLETE`, `UPDATE_ROLLBACK_COMPLETE`, `IMPORT_COMPLETE` | `StackId` |
 | `EKS` | `eks:ListClusters` then `DescribeCluster` | — | `arn` |
 | `SAP HANA on Amazon EC2` | **none** | Requires SSM/backint discovery | Record as `NotEnumerated` |
-| `VirtualMachine` | **none** | Requires AWS Backup gateway and a hypervisor | Record as `NotEnumerated` |
+| `VirtualMachine` | `backup-gateway:ListHypervisors`, then `backup-gateway:ListVirtualMachines` | On-premises VMware VMs. See the note below — zero hypervisors means zero resources, not a gap | `ResourceArn` |
+
+### VirtualMachine — a registered hypervisor is what makes this type possible
+
+The `VirtualMachine` type covers **on-premises VMware VMs** reached through an AWS
+Backup gateway appliance that has a hypervisor registered. It has nothing to do with
+EC2. Without a registered hypervisor the type cannot have any resources at all.
+
+1. Call `backup-gateway:ListHypervisors` per Region.
+2. **Zero hypervisors means zero `VirtualMachine` resources** — record the type as
+   having no eligible resources, and do **not** list it under `NotEnumerated`.
+   Most accounts have no VMware estate, so declaring a permanent blind spot there
+   misrepresents the review's completeness.
+3. Where a hypervisor is registered, enumerate with
+   `backup-gateway:ListVirtualMachines` and treat the results as eligible resources.
+4. Only if `ListHypervisors` itself cannot be executed is the type genuinely
+   unverifiable — record `AccessDenied` or `ToolingFailure` with the reason, not
+   `NotEnumerated`.
+
+`SAP HANA on Amazon EC2` remains `NotEnumerated` by design: proving absence needs SSM
+inventory of the Backint agent, which is outside this skill's scope. State that reason
+rather than implying the type was checked.
 
 ### Storage Gateway — establish the gateway type before recording a gap
 
@@ -349,7 +371,8 @@ Produce this object before evaluating any check. Every field carries a status.
           "status": "OK"
         }
       ],
-      "not_enumerated_types": ["SAP HANA on Amazon EC2", "VirtualMachine"]
+      "not_enumerated_types": ["SAP HANA on Amazon EC2"],
+      "zero_resource_types": ["VirtualMachine", "Redshift Serverless", "DSQL", "Timestream"]
     }
   ]
 }

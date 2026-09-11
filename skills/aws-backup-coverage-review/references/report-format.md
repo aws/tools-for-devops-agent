@@ -170,10 +170,13 @@ backoff.
 These resource types cannot be enumerated by this skill and are excluded from the
 coverage denominator. Verify them manually in the AWS Backup console.
 
+Only list a type here when it is genuinely unverifiable. A type that was queried and
+returned nothing belongs in the by-type table with zero eligible resources, not in this
+notice — `VirtualMachine` with no registered hypervisor is the common example.
+
 | Resource type | Reason |
 |---|---|
 | SAP HANA on Amazon EC2 | Requires SSM and backint agent discovery |
-| VirtualMachine | Requires AWS Backup gateway and a registered hypervisor |
 ```
 
 ## 9. Findings & Recommendations

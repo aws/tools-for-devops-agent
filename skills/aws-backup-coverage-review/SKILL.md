@@ -297,9 +297,12 @@ carries the report structure.
 - **Never claim 100% coverage from the Config fast path alone** unless the
   recorder covers all backup-eligible resource types. State the denominator's
   provenance in the report.
-- **Disclose unsupported inventory.** `SAP HANA on Amazon EC2` and
-  `VirtualMachine` resource types cannot be enumerated by this skill. List them
-  as `NotEnumerated`, never as covered.
+- **Disclose unsupported inventory, but only where it is real.** `SAP HANA on Amazon
+  EC2` cannot be enumerated by this skill — list it as `NotEnumerated`, never as
+  covered. `VirtualMachine` is only unenumerable where a hypervisor is registered:
+  zero hypervisors from `backup-gateway:ListHypervisors` means zero resources, so
+  record it as having none rather than as a blind spot. Claiming a gap that does not
+  exist misstates the review's completeness as surely as missing one.
 - **Empty success is not an error.** `ListBackupPlans` returning zero plans is a
   valid, high-severity finding, not a `ToolingFailure`.
 - **No interpretation without data.** Every finding must be backed by collected

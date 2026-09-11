@@ -53,7 +53,7 @@ complete results.
 
 ### Required: six actions to add
 
-`AIDevOpsAgentAccessPolicy` already covers 43 of the 50 actions this skill uses —
+`AIDevOpsAgentAccessPolicy` already covers 45 of the 52 actions this skill uses —
 verified with `iam:SimulatePrincipalPolicy` against a live agent role. **These six
 are not covered and must be added:**
 
@@ -120,6 +120,8 @@ backup:ListReportPlans
 backup:ListRestoreTestingPlans
 backup:ListRestoreTestingSelections
 backup:ListTags
+backup-gateway:ListHypervisors
+backup-gateway:ListVirtualMachines
 kms:DescribeKey
 sts:GetCallerIdentity
 ```
