@@ -28,6 +28,7 @@ Metadata:
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
           - EnableAgentCoreObservabilitySetup
+          - EnableAgentCoreOpsReview
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -118,6 +119,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAgentCoreOpsReview:
+    Type: String
+    Description: AgentCore Operational Review skill (adds read-only bedrock-agentcore control-plane List/Get and ec2:DescribeSubnets for the multi-AZ check; observability-only mode needs none of these).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -128,6 +135,7 @@ Conditions:
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
+  SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -347,6 +355,45 @@ Resources:
               - ecs:ListTasks
               - eks:DescribeCluster
             Resource: '*'
+  
+  # agentcore-ops-review: adds read-only bedrock-agentcore control-plane (runtime,
+  # memory, gateway, browser, code-interpreter, workload-identity inventory) plus
+  # ec2:DescribeSubnets for the single-AZ runtime check (AC-RUN-2). CloudWatch metric,
+  # Cost Explorer, and Health reads used by the skill are covered by AIDevOpsAgentAccessPolicy.
+  # Observability-only mode requires none of these — it runs on the base policy alone.
+  PolicyAgentCoreOpsReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillAgentCoreOpsReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-AgentCoreOpsReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AgentCoreOpsReviewControlPlaneRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListAgentRuntimeEndpoints
+              - bedrock-agentcore:ListAgentRuntimeVersions
+              - bedrock-agentcore:ListMemories
+              - bedrock-agentcore:GetMemory
+              - bedrock-agentcore:ListMemoryRecords
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:GetGateway
+              - bedrock-agentcore:ListGatewayTargets
+              - bedrock-agentcore:GetGatewayTarget
+              - bedrock-agentcore:ListBrowsers
+              - bedrock-agentcore:ListCodeInterpreters
+              - bedrock-agentcore:ListWorkloadIdentities
+            Resource: '*'
+          - Sid: AgentCoreOpsReviewSubnetAZResolution
+            Effect: Allow
+            Action:
+              - ec2:DescribeSubnets
+            Resource: '*'
 
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
@@ -396,6 +443,7 @@ Outputs:
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
+        - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
