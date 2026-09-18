@@ -4,6 +4,23 @@ All notable changes to the `acm-certificate-ops-review` skill are documented
 in this file. The format is based on Keep a Changelog, and this project follows
 semantic versioning.
 
+## [1.2.0] - 2026-09-18
+
+Authors: Tejas Majamudar (majamuda)
+
+### Added
+- Email-validated certificate detection (Step 2, check #4): identifies
+  `AMAZON_ISSUED` certificates where `ValidationMethod = EMAIL` and flags
+  them as AMBER. The CA/B Forum is deprecating email-based domain validation
+  for publicly trusted certificates - ACM will stop issuing email-validated
+  certificates on **March 31, 2027** and stop renewing them on
+  **September 30, 2027**. Remediation: switch in-place via
+  `UpdateCertificateOptions` (ARN unchanged, 72-hour CNAME window). ACME-origin
+  and IMPORTED/PRIVATE certificates are explicitly excluded from this check.
+- New eval scenario `acm-email-validation-deprecation` covering the AMBER
+  classification, correct 2027 deadlines, and `UpdateCertificateOptions`
+  remediation assertions.
+
 ## [1.1.0] - 2026-09-10
 
 Authors: Tejas Majamudar (majamuda), Manoj Gaddam (vmgaddam)

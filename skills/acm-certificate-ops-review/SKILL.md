@@ -14,7 +14,7 @@ description: "Investigation and review procedures for AWS Certificate Manager (A
   \ strategy."
 metadata:
   author: majamuda, vmgaddam
-  version: "1.1.0"
+  version: "1.2.0"
   aws-devops-agent-skills.agent-types: "Chat tasks"
   aws-devops-agent-skills.aws-services: "AWS Certificate Manager, AWS Private CA"
   aws-devops-agent-skills.technical-domains: "Security"
@@ -154,9 +154,26 @@ and risk levels.
    `DomainValidationOptions`: for DNS validation confirm the required `CNAME`
    `ResourceRecord` exists and resolves; for email validation note that it
    blocks automated renewal.
-4. **Imported certificates in use** - flag `Type = IMPORTED` with a non-empty
+4. **Email-validated certificates (CA/B Forum deprecation)** - identify
+   `AMAZON_ISSUED` certificates where `DomainValidationOptions.ValidationMethod
+   = EMAIL`. Classify using these rules (use `acm:DescribeCertificate` - no new
+   permissions required):
+   - `AMAZON_ISSUED` + `ValidationMethod=DNS` - DNS validated (GREEN, no action)
+   - `AMAZON_ISSUED` + `ValidationMethod=EMAIL` - flag as **AMBER**: email
+     validation is being deprecated by the CA/B Forum. ACM will stop issuing
+     email-validated certificates on **March 31, 2027** and stop renewing them
+     on **September 30, 2027**. Recommend switching to DNS validation NOW using
+     `UpdateCertificateOptions` (ARN stays the same - no disruption to
+     load balancers, CI/CD, or service integrations). The customer has 72 hours
+     to add the CNAME records after initiating the switch. Monitor progress via
+     `ListCertificateDomainValidations`.
+   - `AMAZON_ISSUED` + `CertificateKeyPairOrigin=ACME` - ACM ACME issued, not
+     in scope for email-to-DNS migration (ACME certs use client-side key and
+     PRE_APPROVED endpoint authorization - no email/DNS challenge at issuance).
+   - `IMPORTED` or `PRIVATE` - not in scope for this check.
+5. **Imported certificates in use** - flag `Type = IMPORTED` with a non-empty
    `InUseBy`, since these will not auto-renew and are an outage risk.
-5. **Weak or legacy keys** - flag `KeyAlgorithm` of `RSA_1024` (and any
+6. **Weak or legacy keys** - flag `KeyAlgorithm` of `RSA_1024` (and any
    algorithm below current best practice). When flagging, recommend the
    stronger alternative:
    - RSA_1024 → recommend minimum RSA_2048 (or ECDSA P-256 for better
@@ -168,9 +185,9 @@ and risk levels.
    (check ACM docs / API for supported keyTypes). When new algorithms are
    added (e.g. post-quantum), include them in the recommendation if they
    offer stronger security. Do not limit recommendations to a static list.
-6. **Unused certificates** - flag issued certificates with an empty `InUseBy`
+7. **Unused certificates** - flag issued certificates with an empty `InUseBy`
    as cleanup or cost-optimization candidates (do not auto-delete).
-7. **ACME-issued certificates** - identify certificates with key source ACME
+8. **ACME-issued certificates** - identify certificates with key source ACME
    (visible in ListCertificates / DescribeCertificate). These auto-renew via
    the ACME client and have short validity (currently 45 days). Classify as
    GREEN if the ACME client is active; flag as RED if the cert is expired
@@ -180,7 +197,7 @@ and risk levels.
    When running this check, load
    [references/acm-detection-details.md](references/acm-detection-details.md)
    for the full sub-check procedures and their RED/AMBER classification rules.
-8. **Missing expiry monitoring** - for in-use certificates, check for a
+9. **Missing expiry monitoring** - for in-use certificates, check for a
    CloudWatch alarm on the ACM `DaysToExpiry` metric
    (`AWS/CertificateManager`, dimension `CertificateArn`) via
    `cloudwatch:DescribeAlarmsForMetric`. Flag certificates with no alarm.
@@ -193,11 +210,11 @@ and risk levels.
      public certs. NOTE: `ACM Certificate Expired` events are NOT available
      for imported certificates - so CloudWatch alarms are the only safety
      net for imported certs.
-8. **Stale endpoint after renewal** - if a certificate was renewed or
+10. **Stale endpoint after renewal** - if a certificate was renewed or
    re-issued but a dependent endpoint still serves the old certificate,
    confirm the resource references the new certificate ARN and that the
    distribution/load balancer has finished deploying.
-9. **ACM Private CA** - where relevant, call `acm-pca:ListCertificateAuthorities`
+11. **ACM Private CA** - where relevant, call `acm-pca:ListCertificateAuthorities`
    and `acm-pca:DescribeCertificateAuthority`; flag CAs that are `DISABLED`,
    `EXPIRED`, or nearing expiry, since a CA problem affects every certificate
    it issued.
