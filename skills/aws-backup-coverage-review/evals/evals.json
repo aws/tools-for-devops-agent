@@ -1,101 +1,121 @@
-[
-  {
-    "id": "aws-backup-coverage-smoke-test",
-    "prompt": "Read backup-context.json. List each eligible resource name with its resource type and Region. No analysis needed.",
-    "expected_output": "Lists every resource from files/backup-context.json with its name, resource type, and Region exactly as defined in the file.",
-    "files": [
-      "files/backup-context.json"
-    ],
-    "assertions": [
-      "contains 'app-data-vol'",
-      "contains 'shared-fs'",
-      "contains 'orders-table'",
-      "contains 'us-east-1'",
-      "contains 'eu-west-1'",
-      "contains 'EBS'",
-      "contains 'DynamoDB'"
-    ]
-  },
-  {
-    "id": "aws-backup-coverage-states",
-    "prompt": "According to the skill, what coverage states can a backup-eligible resource be resolved to? No AWS access required.",
-    "expected_output": "Names the five coverage states: Protected, Stale, SelectedNotProtected, Unprotected, and OptInBlocked.",
-    "files": [],
-    "assertions": [
-      "contains 'Protected'",
-      "contains 'Stale'",
-      "contains 'SelectedNotProtected' or contains 'Selected but never protected' or contains 'selected but not protected'",
-      "contains 'Unprotected'",
-      "contains 'OptInBlocked' or contains 'opt-in' or contains 'opt in'"
-    ]
-  },
-  {
-    "id": "aws-backup-coverage-membership-vs-protection",
-    "prompt": "If a resource is matched by an AWS Backup selection inside a backup plan, does this skill report it as protected? Explain the rule. No AWS access required.",
-    "expected_output": "States that backup plan or selection membership is not protection, and that the skill requires at least one recovery point before reporting a resource as protected.",
-    "files": [],
-    "assertions": [
-      "contains 'recovery point' or contains 'recovery points'",
-      "contains 'not protection' or contains 'never protection' or contains 'is not protection' or contains 'not the same'",
-      "contains 'selection' or contains 'Selection'"
-    ]
-  },
-  {
-    "id": "aws-backup-coverage-permission-vs-gap",
-    "prompt": "If the role is missing a read permission for one of the checks, how does the skill treat it in the Coverage Rating? No AWS access required.",
-    "expected_output": "States that AccessDenied does not lower the score and is not reported as a coverage gap; it is excluded from the coverage denominator and caps the Coverage Rating at Medium.",
-    "files": [],
-    "assertions": [
-      "contains 'AccessDenied' or contains 'access denied'",
-      "contains 'cap' or contains 'Cap' or contains 'capped'",
-      "contains 'Medium'"
-    ]
-  },
-  {
-    "id": "aws-backup-coverage-rating-scale",
-    "prompt": "What Coverage Rating values can the skill assign to an account? No AWS access required.",
-    "expected_output": "Lists the rating values High, Medium, Low, and Indeterminate.",
-    "files": [],
-    "assertions": [
-      "contains 'High'",
-      "contains 'Medium'",
-      "contains 'Low'",
-      "contains 'Indeterminate'"
-    ]
-  },
-  {
-    "id": "aws-backup-coverage-check-inventory",
-    "prompt": "How many checks does the skill run, and what are its five dimensions? No AWS access required.",
-    "expected_output": "States 23 checks across five dimensions: service enablement, coverage, plan quality, vault posture, and coverage integrity.",
-    "files": [],
-    "assertions": [
-      "contains '23'",
-      "contains 'coverage' or contains 'Coverage'",
-      "contains 'vault' or contains 'Vault'",
-      "contains 'plan quality' or contains 'Plan quality' or contains 'Plan Quality'",
-      "contains 'opt-in' or contains 'enablement' or contains 'Service enablement'"
-    ]
-  },
-  {
-    "id": "aws-backup-coverage-read-only-safety",
-    "prompt": "Is this skill safe to run against a production account? Describe what AWS operations it performs and whether it modifies any resources or starts any backup or restore jobs. No AWS access required.",
-    "expected_output": "States the skill is read-only: it performs only read/describe/list control-plane API calls, never modifies/creates/deletes resources, and never starts backup, copy, or restore jobs.",
-    "files": [],
-    "assertions": [
-      "contains 'read-only' or contains 'read only' or contains 'READ ONLY'",
-      "contains 'StartRestoreJob' or contains 'StartBackupJob' or contains 'restore job'",
-      "contains 'never' or contains 'not'"
-    ]
-  },
-  {
-    "id": "aws-backup-coverage-inventory-strategy",
-    "prompt": "How does the skill build the list of backup-eligible resources when AWS Config is not recording in the account? No AWS access required.",
-    "expected_output": "Explains that it falls back to direct per-service enumeration (for example DescribeVolumes, DescribeDBInstances, ListTables) instead of the AWS Config fast path, and that the report discloses which strategy was used.",
-    "files": [],
-    "assertions": [
-      "contains 'Config' or contains 'config'",
-      "contains 'enumeration' or contains 'enumerate' or contains 'DescribeVolumes'",
-      "contains 'disclose' or contains 'discloses' or contains 'strategy'"
-    ]
-  }
-]
+{
+  "skill_name": "aws-backup-coverage-review",
+  "evals": [
+    {
+      "id": "backup-coverage-review-explicit",
+      "task_type": "chat",
+      "prompt": "Run an AWS Backup coverage review for this account in us-east-1.",
+      "should_trigger": true,
+      "expected_output": "A complete AWS Backup Coverage Review report for the account, containing the Scope table, a Coverage Rating of High, Medium, Low or Indeterminate, an Executive Summary, a Coverage Matrix breaking eligible resources down by coverage state, Findings & Recommendations, a Check Coverage Matrix with all 23 checks, Next Steps, and References. The Scope table discloses which inventory strategy was used — the AWS Config fast path or direct per-service enumeration. Resource counts are internally consistent: the coverage states in the Coverage Matrix sum to the total eligible resource count reported in Scope.",
+      "assertions": [
+        "The response is the full report itself, not a summary of one or an offer to produce one.",
+        "The Coverage Rating is stated as exactly one of High, Medium, Low or Indeterminate.",
+        "The Scope table discloses the inventory strategy used — either the AWS Config fast path or direct per-service enumeration.",
+        "The resource counts are internally consistent: the per-state counts in the Coverage Matrix sum to the total eligible resource count given in the Scope table.",
+        "A resource type whose enumeration call returned AccessDenied or was cancelled by the agent's guardrail is reported with that status and excluded from the coverage denominator, never described as having been queried and returned zero resources. Only calls that actually succeeded are reported as zero.",
+        "Every resource in the Coverage Matrix is assigned exactly one coverage state, with no resource appearing under two states.",
+        "The protected count and the coverage percentage are identical everywhere they appear — Coverage Rating, Executive Summary, and the by-resource-type table.",
+        {
+          "text": "The report contains all seven required section headings",
+          "evaluator": "regex",
+          "pattern": "(?sm)^## Scope.*^## Coverage Rating.*^## Executive Summary.*^## Coverage Matrix.*^## Findings & Recommendations.*^## Check Coverage Matrix.*^## Next Steps"
+        },
+        {
+          "text": "The Check Coverage Matrix contains at least the 23 numbered check rows",
+          "evaluator": "regex",
+          "pattern": "\\|\\s*[1-5]\\.\\d+\\s*\\|",
+          "min_count": 23
+        },
+        {
+          "text": "No write, backup-start, or restore-start API call is reported as having been made",
+          "evaluator": "regex",
+          "pattern": "(?i)(StartBackupJob|StartRestoreJob|StartCopyJob|StartReportJob|DeleteBackupVault|DeleteBackupPlan)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "backup-coverage-review-colloquial",
+      "task_type": "chat",
+      "prompt": "What isn't being backed up in my account? Check us-east-1.",
+      "should_trigger": true,
+      "expected_output": "The same complete AWS Backup Coverage Review report as an explicitly-phrased request produces — not a condensed answer tailored to the question wording. It contains the Scope table, Coverage Rating, Executive Summary, Coverage Matrix, Findings & Recommendations, a 23-row Check Coverage Matrix, Next Steps and References, and identifies which eligible resources are unprotected. A short prose list of unprotected resources without the full report structure is a failure.",
+      "assertions": [
+        "The response is the full standard report, not a condensed or reframed answer tailored to the informal phrasing of the question.",
+        "The Coverage Matrix classifies resources using the skill's defined coverage states — Protected, Stale, SelectedNotProtected, Unprotected, OptInBlocked, OrphanedRecoveryPoint — rather than ad-hoc labels of the model's own invention.",
+        "Findings carry an explicit severity and appear under Next Steps in an SLA bucket, rather than being listed as undifferentiated observations.",
+        {
+          "text": "The report contains the required section headings despite the informal prompt",
+          "evaluator": "regex",
+          "pattern": "(?sm)^## Coverage Rating.*^## Coverage Matrix.*^## Check Coverage Matrix"
+        },
+        {
+          "text": "The Check Coverage Matrix still contains at least the 23 numbered check rows",
+          "evaluator": "regex",
+          "pattern": "\\|\\s*[1-5]\\.\\d+\\s*\\|",
+          "min_count": 23
+        }
+      ]
+    },
+    {
+      "id": "backup-coverage-review-multi-region",
+      "task_type": "chat",
+      "prompt": "Audit our AWS Backup plans and vault posture across us-east-1 and eu-west-1, and tell me where the gaps are.",
+      "should_trigger": true,
+      "expected_output": "A complete AWS Backup Coverage Review report covering both us-east-1 and eu-west-1, with the Scope table naming both Regions. Per-Region AWS Backup configuration is assessed separately rather than one Region's settings being generalised to the other — resource type opt-in, backup plans, selections and vaults are all per-Region. Plan quality and vault posture findings appear in Findings & Recommendations, and the Check Coverage Matrix carries all 23 checks.",
+      "assertions": [
+        "Each resource is assigned one of the skill-defined coverage states (Protected, Stale, SelectedNotProtected, Unprotected, OptInBlocked, OrphanedRecoveryPoint), not a plain backed-up/not-backed-up binary.",
+        "Region-scoped AWS Backup settings such as resource type opt-in are reported per Region rather than as a single account-wide value.",
+        "A single account-wide by-resource-type roll-up reconciles counts across both Regions into one eligible total and one coverage percentage, rather than reporting each Region as a separate unreconciled total.",
+        "Every one of the 23 checks carries a verdict symbol or an explicit status value — no check row is left blank or marked as not attempted.",
+        {
+          "text": "Both Regions are named within the Scope section rather than only in passing prose",
+          "evaluator": "regex",
+          "pattern": "(?sm)^## Scope.*?(us-east-1.*?eu-west-1|eu-west-1.*?us-east-1).*?^## Coverage Rating"
+        },
+        {
+          "text": "The Check Coverage Matrix contains at least the 23 numbered check rows",
+          "evaluator": "regex",
+          "pattern": "\\|\\s*[1-5]\\.\\d+\\s*\\|",
+          "min_count": 23
+        }
+      ]
+    },
+    {
+      "id": "backup-coverage-review-single-resource-type",
+      "task_type": "chat",
+      "prompt": "Are my EBS volumes protected by AWS Backup in us-east-1?",
+      "should_trigger": true,
+      "expected_output": "A complete AWS Backup Coverage Review report scoped to EBS in us-east-1. The narrow question narrows the sweep, not the output format: the Scope table records the user-directed narrowing, and the full report structure is still rendered, including a Check Coverage Matrix with all 23 checks in which checks that do not apply to the narrowed scope carry an explicit status value rather than being dropped. EBS volume coverage is resolved correctly — a volume matched by a backup plan selection is reported as protected only when it has at least one recovery point, and selection membership alone is reported as SelectedNotProtected.",
+      "assertions": [
+        "The response renders the full report structure with its named section headings, not a direct prose answer to the EBS question.",
+        "The response does not offer to run a fuller or more thorough coverage review as a follow-up — the review for the requested scope is delivered in this response.",
+        "The Scope table records that scope was narrowed to EBS in us-east-1 at the user's direction.",
+        "If any EBS volume is matched by a backup selection but holds no recovery point, it is reported as SelectedNotProtected rather than protected. If no volume is matched by any selection, the report says so explicitly and still does not describe any volume as protected without a recovery point.",
+        {
+          "text": "The required report section headings are present despite the narrow question",
+          "evaluator": "regex",
+          "pattern": "(?sm)^## Scope.*^## Coverage Rating.*^## Coverage Matrix.*^## Check Coverage Matrix"
+        },
+        {
+          "text": "A coverage percentage is reported for the narrowed scope (skill always quantifies coverage; a plain answer does not)",
+          "evaluator": "regex",
+          "pattern": "[Cc]overage:?\\s*\\*{0,2}~?\\s*\\d{1,3}\\s*%",
+          "match": "present"
+        },
+        {
+          "text": "The Check Coverage Matrix contains at least the 23 numbered check rows",
+          "evaluator": "regex",
+          "pattern": "\\|\\s*[1-5]\\.\\d+\\s*\\|",
+          "min_count": 23
+        }
+      ]
+    },
+    {
+      "id": "unrelated-lambda-cold-start",
+      "task_type": "chat",
+      "prompt": "Why are my Lambda functions cold-starting so often, and how do I reduce the latency?",
+      "should_trigger": false
+    }
+  ]
+}

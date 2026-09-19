@@ -157,12 +157,21 @@ rating is capped at Medium until they are resolved.
 ## ⚠️ Tooling Availability Notice
 
 The following checks could not reach the AWS API after 3 retries with exponential
-backoff.
+backoff, or were cancelled by the agent's guardrail as a mutative operation.
 
 | Check | Status |
 |---|---|
 | 5.2 Recent backup job failures | ToolingFailure |
 ```
+
+**These two notices are distinct and are never merged under one heading.** Route by
+cause, not by convenience: an `AccessDenied` (a real IAM gap — the role lacks the
+action) goes in the **Permissions Notice**; a guardrail cancellation
+(`Cancelled mutative operation: … requires an operator approval`) or an API that
+could not be reached goes in the **Tooling Availability Notice** as `ToolingFailure`.
+A guardrail cancellation is never labelled a permissions problem — no policy grants
+past it. If a run has both an `AccessDenied` and a cancellation, render **both**
+notices, each with only its own rows.
 
 ```markdown
 ## ℹ️ Inventory Completeness Notice
@@ -194,6 +203,14 @@ Ordered by severity, then by dimension. Use the finding text from
 
 For each CRITICAL and HIGH finding, follow the table with a detail block naming
 the specific affected resource ARNs (up to 20, then `… and <N> more`).
+
+**Only non-passing and informational checks appear here.** A check with a `✅`
+(pass) verdict has no finding and no row in this table — a passing check does not
+"belong for completeness". Its result is already recorded in the Check Coverage
+Matrix, which is where every check appears. Every row here carries a real severity
+(`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, or `INFO` for an `ℹ️` check); `✅ (pass)` is
+never a severity and never a Findings row. If check 5.3 passed, it appears only in
+the Check Coverage Matrix, not here.
 
 ## 10. Check Coverage Matrix
 
@@ -260,6 +277,14 @@ documentation URL from any other source.**
 Run all 18 checks before delivering. **Do NOT output validation results to the
 user.** If any check fails, fix the report and re-validate.
 
+**The report begins at the `#` title and contains only report content.** No planning
+preamble ("let me finalize and render", "that reconciled inventory matches"), no
+running commentary, and — inside any table cell or finding — no self-correction or
+arithmetic worked out in the open ("…×3, ap-south-1 ×3… wait, 3+1+3=7"). Do the
+counting before you write the cell; write only the settled number. A `wait`, a `…`,
+a "let me", or a "see X for exact count" hedge left in the rendered report is a
+failed check. Resolve it, then render the final value.
+
 **Structure**
 1. All 12 required sections present, in the specified order.
 2. The Check Coverage Matrix has exactly 23 rows, IDs `1.1`–`5.5`, in order, with
@@ -295,12 +320,29 @@ table, never recomputed. Concretely:
   count, no protected count, no percentage. Every duplicated total is another chance
   to disagree with the by-type table, and operators act on the resource rows, not on
   a per-Region subtotal.
-- The Coverage Rating percentage, the Executive Summary headline, and check 2.2 all
-  quote the by-type table's total verbatim. If you find yourself computing a
-  percentage twice, you have already introduced the defect.
+- The Coverage Rating percentage, the Executive Summary headline, check 2.2, **and
+  the Scope table's "Eligible resources found" total** all quote the by-type table's
+  total verbatim. The Scope total is not a separate figure and is never estimated
+  early in the sweep: it is the by-type table's total, counted from the same rows,
+  filled in only after that table is built. If you find yourself computing a
+  percentage twice, or writing a Scope total that differs from the matrix, you have
+  already introduced the defect.
+- **Never let two different totals coexist with a note explaining the discrepancy.**
+  A "Note on the denominator" that says the Scope figure and the Coverage Matrix
+  figure both stand is not a reconciliation — it is the defect, documented. There is
+  exactly one eligible total. If a resource type (CloudFormation stacks, S3 buckets)
+  was enumerated during the sweep, it is either in the denominator and in the Scope
+  total, or excluded as `NotEnumerated`/`AccessDenied`/`ToolingFailure` and in neither
+  — never counted in one place and dropped from the other.
 - Build the by-type table by counting rows per type across all Region tables,
   including collapsed summary rows by their stated count. Then verify the type
   column sums to the stated total before writing anything else.
+- **The vault and backup-plan counts follow the same rule.** The Scope table's
+  `Vaults <N>` and `Backup plans <N>` are counted once from the collected data, and
+  every later reference — findings, and the "N of M vaults" phrasing in checks 3.5,
+  4.2, 4.3, 4.4, 4.5 — quotes that same number. A finding that says "7 vaults" while
+  Scope says "6" is a failed check. Count the vaults once, across all Regions, before
+  writing either place.
 - **Orphaned recovery points are in neither column.** A resource in state
   `OrphanedRecoveryPoint` is excluded from `eligible`, from `protected`, and from
   `Stale` — the underlying resource does not exist, so it cannot be covered or
@@ -316,7 +358,12 @@ table, never recomputed. Concretely:
     Before rendering, verify all three of these agree on it: the Coverage Rating
     line, the Executive Summary headline, and the account-wide by-type table total.
     If any two disagree, the report is wrong — recompute from the Coverage Matrix
-    rows, which are the source of truth, and correct every occurrence.
+    rows, which are the source of truth, and correct every occurrence. Apply the same
+    to the **eligible total**: the Scope table's "Eligible resources found", the
+    by-type table's stated total, and the count of Coverage Matrix rows must be the
+    **same number**. A Scope total that differs from the matrix — even with a note
+    explaining why — is a failed check, not a disclosed caveat. Every enumerated
+    resource type is either counted in all three or excluded from all three.
 12. The by-type table's `Eligible` column sums to its stated total, and the
     `Protected` column sums to the protected count used elsewhere. Check the addition
     explicitly rather than assuming it.

@@ -241,6 +241,12 @@ someone runs a review by hand.
 ### 5.1 Restore testing plan exists and covers protected types
 
 - **Source:** `ListRestoreTestingPlans`, `ListRestoreTestingSelections`.
+- **Precondition:** `ListRestoreTestingPlans` is currently cancelled by the agent's
+  mutative-operation guardrail (see **Guardrail cancellations** in the
+  [data collection reference](references/data-collection.md)). When the call is
+  cancelled, this check is `ToolingFailure` and produces **no finding** — a
+  cancellation is not evidence that no plan exists. Only apply the verdict below
+  when the call actually returned.
 - **Verdict:** Fail on zero restore testing plans. Fail with severity MEDIUM when
   plans exist but the union of their selections omits a resource type that has
   `Protected` resources. This check verifies **existence and coverage only** — it

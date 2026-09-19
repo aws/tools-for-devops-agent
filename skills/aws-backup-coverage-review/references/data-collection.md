@@ -39,9 +39,58 @@ operation. In particular never call `StartBackupJob`, `StartRestoreJob`,
 or `PutRestoreValidationResult`. This skill never mutates any resource and never
 reads backup content or object data.
 
-**CloudTrail is deliberately excluded.** The agent's tool policy currently
-classifies the entire `cloudtrail` namespace as mutative and cancels those calls,
-so no check may depend on it.
+## Guardrail cancellations
+
+Independently of IAM, the agent's tool policy classifies some read-only operations
+as mutative and cancels them, returning:
+
+```
+Cancelled mutative operation: <service> <operation>. This operation requires an
+operator approval to execute.
+```
+
+A cancelled call is **not an empty success.** It carries no information about the
+resource's actual state, so it maps to `ToolingFailure` — which caps the Coverage
+Rating at Medium and is never scored as a coverage gap. Never read a cancellation
+as `NotConfigured`, and never let it produce a finding: reporting "no restore
+testing plan is configured" when the call to list them was cancelled is a false
+finding about the customer's account.
+
+Operations observed cancelled in live testing, none of which are mutative in fact:
+
+| Operation | Affects |
+|---|---|
+| `backup:ListRestoreTestingPlans` | Check 5.1 — render `ToolingFailure`, not a Fail |
+| `storagegateway:ListGateways` | Storage Gateway enumeration — render `NotEnumerated` |
+| the entire `cloudtrail` namespace | Nothing; no check may depend on it |
+
+The list is not exhaustive and the classification may change. Treat *any*
+cancellation of an allowlisted read as `ToolingFailure`, disclose it in the Scope
+table alongside `AccessDenied` gaps, and continue the sweep — a cancelled call
+never aborts the review.
+
+**Call operations by their exact API name.** `backup:ListFrameworks` is the
+operation that lists Audit Manager frameworks; `ListBackupFrameworks` does not
+exist and fails with `Invalid AWS operation`. Likewise `ListCopyJobs` is not in the
+allowlist above and must not be called — cross-Region copy configuration is read
+from the backup plan via `GetBackupPlan`, not from job history.
+
+**The IAM action prefix is the service name, not the SDK client name.** Several
+services expose a client whose name differs from their IAM prefix, and using the
+client name produces an `AccessDenied` that no policy can grant — the action does
+not exist. Timestream is the case observed in live testing: the boto3 client is
+`timestream-write`, but the IAM action is `timestream:ListDatabases`.
+`timestream-write:ListDatabases` is denied no matter what the role is granted.
+
+| Enumerating | IAM action to use | Do not use |
+|---|---|---|
+| Timestream databases | `timestream:ListDatabases` | `timestream-write:ListDatabases` |
+| Timestream tables | `timestream:ListTables` | `timestream-write:ListTables` |
+
+A denial caused by a misnamed action is not a permissions gap in the account. If a
+call is denied, check the action name against the allowlist above before recording
+`AccessDenied` — otherwise the resource type is dropped from the denominator over a
+typo, and the report understates the inventory it claims to have swept.
 
 ## Status enum
 

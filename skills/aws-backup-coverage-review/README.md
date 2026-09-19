@@ -199,6 +199,20 @@ in particular never `StartBackupJob`, `StartRestoreJob`, `StartCopyJob`, or
   discovery and an AWS Backup gateway respectively. Both are reported as
   `NotEnumerated` and excluded from the denominator, never as covered. The report
   always discloses which inventory strategy was used.
+- **Some read-only calls are blocked by the DevOps Agent guardrail, not by IAM.**
+  The DevOps Agent's [permission guardrail](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security-limiting-agent-access-in-an-aws-account.html)
+  classifies a few read-only operations as mutative and cancels them with
+  `Cancelled mutative operation: … requires an operator approval`. `backup:ListRestoreTestingPlans`
+  (check 5.1, restore testing coverage) and `storagegateway:ListGateways` (Storage
+  Gateway enumeration) are the two observed. This is a platform classification, **not
+  an IAM gap** — the action can be granted in IAM and remain uncallable, and no policy
+  change or CloudFormation edit fixes it. When it occurs, the skill records the check
+  as `ToolingFailure`, which caps the Coverage Rating at Medium and is never scored as
+  a coverage gap; it does **not** report "no restore testing plan is configured," since
+  a cancelled call carries no information about whether resources exist. The
+  `ToolingFailure` line in the report is expected behavior, not a defect. Granting an
+  operator approval for the operation, or running the same review outside the guarded
+  runtime, is the only way to obtain the underlying data.
 - **Coverage integrity, not job triage.** The review flags that backup jobs are
   failing but does not diagnose why. Backup and restore job failure triage is out
   of scope.

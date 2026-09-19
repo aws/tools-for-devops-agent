@@ -39,15 +39,24 @@ swept), **Coverage Rating** with a coverage percentage, **Executive Summary**,
 **Coverage Matrix**, **Findings & Recommendations**, a **Check Coverage Matrix with
 all 23 rows**, and **Next Steps**.
 
-Two failure modes to avoid specifically, because both feel natural in a chat:
+Three failure modes to avoid specifically, because all three feel natural in a chat:
 
 - **Do not compress the report into narrative bullets** because the question was
   phrased casually. "What isn't being backed up?" requires the same full report as
   "run an AWS Backup coverage review".
+- **Do not substitute a direct lookup when the question is narrow.** "Are my EBS
+  volumes protected in us-east-1?" narrows the *scope* of the review; it does not
+  authorise a different *output*. Narrow the sweep, then render the full report for
+  that scope. See **Scoped requests** under the Final Delivery Contract — and
+  **Follow-up questions in the same conversation** for the single exception, which
+  applies only after a qualifying report has already been delivered in this
+  conversation.
 - **Do not end with an offer to investigate further or to fix anything** ("want me to
   dig into any of these?", "which gap would you like to tackle first?"). The report is
   the deliverable, complete on first response. Findings the review surfaces are
-  already in it, each with a recommendation and an SLA bucket.
+  already in it, each with a recommendation and an SLA bucket. In particular, never
+  offer to "run the full coverage review" as a follow-up — if this skill loaded, the
+  full review for the requested scope *is* the current response.
 
 If you cannot complete a section, render it with the explicit status values defined
 below (`AccessDenied`, `ToolingFailure`, `NotEnumerated`) — never drop it.
@@ -88,17 +97,23 @@ read-only APIs, treating AWS Config as an optimization rather than a prerequisit
 
 - **This skill (orchestrator/analyzer):** scope resolution, routing, coverage
   model application, rating, report rendering.
-- **Data collection:** `references/data-collection.md` — the read-only API
-  allowlist, hard denials, the per-Region and per-resource-type call plan, and
-  error classification. Data is acquired with the agent's native `use_aws` tool
-  under the assumed role in the target account. No credentials or profile are
-  requested from the user.
-- **Coverage logic:** `references/coverage-logic.md` — all 23 checks, thresholds,
-  verdict rules, finding templates, and the rating roll-up.
-- **Report format:** `references/report-format.md` — report structure, the
-  coverage matrix, the check coverage matrix, severity map, pre-render validation.
-- **Operational depth:** `references/backup-best-practices.md` — reasoning behind
-  the thresholds, remediation guidance, and the canonical AWS documentation URLs.
+- **Data collection:** [data collection reference](references/data-collection.md)
+  — the read-only API allowlist, hard denials, the per-Region and
+  per-resource-type call plan, and error classification. Load it at Step 2,
+  before issuing any API call. Data is acquired with the agent's native `use_aws`
+  tool under the assumed role in the target account. No credentials or profile
+  are requested from the user.
+- **Coverage logic:** [coverage logic reference](references/coverage-logic.md) —
+  all 23 checks, thresholds, verdict rules, finding templates, and the rating
+  roll-up. Load it at Step 6, before evaluating the checks.
+- **Report template:** [report template](assets/report-format.md) — report
+  structure, the coverage matrix, the check coverage matrix, severity map,
+  pre-render validation. Load it at Step 8, before rendering the report.
+- **Operational depth:**
+  [backup best practices reference](references/backup-best-practices.md) —
+  reasoning behind the thresholds, remediation guidance, and the canonical AWS
+  documentation URLs. Load it when a finding needs remediation guidance or a
+  documentation citation.
 
 ## The Coverage Model
 
@@ -153,26 +168,47 @@ plainly and continue with the supported types rather than aborting.
 
 ## Execution Flow
 
-1. Resolve scope (above).
-2. Determine the inventory strategy once, per `references/data-collection.md`:
+Work through these in order; each step depends on the one before it.
+
+- [ ] **Step 1 — Resolve scope:** apply the scope rules above.
+- [ ] **Step 2 — Determine the inventory strategy once,** loading the
+      [data collection reference](references/data-collection.md) first:
    - Call `config:DescribeConfigurationRecorderStatus`. If a recorder exists and
      `recording` is `true` → **Config fast path** (one `config:SelectResourceConfig`
      query per Region).
    - Otherwise → **direct enumeration** (per-service `Describe`/`List` calls).
    - Record which strategy was used; the report must disclose it, because it
      determines how complete the denominator is.
-3. Collect AWS Backup configuration per Region: region settings, plans,
-   selections, vaults, protected resources, restore testing plans.
-4. Collect the eligible-resource inventory per Region using the chosen strategy.
-5. Resolve every eligible resource to one of the five coverage states.
-6. Load `references/coverage-logic.md` and evaluate all 23 checks.
-7. Evaluate pre-flight: inspect every `status` field in the collected data.
+- [ ] **Step 3 — Collect AWS Backup configuration per Region:** region settings,
+      plans, selections, vaults, protected resources, restore testing plans.
+- [ ] **Step 4 — Collect the eligible-resource inventory per Region** using the
+      chosen strategy.
+- [ ] **Step 5 — Resolve coverage states:** assign every eligible resource exactly
+      one of the six coverage states. **Persist the per-resource rows as you resolve
+      them** — write each resource's Region, type, ARN or identifier, coverage state,
+      last backup, and matched selection to a working file (e.g. `fs_write` to a
+      scratch path). This is the account-wide inventory; on a large sweep it will not
+      survive in context to Step 8, so it must exist on disk. Render the Coverage
+      Matrix from this file, not from memory.
+- [ ] **Step 6 — Evaluate the checks:** load the
+      [coverage logic reference](references/coverage-logic.md) and evaluate all
+      23 checks. **Persist all 23 verdicts** (check ID, verdict, finding text,
+      severity, status) to the working file alongside the inventory, for the same
+      reason. Render the Check Coverage Matrix and Findings from this file.
+- [ ] **Step 7 — Evaluate pre-flight:** inspect every `status` field in the
+      collected data.
    - Any `AccessDenied` → present the permissions audit below.
    - Any `ToolingFailure` → present the tooling notice below.
    - Otherwise proceed.
-8. Load `references/report-format.md` and render the report.
-9. Run the pre-render validation checks.
-10. Deliver per the **Final Delivery Contract** below.
+- [ ] **Step 8 — Render the report:** **load
+      [the report template](assets/report-format.md) again now, immediately before
+      rendering.** A read from earlier in the run does not count — on a long sweep the
+      template falls out of context, and rendering from a remembered outline drops
+      required sections and collapses headings. Re-read it, then render every section
+      it defines, drawing the Coverage Matrix, Check Coverage Matrix and Findings from
+      the working file written in Steps 5 and 6.
+- [ ] **Step 9 — Validate:** run the pre-render validation checks.
+- [ ] **Step 10 — Deliver** per the **Final Delivery Contract** below.
 
 ## Pre-flight: Permissions audit
 
@@ -213,8 +249,8 @@ Wait for the user's response. Do NOT proceed by default.
 
 ## Coverage Rating
 
-One rating for the account, from the roll-up rules in
-`references/coverage-logic.md`:
+One rating for the account, from the roll-up rules in the
+[coverage logic reference](references/coverage-logic.md):
 
 | Rating | Criteria |
 |---|---|
@@ -241,15 +277,14 @@ Emoji map: `CRITICAL → ❌` · `HIGH → ⚠️` · `MEDIUM → ⚠️` · `LO
 
 ## Final Delivery Contract (Required)
 
-The complete AWS Backup Coverage Review report is the authoritative output of
-this skill. **A prose summary is not an acceptable substitute, no matter how
-accurate its findings are.**
+This defines *how* to deliver the full report the **Output Contract** already
+mandates; it does not restate that the report is the only acceptable output.
 
 ### If you delegate any part of this review to a subagent
 
 Delegating the account sweep to a research subagent is allowed, but the subagent
 returns *data*, never the final answer. A subagent may not receive this skill's
-`references/` files, so it cannot be trusted to render the report.
+`references/` or `assets/` files, so it cannot be trusted to render the report.
 
 - The agent that owns this skill **renders the report itself**, from the data the
   subagent returned.
@@ -257,37 +292,89 @@ returns *data*, never the final answer. A subagent may not receive this skill's
 - If the subagent's data is missing anything the report requires, ask it for that
   specific data or collect it directly. Do not omit a section because the data
   came back thin.
+- **Bound each subagent to a compact, structured return.** Give it a fixed schema —
+  per-resource inventory rows (Region, type, ARN, coverage state, last backup,
+  matched selection) plus the raw AWS Backup configuration, as data only, **no prose
+  narration and no rendered report**. A subagent that returns a long free-text answer
+  forces a distillation pass that silently drops the per-resource detail the Coverage
+  Matrix needs. Have it write its findings to the shared working file (Steps 5–6)
+  rather than returning them inline where possible.
+- **Split the sweep into non-overlapping Region groups,** one group per subagent.
+  Overlapping groups re-collect the same Regions, multiplying tool calls and the
+  volume that must later be distilled.
+- **A subagent that returns nothing — a refusal, an empty result, a cancelled
+  operation — is a `ToolingFailure` for every resource type it was asked to cover,
+  not evidence those types are absent.** Record it as `ToolingFailure`, name what
+  failed, and either re-collect that group directly or disclose it in the tooling
+  notice. Never treat a missing subagent return as "zero resources."
 
 ### Delivery
 
-The report's required sections, tables and validation rules are defined in
-`references/report-format.md` — load it before rendering. When this skill is paired
-with the `aws-backup-coverage-review` custom agent, that agent's system prompt also
-carries the report structure.
+The report's required sections, tables and validation rules are defined in the
+[report template](assets/report-format.md) — **re-load it at Step 8, immediately
+before rendering, even if it was read earlier in the run.** If the runtime offers no
+working-file tool (`fs_write` or equivalent), keep the sweep small enough to hold the
+per-resource inventory in context — split into more, narrower Region groups — rather
+than dropping the Coverage Matrix; the per-resource rows are required output, not an
+optimization.
 
 1. Create the complete report as a single artifact named
    `aws-backup-coverage-review-<account-id>-<YYYY-MM-DD>.md`. If the runtime does
    not support persisted artifacts, skip artifact creation and rely on step 3.
 2. Include every required report section, the Coverage Matrix, the Check Coverage
    Matrix with all 23 rows, every finding, the Coverage Rating, the inventory
-   strategy disclosure, and all recommendations — exactly per
-   `references/report-format.md`.
-3. Return the same complete report in the user-facing final response.
-4. Do not replace the report with a summary, paraphrase, shortened version,
-   excerpt, or alternate structure. The report renders verbatim; only placeholder
-   values are substituted.
-5. This applies regardless of how the request is phrased. "What isn't being
-   backed up?", "audit my backup plans", "backup gap analysis", "are my volumes
-   protected", and "AWS Backup coverage review" all yield the **same full
-   standard report**. Never produce a condensed, reframed, or "focused view"
-   variant tailored to the question wording.
+   strategy disclosure, and all recommendations — exactly per the
+   [report template](assets/report-format.md).
+3. Return the same complete report in the user-facing final response, verbatim —
+   no summary, paraphrase, excerpt, or alternate structure, and no "focused view"
+   tailored to the question wording. Only placeholder values are substituted.
+
+### Scoped requests
+
+A request that names specific Regions or resource types — "are my EBS volumes
+protected in us-east-1?", "check RDS backups in eu-west-1" — narrows **what is
+swept**, never **what is rendered**.
+
+- Honour the narrowing in the sweep: review only the named Regions and resource
+  types, and record the narrowed scope in the Scope table as a user-directed
+  limit.
+- Render the full standard report for that scope. All 23 checks still appear in the
+  Check Coverage Matrix; checks that do not apply to the narrowed scope are marked
+  with the defined status values rather than dropped.
+- A narrow scope makes the report *shorter*, because there are fewer resources and
+  fewer findings. It never makes it *structurally different*. If the scope is so
+  narrow that most of the report is empty, render it anyway — the empty sections are
+  the finding. Do not downgrade to a "direct, bounded lookup" because the question
+  felt small; that trade-off is already decided by the Output Contract.
+
+### Follow-up questions in the same conversation
+
+The one exception. If the full report for a scope that already covers the question
+was rendered **earlier in this same conversation**, answer the follow-up directly
+from it instead of re-rendering it. Repeating an identical report minutes later
+serves nobody.
+
+This applies only when all three hold:
+
+- The earlier report in this conversation already swept the Regions and resource
+  types the follow-up asks about. A follow-up that widens scope — a new Region, a
+  type that was not swept — is a new request and gets the full report.
+- The answer is drawn from that report and agrees with it. Never restate a coverage
+  state, count, or severity that contradicts what was already delivered.
+- No new data collection is needed. If you must call an API to answer, the earlier
+  sweep did not cover it, so render the full report for the new scope.
+
+Say which earlier review the answer comes from, so the user can tell a grounded
+slice from a fresh opinion. This exception never applies to the first
+coverage-related response in a conversation — that is always the full report.
 
 ## Critical Rules
 
 - **READ ONLY.** This skill performs only read-only control-plane API calls. It
   never creates, modifies, deletes, or starts anything — in particular never
   `StartBackupJob`, `StartRestoreJob`, `StartCopyJob`, or `StartReportJob`. See
-  the allowlist and hard denials in `references/data-collection.md`.
+  the allowlist and hard denials in the
+  [data collection reference](references/data-collection.md).
 - **Never conflate `NotConfigured` with `AccessDenied`.** The first is a finding;
   the second is a blind spot. They render differently and only the first affects
   the rating.
@@ -349,17 +436,25 @@ carries the report structure.
 | `ListBackupSelections` returns results under the key `BackupSelectionsList` | Reading a differently-named key yields a silent empty list, which makes every resource look `Unprotected` instead of `SelectedNotProtected` |
 | A selection can reference a literal ARN for a resource that no longer exists | The plan then protects nothing through that entry while still looking healthy. Caught by check 3.6's dangling-ARN sub-check and by check 5.2 |
 | Aurora, Neptune, and DocumentDB all surface via `rds:DescribeDBClusters` | Separate them by the `Engine` field before mapping to AWS Backup resource types |
-| Backup resource type names are not CloudFormation type names | `EBS`, not `AWS::EC2::Volume`. Map explicitly per `references/data-collection.md` |
+| Backup resource type names are not CloudFormation type names | `EBS`, not `AWS::EC2::Volume`. Map explicitly per the [data collection reference](references/data-collection.md) |
+| Some read-only calls are cancelled as `Cancelled mutative operation`, independently of IAM | The state is unknown, so the check is `ToolingFailure` and yields **no finding** — never report a feature absent because the call listing it was cancelled. Known cases and affected checks are in the [data collection reference](references/data-collection.md) |
 
 ## References
 
-- `references/data-collection.md` — Read-only API allowlist, hard denials, error
-  classification and retry behaviour, the
+- [data collection reference](references/data-collection.md) — Read-only API
+  allowlist, hard denials, error classification and retry behaviour, the
   per-Region and per-resource-type call plan, the Config fast path, resource type
-  mapping, and error classification.
-- `references/coverage-logic.md` — All 23 checks across 5 dimensions, thresholds,
-  verdict rules, finding templates, and the Coverage Rating roll-up.
-- `references/report-format.md` — Report structure, Coverage Matrix, Check
-  Coverage Matrix, severity map, pre-render validation.
-- `references/backup-best-practices.md` — Reasoning behind the thresholds,
-  remediation guidance, and canonical AWS documentation URLs.
+  mapping, and error classification. Load at Step 2.
+- [coverage logic reference](references/coverage-logic.md) — All 23 checks across
+  5 dimensions, thresholds, verdict rules, finding templates, and the Coverage
+  Rating roll-up. Load at Step 6.
+- [backup best practices reference](references/backup-best-practices.md) —
+  Reasoning behind the thresholds, remediation guidance, and canonical AWS
+  documentation URLs. Load when a finding needs remediation guidance or a
+  documentation citation.
+
+## Assets
+
+- [report template](assets/report-format.md) — Report structure, Coverage Matrix,
+  Check Coverage Matrix, severity map, pre-render validation. Load at Step 8,
+  before rendering the report.
