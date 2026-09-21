@@ -1,0 +1,372 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Registers the AWS-managed Apache Spark Troubleshooting Agent for Amazon
+  EMR (a SageMaker Unified Studio MCP server) with AWS DevOps Agent. Creates
+  the SigV4 IAM role trusted by AWS DevOps Agent and the DevOps Agent
+  Service (capability provider). Attaching the Service to your Agent Space
+  is a one-time manual step performed once, per the DevOps Agent
+  documentation.
+
+Parameters:
+
+  TroubleshootingRoleName:
+    Type: String
+    Default: SparkTroubleshootingRole
+    Description: >
+      Name of the IAM role AWS DevOps Agent assumes (via SigV4) when
+      calling the Apache Spark Troubleshooting MCP server.
+    AllowedPattern: '^[a-zA-Z0-9+=,.@_-]{1,64}$'
+
+  ServiceName:
+    Type: String
+    Default: spark-troubleshooting
+    Description: >
+      Name of the AWS DevOps Agent Service (capability provider) that
+      wraps the MCP registration. Must be unique per account per region.
+    AllowedPattern: '^[a-zA-Z0-9_-]{1,63}$'
+
+  EnableEMREC2:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Attach EMR on EC2 read permissions to the troubleshooting role.
+
+  EnableEMRServerless:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Attach EMR Serverless read permissions to the troubleshooting role.
+
+  EnableGlue:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Attach AWS Glue read permissions to the troubleshooting role.
+
+  SparkArtifactsBucketNames:
+    Type: CommaDelimitedList
+    Description: >
+      One or more S3 bucket NAMES (not ARNs) where Apache Spark event
+      logs, driver / executor stdout / stderr, and application code
+      (.py / .jar / .zip) are stored. The troubleshooting role receives
+      scoped read access to these buckets and their contents. Required
+      — without this the MCP tools that fetch Spark artifacts from S3
+      will fail.
+
+      Example: my-spark-logs,my-spark-code
+
+  CloudWatchKmsKeyArn:
+    Type: String
+    Default: ''
+    Description: >
+      (Optional) ARN of a KMS key used to encrypt CloudWatch Logs for
+      EMR Serverless or Glue. Leave empty if CloudWatch Logs use
+      AWS-owned keys or the account default key.
+    AllowedPattern: '^(arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+)?$'
+
+Rules:
+
+  # AWS DevOps Agent and SageMaker Unified Studio MCP support intersect in
+  # 11 commercial regions. Fail-fast here to avoid a confusing partial
+  # deploy in an unsupported region.
+  SupportedRegion:
+    Assertions:
+      - Assert: !Contains
+          - - us-east-1
+            - us-west-2
+            - ap-northeast-1
+            - eu-west-1
+            - ap-southeast-1
+            - ap-southeast-2
+            - ca-central-1
+            - sa-east-1
+            - eu-central-1
+            - eu-west-2
+            - ap-south-1
+          - !Ref AWS::Region
+        AssertDescription: >
+          This integration is only supported in regions where BOTH AWS
+          DevOps Agent and the SageMaker Unified Studio MCP service are
+          available: us-east-1, us-west-2, ap-northeast-1, eu-west-1,
+          ap-southeast-1, ap-southeast-2, ca-central-1, sa-east-1,
+          eu-central-1, eu-west-2, ap-south-1.
+
+Conditions:
+
+  EnableEMREC2Cond:        !Equals [!Ref EnableEMREC2,        'true']
+  EnableEMRServerlessCond: !Equals [!Ref EnableEMRServerless, 'true']
+  EnableGlueCond:          !Equals [!Ref EnableGlue,          'true']
+  HasKmsKey:               !Not    [!Equals [!Ref CloudWatchKmsKeyArn, '']]
+
+Resources:
+
+  # ============================================================================
+  # IAM role trusted by AWS DevOps Agent for SigV4 signing
+  # ============================================================================
+
+  SparkTroubleshootingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref TroubleshootingRoleName
+      Description: Role assumed by AWS DevOps Agent to invoke the Apache Spark Troubleshooting MCP server via SigV4.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: aidevops.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:aidevops:${AWS::Region}:${AWS::AccountId}:service/*'
+      Tags:
+        - Key: Purpose
+          Value: SparkTroubleshootingMCPConnect
+
+  # ---------- Base: invoke the SMUS MCP service ----------
+
+  MCPInvokeAccess:
+    Type: AWS::IAM::Policy
+    Metadata:
+      # sagemaker-unified-studio-mcp is a newer service not yet in the
+      # cfn-lint service-name allowlist. The actions are valid — see the
+      # AWS EMR Release Guide "Setup for Troubleshooting Agent" page.
+      cfn-lint:
+        config:
+          ignore_checks: [W3037]
+    Properties:
+      PolicyName: MCPInvokeAccess
+      Roles: [!Ref SparkTroubleshootingRole]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: InvokeSMUSSparkTroubleshootingMCP
+            Effect: Allow
+            Action:
+              - sagemaker-unified-studio-mcp:InvokeMcp
+              - sagemaker-unified-studio-mcp:CallReadOnlyTool
+              - sagemaker-unified-studio-mcp:CallPrivilegedTool
+            Resource: '*'
+
+  # ---------- S3 read on customer-supplied Spark artifacts buckets ----------
+  # Tightened from the AWS canonical setup template, which uses Resource: '*'.
+  # The MCP tools that fetch Spark event logs, application code, and driver
+  # stdout / stderr from S3 need this scope. Passed in via
+  # SparkArtifactsBucketNames.
+
+  SparkArtifactsS3Access:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: SparkArtifactsS3Access
+      Roles: [!Ref SparkTroubleshootingRole]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # The Rules block confines this template to the standard commercial
+          # partition (us-east-1, us-west-2, …), so hardcoding "arn:aws:s3:::"
+          # is safe. !Join requires a literal string delimiter.
+          - Sid: SparkArtifactsListBucket
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource: !Split
+              - ','
+              - !Sub
+                - 'arn:aws:s3:::${Joined}'
+                - Joined: !Join [',arn:aws:s3:::', !Ref SparkArtifactsBucketNames]
+          - Sid: SparkArtifactsGetObject
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+            Resource: !Split
+              - ','
+              - !Sub
+                - 'arn:aws:s3:::${Joined}/*'
+                - Joined: !Join ['/*,arn:aws:s3:::', !Ref SparkArtifactsBucketNames]
+
+  # ---------- EMR on EC2 (conditional) ----------
+
+  EMREC2Access:
+    Type: AWS::IAM::Policy
+    Condition: EnableEMREC2Cond
+    Properties:
+      PolicyName: EMREC2Access
+      Roles: [!Ref SparkTroubleshootingRole]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EMREC2ReadAccess
+            Effect: Allow
+            Action:
+              - elasticmapreduce:DescribeCluster
+              - elasticmapreduce:DescribeStep
+              - elasticmapreduce:ListSteps
+              - elasticmapreduce:ListClusters
+              - elasticmapreduce:DescribeJobFlows
+            Resource: '*'
+          - Sid: EMREC2PersistentAppUI
+            Effect: Allow
+            Action:
+              - elasticmapreduce:CreatePersistentAppUI
+              - elasticmapreduce:DescribePersistentAppUI
+              - elasticmapreduce:GetPersistentAppUIPresignedURL
+            Resource: '*'
+
+  # ---------- EMR Serverless (conditional) ----------
+
+  EMRServerlessAccess:
+    Type: AWS::IAM::Policy
+    Condition: EnableEMRServerlessCond
+    Properties:
+      PolicyName: EMRServerlessAccess
+      Roles: [!Ref SparkTroubleshootingRole]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EMRServerlessReadAccess
+            Effect: Allow
+            Action:
+              - emr-serverless:GetJobRun
+              - emr-serverless:GetApplication
+              - emr-serverless:ListApplications
+              - emr-serverless:ListJobRuns
+              - emr-serverless:ListJobRunAttempts
+              - emr-serverless:GetDashboardForJobRun
+              - emr-serverless:ListTagsForResource
+            Resource: '*'
+          - Sid: EMRServerlessCloudWatchLogsAccess
+            Effect: Allow
+            Action:
+              - logs:GetLogEvents
+              - logs:FilterLogEvents
+            Resource: !Sub 'arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/emr-serverless/*'
+
+  # ---------- Glue (conditional) ----------
+
+  GlueAccess:
+    Type: AWS::IAM::Policy
+    Condition: EnableGlueCond
+    Properties:
+      PolicyName: GlueAccess
+      Roles: [!Ref SparkTroubleshootingRole]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: GlueReadAccess
+            Effect: Allow
+            Action:
+              - glue:GetJob
+              - glue:GetJobRun
+              - glue:GetJobRuns
+              - glue:GetJobs
+              - glue:BatchGetJobs
+            Resource: '*'
+          - Sid: GlueCloudWatchLogsAccess
+            Effect: Allow
+            Action:
+              - logs:GetLogEvents
+              - logs:FilterLogEvents
+            Resource: !Sub 'arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws-glue/*'
+          - Sid: GlueSparkWebUI
+            Effect: Allow
+            Action:
+              - glue:RequestLogParsing
+              - glue:GetLogParsingStatus
+              - glue:GetEnvironment
+              - glue:GetStage
+              - glue:GetStages
+              - glue:GetStageFiles
+              - glue:BatchGetStageFiles
+              - glue:GetStageAttempt
+              - glue:GetStageAttemptTaskList
+              - glue:GetStageAttemptTaskSummary
+              - glue:GetExecutors
+              - glue:GetExecutorsThreads
+              - glue:GetStorage
+              - glue:GetStorageUnit
+              - glue:GetQueries
+              - glue:GetQuery
+              - glue:GetDashboardUrl
+            Resource: '*'
+          - Sid: GluePassRoleAccess
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: '*'
+            Condition:
+              StringLike:
+                iam:PassedToService: glue.amazonaws.com
+
+  # ---------- Optional KMS decrypt for CloudWatch Logs ----------
+
+  CloudWatchKmsDecrypt:
+    Type: AWS::IAM::Policy
+    Condition: HasKmsKey
+    Properties:
+      PolicyName: CloudWatchKmsDecrypt
+      Roles: [!Ref SparkTroubleshootingRole]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudWatchLogsKMSDecrypt
+            Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: !Ref CloudWatchKmsKeyArn
+
+  # ============================================================================
+  # AWS DevOps Agent Service (capability provider)
+  # ============================================================================
+  # Registers the AWS-managed Apache Spark Troubleshooting MCP endpoint as a
+  # capability provider. SigV4 auth; no private connection is used or needed.
+  # AWS DevOps Agent reaches the SMUS MCP over the AWS backbone via its
+  # publicly-resolvable endpoint. The customer-side network path is not on
+  # the DevOps Agent → MCP data path for SigV4-authenticated MCPs — see
+  # https://github.com/aws/tools-for-devops-agent/pull/103 for the
+  # investigation.
+
+  SparkTroubleshootingService:
+    Type: AWS::DevOpsAgent::Service
+    Metadata:
+      # AWS::DevOpsAgent::Service is a recent addition to CloudFormation
+      # and is not yet present in cfn-lint's provider schema for every
+      # region. The resource type is real; verified via
+      # `aws cloudformation describe-type`.
+      cfn-lint:
+        config:
+          ignore_checks: [E3006]
+    Properties:
+      ServiceType: mcpserversigv4
+      ServiceDetails:
+        MCPServerSigV4:
+          Name: !Ref ServiceName
+          Endpoint: !Sub 'https://sagemaker-unified-studio-mcp.${AWS::Region}.api.aws/spark-troubleshooting/mcp'
+          Description: Apache Spark Troubleshooting Agent for Amazon EMR
+          AuthorizationConfig:
+            Region: !Ref AWS::Region
+            Service: sagemaker-unified-studio-mcp
+            McpRoleArn: !GetAtt SparkTroubleshootingRole.Arn
+      Tags:
+        - Key: Purpose
+          Value: SparkTroubleshootingMCPConnect
+
+Outputs:
+
+  TroubleshootingRoleArn:
+    Description: ARN of the IAM role AWS DevOps Agent assumes for SigV4 signing.
+    Value: !GetAtt SparkTroubleshootingRole.Arn
+
+  MCPEndpointURL:
+    Description: MCP endpoint URL registered with AWS DevOps Agent.
+    Value: !Sub 'https://sagemaker-unified-studio-mcp.${AWS::Region}.api.aws/spark-troubleshooting/mcp'
+
+  ServiceArn:
+    Description: >
+      ARN of the AWS DevOps Agent Service (capability provider). Attach
+      this Service to your Agent Space to make its tools available to the
+      agent — see the README for the manual step.
+    Value: !GetAtt SparkTroubleshootingService.Arn
