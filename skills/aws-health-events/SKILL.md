@@ -14,7 +14,7 @@ description: ALWAYS use this skill in the beginning of any incident investigatio
   event summary or report for their account over a specified time period.
 metadata:
   author: udid-aws
-  version: "1.0.0"
+  version: "1.0.1"
   aws-devops-agent-skills.agent-types: "Chat tasks, Incident RCA"
   aws-devops-agent-skills.aws-services: "AWS Health"
   aws-devops-agent-skills.technical-domains: "Operations"
