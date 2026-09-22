@@ -97,9 +97,21 @@ jobs:
             # Checked rather than attempted-and-ignored. `--remove-label` errors when
             # the label is absent, so suppressing that error also suppressed every
             # other error, including the missing-GH_REPO failure this step used to
-            # hit on both branches. Any real failure now fails the job.
-            if gh pr view "$PR" --json labels \
-                 --jq "[.labels[].name] | index(\"$LABEL\") != null" | grep -qx true; then
+            # hit on both branches.
+            #
+            # The lookup is a separate statement on purpose. Piping it straight into a
+            # test — `gh pr view ... | grep -qx true` — reproduces the same pathology:
+            # a failed lookup prints nothing, the test simply doesn't match, and the
+            # step reports "the label wasn't set" and exits 0. `set -e` does not catch
+            # it, because a command failing inside an `if` condition is exempt from
+            # errexit. As its own assignment, a failed lookup fails the job, while an
+            # absent label stays benign.
+            #
+            # LABEL is read from the environment by jq rather than interpolated into
+            # the jq program text; `gh --jq` has no `--arg`.
+            has_label=$(gh pr view "$PR" --json labels \
+                          --jq '[.labels[].name] | index(env.LABEL) != null')
+            if [ "$has_label" = "true" ]; then
               gh pr edit "$PR" --remove-label "$LABEL"
               echo "::notice::PR #$PR passed; removed $LABEL."
             else
