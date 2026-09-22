@@ -29,11 +29,11 @@ Each file system receives an **SLA Readiness rating** (High / Medium / Low /
 Indeterminate) with per-dimension findings.
 
 The throughput and storage checks are enriched with **usage-pattern (trend)
-analysis** built on daily-aggregate CloudWatch metrics over a configurable window
-(default 30 days): it evaluates throughput against **peak** demand (not just the
-average, catching e.g. weekday-morning throttling that averages hide), classifies the
-**weekday/weekend usage profile**, and projects **storage growth** to the 20%-full
-floor.
+analysis** over a configurable window (default 30 days): daily aggregates drive the
+**weekday/weekend usage profile** and **storage growth** projection, while supported
+5-minute `Sum` series provide an approximate interval peak for throughput sizing.
+This catches shorter demand peaks that daily averages hide without claiming an
+instantaneous maximum.
 
 While measuring utilization for the SLA checks, the skill also flags cost
 opportunities as 💰 advisory notes that never lower the SLA rating: **heavily
@@ -100,12 +100,13 @@ write, create, update, or delete operation.
   right-sizing signals, not exact savings figures.
 - **Throughput metrics floor.** Some throughput metrics are only published for file
   systems provisioned at ≥ 32 MBps; below that the report notes limited metrics.
-- **Trend needs history.** Usage-pattern analysis, peak detection, and the storage
-  growth projection need enough daily datapoints; for a file system younger than
-  ~14 days the skill reports "insufficient data" and skips the projections rather
-  than extrapolating. Peak figures are derived from daily `Maximum` statistics and
-  are therefore **approximate** (the busiest sub-interval of each day), not exact
-  instantaneous peaks.
+- **Trend needs history.** Usage-pattern analysis and storage growth projection
+  need enough complete daily datapoints; with fewer than ~14 days the skill reports
+  "insufficient data" and skips those conclusions rather than extrapolating. Empty
+  CloudWatch series are treated as missing, never as zero. Peak throughput demand
+  is the highest aligned 5-minute read + 2 × write average derived from supported
+  `Sum` statistics, so it is approximate and can smooth bursts shorter than five
+  minutes.
 - **Throughput cost recommendations stop at 32 MBps.** Because FSx emits
   throughput-utilization metrics only at ≥ 32 MBps, the skill can recommend stepping
   *toward* the 32 MBps tier but cannot validate the 8/16 MBps tiers from CloudWatch;

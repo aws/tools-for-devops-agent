@@ -13,16 +13,17 @@ grounded in AWS documentation (see `references/fsx-windows-sla-best-practices.md
 | 🔴 Critical | Active or imminent availability loss | Rating → Low |
 | ⚠️ Warning | Weakens the SLA; not yet failing | Rating capped at Medium |
 | ✅ Pass | Meets the availability best practice | No cap |
-| ❓ Unable to verify | Data missing (AccessDenied / ToolingFailure) | Rating capped at Medium |
+| ❓ Unable to verify | Data missing (`AccessDenied` / `ToolingFailure` / `InsufficientData`) | Rating capped at Medium |
 | ℹ️ Info | Transient/contextual note (e.g. storage optimization in progress) | **No effect on rating** |
 | 💰 Cost note | Advisory only — over-provisioning | **No effect on rating** |
 
 Apply the "Unable to verify" template for any dimension whose `status` is
-`AccessDenied` or `ToolingFailure`:
+`AccessDenied`, `ToolingFailure`, or `InsufficientData`:
 
 > **❓ Unable to verify.** The `<dimension>` check could not complete
-> (`<AccessDenied|ToolingFailure>`). This configuration was not assessed; the SLA
-> Readiness rating is capped at Medium. Add the missing read permission or retry.
+> (`<status>: <reason>`). This configuration was not assessed; the SLA Readiness
+> rating is capped at Medium. Add the missing permission, retry the failed query, or
+> collect sufficient complete metric history as indicated, then re-run the review.
 
 ---
 
@@ -145,12 +146,14 @@ If none match, omit `<ad_root_cause_note>` (leave the generic root-cause list on
 
 ## Dimension 3 — Throughput capacity (SLA + cost lens)
 
-Evaluate against the AWS sizing guidance **read + 2 × write**, computed at both the
-average and the **peak** of the daily series (see `references/trend-analysis.md`).
-Peak matters because a file system fine on average can throttle every weekday
-morning. Use `throughput.required_peak_mbps` and `throughput.required_avg_mbps` vs
+Evaluate against the AWS sizing guidance **read + 2 × write**, computed at the
+window average and the **highest 5-minute interval average** (see
+`references/trend-analysis.md`). This is an approximate peak: it catches demand that
+a daily average hides but can smooth bursts shorter than five minutes. Use
+`throughput.required_peak_mbps` and `throughput.required_avg_mbps` vs
 `throughput.provisioned_mbps`, and read `trend.usage_profile` /
-`trend.throughput_pattern` for evidence.
+`trend.throughput_pattern` for evidence. If `throughput.status` is
+`InsufficientData`, do not evaluate adequacy or cost; emit Unable to verify.
 
 Evaluate in this order:
 
@@ -163,7 +166,7 @@ Evaluate in this order:
 
 **⚠️ Warning body (undersized at peak):**
 > **⚠️ Throughput capacity may be undersized at peak.** Provisioned throughput is
-> `<provisioned_mbps>` MBps, but the measured **peak** demand over the last
+> `<provisioned_mbps>` MBps, but the measured **approximate 5-minute interval peak** demand over the last
 > `<lookback>` is ~`<required_peak_mbps>` MBps (approximate peak read
 > `<peak_read_mbps>` MBps + 2 × write `<peak_write_mbps>` MBps; average demand was
 > ~`<required_avg_mbps>` MBps). When demand meets or exceeds provisioned throughput —
@@ -181,13 +184,14 @@ bites during business-hours peaks (e.g. a morning mount storm)." Otherwise omit.
 
 **✅ Pass body:**
 > **✅ Throughput capacity adequate.** Provisioned `<provisioned_mbps>` MBps covers
-> the measured peak demand of ~`<required_peak_mbps>` MBps (read + 2 × write at peak;
-> average ~`<required_avg_mbps>` MBps) over the last `<lookback>`. Usage pattern:
+> the measured approximate 5-minute interval peak demand of
+> ~`<required_peak_mbps>` MBps (read + 2 × write; average
+> ~`<required_avg_mbps>` MBps) over the last `<lookback>`. Usage pattern:
 > `<throughput_pattern>`, profile `<usage_profile>`.
 
 **💰 Cost note (over-provisioned throughput) — append to the Pass, do NOT change the rating:**
 > **💰 Cost optimization — throughput over-provisioned.** Provisioned
-> `<provisioned_mbps>` MBps is well above even the measured **peak** demand of
+> `<provisioned_mbps>` MBps is well above even the measured **approximate 5-minute interval peak** demand of
 > ~`<required_peak_mbps>` MBps (read + 2 × write) over the last `<lookback>`.
 > `<profile_evidence>` Throughput capacity is billed continuously, so this is likely
 > wasted spend. Review whether a lower throughput tier still meets peak demand with

@@ -6,9 +6,11 @@ All guidance here is grounded in AWS documentation (URLs at the end).
 
 ## The availability model
 
-FSx for Windows publishes a **99.9% availability SLA**, but the SLA is only
-meaningful when the file system is configured for it. Two deployment types offer
-very different real-world availability:
+FSx for Windows has distinct availability commitments: **99.99% Monthly Uptime
+Percentage for Multi-AZ file systems** and **99.5% Single-AZ Uptime Percentage for
+Single-AZ file systems**. Configuration still determines whether a workload can
+benefit from those commitments and avoid exclusions. The deployment types also
+provide very different operational availability:
 
 - **Single-AZ** (`SINGLE_AZ_1`, `SINGLE_AZ_2`): one Windows file server + storage in
   a single AZ. Data is replicated within the AZ and AWS auto-replaces failed
@@ -152,6 +154,8 @@ wasteful" case the review is meant to surface.
 
 ## Grounding sources
 
+- Amazon FSx Service Level Agreement —
+  https://aws.amazon.com/fsx/sla/
 - Availability and durability: Single-AZ and Multi-AZ file systems —
   https://docs.aws.amazon.com/fsx/latest/WindowsGuide/high-availability-multiAZ.html
 - Why is my FSx for Windows File Server in a Misconfigured state? —

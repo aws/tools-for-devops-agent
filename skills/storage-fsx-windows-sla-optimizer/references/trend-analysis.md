@@ -9,67 +9,86 @@ This is a general technique built entirely on `AWS/FSx` CloudWatch metrics via
 `use_aws`. It performs no writes and needs no additional IAM beyond
 `cloudwatch:GetMetricData` (already used).
 
-## Core idea: daily aggregates
+## Core idea: daily trends plus 5-minute peak samples
 
-Instead of one statistic across the whole window, query **one datapoint per day**
-(`Period=86400`). A 30-day lookback then yields 30 daily datapoints per metric, which
-is what makes pattern, peak, weekday/weekend, and trend analysis possible. A single
-window-wide average cannot show any of that.
+Use daily datapoints (`Period=86400`) for weekday/weekend shape, growth, storage,
+and idle analysis. Use a separate 5-minute `Sum` series (`Period=300`) for read and
+write peak estimation. A single window-wide average hides usage shape, while a daily
+bucket is too coarse for throughput peaks.
 
 ### Lookback window
 
 - **Default: 30 days.** Best balance for trend work — enough for a clean
   week-over-week growth rate and to distinguish a step-change from normal weekly
   variation.
-- **Honored overrides:** 14, 21, 30, or 60 days if the user asks ("analyze the last
-  14 days"). Never block to ask; default silently and print the window in the report
-  header.
-- Tradeoff to document, not to prompt on: 14 = faster/cheaper but only two weeks of
-  signal; 30 = clean trend; 60 = better for slow seasonal growth.
-- Derive the window as `endTime = now − 5min` (ingestion lag),
-  `startTime = endTime − lookback`.
+- **Honored overrides:** 14, 21, 30, or 60 days if the user asks. Never block to
+  ask; default silently and print the window in the report header.
+- Derive `endTime = now − 5min` and `startTime = endTime − lookback`.
 
 ### Volume vs rate discipline
 
-A daily `Sum` of bytes is a **volume** (total bytes that day). A daily `Maximum` of a
-per-second/per-minute metric is an **approximate peak**, because the largest value
-inside an 86400s bucket is the busiest sub-interval, not a true instantaneous peak.
-Always:
-- Label the daily-peak figure **approximate**.
-- Convert byte volumes to an average rate for sizing math (see below); never present
-  a raw daily byte sum as a "rate".
+`DataReadBytes` and `DataWriteBytes` support the `Sum` statistic. A `Sum` is a byte
+volume for its period, so divide by that period's seconds to derive a rate:
+
+- Daily `Sum / 86400` → daily average bytes/second.
+- 5-minute `Sum / 300` → 5-minute average bytes/second.
+
+The largest 5-minute average over the window is an **approximate interval peak**. It
+is not an instantaneous maximum and can smooth bursts shorter than five minutes.
+Never request the unsupported `Maximum` statistic for either byte metric.
 
 ## Metrics and statistics
 
-Query each file system with daily period (`Period=86400`) over the lookback:
+| Resolution | Metric | Statistic | Used for |
+|---|---|---|---|
+| Daily (`86400`) | `DataReadBytes`, `DataWriteBytes` | `Sum` | daily/window averages, profile, growth |
+| 5-minute (`300`) | `DataReadBytes`, `DataWriteBytes` | `Sum` | approximate interval peak |
+| Daily (`86400`) | `DataReadOperations`, `DataWriteOperations`, `MetadataOperations` | `Sum` | idle detection |
+| Daily (`86400`) | `FreeStorageCapacity` | `Minimum`, `Average` | headroom and storage trend |
 
-| Metric | Statistic(s) | Used for |
-|---|---|---|
-| `DataReadBytes` | `Sum`, `Maximum` | avg + peak read rate |
-| `DataWriteBytes` | `Sum`, `Maximum` | avg + peak write rate |
-| `DataReadOperations` | `Sum` | idle detection, IOPS-bound context |
-| `DataWriteOperations` | `Sum` | idle detection |
-| `MetadataOperations` | `Sum` | idle detection (activity even when no data I/O) |
-| `FreeStorageCapacity` | `Minimum`, `Average` | worst-case headroom + growth trend |
-
-Batch ≤ 5 file systems per `get-metric-data` call; snake_case query ids
-(`daily_read_sum_0`, `daily_read_max_0`, ...). If a metric's `Values` is empty, treat
-that metric's daily values as 0 (do not fail the whole file system).
+Use snake_case query IDs such as `daily_read_sum_0` and `peak5m_read_sum_0`.
+Batch daily queries at ≤5 file systems and 5-minute peak queries at ≤2 file systems.
+Paginate until `NextToken` is absent and require `StatusCode == Complete`.
 
 ### Rate conversions (in code, never mentally)
 
-For each day `d`:
-- `avg_read_mbps[d] = DataReadBytes.Sum[d] / 86400 / 1_000_000`
-- `avg_write_mbps[d] = DataWriteBytes.Sum[d] / 86400 / 1_000_000`
-- `peak_read_mbps[d] ≈ DataReadBytes.Maximum[d] / 60 / 1_000_000` (approx — the metric
-  is emitted at 1-minute granularity; label approximate)
-- `peak_write_mbps[d] ≈ DataWriteBytes.Maximum[d] / 60 / 1_000_000`
+For each daily bucket `d` and 5-minute bucket `p`:
+- `avg_read_mbps[d] = daily_read_sum[d] / 86400 / 1_000_000`
+- `avg_write_mbps[d] = daily_write_sum[d] / 86400 / 1_000_000`
+- `interval_read_mbps[p] = peak5m_read_sum[p] / 300 / 1_000_000`
+- `interval_write_mbps[p] = peak5m_write_sum[p] / 300 / 1_000_000`
 
-Window-level rollups:
-- `avg_read_mbps`, `avg_write_mbps` = mean of the daily averages
-- `peak_read_mbps`, `peak_write_mbps` = max of the daily approximate peaks
-- `required_avg_mbps = avg_read_mbps + 2 × avg_write_mbps` (sizing floor)
-- `required_peak_mbps = peak_read_mbps + 2 × peak_write_mbps` (sizing under peak)
+Window-level rollups (align read and write by timestamp):
+- `avg_read_mbps`, `avg_write_mbps` = mean of the complete daily averages
+- `interval_demand_mbps[p] = interval_read_mbps[p] + 2 × interval_write_mbps[p]`
+- `required_peak_mbps = max(interval_demand_mbps[p])`
+- `peak_read_mbps`, `peak_write_mbps` = the aligned read/write components from the
+  same interval that produced `required_peak_mbps` (do not combine independent
+  read and write maxima from different timestamps)
+- `required_avg_mbps = avg_read_mbps + 2 × avg_write_mbps`
+
+## Missing and incomplete data
+
+Never convert absence into zero. An empty `Values` array, a missing timestamp, or a
+final non-`Complete` result is not evidence of no activity. Preserve explicit numeric
+zero datapoints as observed zeros.
+
+- Missing daily or 5-minute read/write data: do not calculate throughput adequacy or
+  right-sizing; set `throughput.status = "InsufficientData"`, unavailable throughput
+  values to `null`, and dependent profile/pattern fields to `"not-assessed"`.
+- Missing free-storage data: do not calculate headroom or growth; set
+  `storage.status = "InsufficientData"`, unavailable storage values to `null`, and
+  `storage_trend = "not-assessed"`.
+- Missing any operation series: set `trend.idle = null`; never emit an idle-system
+  cost finding. Other complete trend calculations may continue.
+- Record absent required series in `trend.missing_metrics`.
+- Fewer than ~14 complete daily points: set `usage_profile`, `throughput_pattern`,
+  and `storage_trend` to `"insufficient-data"`; set projections and `idle` to null;
+  and set `trend.status = "InsufficientData"`.
+
+The strings `not-assessed` and `insufficient-data` are required report-safe sentinels,
+not healthy states. Keep timestamps aligned across series and exclude only incomplete
+calculations; do not discard valid independent dimensions.
 
 ## Weekday / weekend profile
 
@@ -167,15 +186,17 @@ Trend analysis augments each file system's object (see `data-collection.md`) wit
   "weeks_to_floor": 6,
   "idle": false,
   "step_change_date": null,
+  "missing_metrics": [],
   "status": "OK"
 }
 ```
 
-`status` follows the same classification as other dimensions (`OK` / `ToolingFailure`
-/ `NotConfigured` when a file system is too new to have a full window). When fewer
-than ~14 daily datapoints exist (new file system), set
-`usage_profile = "insufficient-data"`, skip projections, and note the gap — never
-extrapolate a trend from too few points.
+`status` follows the same classification as other dimensions. Use
+`InsufficientData` when required metric series are empty, incomplete, or too short
+for the requested trend. When fewer than ~14 complete daily datapoints exist, set
+`usage_profile = "insufficient-data"`, set `idle = null`, skip profile and growth
+projections, and note the actual history. Never extrapolate or substitute zero for
+missing datapoints.
 
 ## Safety and discipline
 

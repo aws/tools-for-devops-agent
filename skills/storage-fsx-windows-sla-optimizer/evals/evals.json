@@ -74,12 +74,15 @@
   {
     "id": "fsx-windows-sla-peak-aware-throughput",
     "prompt": "According to the skill, does the throughput check evaluate demand at the average or at the peak, and why does that matter? No file-system access required.",
-    "expected_output": "Explains that throughput is evaluated against measured peak demand (read + 2x write at the daily peak), not just the window average, because a file system that looks fine on average can still throttle during peaks such as a weekday-morning mount storm. Peak figures are approximate.",
+    "expected_output": "Explains that throughput is evaluated against measured approximate peak demand (read + 2x write at the highest 5-minute interval average derived from Sum), not just the window average, because a file system that looks fine on average can still throttle during shorter peaks such as a weekday-morning mount storm.",
     "files": [],
     "assertions": [
       "contains 'peak' or contains 'Peak'",
       "contains 'average' or contains 'avg'",
-      "contains 'throttl' or contains 'peak demand' or contains 'morning'"
+      "contains 'throttl' or contains 'peak demand' or contains 'morning'",
+      "contains '5-minute'",
+      "contains 'Sum'",
+      "contains 'approximate'"
     ]
   },
   {
@@ -139,8 +142,8 @@
   },
   {
     "id": "fsx-windows-sla-trend-weekday-peaker",
-    "prompt": "The file trend-weekday-peaker.json is a pre-collected structured configuration object for one FSx for Windows file system (already gathered; do not attempt any AWS access). Apply the skill's finding logic and report the throughput dimension result and the usage profile.",
-    "expected_output": "Flags the throughput dimension as a Warning because provisioned throughput (64 MBps) is below the measured peak demand (~114 MBps = peak read + 2x peak write), even though the average (~36 MBps) is under provisioned. Reports the weekday-dominant usage profile and notes the shortfall bites during weekday business-hours peaks.",
+    "prompt": "The file trend-weekday-peaker.json is a pre-enriched structured configuration object for one FSx for Windows file system (already gathered; do not attempt any AWS access). Apply the skill's finding logic and report the throughput dimension result and the usage profile.",
+    "expected_output": "Flags the throughput dimension as a Warning because provisioned throughput (64 MBps) is below the measured approximate 5-minute interval peak demand (~114 MBps = peak read + 2x peak write), even though the average (~36 MBps) is under provisioned. Reports the weekday-dominant usage profile and notes the shortfall bites during weekday business-hours peaks.",
     "files": ["files/trend-weekday-peaker.json"],
     "assertions": [
       "contains 'peak' or contains 'Peak'",
@@ -152,7 +155,7 @@
   },
   {
     "id": "fsx-windows-sla-trend-idle",
-    "prompt": "The file trend-idle.json is a pre-collected structured configuration object for one FSx for Windows file system (already gathered; do not attempt any AWS access). Apply the skill's finding logic. Is this file system idle, what cost action follows, and does it change the SLA rating?",
+    "prompt": "The file trend-idle.json is a pre-enriched structured configuration object for one FSx for Windows file system (already gathered; do not attempt any AWS access). Apply the skill's finding logic. Is this file system idle, what cost action follows, and does it change the SLA rating?",
     "expected_output": "Identifies the file system as idle (near-zero data I/O and operations across the window), emits the idle-file-system cost note as the top cost opportunity (a decommission candidate), and states this does not lower the SLA rating. Still reports the Single-AZ deployment as a separate SLA warning.",
     "files": ["files/trend-idle.json"],
     "assertions": [
@@ -164,7 +167,7 @@
   },
   {
     "id": "fsx-windows-sla-trend-storage-filler",
-    "prompt": "The file trend-storage-filler.json is a pre-collected structured configuration object for one FSx for Windows file system (already gathered; do not attempt any AWS access). Apply the skill's finding logic and report the storage dimension result, including any projection.",
+    "prompt": "The file trend-storage-filler.json is a pre-enriched structured configuration object for one FSx for Windows file system (already gathered; do not attempt any AWS access). Apply the skill's finding logic and report the storage dimension result, including any projection.",
     "expected_output": "Reports that although current free space (~30%) is above the 20% guidance, used capacity is growing (~30 GiB/week) and is projected to reach the 20% floor in about 3 weeks; because that is within ~4 weeks, the storage dimension is raised to a Warning and a capacity increase is recommended before then.",
     "files": ["files/trend-storage-filler.json"],
     "assertions": [
@@ -176,7 +179,7 @@
   },
   {
     "id": "fsx-windows-sla-misconfigured-critical",
-    "prompt": "The file misconfigured-ad-credentials.json is a pre-collected structured configuration object for one FSx for Windows file system (already gathered; do not attempt any AWS access). Apply the skill's finding logic and produce the review. What is the Active Directory dimension result, what is the overall SLA Readiness rating, and what specific root cause and remediation should be called out?",
+    "prompt": "The file misconfigured-ad-credentials.json is a pre-enriched structured configuration object for one FSx for Windows file system (already gathered; do not attempt any AWS access). Apply the skill's finding logic and produce the review. What is the Active Directory dimension result, what is the overall SLA Readiness rating, and what specific root cause and remediation should be called out?",
     "expected_output": "Recognizes the MISCONFIGURED lifecycle state as a Critical Active Directory finding (FSx cannot reach its domain controllers, so the file system is unavailable or at imminent risk and backups may not succeed). The overall SLA Readiness rating is Low because a Critical finding is present (Critical precedence dominates the Single-AZ warning). Matches the failure detail ACTIVE_DIRECTORY_INVALID_CREDENTIALS to the specific root cause — invalid/rotated/expired service-account credentials — and recommends updating the self-managed AD configuration with current credentials, including the Protected Users group / NTLM caveat. May reference the AWSSupport-ValidateFSxWindowsADConfig runbook.",
     "files": ["files/misconfigured-ad-credentials.json"],
     "assertions": [

@@ -58,14 +58,14 @@ Backup service, FSx data migration, or SMB share-permission troubleshooting.
 - **This skill (orchestrator/analyzer):** input parsing, routing, finding-logic
   application, report rendering.
 - **Data collection:** `references/data-collection.md` — the read-only
-  control-plane API calls used to gather file-system configuration and CloudWatch
-  metrics (as daily aggregates), and the structured object they produce. Data is
-  acquired with the agent's native `use_aws` tool under the assumed role in the
-  target account. No credentials or profile are requested from the user.
+  control-plane API calls used to gather file-system configuration plus daily trend
+  and 5-minute peak metric series. Data is acquired with the agent's native
+  `use_aws` tool under the assumed role in the target account. No credentials or
+  profile are requested from the user.
 - **Trend analysis:** `references/trend-analysis.md` — the usage-pattern method
-  (daily-aggregate windowing, peak-vs-average, weekday/weekend profile, storage
-  growth projection, and idle detection) that enriches the throughput and storage
-  dimensions. Default lookback 30 days.
+  (daily trends, approximate 5-minute interval peaks, weekday/weekend profile,
+  storage growth projection, and idle detection) that enriches the throughput and
+  storage dimensions. Default lookback 30 days.
 - **Finding logic:** `references/finding-logic.md` — all severity rules and body
   templates for the seven dimensions and the cost-optimization notes.
 - **Report format:** `references/report-format.md` — report structure, SLA
@@ -135,22 +135,26 @@ is automatic and silent.**
 
 ### Execution flow
 
-1. Collect configuration and metrics per `references/data-collection.md`.
+1. Collect raw configuration and metric series per `references/data-collection.md`.
 2. If the file system is not found or the role has no access → abort: "File system
    `<id>` does not exist in `<region>` or the role does not have access."
 3. Confirm `FileSystemType` is `WINDOWS`. If it is `ONTAP`, `LUSTRE`, or `OPENZFS`
    → abort: "`<id>` is an FSx for `<type>` file system; this skill reviews FSx for
    Windows only."
-4. Evaluate pre-flight: check all `status` fields in the collected data.
+4. Evaluate API pre-flight statuses.
    - If any `AccessDenied` → present permissions audit (see Pre-flight section)
    - If any `ToolingFailure` → present tooling notice (see Pre-flight section)
-   - If no gaps → proceed
-5. Load `references/finding-logic.md`.
-6. Apply finding logic against the structured configuration and metric data.
-7. Load `references/report-format.md`.
-8. Render the single-file-system report.
-9. Run the pre-render validation.
-10. Deliver the report per the **Final Delivery Contract** below.
+5. Load `references/trend-analysis.md` and derive throughput, storage-trend,
+   usage-profile, and idle fields only from complete observed metric series.
+6. Validate the derived fields. Propagate missing/empty series as
+   `InsufficientData`; never replace missing values with zero. Continue with the
+   available dimensions and render affected conclusions as Unable to verify.
+7. Load `references/finding-logic.md`.
+8. Apply finding logic against the enriched structured configuration object.
+9. Load `references/report-format.md`.
+10. Render the single-file-system report.
+11. Run the pre-render validation.
+12. Deliver the report per the **Final Delivery Contract** below.
 
 ### Pre-flight: Permissions audit
 
@@ -192,8 +196,9 @@ Wait for user response. Do NOT proceed by default.
 **Load `references/fleet-orchestration.md` for full fleet behavior.** Summary:
 
 - Groups file systems by account+region for caching (account-level lookups once)
-- Collects configuration and metrics once per file system
-- Applies finding logic to each file system's data
+- Collects raw configuration and daily/5-minute metric series once per file system
+- Loads `references/trend-analysis.md`, derives fields, and validates missing data
+  for each file system before applying finding logic
 - Produces a two-layer report: summary matrix + per-file-system details
 - For 21+ file systems: creates a manifest for progress tracking and resume
 
@@ -230,8 +235,9 @@ After completing the review (single or fleet):
   never reads file/share data over SMB. See the allowlist in
   `references/data-collection.md`.
 - **No interpretation without data.** Every finding must be backed by collected
-  data. If a check returned AccessDenied or ToolingFailure, use the "Unable to
-  verify" template — never infer state.
+  data. If a check returned `AccessDenied`, `ToolingFailure`, or `InsufficientData`,
+  use the "Unable to verify" template for the affected dimension — never infer
+  state and never convert missing metrics to zero.
 - **Deployment type cannot be changed after creation.** For a Single-AZ file
   system, the remediation is to create a new Multi-AZ file system and migrate — not
   a toggle. State this in the finding; never imply an in-place switch.
@@ -252,9 +258,9 @@ After completing the review (single or fleet):
 ## References
 
 - `references/data-collection.md` — Read-only control-plane API calls, CloudWatch
-  daily-aggregate metric queries, error classification, and the structured
+  daily-trend and 5-minute peak metric queries, error classification, and the structured
   configuration object.
-- `references/trend-analysis.md` — Usage-pattern method: daily-aggregate windowing,
+- `references/trend-analysis.md` — Usage-pattern method: daily-trend and 5-minute peak windowing,
   peak-vs-average, weekday/weekend profile, storage growth projection, idle
   detection, and the derived trend fields.
 - `references/finding-logic.md` — All finding rules, severity assignments, and body

@@ -65,8 +65,16 @@ use the "Unable to verify" template where data was missing.>
 magnitude. If the idle-file-system note fired (`trend.idle == true`), list it FIRST
 (it supersedes the over-provisioned-throughput note — do not list both). Include the
 supporting usage-pattern evidence where available (e.g. "idle nights/weekends,
-weekend:weekday ratio <n>", "throughput provisioned at 4×+ measured peak demand").
-If none, write: "No over-provisioning detected in the reviewed dimensions.">
+weekend:weekday ratio <n>", "throughput provisioned at 4×+ the approximate
+5-minute interval peak demand").
+
+If no cost note fired:
+- Write "No over-provisioning detected in the reviewed dimensions." **only** when
+  `throughput.status == OK`, `storage.status == OK`, and `trend.idle` is a boolean.
+- Otherwise write "Cost optimization partially assessed; no opportunity was found
+  in the dimensions with complete data. Unable to assess: `<missing cost inputs>`."
+  List throughput, storage, and/or idle detection as applicable. Never turn missing
+  metric data into a definitive clean-cost conclusion.>
 
 ## Recommended Actions
 
@@ -75,6 +83,8 @@ Each item is a concrete next step drawn from the finding remediation text.>
 
 ## References
 
+- Amazon FSx Service Level Agreement —
+  https://aws.amazon.com/fsx/sla/
 - Availability and durability: Single-AZ and Multi-AZ file systems —
   https://docs.aws.amazon.com/fsx/latest/WindowsGuide/high-availability-multiAZ.html
 - Why is my FSx for Windows File Server in a Misconfigured state? —
@@ -152,14 +162,17 @@ malformed report.
 8. Placeholders are all substituted — no literal `<...>` remains.
 9. Byte values are converted to GiB and rates to MBps; no raw byte counts shown.
 10. The AI-generated caveat line is present at the top.
-11. For "Unable to verify" dimensions, the rating is capped at Medium (or
-    Indeterminate) and the report says which permission/retry is needed.
+11. For "Unable to verify" dimensions (`AccessDenied`, `ToolingFailure`, or
+    `InsufficientData`), the rating is capped at Medium (or Indeterminate) and the
+    report states whether permission, retry, or more complete metric history is
+    needed.
 12. Region and account are shown; the file-system ID is shown exactly as returned.
 13. The References section is present with the canonical AWS URLs above.
 14. The header shows the usage profile, throughput pattern, and storage trend; the
     metric lookback is stated.
-15. The throughput finding is evaluated against **peak** demand (`required_peak_mbps`),
-    and any peak figure is labeled approximate.
+15. The throughput finding is evaluated against the approximate highest 5-minute
+    interval demand (`required_peak_mbps`, derived from `Sum`); it is labeled
+    approximate and never described as an instantaneous maximum.
 16. If `storage_trend == "growing"`, the storage finding includes the
     `weeks_to_floor` projection; a projection of ≤ 4 weeks is reflected as at least a
     ⚠️ Warning even when the current free % is healthy.
@@ -168,8 +181,10 @@ malformed report.
     also listed.
 18. No week-over-week volume table is rendered (growth rate is an internal input to
     the projections only).
-19. If `usage_profile == "insufficient-data"` (new file system), trend projections
-    are omitted and the data gap is noted rather than extrapolated.
+19. If trend history is incomplete, `usage_profile`, `throughput_pattern`, and
+    `storage_trend` use the documented `insufficient-data` or `not-assessed`
+    sentinels; unsupported projections and idle conclusions are omitted rather than
+    extrapolated.
 20. When lifecycle is `MISCONFIGURED` or `MISCONFIGURED_UNAVAILABLE` and the
     `failure_message` matches a known AD detail code, the targeted `<ad_root_cause_note>`
     is present (invalid-credentials / insufficient-permissions / computer-account-reuse);
@@ -179,3 +194,6 @@ malformed report.
     `<sub32_caveat>` (no metrics below 32 MBps; validate customer-side) is present.
     A `STORAGE_OPTIMIZATION` action in progress is surfaced as the ℹ️ info note and
     the throughput finding acknowledges metrics may be elevated by the optimization.
+22. "No over-provisioning detected" appears only when throughput, storage, and idle
+    inputs are complete; otherwise the Cost Optimization section names the inputs
+    that were not assessed.

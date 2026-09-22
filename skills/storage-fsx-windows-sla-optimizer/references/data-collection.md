@@ -30,9 +30,11 @@ policy grants `fsx:Describe*` but not `fsx:List*`).
 > The `ds:DescribeDirectories` call is best-effort: it applies only when the file
 > system uses AWS Managed Microsoft AD (an FSx `WindowsConfiguration.ActiveDirectoryId`
 > is present). For a self-managed AD there is no Directory Service object to
-> describe — AD health is then inferred from the file-system `Lifecycle` and
-> `WindowsConfiguration.MaintenanceOperationsStatus`/administrative actions instead.
-> The skill never attempts to reach the customer's domain controllers directly.
+> describe — AD health is then inferred from the file-system `Lifecycle`,
+> `FailureDetails`, and failed `AdministrativeActions` instead. The
+> `MaintenanceOperationsInProgress` list is maintenance context, not an AD-health
+> signal. The skill never attempts to reach the customer's domain controllers
+> directly.
 
 ## Collection sequence
 
@@ -61,7 +63,7 @@ Extract per file system:
   `WindowsConfiguration.DailyAutomaticBackupStartTime`,
   `WindowsConfiguration.CopyTagsToBackups`
 - `WindowsConfiguration.WeeklyMaintenanceStartTime`
-- `WindowsConfiguration.MaintenanceOperationsStatus` (when present)
+- `WindowsConfiguration.MaintenanceOperationsInProgress` (when present)
 - `SubnetIds`, `PreferredSubnetId` (Multi-AZ has a preferred + standby subnet),
   `KmsKeyId`, `CreationTime`
 - `AdministrativeActions[]` — flag any with `Status == FAILED` (a failed storage or
@@ -89,15 +91,20 @@ When `ActiveDirectoryId` is present, call `ds describe-directories`
 AD, skip this call and rely on the file-system `Lifecycle` (`MISCONFIGURED` is the
 key signal — see best-practices).
 
-### Step 4 — Metrics (`AWS/FSx` namespace), as daily aggregates
+### Step 4 — Metrics (`AWS/FSx` namespace): daily trends + 5-minute peaks
 
-Use `cloudwatch get-metric-data` with a **daily period (`Period=86400`)** so each
-metric returns one datapoint per day. This is what powers the trend analysis (peaks,
-weekday/weekend profile, growth projection, idle detection) in
-`references/trend-analysis.md` — a single window-wide average cannot show usage shape.
+Use `cloudwatch get-metric-data` over the requested lookback with two resolutions:
+
+1. **Daily trend series (`Period=86400`)** for weekday/weekend shape, growth,
+   storage headroom, and idle detection.
+2. **5-minute peak series (`Period=300`)** for `DataReadBytes` and
+   `DataWriteBytes`. FSx publishes these metrics each minute, but CloudWatch retains
+   5-minute resolution for 63 days, so 300 seconds covers every supported lookback
+   (up to 60 days). The highest aligned 5-minute read + 2 × write demand is an
+   approximate peak, not an instantaneous maximum.
 
 Derive the window from the requested lookback: `endTime = now − 5min` (CloudWatch
-ingestion lag), `startTime = endTime − lookback`.
+ ingestion lag), `startTime = endTime − lookback`.
 
 - **Default lookback: 30 days** (a clean week-over-week trend and enough to tell a
   step-change from normal weekly variation).
@@ -114,49 +121,61 @@ Metrics published for **all** file systems:
 > file-server performance metrics — `FileServerDiskThroughputUtilization`,
 > `FileServerDiskThroughputBalance` (burst credits), `NetworkThroughputUtilization`,
 > `FileServerDiskIopsUtilization` — **only** for file systems provisioned at
-> **≥ 32 MBps**. The 8 and 16 MBps tiers run on resource-constrained hosts that emit
-> no throughput/CPU metrics, and the AWS pricing calculator floors at 32 MBps. Two
+> **≥ 32 MBps**. The six metrics above are available at every throughput tier. Two
 > consequences:
 > 1. If a file system is below 32 MBps, record `metrics_limited = true` and note
->    "limited metrics (throughput < 32 MBps)" rather than treating the absence as a
->    finding.
+>    "limited file-server performance metrics (throughput < 32 MBps)" rather than
+>    treating those metrics' absence as a finding.
 > 2. For the throughput **cost note** (dimension 3), the skill can recommend dropping
 >    *toward* 32 MBps when measured peak demand is far below provisioned, but it
->    **cannot validate the 8/16 MBps tiers from CloudWatch** (no metrics exist there).
->    So any recommendation at or below 32 MBps must carry the caveat that the smaller
->    tiers can only be confirmed by customer-side observation after the change, not
->    from these metrics.
+>    **cannot validate the 8/16 MBps tiers from file-server utilization metrics**.
+>    Any recommendation at or below 32 MBps carries that caveat.
 
-Query, per file system (dimension `FileSystemId=fs-...`), one query per metric+stat,
-all `Period=86400`:
+Query per file system (`FileSystemId=fs-...`):
 
-| Metric | Statistic(s) | Derives |
-|---|---|---|
-| `DataReadBytes` | `Sum`, `Maximum` | daily avg + approximate peak read MBps |
-| `DataWriteBytes` | `Sum`, `Maximum` | daily avg + approximate peak write MBps |
-| `DataReadOperations` | `Sum` | idle detection, IOPS-bound context |
-| `DataWriteOperations` | `Sum` | idle detection |
-| `MetadataOperations` | `Sum` | idle detection (activity with no data I/O) |
-| `FreeStorageCapacity` | `Minimum`, `Average` | worst-case headroom + growth trend |
+| Resolution | Metric | Statistic | Derives |
+|---|---|---|---|
+| Daily (`86400`) | `DataReadBytes` | `Sum` | daily and window-average read MBps |
+| Daily (`86400`) | `DataWriteBytes` | `Sum` | daily and window-average write MBps |
+| 5-minute (`300`) | `DataReadBytes` | `Sum` | approximate peak read MBps |
+| 5-minute (`300`) | `DataWriteBytes` | `Sum` | approximate peak write MBps |
+| Daily (`86400`) | `DataReadOperations` | `Sum` | idle detection, IOPS-bound context |
+| Daily (`86400`) | `DataWriteOperations` | `Sum` | idle detection |
+| Daily (`86400`) | `MetadataOperations` | `Sum` | idle detection |
+| Daily (`86400`) | `FreeStorageCapacity` | `Minimum`, `Average` | worst-case headroom + growth trend |
 
-`references/trend-analysis.md` defines the full conversion, classification, and
-projection math applied to these daily series. In brief, it produces: window-level
-`avg_read_mbps`/`avg_write_mbps`, `peak_read_mbps`/`peak_write_mbps` (approximate),
-`required_avg_mbps` and `required_peak_mbps` (read + 2 × write), the weekday/weekend
-`usage_profile`, the `throughput_pattern`, the storage `weeks_to_floor` projection,
-and the `idle` flag.
+`Sum` is the only valid statistic for the FSx `DataReadBytes` and
+`DataWriteBytes` metrics. Never request `Maximum` for either metric.
+`references/trend-analysis.md` defines the conversion and classification math.
 
 Rules for `get-metric-data`:
-- Each `MetricDataQueries[].Id` must match `^[a-z][a-z0-9_]*$` (snake_case), suffixed
-  per file system in the fleet path (`daily_read_sum_0`, `daily_read_max_0`, ...). A
-  camelCase id fails with `InvalidParameterValue`.
-- Batch a **maximum of 5 file systems per call** to stay within tool-use payload
-  size (fleet path batches accordingly).
-- Times in ISO 8601. Always honor the user-supplied lookback; never hardcode it.
-- If a metric's `Values` is empty, treat **that metric's** daily values as 0 — do not
-  fail the whole file system.
-- If fewer than ~14 daily datapoints exist (new file system), set the trend
-  `usage_profile` to `insufficient-data`, skip projections, and note the gap.
+- Query IDs must match `^[a-z][a-z0-9_]*$` and be suffixed per file system, for
+  example `daily_read_sum_0` and `peak5m_read_sum_0`.
+- Batch daily queries for at most 5 file systems per call. Batch 5-minute peak
+  queries for at most 2 file systems per call so a 60-day request remains below
+  CloudWatch's 100,800-datapoint request limit. Follow `NextToken` until absent.
+- Times are ISO 8601. Honor the user-supplied lookback; never hardcode it.
+- Require each `MetricDataResult.StatusCode` to be `Complete`. Retry/paginate
+  `PartialData`; classify a final non-`Complete` result as `ToolingFailure`.
+- An empty `Values` array or a missing timestamp is **missing data**, never zero.
+  Preserve an explicit numeric `0` as valid observed data; never synthesize zeros.
+- Propagate missing series to only the affected conclusions:
+  - Missing daily or 5-minute read/write bytes → `throughput.status =
+    "InsufficientData"`; do not calculate throughput adequacy or right-sizing. Set
+    unavailable throughput fields to `null`; when daily bytes are missing, set
+    `trend.usage_profile` and `trend.throughput_pattern` to `"not-assessed"`.
+  - Missing `FreeStorageCapacity` → `storage.status = "InsufficientData"`; do not
+    calculate headroom or growth. Set unavailable storage fields to `null` and
+    `trend.storage_trend = "not-assessed"`.
+  - Missing operation series → set `trend.idle = null`; never claim the file system
+    is idle. Other complete trend calculations may continue.
+  - Record every absent required series in `trend.missing_metrics`.
+- If fewer than ~14 complete daily datapoints exist, set `trend.usage_profile`,
+  `trend.throughput_pattern`, and `trend.storage_trend` to `"insufficient-data"`;
+  set projection fields and `trend.idle` to `null`; and record
+  `trend.status = "InsufficientData"`. Current throughput or storage checks may
+  still use complete observed series, but the report must state the shorter actual
+  history.
 
 ### Step 5 — Alarm coverage
 
@@ -167,7 +186,8 @@ file system is an observability gap (dimension 7).
 
 ## Structured configuration object
 
-Collection produces one object per file system for the finding logic to consume:
+Collection plus trend derivation produces one enriched object per file system for the
+finding logic to consume:
 
 ```json
 {
@@ -181,7 +201,7 @@ Collection produces one object per file system for the finding logic to consume:
     "subnet_ids": ["subnet-..."], "status": "OK" },
   "active_directory": { "mode": "AWS_MANAGED", "directory_id": "d-...",
     "stage": "Active", "stage_reason": null, "status": "OK" },
-  "throughput": { "provisioned_mbps": 32,
+  "throughput": { "provisioned_mbps": 32, "peak_period_seconds": 300,
     "avg_read_mbps": 4.1, "avg_write_mbps": 2.0,
     "peak_read_mbps": 28.5, "peak_write_mbps": 12.0,
     "required_avg_mbps": 8.1, "required_peak_mbps": 52.5,
@@ -192,11 +212,13 @@ Collection produces one object per file system for the finding logic to consume:
     "weekend_weekday_ratio": 0.08, "throughput_pattern": "flat",
     "throughput_growth_pct_per_week": 3.2, "storage_trend": "growing",
     "used_growth_gib_per_week": 44.0, "weeks_to_floor": 6,
-    "idle": false, "step_change_date": null, "status": "OK" },
+    "idle": false, "step_change_date": null, "missing_metrics": [],
+    "status": "OK" },
   "backups": { "automatic_retention_days": 30,
     "daily_start_time": "01:00", "copy_tags_to_backups": true,
     "latest_backup_time": "2026-08-30T01:07:00Z", "status": "OK" },
-  "maintenance": { "weekly_start_time": "7:02:00", "status": "OK" },
+  "maintenance": { "weekly_start_time": "7:02:00",
+    "operations_in_progress": [], "status": "OK" },
   "alarms": { "fsx_alarm_count": 2, "free_storage_alarm": true, "status": "OK" },
   "administrative_actions": [
     { "type": "STORAGE_OPTIMIZATION", "status": "COMPLETED" }
@@ -210,27 +232,30 @@ Each dimension carries its own `status`:
 |---|---|
 | `OK` | data retrieved and evaluated |
 | `AccessDenied` | the underlying read call returned AccessDenied — do not infer state |
-| `ToolingFailure` | the call failed for an infrastructure reason (throttling, timeout, tool error) |
+| `ToolingFailure` | the call failed or remained incomplete after retry/pagination |
+| `InsufficientData` | the call succeeded but required metric datapoints are missing or too sparse; never infer zero |
 | `NotApplicable` | e.g. `ds describe-directories` skipped for self-managed AD |
-| `NotConfigured` | a successful empty response — e.g. `AutomaticBackupRetentionDays == 0`, or no FSx alarms found |
+| `NotConfigured` | a configured feature is absent — e.g. retention is 0 or no FSx alarm exists |
 
 ## Error classification
 
 Map each `use_aws` outcome to a `status`:
 
-- Success with data → `OK`.
-- Success but semantically empty (retention 0, zero alarms, no backups) →
-  `NotConfigured` (this is a finding, not an error — a never-configured feature).
+- Success with complete required data → `OK`.
+- Success with an explicitly disabled or absent configuration → `NotConfigured`.
+- Success with an empty/incomplete metric series → `InsufficientData` for the
+  affected derived field or dimension. This is not equivalent to a numeric zero.
 - `AccessDenied` / `AccessDeniedException` / `UnauthorizedOperation` →
   `AccessDenied`.
-- `Throttling` / `RequestLimitExceeded` / timeouts / tool-transport errors →
-  `ToolingFailure` (retry once with backoff before classifying).
-- A call that does not apply to this file system (Directory Service lookup on a
-  self-managed AD file system) → `NotApplicable`.
+- `Throttling` / `RequestLimitExceeded` / timeouts / tool-transport errors, or a
+  final non-`Complete` metric result after retry/pagination → `ToolingFailure`.
+- A call that does not apply to this file system → `NotApplicable`.
 
-Never let an `AccessDenied` or `ToolingFailure` masquerade as a healthy result. A
-dimension without data is reported with the "Unable to verify" template in the
-finding logic and caps the SLA Readiness rating at Medium.
+Never let `AccessDenied`, `ToolingFailure`, or `InsufficientData` masquerade as a
+healthy result. An affected dimension uses the "Unable to verify" template and caps
+the SLA Readiness rating at Medium. A trend-only gap suppresses only the unsupported
+profile, projection, or idle conclusion when the underlying dimension still has
+complete independent data.
 
 ## Safety notes
 

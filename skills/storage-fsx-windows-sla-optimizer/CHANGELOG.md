@@ -39,9 +39,10 @@ Initial release for AWS DevOps Agent.
   daily-aggregate CloudWatch metrics (`Period=86400`) over a configurable lookback
   (default 30 days; 14 / 21 / 30 / 60 accepted).
 - **Peak-aware throughput sizing:** evaluates provisioned capacity against measured
-  **peak** demand (read + 2 × write at the daily peak), not just the window average,
-  catching weekday-morning throttling that an average hides. Peak figures are labeled
-  approximate (derived from daily `Maximum`).
+  **peak** demand (read + 2 × write at the highest 5-minute interval average), not
+  just the window average, catching short demand peaks that a daily average hides.
+  Peak figures are labeled approximate and use the FSx byte metrics' supported
+  `Sum` statistic.
 - **Weekday/weekend usage profile** classification, used as evidence for the
   throughput cost note.
 - **Storage growth projection** to the 20%-full floor; a projection of ≤ 4 weeks is

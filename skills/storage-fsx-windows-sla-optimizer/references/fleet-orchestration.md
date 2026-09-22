@@ -27,16 +27,20 @@ Group the input file systems by `account_id` + `region` before collecting:
 - **Per-file-system data** (`describe-file-systems`, `describe-backups`,
   `get-metric-data`) is still collected for each file system.
 
-## Batching the metric queries
+## Batching and deriving metric data
 
-`cloudwatch get-metric-data` is limited to **5 file systems per call** (tool-use
-payload size). For a fleet:
+`cloudwatch get-metric-data` uses separate daily trend and 5-minute peak queries:
 
-1. Chunk the file systems into groups of ≤5.
-2. Issue one `get-metric-data` per chunk, each `MetricDataQueries[].Id` in
-   snake_case and suffixed with a per-file-system index (e.g. `free_min_0`,
-   `read_bytes_0`, `free_min_1`, ...).
-3. Reassemble results back to each file system before applying finding logic.
+1. Chunk daily queries into groups of ≤5 file systems.
+2. Chunk 5-minute `DataReadBytes`/`DataWriteBytes` `Sum` queries into groups of ≤2
+   file systems so the 60-day maximum lookback remains below CloudWatch's
+   100,800-datapoint request limit.
+3. Use snake_case IDs suffixed with a per-file-system index, such as
+   `daily_read_sum_0`, `peak5m_read_sum_0`, and `free_min_0`.
+4. Follow `NextToken` until absent and require each final result to be `Complete`.
+5. Reassemble raw series by file system; never substitute zero for empty values.
+6. For each reassembled file system, load and apply `trend-analysis.md`, validate
+   completeness, and propagate `InsufficientData` before applying finding logic.
 
 ## Manifest (21+ file systems)
 
