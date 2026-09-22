@@ -10,7 +10,7 @@ The agent decides whether to load a skill based on description matching. To guar
 
 1.  **Classify:** Determine if the operation is free or paid
     
-2.  **Estimate:** Calculate expected cost using known formulas or heuristics
+2.  **Estimate:** Resolve the live per-Region rate, then apply the operation's formula or heuristic
     
 3.  **Check budget:** Compare estimated cost against per-investigation budget
     
@@ -47,7 +47,7 @@ Rather than hardcoding every free/paid operation across 200+ AWS services, this 
 │ • Covers ANY current or future AWS service      │
 ├─────────────────────────────────────────────────┤
 │ Layer 2: Known-Paid Registry                    │
-│ • Exact pricing formulas for high-cost ops      │
+│ • Live per-Region rate lookup + formulas        │
 │ • Extensible by operator configuration          │
 │ • Athena, DynamoDB, S3, X-Ray, SageMaker...     │
 ├─────────────────────────────────────────────────┤
@@ -65,7 +65,7 @@ Even if AWS launches a new service tomorrow, the heuristic rules will correctly 
 
 | Tool | Classification | Cost Model | Guardrail |
 | --- | --- | --- | --- |
-| get_prometheus_metrics | **PAID** | $0.01 / 1,000 metrics×periods (same billing meter as CloudWatch GetMetricData) | Track series × datapoints per call |
+| get_prometheus_metrics | **PAID** | Billed per sample scanned — rate resolved from a live `CW:PromQL:SamplesScanned` usagetype lookup | Track samples scanned per call |
 | use_aws | **VARIABLE** | Depends on operation — apply Layers 1–3 | Full heuristic pipeline |
 | use_azure | **FREE** | Azure Reader role, no per-call billing | Track count only |
 | grafana_query_prometheus | **CAUTION** | Depends on Grafana data source billing model | Track count, warn at 50+ |
@@ -83,25 +83,30 @@ Even if AWS launches a new service tomorrow, the heuristic rules will correctly 
 
 | Classification | Rule |
 | --- | --- |
-| **FREE** | Verb is Describe, List, Get, Lookup, Check, Validate, Tag: returns metadata only |
+| **FREE** | Verb is Describe, List, Get, Lookup, Check, Validate, Tag, Untag: returns metadata only |
 | **PAID** | Verb contains Query, Scan, Execute, Invoke, Insights: processes or scans data |
 | **CAUTION** | Paginated List/Describe with broad scope |
 
 ### Layer 2: Known-Paid Registry
 
-| Service | Operation | Cost Formula |
-| --- | --- | --- |
-| CloudWatch Logs | StartQuery | $0.005/GB scanned |
-| CloudWatch Logs | StartLiveTail | $0.01/minute |
-| CloudWatch | GetMetricData / PromQL | $0.01/1,000 metrics×periods |
-| X-Ray | GetTraceSummaries, BatchGetTraces | $0.50/1M traces |
-| Athena | StartQueryExecution | $5.00/TB scanned |
-| DynamoDB | Scan | ~$0.25/1M RCU. **BLOCKED unless approved** |
-| S3 | GetObject | $0.0004/1K requests + $0.09/GB transfer |
-| S3 | SelectObjectContent | $0.002/GB scanned + $0.0007/GB returned |
-| SageMaker | InvokeEndpoint | **BLOCKED: requires explicit approval** |
-| Lambda | Invoke | **BLOCKED unless user explicitly requests** |
-| Kinesis | GetRecords | $0.015/1M records |
+The registry holds no rates of its own. It records, per operation, which Pricing API filter field to query (`operation` or `usagetype`), the exact filter value, and the formula the resolved rate feeds into. `usagetype` and `operation` are different filter fields, and the value is never derived from the AWS API operation name — both are stated explicitly per operation.
+
+| Service | Operation | Rate resolved via | Cost Formula |
+| --- | --- | --- | --- |
+| CloudWatch Logs | StartQuery | `operation` | `scan_gb × rate` |
+| CloudWatch Logs | StartLiveTail | `operation` | Duration-based |
+| CloudWatch | GetMetricData | `operation` | `(metrics × periods) × rate` |
+| CloudWatch | GetInsightRuleReport | `usagetype` | `metrics_requested × rate` |
+| CloudWatch | PromQL (`get_prometheus_metrics`) | `usagetype` | `samples_scanned × rate` |
+| X-Ray | GetTraceSummaries, BatchGetTraces | `operation` | `traces × rate` |
+| Athena | StartQueryExecution | `usagetype` | `scan_tb × rate`, min 10MB |
+| DynamoDB | Scan | `usagetype` | `RCU × rate`. **BLOCKED unless approved** |
+| DynamoDB | Query | `usagetype` | `RCU × rate` |
+| S3 | GetObject | `usagetype` (Tier2) | Per request |
+| S3 | ListObjects, PutObject, CopyObject | `usagetype` (Tier1) | Per request |
+| S3 | SelectObjectContent | `usagetype` (3 meters) | Bytes scanned + bytes returned + request |
+| SageMaker | InvokeEndpoint | — | **BLOCKED: requires explicit approval** |
+| Lambda | Invoke | — | **BLOCKED unless user explicitly requests** |
 
 **Operators can extend this registry:**
 
@@ -109,6 +114,21 @@ Even if AWS launches a new service tomorrow, the heuristic rules will correctly 
 "Treat opensearch:Search as paid at $0.01 per 1000 requests."
 
 ```
+
+### Regional Rate Resolution
+
+Rates vary by AWS Region, so every rate is resolved live for the workload's Region. `references/pricing-reference.md` holds the call patterns that do it.
+
+| Step | What happens |
+| --- | --- |
+| 1. Region | Derived from the resource ARN — never the agent's runtime Region, never a default |
+| 2. Lookup | `pricing:GetProducts`. `operation` lookups pass the workload Region as a `regionCode` filter; `usagetype` lookups prepend the workload-Region prefix |
+| 3. Cache | Keyed on `(service, operation, region)` — one lookup per service and Region per investigation |
+
+
+There is no fallback rate. If the lookup cannot be resolved exactly, the skill halts rather than estimating: it will not improvise a rate from memory or training data. The operator is offered the choice to re-check the filter field, value, and Region prefix, use a free alternative, or have the lookup gap reported.
+
+It loads once, on the first operation classified as PAID, and is reused for the rest of the investigation. Investigations that touch only metadata or third-party tools do not load it.
 
 ### Layer 3: Response Validation (Self-Learning)
 
@@ -123,11 +143,10 @@ After execution, the skill checks response fields for metered indicators:
 | ContentLength > 100MB | Large object transfer |
 | NextToken after 10+ pages | Pagination runaway |
 
-If a previously-unclassified operation returns metered fields, it is reclassified as paid for the remainder of the investigation.
 
 ## Budget Enforcement
 
-The skill maintains a **running cost accumulator** throughout each investigation using the scratchpad:
+The skill maintains a running cost accumulator throughout each investigation using the scratchpad:
 
 ```
 📋 INVESTIGATION BUDGET STATUS
@@ -173,11 +192,7 @@ When the next operation would exceed the budget:
 
 ## Cross-Region Detection
 
-When the target region differs from the Agent Space region, the skill adds estimated data transfer cost ($0.02/GB) based on return size:
-
-- Aggregation queries: ~KB (negligible)
-- Raw log/trace fetches: up to 100% of matched bytes
-- Unknown: 15% of scan volume as upper bound (flagged ⚠️)
+When the target region differs from the Agent Space region, the skill adds a data transfer cost. The rate is looked up live for that specific source → destination route and cached per route, because inter-Region rates vary widely by geography (roughly $0.01–$0.15/GB depending on source Region) — there is no flat rate to assume.
 
 ## Cost Reduction Suggestions
 
@@ -191,9 +206,12 @@ When halting, the skill always suggests cost-efficient alternatives:
 | dynamodb:Scan | dynamodb:Query with key condition | ~100% |
 | athena:StartQueryExecution (full) | Add partition filter in WHERE | 90%+ |
 | xray:GetTraceSummaries (broad) | Narrow time + add filter expression | 90%+ |
+| s3:GetObject (large) | s3:SelectObjectContent with SQL filter | Variable |
 | Broad time window | Narrow to ±30 min around incident | 90%+ |
 
 ## Scenarios
+
+The dollar figures below are illustrative output. Every one of them is computed from a rate the skill resolved live for the workload's Region at estimation time; none is a rate published by this skill.
 
 **Scenario A: Scoped investigation, within budget**
 
@@ -241,19 +259,24 @@ Agent attempts: athena:StartQueryExecution (full scan, no WHERE clause)
 
 ```
 
-**Scenario D: PromQL broad query warned**
+**Scenario D: PromQL broad query flagged**
 
 ```
 Agent attempts: get_prometheus_metrics (no label filter, 7d range, 60s step)
 
-  ⚠️ WARN: PromQL query would fetch ~5M metrics×periods
-  💰 Estimated cost: $50.00
+  ⚠️ FLAGGED: query hit the 500-series cap
+     ~5.04M samples scanned (500 series × 10,080 datapoints at 60s step)
+     💰 ~$0.05 at the live CW:PromQL:SamplesScanned rate
+
+  The series cap means this query cost the maximum it could for
+  this range and step, and the returned data is truncated — so the
+  result is both incomplete and needlessly broad.
 
   💡 Suggestions:
     → Add label filters to reduce series count
     → Use topk(10, ...) to cap series
-    → Increase step to 300s
-    → Narrow time range to 1h
+    → Increase step to 300s (5× cheaper)
+    → Narrow time range to 1h (168× cheaper)
 
 ```
 
@@ -287,8 +310,32 @@ Add the skill to your Agent Space and adjust the threshold to match your organiz
 
 **Option B:** Download the `.zip` directly from the [repository](https://github.com/aws/tools-for-devops-agent/tree/main/skills/investigation-cost-guardrail) and upload it as a skill in your Agent Space.
 
+### Required IAM Permissions
+
+The skill calls the AWS Price List Query API to resolve per-Region rates. Grant the role your Agent Space assumes:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "pricing:GetProducts",
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+`Resource` is `*` because the Price List API returns public pricing data. The API is free and read-only.
+
+The call is always sent to `us-east-1`, so a Region-scoped tool policy needs to allow `us-east-1`.
+
+Your Agent Space tool policy must also permit the call. This permission is required, not optional: the skill carries no baseline rates to fall back on, so if the lookup is unavailable it halts before the paid operation instead of estimating.
+
+
 ## Known Limitations
 
 - **Budget is scoped to a single investigation:** each investigation starts with a fresh budget; cumulative tracking across multiple investigations at the agent space level is not currently supported.
 - **Skill-halted investigations show "Completed" status:** halt reason is only visible in the investigation output.
-
+- **A paid operation cannot be estimated without a successful rate lookup:** there is no fallback rate, so a missing `pricing:GetProducts` permission halts that operation.

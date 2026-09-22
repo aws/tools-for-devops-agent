@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0
+
+  - Replace every hardcoded rate with a live AWS Price List Query API lookup, resolved for the workload region at estimation time. The skill no longer carries baseline rates of any kind.
+  - Add `references/pricing-reference.md` holding the exact call patterns: which filter field each operation uses (`operation` vs `usagetype`), the exact filter value, region scoping, the `usagetype` region-prefix map and its us-east-1 exceptions, S3 request tiers and the three meters S3 Select bills on, and the filtered cross-region data transfer lookup.
+  - `SKILL.md` loads the reference on the first operation Layer 2 classifies as PAID and reuses it for the rest of the investigation.
+  - Layer 2 now records filter fields and formulas instead of rates, covering CloudWatch Logs Insights, `GetMetricData`, `GetInsightRuleReport`, Live Tail, PromQL samples scanned, X-Ray, Athena, DynamoDB, and S3 requests and Select.
+
+
 ## 2.0.0
 
 - Expand the scope from a fixed CloudWatch/X-Ray/CloudTrail set to all AWS service with the agent's own tools; `aws-services` metadata changes to `All`.

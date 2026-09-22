@@ -80,4 +80,3 @@ MCP ([Model Context Protocol](https://modelcontextprotocol.io)) is an open stand
 - [Agent Skills specification](https://agentskills.io/home) — the open standard these skills follow
 - [AGENTS.md specification](https://agents.md/) — the open standard for custom agent definitions
 - [Model Context Protocol](https://modelcontextprotocol.io) — the open specification for MCP servers
-- [Agent Skill Eval](https://github.com/aws-samples/sample-agent-skill-eval) — evaluation framework for testing skills
