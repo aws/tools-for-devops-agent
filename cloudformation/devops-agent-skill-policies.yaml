@@ -29,6 +29,7 @@ Metadata:
           - EnableDmsOperationReview
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
+          - EnableAIMLAgentCoreSecurityAssessment
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -125,6 +126,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAIMLAgentCoreSecurityAssessment:
+    Type: String
+    Description: AI/ML AgentCore Security Assessment skill (adds read-only bedrock-agentcore control-plane Get/List, ecr:DescribeRepositories, and ec2 Describe reads; IAM and KMS reads are covered by AIDevOpsAgentAccessPolicy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -136,6 +143,7 @@ Conditions:
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
+  SkillAIMLAgentCoreSecurityAssessment: !Equals [!Ref EnableAIMLAgentCoreSecurityAssessment, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -404,6 +412,44 @@ Resources:
               - ec2:DescribeSubnets
             Resource: '*'
 
+  # aiml-agentcore-security-assessment: adds read-only AgentCore control-plane
+  # Get/List reads plus ecr:DescribeRepositories and ec2 Describe reads. IAM and
+  # KMS reads are covered by AIDevOpsAgentAccessPolicy. AC-04 (observability) is
+  # owned by agentcore-observability-setup and not assessed here. AC-03 (stale
+  # access) is prescribe-only and intentionally NOT granted (no Generate*).
+  PolicyAIMLAgentCoreSecurityAssessment:
+    Type: AWS::IAM::Policy
+    Condition: SkillAIMLAgentCoreSecurityAssessment
+    Properties:
+      PolicyName: DevOpsAgentSkill-AIMLAgentCoreSecurityAssessment
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AgentCoreControlPlaneRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:GetGateway
+              - bedrock-agentcore:GetMemory
+              - bedrock-agentcore:GetPolicyEngine
+              - bedrock-agentcore:GetResourcePolicy
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:ListMemories
+              - bedrock-agentcore:ListPolicyEngines
+            Resource: '*'
+          - Sid: AgentCoreContainerAndNetworkRead
+            Effect: Allow
+            Action:
+              - ecr:DescribeRepositories
+              - ec2:DescribeSubnets
+              - ec2:DescribeRouteTables
+              - ec2:DescribeVpcs
+              - ec2:DescribeVpcEndpoints
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -453,7 +499,9 @@ Outputs:
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
+        - aiml-agentcore-security-assessment: ${EnableAIMLAgentCoreSecurityAssessment} (bedrock-agentcore:Get*/List* control-plane reads, ecr:DescribeRepositories, ec2:DescribeSubnets/RouteTables/Vpcs/VpcEndpoints)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
+        - aiml-agentcore-security-assessment relies on it for IAM and KMS reads (only the bedrock-agentcore/ecr/ec2 delta is added above)
       No IAM required:
         - skip-scheduled-maintenance
