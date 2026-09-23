@@ -1,9 +1,9 @@
 ---
 name: database-audit-automation
-description: Deploy and manage AI-powered database auditing automation for Amazon RDS SQL Server and Aurora PostgreSQL. Covers deployment, audit configuration, anomaly detection, compliance reporting, and troubleshooting using Amazon Bedrock, Lambda, EventBridge, and S3.
+description: Interpret and troubleshoot the AI-powered database auditing automation solution for Amazon RDS SQL Server and Aurora PostgreSQL. Use to read and explain the compliance reports it generates, reason about anomaly alerts, and diagnose the audit log pipeline (CloudWatch Logs → Lambda → S3 → Bedrock). Deployment and operations are documented in README.md.
 metadata:
   author: bbhavini0502
-  version: "2.0.0"
+  version: "2.1.0"
   aws-devops-agent-skills.agent-types: "Chat tasks"
   aws-devops-agent-skills.aws-services: "Amazon RDS, Amazon Aurora, Amazon Bedrock, AWS Lambda, Amazon S3, Amazon EventBridge, Amazon SNS"
   aws-devops-agent-skills.technical-domains: "Databases, Security"
@@ -13,95 +13,85 @@ metadata:
 
 ## Overview
 
-Use this skill to help a user operate, interpret, and troubleshoot the **Database Auditing Automation Solution** — an AI-powered system that automates database audit log collection, anomaly detection, and compliance report generation for Amazon RDS SQL Server and Amazon Aurora PostgreSQL.
+Use this skill to **interpret** and **troubleshoot** the Database Auditing Automation Solution — an AI-powered system that collects database audit logs, runs hourly anomaly detection, and generates monthly compliance reports for Amazon RDS SQL Server and Amazon Aurora PostgreSQL.
 
-The solution is deployed by the user from a CloudFormation template and its supporting scripts (see the skill's `README.md` and `assets/` directory). This skill assumes the solution is already deployed unless the user is asking how to deploy it, in which case direct them to the setup steps in `README.md`.
+This skill assumes the solution is **already deployed**. It exists for the two jobs that need judgment, not a fixed runbook:
+
+1. **Interpreting the AI-generated compliance report** stored in S3.
+2. **Diagnosing the audit pipeline** when logs stop flowing or reports/alerts don't appear.
+
+Deploying the solution, turning on database auditing, and the routine operations commands (invoking a Lambda, listing S3) are **deterministic user steps** and are documented in `README.md` and `assets/`. Do not recite those steps from here — if the user asks how to deploy or operate the solution, point them to `README.md`. That keeps this skill focused on what the agent actually adds.
 
 ## Agent Scope and Behavior
 
 This is a **Chat-task** skill. Follow these rules:
 
-- **You provide guidance, interpretation, and diagnosis. You do not execute infrastructure changes.** Deploying the CloudFormation stack, running shell scripts, creating parameter/option groups, modifying database clusters, and running audit-setup SQL inside the database engine are all actions the **user** performs. When such a step is needed, tell the user the exact command or file to run and where to find it (`assets/...`) — do not attempt to run it yourself.
-- Prefer read-only investigation (describe/list/get and reading logs and S3 objects) when helping diagnose a problem.
-- When you recommend a command that changes state (a `modify-*`, `deploy`, `update-*`, or SQL DDL), present it as a step for the user to review and run, and briefly note its effect.
-- Ground every answer in this skill's documented resource names, thresholds, and pipeline. Do not invent resource names, ARNs, or account IDs — ask the user or read them from their environment.
+- **You interpret and diagnose. You do not change infrastructure.** Deploying the stack, running scripts, modifying databases, and running audit-setup SQL are user actions documented in `README.md`.
+- Work **read-only**: read S3 objects (reports, audit logs) and CloudWatch Logs, and use `describe`/`list` calls. Do not call `put`, `modify`, `update`, `delete`, or `invoke`.
+- When a fix requires a state change, describe it and point the user to the exact command or asset in `README.md` for them to run — do not run it.
+- Ground every answer in the resource names, S3 paths, and thresholds documented below. **Do not invent** bucket names, ARNs, account IDs, or file paths — read them from the user's environment or ask.
 
 ## When to Use This Skill
 
-Activate this skill when the user asks about:
-- Setting up database auditing on RDS SQL Server or Aurora PostgreSQL
-- Deploying the database audit automation solution
-- Generating compliance reports from database audit logs
-- Detecting anomalies in database activity
-- Monitoring privileged database user access
-- Database audit compliance (SOX, PCI-DSS, HIPAA)
-- Configuring pgAudit or SQL Server native audit
-- Analyzing database security events with AI
-- Troubleshooting audit log pipelines
+Activate when the user asks about:
+- Understanding or explaining a database audit **compliance report**
+- Why an **anomaly alert** did or didn't fire, or what a finding means
+- Monitoring privileged database user access, or audit compliance (SOX, PCI-DSS, HIPAA), in the context of this solution
+- **Troubleshooting** the audit log pipeline (no logs in S3, reports not generated, Bedrock access errors, high Lambda cost)
+
+If the user instead wants to **deploy** the solution or **turn on** pgAudit / SQL Server audit, that's a setup task — direct them to `README.md`.
 
 ## Architecture
 
 ```
 RDS/Aurora → CloudWatch Logs → Lambda (Log Processor) → S3 (Audit Logs)
                                                           ↓
-                                                Lambda (AI Analyzer)
+                                                Lambda (Anomaly Detector)
                                                           ↓
                                                 Bedrock (Claude 3.5 Sonnet)
                                                           ↓
-                                                S3 (Reports) + SNS (Alerts)
+                                          SNS (Alerts) ; S3 (Monthly Reports)
 ```
 
-### Components
+- The **anomaly detector** runs hourly (EventBridge), reads the recent audit logs from S3, asks Bedrock to classify anomalies, and **sends HIGH-severity findings via SNS**. It returns counts in its response. It does **not** write a findings file to S3 — SNS alerts and the monthly report are the durable records.
+- The **report generator** writes a monthly compliance report to S3.
 
-| Component | Service | Purpose |
-|-----------|---------|---------|
-| Log Collection | CloudWatch Logs + Lambda | Stream and normalize audit logs |
-| Log Storage | S3 (Versioned, Encrypted) | Store structured audit data with lifecycle policies |
-| Anomaly Detection | Lambda + Bedrock | Hourly AI analysis of recent logs |
-| Report Generation | Lambda + Bedrock | Monthly compliance reports |
-| Alerting | SNS | Real-time notifications for high-severity findings |
-| Report Retention | S3 Object Lock (COMPLIANCE) | 7-year immutable audit trail |
-| Dashboard | CloudFront + API Gateway + Lambda | Web UI for team access |
+### Deployed resource names and locations
 
-### Deployed Resource Names
-
-Default names created by the CloudFormation stack (project prefix `db-audit-ai`). Use these when helping the user locate or inspect resources:
+Default names use the project prefix `db-audit-ai`. If the user changed `ProjectName` at deploy time, substitute their prefix. `{ACCOUNT-ID}` is their 12-digit AWS account ID.
 
 - **Lambda:** `db-audit-ai-log-processor`, `db-audit-ai-anomaly-detector`, `db-audit-ai-report-generator`
-- **S3:** `db-audit-ai-audit-logs-{ACCOUNT-ID}`, `db-audit-ai-reports-{ACCOUNT-ID}`
-- **EventBridge rule (reports):** `db-audit-ai-monthly-report`
-- **Privileged-user list:** `PRIVILEGED_USERS` environment variable on the anomaly detector Lambda
+- **Audit logs (input):** `s3://db-audit-ai-audit-logs-{ACCOUNT-ID}/<db_type>/audit-logs/<date>/...` where `<db_type>` is `postgresql` or `sqlserver`
+- **Monthly reports:** `s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/<YYYY-MM>/audit-report.txt` (plain text)
+- **SNS alerts:** topic `db-audit-ai-anomaly-alerts`
+- **EventBridge:** `db-audit-ai-hourly-anomaly-check` (anomaly detection schedule)
+- **Privileged-user list:** `PRIVILEGED_USERS` environment variable on `db-audit-ai-anomaly-detector`
 
-If the user changed `ProjectName` at deploy time, substitute their prefix.
+## Required Agent Permissions
 
-## Helping the User Deploy or Configure (point to README/assets)
+To interpret reports and diagnose the pipeline, the agent's cloud-source role needs **read** access beyond a bare describe-only posture. Confirm these are present; if a call is denied, tell the user which permission is missing rather than guessing at the data:
 
-When the user wants to deploy the solution or turn on database auditing, these are **user actions** — provide the steps and the asset locations, and let the user run them:
+- `s3:GetObject` and `s3:ListBucket` on `db-audit-ai-reports-{ACCOUNT-ID}` (read the compliance report) and `db-audit-ai-audit-logs-{ACCOUNT-ID}` (read audit logs when reasoning about anomalies)
+- `logs:FilterLogEvents`, `logs:GetLogEvents`, `logs:DescribeLogGroups`, `logs:DescribeLogStreams` (inspect the log-processor / detector Lambda logs)
+- `rds:DescribeDBInstances`, `rds:DescribeDBClusters` (check CloudWatch Logs export config)
+- `lambda:GetFunctionConfiguration`, `events:DescribeRule` (check timeout and schedule during troubleshooting)
 
-- **Deploy the solution:** the CloudFormation template `assets/templates/infrastructure.yaml` and the helper script in `assets/deploy/deploy.md`. Full walkthrough is in `README.md`.
-- **Aurora PostgreSQL auditing (pgAudit):** the user creates a custom parameter group with `shared_preload_libraries = pgaudit`, applies it, runs the SQL in `assets/sql/aurora-postgresql-audit-setup.md`, and enables CloudWatch Logs export for the `postgresql` log type.
-- **RDS SQL Server auditing:** the user creates an Option Group with `SQLSERVER_AUDIT`, applies it, runs the SQL in `assets/sql/rds-sqlserver-audit-setup.md`, and enables CloudWatch Logs export for `error` and `agent` logs.
-- **Optional dashboard:** `assets/templates/ui-infrastructure.yaml` and the script in `assets/deploy/deploy-ui.md`.
-- **Existing `.sqlaudit` binary files:** the parser stack `assets/templates/sqlaudit-parser-stack.yaml` and the script in `assets/deploy/upload-sqlaudit.md`.
+These are read-only. The agent does not need — and should not use — write permissions.
 
-(SQL and shell assets are stored as `.md` files because DevOps Agent skill uploads accept only a fixed set of file extensions; the code is in fenced blocks inside each file.)
+## Interpreting Compliance Reports
 
-Do not run these for the user. Summarize the step, name the exact asset, and note that it must be run in their environment. The detailed commands live in `README.md`.
+The report is at `s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/<YYYY-MM>/audit-report.txt`. To interpret it:
 
-## Operations Guidance
+1. Ask the user for their account ID (and prefix, if customized) and the month, or list the `monthly-reports/` prefix to find available reports.
+2. Read the report object (`s3:GetObject`). If the user has already pasted the report into chat, use that and skip the S3 read.
+3. The report contains these sections — map the user's question to the relevant one and explain it: **Executive Summary, Login Activity Analysis, Privileged Access Monitoring, Change Pattern Analysis, Compliance Findings, Risk Assessment, Recommendations.**
+4. Explain findings in terms of the anomaly categories and thresholds below, and translate them into concrete risk and next actions.
 
-When the user asks how to operate the deployed solution, give them the command to run (these are user-run CLI calls; you present them, the user executes):
+Compliance posture the report relies on: S3 Object Lock (COMPLIANCE mode, 7-year retention) on the reports bucket, versioned + encrypted buckets, CloudTrail access logging, blocked public access, lifecycle tiering (S3-IA at 90 days, Glacier at 180 days for logs).
 
-- **Generate an on-demand report:** invoke the `db-audit-ai-report-generator` Lambda. Reports land in `s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/<YYYY>/<MM>/`.
-- **Run manual anomaly detection:** invoke the `db-audit-ai-anomaly-detector` Lambda.
-- **View reports / logs:** list and copy objects under the reports and audit-logs S3 buckets.
-- **Configure privileged users:** update the `PRIVILEGED_USERS` environment variable on the anomaly detector Lambda.
+## Reasoning About Anomaly Alerts
 
-Always fill in the user's real account ID and region rather than placeholders, and confirm the resource prefix if they customized `ProjectName`.
-
-## Interpreting Anomaly Detection
-
-The anomaly detector classifies five categories. Use this table to explain findings and set expectations about severity:
+There is **no persisted anomaly-findings file** — do not tell the user to fetch one. The durable records are the **SNS alert** the user received and the anomaly-related sections of the **monthly report**. To reason about a specific alert or "why did/didn't this fire", read the underlying **audit logs** in S3 for the relevant window and apply these detection rules:
 
 | # | Pattern | Threshold | Severity |
 |---|---------|-----------|----------|
@@ -111,50 +101,32 @@ The anomaly detector classifies five categories. Use this table to explain findi
 | 4 | Suspicious Query Patterns | Bulk SELECT on sensitive tables, exports | CRITICAL |
 | 5 | Unauthorized Schema Changes | DDL without CR reference | HIGH |
 
-### How the pipeline works
-
-1. **EventBridge** triggers the anomaly detector Lambda every hour.
-2. The Lambda pulls the last hour's logs from S3.
-3. **Bedrock (Claude)** analyzes the logs against the privileged-user list and the five detection rules and returns structured JSON (`type`, `severity`, `description`).
-4. HIGH or CRITICAL findings fire an **SNS alert** immediately.
-5. All findings are stored in S3 for the audit trail.
-
-When a user asks why an alert did or didn't fire, reason from these thresholds and this flow. If they want to tune sensitivity, the detection rules live in the Bedrock prompt inside the anomaly detector Lambda, and the privileged-user list is the `PRIVILEGED_USERS` environment variable.
-
-## Interpreting Compliance Reports
-
-The AI-generated monthly report contains: Executive Summary, Login Activity Analysis, Privileged Access Monitoring, Change Pattern Analysis, Compliance Findings, Risk Assessment, and Recommendations. When a user shares or asks about a report, map their question to the relevant section and explain the finding in terms of the anomaly categories and thresholds above.
-
-Compliance posture is enforced by: S3 Object Lock (COMPLIANCE mode, 7-year retention) on the reports bucket, versioned + encrypted buckets, CloudTrail logging of access, blocked public access, and lifecycle tiering (S3-IA at 90 days, Glacier at 180 days for logs).
+How the detector works: EventBridge triggers it hourly → it reads the last window of logs from `db-audit-ai-audit-logs-{ACCOUNT-ID}/<db_type>/audit-logs/<date>/` → Bedrock classifies against the `PRIVILEGED_USERS` list and the rules above → HIGH-severity findings fire an SNS alert. If the user wants to change sensitivity, the rules live in the Bedrock prompt inside the `db-audit-ai-anomaly-detector` Lambda and the watch list is the `PRIVILEGED_USERS` env var — describe the change and point them to `README.md`; don't modify it yourself.
 
 ## Troubleshooting
 
-Diagnose these by reading configuration and logs (read-only). Recommend fixes for the user to apply.
+Diagnose read-only; recommend fixes for the user to apply.
 
 ### No logs appearing in S3
-
-1. Verify CloudWatch Logs export is enabled on the database (`describe-db-instances` / `describe-db-cluster`, check `EnabledCloudwatchLogsExports`).
-2. Check the `db-audit-ai-log-processor` Lambda logs for errors (filter its log group for `ERROR`).
-3. Verify auditing is configured **inside** the database — the pgAudit extension is loaded (Aurora PostgreSQL) or SQL Server Audit is enabled. If not, this is a user setup step (see the deploy/config section and `README.md`).
+1. Verify CloudWatch Logs export is enabled on the database (`rds describe-db-instances` / `describe-db-cluster`, check `EnabledCloudwatchLogsExports`).
+2. Check `db-audit-ai-log-processor` Lambda logs for errors (filter its log group for `ERROR`).
+3. Verify auditing is configured **inside** the database — pgAudit extension loaded (Aurora PostgreSQL) or SQL Server Audit enabled. If not, this is a user setup step in `README.md`.
 
 ### Bedrock access denied
-
-Model access for Claude 3.5 Sonnet must be enabled in the account/region (AWS Console → Bedrock → Model access). This is a user action.
+Claude 3.5 Sonnet model access must be enabled in the account/region (Console → Bedrock → Model access). User action.
 
 ### Reports not generated
+1. Check the report generator's schedule (EventBridge) and the `db-audit-ai-report-generator` timeout is 900s.
+2. Confirm the reports bucket exists and the report month you expect is present under `monthly-reports/<YYYY-MM>/`.
+3. Check the report-generator Lambda logs for errors.
 
-1. Check the EventBridge rule `db-audit-ai-monthly-report` (`describe-rule`).
-2. Verify the report-generator Lambda timeout is 900s (15 min).
-3. Check S3 permissions on the reports bucket.
-
-### High Lambda costs
-
-Suggest: reduce anomaly-detection frequency (hourly → every 4 hours) via the EventBridge schedule, reduce `max_tokens` in the Bedrock calls, or filter low-value log events before sending to Bedrock.
+### High Lambda cost
+Suggest (as user changes): reduce anomaly-detection frequency (hourly → every 4 hours) via the EventBridge schedule, reduce `max_tokens` in the Bedrock calls, or filter low-value log events before sending to Bedrock.
 
 ## References
 
-- Setup, deployment, and command details for users: this skill's `README.md`
-- Vendored deployment assets: `assets/templates/`, `assets/sql/`, `assets/deploy/`
+- Deployment, audit configuration, and operations commands (user steps): this skill's `README.md`
+- Vendored assets: `assets/templates/`, `assets/sql/`, `assets/deploy/`
 - Source solution: https://github.com/aws-samples/sample-database-auditing-automation
 - Amazon Bedrock: https://docs.aws.amazon.com/bedrock/
 - pgAudit: https://github.com/pgaudit/pgaudit

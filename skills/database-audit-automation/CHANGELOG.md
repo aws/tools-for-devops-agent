@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.1.0] - 2026-09-22
+
+### Changed
+- Refocused SKILL.md on the two tasks that need agent judgment — interpreting the AI-generated
+  compliance report and troubleshooting the audit pipeline. Removed the deterministic
+  deploy/configure and operations command recitation from SKILL.md; those steps live in
+  README.md, and the skill now points the user there instead of reproducing them (avoids
+  spending agent tokens/credits re-emitting a fixed runbook).
+- Constrained agent behavior to read-only (read S3 objects and CloudWatch Logs, describe/list);
+  the agent no longer presents itself as relaying invoke/modify commands.
+
+### Fixed
+- Corrected a false claim that anomaly findings are stored in S3. The anomaly detector does not
+  persist a findings file — it returns counts and sends HIGH-severity findings via SNS. The
+  durable records are the SNS alert and the monthly report. SKILL.md now reflects this.
+- Corrected the monthly report S3 path to `monthly-reports/<YYYY-MM>/audit-report.txt` (single
+  `YYYY-MM` segment) in both SKILL.md and README.md, matching the CloudFormation template.
+
+### Added
+- Concrete S3 locations for reports and audit logs, and accurate resource names (SNS topic
+  `db-audit-ai-anomaly-alerts`, EventBridge rule `db-audit-ai-hourly-anomaly-check`) in SKILL.md.
+- A "Required Agent Permissions" section in SKILL.md and a split of user vs. agent IAM
+  permissions in README.md, calling out the read access (`s3:GetObject`/`s3:ListBucket` on the
+  reports and audit-logs buckets, CloudWatch Logs reads) the agent needs to interpret data.
+
 ## [2.0.0] - 2026-09-22
 
 ### Changed

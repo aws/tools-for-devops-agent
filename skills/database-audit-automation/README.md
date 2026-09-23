@@ -72,7 +72,16 @@ The solution uses Amazon Bedrock (Claude 3.5 Sonnet) for anomaly detection and r
 
 ### 3. IAM permissions
 
-Deploying and operating the solution requires permissions beyond read-only — CloudFormation stack operations, RDS/Aurora audit configuration changes, and access to Lambda, S3, EventBridge, SNS, and Bedrock. Review and scope these to your environment before running. The agent's investigative/reporting help operates against audit data already in S3 and CloudWatch Logs.
+**You (deploying and operating the solution)** need permissions beyond read-only — CloudFormation stack operations, RDS/Aurora audit configuration changes, and access to Lambda, S3, EventBridge, SNS, and Bedrock. Review and scope these to your environment before running.
+
+**The DevOps Agent (interpreting reports and troubleshooting)** works read-only and needs read access to the audit data and pipeline. Grant its cloud-source role:
+
+- `s3:GetObject`, `s3:ListBucket` on `db-audit-ai-reports-{ACCOUNT-ID}` (read compliance reports) and `db-audit-ai-audit-logs-{ACCOUNT-ID}` (read audit logs when reasoning about anomalies)
+- `logs:FilterLogEvents`, `logs:GetLogEvents`, `logs:DescribeLogGroups`, `logs:DescribeLogStreams` (inspect the Lambda logs during troubleshooting)
+- `rds:DescribeDBInstances`, `rds:DescribeDBClusters` (check CloudWatch Logs export configuration)
+- `lambda:GetFunctionConfiguration`, `events:DescribeRule` (check Lambda timeout and schedules)
+
+The agent does not need write permissions; it never deploys, invokes, or modifies resources.
 
 ### 4. AWS CLI configured
 
@@ -168,7 +177,7 @@ aws lambda invoke --function-name db-audit-ai-anomaly-detector --region us-east-
 
 # List / download reports
 aws s3 ls s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/ --recursive
-aws s3 cp s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/2026/08/audit-report.txt .
+aws s3 cp s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/2026-08/audit-report.txt .
 
 # View audit logs
 aws s3 ls s3://db-audit-ai-audit-logs-{ACCOUNT-ID}/postgresql/audit-logs/ --recursive
