@@ -29,6 +29,7 @@ Metadata:
           - EnableDmsOperationReview
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
+          - EnableAIMLSageMakerSecurityAssessment
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -125,6 +126,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAIMLSageMakerSecurityAssessment:
+    Type: String
+    Description: AI/ML SageMaker Security Assessment skill (adds read-only sagemaker List/Describe and guardduty:ListDetectors; IAM/EC2/KMS/S3 reads are covered by AIDevOpsAgentAccessPolicy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -136,6 +143,7 @@ Conditions:
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
+  SkillAIMLSageMakerSecurityAssessment: !Equals [!Ref EnableAIMLSageMakerSecurityAssessment, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -404,6 +412,63 @@ Resources:
               - ec2:DescribeSubnets
             Resource: '*'
 
+  # aiml-sagemaker-security-assessment: adds read-only SageMaker control-plane
+  # List/Describe reads plus guardduty:ListDetectors. IAM, EC2, KMS, and S3 reads
+  # are covered by AIDevOpsAgentAccessPolicy. SM-02 stale-access and IAM Identity
+  # Center aspects are prescribe-only and intentionally NOT granted (no Generate*).
+  PolicyAIMLSageMakerSecurityAssessment:
+    Type: AWS::IAM::Policy
+    Condition: SkillAIMLSageMakerSecurityAssessment
+    Properties:
+      PolicyName: DevOpsAgentSkill-AIMLSageMakerSecurityAssessment
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SageMakerControlPlaneRead
+            Effect: Allow
+            Action:
+              - sagemaker:DescribeAutoMLJob
+              - sagemaker:DescribeCompilationJob
+              - sagemaker:DescribeDataQualityJobDefinition
+              - sagemaker:DescribeDomain
+              - sagemaker:DescribeEndpoint
+              - sagemaker:DescribeFeatureGroup
+              - sagemaker:DescribeHyperParameterTuningJob
+              - sagemaker:DescribeModel
+              - sagemaker:DescribeMonitoringSchedule
+              - sagemaker:DescribeNotebookInstance
+              - sagemaker:DescribeProcessingJob
+              - sagemaker:DescribeTrainingJob
+              - sagemaker:DescribeTransformJob
+              - sagemaker:ListAssociations
+              - sagemaker:ListAutoMLJobs
+              - sagemaker:ListCompilationJobs
+              - sagemaker:ListDataQualityJobDefinitions
+              - sagemaker:ListDomains
+              - sagemaker:ListEndpoints
+              - sagemaker:ListExperiments
+              - sagemaker:ListFeatureGroups
+              - sagemaker:ListHyperParameterTuningJobs
+              - sagemaker:ListModelPackageGroups
+              - sagemaker:ListModelPackages
+              - sagemaker:ListModels
+              - sagemaker:ListMonitoringSchedules
+              - sagemaker:ListNotebookInstances
+              - sagemaker:ListPipelineExecutions
+              - sagemaker:ListPipelines
+              - sagemaker:ListProcessingJobs
+              - sagemaker:ListTrainingJobs
+              - sagemaker:ListTransformJobs
+              - sagemaker:ListTrials
+            Resource: '*'
+          - Sid: SageMakerGuardDutyCoverageRead
+            Effect: Allow
+            Action:
+              - guardduty:ListDetectors
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -453,7 +518,9 @@ Outputs:
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
+        - aiml-sagemaker-security-assessment: ${EnableAIMLSageMakerSecurityAssessment} (sagemaker:List*/Describe* control-plane reads, guardduty:ListDetectors)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
+        - aiml-sagemaker-security-assessment relies on it for IAM/EC2/KMS/S3 reads (only the SageMaker/guardduty delta is added above)
       No IAM required:
         - skip-scheduled-maintenance
