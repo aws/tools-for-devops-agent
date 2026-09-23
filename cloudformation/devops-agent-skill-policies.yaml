@@ -29,6 +29,7 @@ Metadata:
           - EnableDmsOperationReview
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
+          - EnableDynamoDbDataHealthInspection
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -124,6 +125,27 @@ Parameters:
     Description: AgentCore Operational Review skill (adds read-only bedrock-agentcore control-plane List/Get and ec2:DescribeSubnets for the multi-AZ check; observability-only mode needs none of these).
     AllowedValues: ['true', 'false']
     Default: 'true'
+  EnableDynamoDbDataHealthInspection:
+    Type: String
+    Description: >
+      DynamoDB Data Health Inspection skill. NOTE: this is the only skill policy in
+      this template that grants DATA-PLANE reads (dynamodb:Scan and dynamodb:Query),
+      which let the role read item data from DynamoDB tables. The skill gates every
+      data-plane read behind explicit operator consent and hard sampling caps, and
+      never mutates a table. Set to 'false' if you want control-plane-only analysis.
+      Scope DynamoDbDataPlaneTableArns to specific tables rather than leaving it as '*'.
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+
+  DynamoDbDataPlaneTableArns:
+    Type: CommaDelimitedList
+    Description: >
+      (Recommended) Table ARNs the DynamoDB Data Health Inspection skill may sample,
+      e.g. arn:aws:dynamodb:us-east-1:111122223333:table/orders-prod. The skill only
+      issues data-plane reads against the base table - never against a secondary
+      index - so index ARNs are not required. Leave as '*' to allow all tables in the
+      account.
+    Default: '*'
 
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
@@ -136,6 +158,7 @@ Conditions:
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
+  SkillDynamoDbDataHealthInspection: !Equals [!Ref EnableDynamoDbDataHealthInspection, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -404,6 +427,60 @@ Resources:
               - ec2:DescribeSubnets
             Resource: '*'
 
+  # dynamodb-data-health-inspection: read-only DynamoDB control-plane reads,
+  # Contributor Insights rule reports, and Application Auto Scaling target reads,
+  # plus the two DATA-PLANE reads the skill needs to sample item sizes and TTL
+  # timestamps. CloudWatch GetMetricData/GetMetricStatistics/DescribeAlarms and
+  # sts:GetCallerIdentity are covered by AIDevOpsAgentAccessPolicy.
+  #
+  # dynamodb:Scan and dynamodb:Query are the only non-Describe/Get/List grants in this
+  # template. They are separated into their own Sid so the Resource can be scoped to
+  # specific tables via DynamoDbDataPlaneTableArns. The skill gates every data-plane
+  # read behind explicit operator consent and caps the sample at 1,000 items by default
+  # (10,000 absolute), eventually-consistent, never a full-table scan.
+  #
+  # Deliberately NOT granted: dynamodb:UpdateContributorInsights and
+  # dynamodb:UpdateTimeToLive. The skill recommends enabling those features but must
+  # never change a table's configuration itself.
+  PolicyDynamoDbDataHealthInspection:
+    Type: AWS::IAM::Policy
+    Condition: SkillDynamoDbDataHealthInspection
+    Properties:
+      PolicyName: DevOpsAgentSkill-DynamoDbDataHealthInspection
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DynamoDbControlPlaneRead
+            Effect: Allow
+            Action:
+              - dynamodb:DescribeContinuousBackups
+              - dynamodb:DescribeContributorInsights
+              - dynamodb:DescribeLimits
+              - dynamodb:DescribeTable
+              - dynamodb:DescribeTimeToLive
+              - dynamodb:ListContributorInsights
+              - dynamodb:ListTables
+            Resource: '*'
+          - Sid: DynamoDbDataPlaneSampling
+            Effect: Allow
+            Action:
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource: !Ref DynamoDbDataPlaneTableArns
+          - Sid: ContributorInsightsRuleReportRead
+            Effect: Allow
+            Action:
+              - cloudwatch:DescribeInsightRules
+              - cloudwatch:GetInsightRuleReport
+            Resource: '*'
+          - Sid: IndexAutoScalingRead
+            Effect: Allow
+            Action:
+              - application-autoscaling:DescribeScalableTargets
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -453,6 +530,7 @@ Outputs:
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
+        - dynamodb-data-health-inspection: ${EnableDynamoDbDataHealthInspection} (dynamodb:DescribeTable/DescribeTimeToLive/DescribeContributorInsights/ListContributorInsights/ListTables/DescribeContinuousBackups/DescribeLimits, cloudwatch:GetInsightRuleReport/DescribeInsightRules, application-autoscaling:DescribeScalableTargets, and DATA-PLANE dynamodb:Scan/Query scoped to DynamoDbDataPlaneTableArns)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
