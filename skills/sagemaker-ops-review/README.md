@@ -116,7 +116,7 @@ Constraints enforced at upload time:
 1. Navigate to the **Skills** page in your Agent Space Operator Web App.
 2. Choose **Add skill** → **Upload skill**.
 3. Drag and drop `sagemaker-ops-review.zip` (or browse to it).
-4. Select agent type: **Generic** / **All agents**. This is required if you intend to drive the skill from the [`aws-operation-review` custom agent](../../custom-agents/aws-operation-review/README.md) — narrowing the skill to **On-demand** / **Evaluation** keeps it out of the custom agent's skill picker, leaving that agent with no checks to run. Narrow the agent types only if you are driving the skill from Chat alone.
+4. Select agent type: **Generic** / **All agents**. This is required if you intend to drive the skill from the [`aws-operation-review` custom agent](../../custom-agents/aws-operation-review/) — narrowing the skill to **On-demand** / **Evaluation** keeps it out of the custom agent's skill picker, leaving that agent with no checks to run. Narrow the agent types only if you are driving the skill from Chat alone.
 5. Review the validation results.
 6. Choose **Upload**.
 
@@ -148,7 +148,7 @@ Quota headroom before a launch:
 
 Point an Evaluation agent at the skill and schedule it — weekly ahead of an operational review meeting, or monthly as a posture check. The report is produced in full each run, so successive runs are directly comparable.
 
-For a ready-made scheduled configuration, use the [`aws-operation-review` custom agent](../../custom-agents/aws-operation-review/README.md), which loads this skill for SageMaker AI reviews and supports schedule triggers.
+For a ready-made scheduled configuration, use the [`aws-operation-review` custom agent](../../custom-agents/aws-operation-review/), which loads this skill for SageMaker AI reviews and supports schedule triggers.
 
 ## Report Structure
 
@@ -189,9 +189,9 @@ If every in-scope check across every in-scope account and region returns no reso
 
 ## Related
 
-- [`aws-operation-review` custom agent](../../custom-agents/aws-operation-review/README.md) — loads this skill for SageMaker AI operational reviews, on demand or on a schedule.
-- [`aiml-access-diagnostics`](../aiml-access-diagnostics/README.md) — diagnoses IAM and access failures for SageMaker and Bedrock calls; use during an incident rather than a posture review.
-- [`service-quota-check`](../service-quota-check/README.md) — general-purpose, all-service quota checking. This skill's Service Quotas pillar is SageMaker-specific and scoped to seven verified SageMaker quota codes.
+- [`aws-operation-review` custom agent](../../custom-agents/aws-operation-review/) — loads this skill for SageMaker AI operational reviews, on demand or on a schedule.
+- [`aiml-access-diagnostics`](../aiml-access-diagnostics/) — diagnoses IAM and access failures for SageMaker and Bedrock calls; use during an incident rather than a posture review.
+- [`service-quota-check`](../service-quota-check/) — general-purpose, all-service quota checking. This skill's Service Quotas pillar is SageMaker-specific and scoped to seven verified SageMaker quota codes.
 - AWS Well-Architected lenses grounding the Best Practices pillar: [Machine Learning](https://docs.aws.amazon.com/wellarchitected/latest/machine-learning-lens/machine-learning-lens.html) · [Generative AI](https://docs.aws.amazon.com/wellarchitected/latest/generative-ai-lens/generative-ai-lens.html) · [Agentic AI](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/agentic-ai-lens.html)
 
 ## Non-production disclaimer
