@@ -96,13 +96,20 @@ pull request it is applied to. Each exempted type is then checked after all, and
 its stated reason is reported as a withdrawn exemption, so the log names the claim
 that was rejected rather than silently ignoring the file.
 
+The label is a whole-pull-request switch, not a way to refuse one claim: applying it
+withdraws every exempted type on every skill the pull request touches. On a pull
+request where one exemption is unfounded and another is legitimate, the label refuses
+both, and the legitimate one has to be argued in review instead. Per-skill or
+per-type granularity is deliberately not offered — the label carries no place to
+name a target, and the all-or-nothing form is the right trade for a lever this
+rarely used.
+
 Without that, the label could not reach a pull request exempting all three types:
 setting the mode only decides whether violations fail, and an exemption removes the
 violations in the first place, so such a pull request would go green whatever a
 maintainer did. Since exempting a type is a claim about what can be produced,
-withdrawing it is the maintainer's way of rejecting that claim on one pull request,
-and it is the label — applied per PR, by someone with triage or write access — that
-carries the judgement.
+withdrawing those claims is how a maintainer refuses them, and it is the label —
+applied per PR, by someone with triage or write access — that carries the judgement.
 
 ``--strict`` deliberately does *not* withdraw exemptions. It is a repo-wide lever
 for forcing the migration off the old flat layout, so having it also overrule every
@@ -190,6 +197,11 @@ PRS_PREDATING_CHECK = frozenset(
 # exemption removes the violations that the mode decides the severity of, so there is
 # nothing left to fail on.
 #
+# Withdrawal is all-or-nothing per pull request: one application of the label withdraws
+# every claimed type across every skill the pull request touches, since the label is
+# read once and applies to the whole run. Per-skill or per-type granularity would need
+# a mechanism the label does not have, and is not worth it for a rarely used lever.
+#
 # Adding or removing a label requires triage or write access to this repository, so
 # a contributor cannot clear it to unblock their own pull request, nor grant
 # themselves an exemption the label has withdrawn.
@@ -215,9 +227,11 @@ PREDATES_CHECK_HINT = (
     "withdrawn."
 )
 
-# Printed when a green check rests on honored exemptions. Those are the results the
-# check never looked for, so without this a maintainer reading the pass has no
-# prompt that the reasons are theirs to accept or reject, nor how to reject them.
+# Printed whenever any touched skill has an honored exemption, whatever the overall
+# outcome — so it also appears on a run that fails for an unrelated reason, or for
+# another skill. Those exempted results are the ones the check never looked for, so
+# without this a maintainer has no prompt that the reasons are theirs to accept or
+# reject, nor how to reject them.
 EXEMPTIONS_HINT = (
     "The exempted test type(s) listed above were not checked, so the missing "
     "results could not fail this check. If a stated reason does not hold, apply the "

@@ -148,7 +148,9 @@ An exemption excuses the tool's results, not the testing itself. Still test the 
 
 The file fails closed: invalid JSON, an unknown test type, or a missing or empty `reason` grants no exemption and is reported as a problem in its own right, so a typo can't silently waive a requirement. Because the file is part of the PR, granting an exemption goes through normal review like any other change — don't add one without agreement from a maintainer.
 
-An exemption is a claim about what can't be produced, and a maintainer who doesn't accept the claim can reject it by adding the `enforce-evals` label to the pull request. That withdraws every exemption the PR's skills claim — each exempted type is checked as though the file weren't there, and the check's log names the reason it rejected next to the results now required. Expect it if a reason doesn't stand up, so write one you can defend rather than one that gets the check green.
+An exemption is a claim about what can't be produced, and a maintainer who doesn't accept the claim can reject it by adding the `enforce-evals` label to the pull request. That withdraws every exemption the PR's skills claim — each exempted type is checked as though the file weren't there, and the check's log names the reason it rejected next to the results now required.
+
+The label is all-or-nothing for the whole pull request: it withdraws every exempted test type on every skill the PR touches, not just the claim a maintainer means to refuse. On a PR where one exemption is unfounded and another is legitimate, applying the label requires the results for both, and the legitimate one has to be settled in review — either by producing those results too, or by splitting the skills across separate PRs.
 
 Everything below that depth is left unchecked, so `outputs/`, `_metadata.json`, `cli_debug/`, `sdk_debug/`, iteration counts, and scenario names are all free to vary, as are any extra files.
 
