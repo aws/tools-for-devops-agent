@@ -1,0 +1,131 @@
+[
+  {
+    "id": "ddb-latency-smoke-test",
+    "prompt": "Read latency-context.json. List the table names and their regions. No analysis needed.",
+    "expected_output": "Lists every table from files/latency-context.json with the region exactly as defined in the file.",
+    "files": [
+      "files/latency-context.json"
+    ],
+    "assertions": [
+      "contains 'orders-prod'",
+      "contains 'checkout-prod'",
+      "contains 'reports-prod'",
+      "contains 'sessions-prod'",
+      "contains 'us-west-2'",
+      "contains 'eu-west-1'"
+    ]
+  },
+  {
+    "id": "ddb-latency-classifications",
+    "prompt": "According to the skill, what are the possible primary classifications of a DynamoDB latency profile, and what establishes each one? No table access required.",
+    "expected_output": "Names all six: indeterminate (no data or insufficient coverage), service_side (SystemErrors), throttle_induced (throttle events coinciding with the latency rise), systemic_degradation (sustained Average/p50), transient_spike (p99 elevated with normal p50), and nominal (everything measured within threshold).",
+    "files": [],
+    "assertions": [
+      "contains 'indeterminate'",
+      "contains 'SystemErrors'",
+      "contains 'throttle'",
+      "contains 'p50'",
+      "contains 'p99'",
+      "contains 'nominal'"
+    ]
+  },
+  {
+    "id": "ddb-latency-metric-scope",
+    "prompt": "What does the SuccessfulRequestLatency metric measure, what does it exclude, and which statistics does it support? Answer from the skill's documented facts. No table access required.",
+    "expected_output": "States that SuccessfulRequestLatency measures latency internal to the DynamoDB service only, excluding client-side activity and network trip time, and that it covers successful requests only so throttled and failed requests are not represented. States that valid statistics include Minimum, Maximum, Sum, Average, Percentile and SampleCount, so p50/p90/p99 are available, and that custom percentiles can be entered.",
+    "files": [],
+    "assertions": [
+      "contains 'internal'",
+      "contains 'network'",
+      "contains 'successful'",
+      "contains 'Percentile' or contains 'percentile'",
+      "contains 'SampleCount'"
+    ]
+  },
+  {
+    "id": "ddb-latency-throttle-induced-flat-curve",
+    "prompt": "Read latency-context.json. For checkout-prod, the team stopped investigating DynamoDB because the latency dashboard is flat, yet writes intermittently take 3 to 6 seconds. Using the skill's logic, classify the latency and explain the evidence. Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Classifies as LT-02 throttle-induced: WriteThrottleEvents 1,842 and ThrottledRequests 1,103 across 19 periods, while PutItem service-side latency stays at 4.8 ms p50. Explains that SuccessfulRequestLatency covers only successful requests, so throttled calls are absent from it, and that SDK automatic retries of ProvisionedThroughputExceededException turn the throttling into elapsed time the client experiences as latency. Notes consumed write capacity of 398 against 400 provisioned, and that ThrottledRequests increments once per request so it is a floor.",
+    "files": [
+      "files/latency-context.json"
+    ],
+    "assertions": [
+      "contains 'LT-02' or contains 'throttle-induced' or contains 'throttle_induced'",
+      "contains '1842' or contains '1,842'",
+      "contains 'retry' or contains 'retries' or contains 'retried'",
+      "contains 'successful'",
+      "contains '398' or contains '400'"
+    ]
+  },
+  {
+    "id": "ddb-latency-tail-versus-sustained",
+    "prompt": "Read latency-context.json. A p99 alarm fired twice this morning on orders-prod and the on-call engineer wants to know whether to escalate to AWS. Using the skill's logic, classify the latency profile and say what the evidence supports. Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Classifies as LT-04 isolated tail spike at Low severity: GetItem p99 reached 68.4 ms in 2 of 180 periods while p50 held at 3.6 ms and Average at 4.1 ms, with SystemErrors measured at zero and throttle events measured at zero. Explains that high p99 with normal p50 indicates sporadic slowness affecting a small share of requests, that occasional spikes in Maximum and high percentiles are documented as expected from DynamoDB background operations or transient infrastructure conditions, and that escalation is not warranted on this evidence.",
+    "files": [
+      "files/latency-context.json"
+    ],
+    "assertions": [
+      "contains 'LT-04' or contains 'transient' or contains 'tail'",
+      "contains '68.4' or contains '68'",
+      "contains '3.6'",
+      "contains 'expected' or contains 'normal' or contains 'variance'",
+      "contains 'p50'"
+    ]
+  },
+  {
+    "id": "ddb-latency-nodata-not-zero",
+    "prompt": "Read latency-context.json. For sessions-prod, every latency statistic is within normal range. Using the skill's logic, what is the classification, and is this table healthy? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Does not classify the table as nominal. Classifies as LT-00 indeterminate because SystemErrors returned NoData: a nominal verdict requires SystemErrors and the throttle metrics to have been measured at zero, and a metric that published nothing cannot rule out a service-side condition. States that NoData and a measured zero support different conclusions and must not be coerced together.",
+    "files": [
+      "files/latency-context.json"
+    ],
+    "assertions": [
+      "contains 'LT-00' or contains 'indeterminate'",
+      "contains 'SystemErrors'",
+      "contains 'NoData' or contains 'no data' or contains 'published nothing'",
+      "contains 'zero'"
+    ]
+  },
+  {
+    "id": "ddb-latency-multi-item-relative-baseline",
+    "prompt": "Read latency-context.json. The reports-prod nightly job went from 20 minutes to over an hour with no code change. Using the skill's logic, classify the latency and name the contributing factors. Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Classifies as LT-03 systemic degradation for the Scan operation, established by the relative test rather than an absolute threshold: Scan p50 rose from 120 ms in the first third of the window to 410 ms in the last third, about 3.4 times, with 60 datapoints in each third. Names CF-02 mean item size of about 148 KB as a plausible contributor, noting item size affects latency and larger items reduce items per page, and CF-03 that the elevated operation is multi-item so latency scales with result-set size, projection and filter expressions. States that whether the access pattern needs a different key schema or index is outside this skill.",
+    "files": [
+      "files/latency-context.json"
+    ],
+    "assertions": [
+      "contains 'LT-03' or contains 'systemic'",
+      "contains '410' or contains '3.4'",
+      "contains 'Scan'",
+      "contains '148' or contains '151552' or contains '151,552'",
+      "contains 'CF-03' or contains 'multi-item' or contains 'result set' or contains 'result-set'"
+    ]
+  },
+  {
+    "id": "ddb-latency-contradicted-remediations",
+    "prompt": "Our team plans to fix DynamoDB p99 latency by setting the SDK socket timeout to 50 ms and switching all reads to strongly consistent. Evaluate both changes. No table access required.",
+    "expected_output": "Declines both and gives the documented reasons. A 50 ms socket timeout is AWS's own anti-example: overly low timeouts cause client-induced availability issues and can produce connection errors during network latency spikes, and the documentation says to prefer request hedging to short timeouts. Strongly consistent reads require twice the throughput, may have higher latency, and are not supported on global secondary indexes, while eventually consistent reads can be served from an availability zone co-located with the requester and appear in AWS's latency-reduction guidance. Offers the documented alternatives, starting with connection reuse and hedging.",
+    "files": [],
+    "assertions": [
+      "contains '50'",
+      "contains 'availability'",
+      "contains 'twice' or contains 'two times' or contains 'double'",
+      "contains 'hedging' or contains 'hedge'",
+      "contains 'global secondary index' or contains 'GSI'"
+    ]
+  },
+  {
+    "id": "ddb-latency-scope-boundary",
+    "prompt": "Read latency-context.json. For orders-prod, tell me which partition key is hot, the p99 item size, and which GSI is causing the latency. Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Declines all three and explains why each is not answerable here: identifying a hot partition key requires Contributor Insights traffic analysis, which this skill does not collect; the item size distribution requires reading items, and only a mean of about 7.9 KB from table metadata is available; and SuccessfulRequestLatency has TableName, Operation and StreamLabel dimensions with no index dimension, so latency cannot be attributed to a GSI. Names what would answer each.",
+    "files": [
+      "files/latency-context.json"
+    ],
+    "assertions": [
+      "contains 'Contributor Insights'",
+      "contains 'dimension' or contains 'StreamLabel'",
+      "contains 'mean' or contains 'distribution'",
+      "contains 'outside' or contains 'cannot' or contains 'not measurable' or contains 'does not'"
+    ]
+  }
+]
