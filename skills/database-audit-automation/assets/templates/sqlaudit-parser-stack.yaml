@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'SQL Audit File Parser - Add-on for Database Audit AI'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: db-audit-ai
+  AuditLogsBucket:
+    Type: String
+    Default: db-audit-ai-audit-logs-<YOUR-ACCOUNT-ID>
+
+Resources:
+  # Lambda Role
+  SqlAuditParserRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-sqlaudit-parser-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::${AuditLogsBucket}/*'
+
+  # Lambda Function
+  SqlAuditParserFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-sqlaudit-parser'
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt SqlAuditParserRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import struct
+          import io
+          from datetime import datetime
+          
+          s3 = boto3.client('s3')
+          
+          def parse_sqlaudit_file(file_content):
+              events = []
+              
+              try:
+                  # Extract readable strings from binary file
+                  text = file_content.decode('utf-16-le', errors='ignore')
+                  
+                  # Look for common audit patterns
+                  lines = text.split('\x00')
+                  
+                  current_event = {}
+                  for line in lines:
+                      line = line.strip()
+                      if not line or len(line) < 3:
+                          continue
+                      
+                      # Detect event fields
+                      if 'LOGIN' in line.upper() or 'LOGOUT' in line.upper():
+                          if current_event:
+                              events.append(current_event)
+                          current_event = {'event_type': line, 'timestamp': datetime.now().isoformat()}
+                      elif 'SELECT' in line.upper() or 'INSERT' in line.upper() or 'UPDATE' in line.upper() or 'DELETE' in line.upper():
+                          current_event['statement'] = line[:200]
+                      elif line.startswith('dbo') or '.' in line:
+                          current_event['database_object'] = line
+                      elif len(line) > 5 and line.replace('_', '').replace('.', '').isalnum():
+                          if 'user' not in current_event:
+                              current_event['user'] = line
+                  
+                  if current_event:
+                      events.append(current_event)
+                  
+                  # If no structured events, create summary
+                  if not events:
+                      events.append({
+                          'event_type': 'AUDIT_FILE_PROCESSED',
+                          'timestamp': datetime.now().isoformat(),
+                          'file_size': len(file_content),
+                          'note': 'Binary audit file - use SQL Server tools for detailed parsing'
+                      })
+                      
+              except Exception as e:
+                  print(f"Parse error: {e}")
+                  events.append({
+                      'event_type': 'PARSE_ERROR',
+                      'error': str(e),
+                      'file_size': len(file_content)
+                  })
+              
+              return events
+          
+          
+          def extract_string(data, offset):
+              try:
+                  end = data.find(b'\x00', offset)
+                  if end == -1:
+                      return ''
+                  return data[offset:end].decode('utf-16-le', errors='ignore').strip()
+              except:
+                  return ''
+          
+          def lambda_handler(event, context):
+              for record in event['Records']:
+                  bucket = record['s3']['bucket']['name']
+                  key = record['s3']['object']['key']
+                  
+                  if not key.endswith('.sqlaudit'):
+                      continue
+                  
+                  print(f"Processing: {key}")
+                  
+                  response = s3.get_object(Bucket=bucket, Key=key)
+                  file_content = response['Body'].read()
+                  
+                  events = parse_sqlaudit_file(file_content)
+                  
+                  print(f"Extracted {len(events)} events")
+                  
+                  output_key = key.replace('.sqlaudit', '.json').replace('raw/', 'processed/')
+                  
+                  s3.put_object(
+                      Bucket=bucket,
+                      Key=output_key,
+                      Body=json.dumps(events, indent=2),
+                      ContentType='application/json'
+                  )
+                  
+                  print(f"Saved to: {output_key}")
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps(f'Processed {len(event["Records"])} files')
+              }
+
+  # S3 Trigger Permission
+  SqlAuditParserPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SqlAuditParserFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub 'arn:aws:s3:::${AuditLogsBucket}'
+
+Outputs:
+  ParserFunction:
+    Description: SQL Audit Parser Lambda Function
+    Value: !Ref SqlAuditParserFunction

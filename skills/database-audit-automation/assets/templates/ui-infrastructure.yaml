@@ -1,0 +1,476 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Database Audit AI Solution - Web UI'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: db-audit-ai
+  AuditLogsBucket:
+    Type: String
+    Default: db-audit-ai-audit-logs-<YOUR-ACCOUNT-ID>
+  ReportsBucket:
+    Type: String
+    Default: db-audit-ai-reports-<YOUR-ACCOUNT-ID>
+
+Resources:
+  # S3 Bucket for Web UI (Private)
+  WebUIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-web-ui-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ['*']
+            AllowedMethods: [GET, HEAD]
+            AllowedHeaders: ['*']
+
+  # CloudFront Origin Access Identity
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub 'OAI for ${ProjectName}'
+
+  WebUIBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebUIBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowCloudFrontOAI
+            Effect: Allow
+            Principal:
+              CanonicalUser: !GetAtt CloudFrontOAI.S3CanonicalUserId
+            Action: s3:GetObject
+            Resource: !Sub '${WebUIBucket.Arn}/*'
+
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt WebUIBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${CloudFrontOAI}'
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          Compress: true
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${ProjectName}-api'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: ['*']
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ApiGateway
+      StageName: prod
+      AutoDeploy: true
+
+  # Lambda Role for API
+  ApiLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-api-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ApiPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${AuditLogsBucket}'
+                  - !Sub 'arn:aws:s3:::${AuditLogsBucket}/*'
+                  - !Sub 'arn:aws:s3:::${ReportsBucket}'
+                  - !Sub 'arn:aws:s3:::${ReportsBucket}/*'
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProjectName}-*'
+
+  # Lambda: Get Reports
+  GetReportsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-api-get-reports'
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt ApiLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          REPORTS_BUCKET: !Ref ReportsBucket
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+          
+          s3 = boto3.client('s3')
+          
+          def lambda_handler(event, context):
+              bucket = os.environ['REPORTS_BUCKET']
+              
+              try:
+                  response = s3.list_objects_v2(
+                      Bucket=bucket,
+                      Prefix='monthly-reports/'
+                  )
+                  
+                  reports = []
+                  if 'Contents' in response:
+                      for obj in response['Contents']:
+                          if obj['Key'].endswith('.txt'):
+                              reports.append({
+                                  'key': obj['Key'],
+                                  'date': obj['LastModified'].isoformat(),
+                                  'size': obj['Size']
+                              })
+                  
+                  reports.sort(key=lambda x: x['date'], reverse=True)
+                  
+                  return {
+                      'statusCode': 200,
+                      'headers': {
+                          'Content-Type': 'application/json',
+                          'Access-Control-Allow-Origin': '*'
+                      },
+                      'body': json.dumps({'reports': reports})
+                  }
+              except Exception as e:
+                  return {
+                      'statusCode': 500,
+                      'headers': {'Access-Control-Allow-Origin': '*'},
+                      'body': json.dumps({'error': str(e)})
+                  }
+
+  GetReportsIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt GetReportsFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  GetReportsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'GET /reports'
+      Target: !Sub 'integrations/${GetReportsIntegration}'
+
+  GetReportsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetReportsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+  # Lambda: Get Report Content
+  GetReportContentFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-api-get-report-content'
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt ApiLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          REPORTS_BUCKET: !Ref ReportsBucket
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          
+          s3 = boto3.client('s3')
+          
+          def lambda_handler(event, context):
+              bucket = os.environ['REPORTS_BUCKET']
+              
+              try:
+                  key = event['queryStringParameters'].get('key')
+                  if not key:
+                      return {
+                          'statusCode': 400,
+                          'headers': {'Access-Control-Allow-Origin': '*'},
+                          'body': json.dumps({'error': 'Missing key parameter'})
+                      }
+                  
+                  response = s3.get_object(Bucket=bucket, Key=key)
+                  content = response['Body'].read().decode('utf-8')
+                  
+                  return {
+                      'statusCode': 200,
+                      'headers': {
+                          'Content-Type': 'application/json',
+                          'Access-Control-Allow-Origin': '*'
+                      },
+                      'body': json.dumps({'content': content})
+                  }
+              except Exception as e:
+                  return {
+                      'statusCode': 500,
+                      'headers': {'Access-Control-Allow-Origin': '*'},
+                      'body': json.dumps({'error': str(e)})
+                  }
+
+  GetReportContentIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt GetReportContentFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  GetReportContentRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'GET /report-content'
+      Target: !Sub 'integrations/${GetReportContentIntegration}'
+
+  GetReportContentPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetReportContentFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+  # Lambda: Get Dashboard Stats
+  GetStatsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-api-get-stats'
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt ApiLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          AUDIT_LOGS_BUCKET: !Ref AuditLogsBucket
+          REPORTS_BUCKET: !Ref ReportsBucket
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime, timedelta
+          
+          s3 = boto3.client('s3')
+          
+          def lambda_handler(event, context):
+              audit_bucket = os.environ['AUDIT_LOGS_BUCKET']
+              reports_bucket = os.environ['REPORTS_BUCKET']
+              
+              try:
+                  # Count logs
+                  today = datetime.now().strftime('%Y/%m/%d')
+                  
+                  sqlserver_count = 0
+                  postgres_count = 0
+                  
+                  try:
+                      response = s3.list_objects_v2(
+                          Bucket=audit_bucket,
+                          Prefix=f'sqlserver/audit-logs/{today}/'
+                      )
+                      sqlserver_count = response.get('KeyCount', 0)
+                  except:
+                      pass
+                  
+                  try:
+                      response = s3.list_objects_v2(
+                          Bucket=audit_bucket,
+                          Prefix=f'postgresql/audit-logs/{today}/'
+                      )
+                      postgres_count = response.get('KeyCount', 0)
+                  except:
+                      pass
+                  
+                  # Count reports
+                  report_count = 0
+                  try:
+                      response = s3.list_objects_v2(
+                          Bucket=reports_bucket,
+                          Prefix='monthly-reports/'
+                      )
+                      report_count = response.get('KeyCount', 0)
+                  except:
+                      pass
+                  
+                  return {
+                      'statusCode': 200,
+                      'headers': {
+                          'Content-Type': 'application/json',
+                          'Access-Control-Allow-Origin': '*'
+                      },
+                      'body': json.dumps({
+                          'stats': {
+                              'sqlserver_logs_today': sqlserver_count,
+                              'postgresql_logs_today': postgres_count,
+                              'total_reports': report_count,
+                              'last_updated': datetime.now().isoformat()
+                          }
+                      })
+                  }
+              except Exception as e:
+                  return {
+                      'statusCode': 500,
+                      'headers': {'Access-Control-Allow-Origin': '*'},
+                      'body': json.dumps({'error': str(e)})
+                  }
+
+  GetStatsIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt GetStatsFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  GetStatsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'GET /stats'
+      Target: !Sub 'integrations/${GetStatsIntegration}'
+
+  GetStatsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetStatsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+  # Lambda: Trigger Report Generation
+  TriggerReportFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-api-trigger-report'
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt ApiLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          REPORT_GENERATOR_FUNCTION: !Sub '${ProjectName}-report-generator'
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          
+          lambda_client = boto3.client('lambda')
+          
+          def lambda_handler(event, context):
+              function_name = os.environ['REPORT_GENERATOR_FUNCTION']
+              
+              try:
+                  response = lambda_client.invoke(
+                      FunctionName=function_name,
+                      InvocationType='Event'
+                  )
+                  
+                  return {
+                      'statusCode': 200,
+                      'headers': {
+                          'Content-Type': 'application/json',
+                          'Access-Control-Allow-Origin': '*'
+                      },
+                      'body': json.dumps({'message': 'Report generation triggered'})
+                  }
+              except Exception as e:
+                  return {
+                      'statusCode': 500,
+                      'headers': {'Access-Control-Allow-Origin': '*'},
+                      'body': json.dumps({'error': str(e)})
+                  }
+
+  TriggerReportIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt TriggerReportFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  TriggerReportRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'POST /trigger-report'
+      Target: !Sub 'integrations/${TriggerReportIntegration}'
+
+  TriggerReportPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref TriggerReportFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint
+    Value: !GetAtt ApiGateway.ApiEndpoint
+  
+  WebUIBucket:
+    Description: S3 bucket for web UI
+    Value: !Ref WebUIBucket
+  
+  WebUIUrl:
+    Description: Web UI URL
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+  
+  CloudFrontDistribution:
+    Description: CloudFront distribution ID
+    Value: !Ref CloudFrontDistribution
