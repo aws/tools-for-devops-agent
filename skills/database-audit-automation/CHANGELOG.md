@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.0.0] - 2026-09-22
+
+### Changed
+- Aligned the skill with the Agent Skills specification.
+- **SKILL.md** rewritten as explicit step-by-step instructions for three tasks (review a
+  compliance report, reason about an anomaly alert, troubleshoot the pipeline), each with
+  expected outcomes, on-failure handling, and an edge-cases section, per the spec's recommended
+  body sections.
+- Removed the "Required Agent Permissions" section from SKILL.md and moved it to README.md as a
+  **user prerequisite** — permissions must be granted before the skill is used, so they belong in
+  setup docs, not in the agent's runtime instructions.
+- Removed the "References" link section from SKILL.md to README.md (user-facing material).
+
+### Removed
+- **Removed all user deployment artifacts from `assets/`** (CloudFormation templates, audit-setup
+  SQL, deploy scripts). Per the spec, `assets/` is for resources the agent uses (e.g. output
+  templates), not user deployment files. The solution is self-contained in its source repository
+  (https://github.com/aws-samples/sample-database-auditing-automation); README.md now directs
+  users to deploy from there before using the skill, keeping a single source of truth for
+  deployment and leaving the skill as the only artifact here.
+
+### Added
+- **`assets/templates/audit-report-review.md`** — the output template the agent fills when
+  reviewing a compliance report, defining the expected output (a prioritized, actionable audit
+  review rather than a copy or bare summary of the report). Referenced from SKILL.md, per the
+  spec's "templates for output format" guidance.
+- README.md sections for the expected output and the deployment pointer.
+
 ## [2.1.0] - 2026-09-22
 
 ### Changed
