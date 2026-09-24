@@ -18,4 +18,4 @@
 - Runtime budget with a degradation ladder — skipped or compacted scope is declared in the Summary artifact and the final report rather than silently omitted
 - Requires `list_artifacts` alongside `create_or_update_artifact` so re-runs update existing artifacts by title instead of creating duplicates
 - Uses the `understanding-agent-space`, `tool-use-best-practices`, and `chat-tool-use-best-practices` memory stores
-- Scope is pinned to cluster `retail-store-demo` in `us-east-1`; edit Workflow step 1 of the system prompt to target a different cluster
+- One cluster per run: Workflow step 1 of the system prompt ships `<CLUSTER_NAME>` and `<REGION>` placeholders to replace at creation time, and a run request that explicitly names a cluster overrides the saved default without looking it up first

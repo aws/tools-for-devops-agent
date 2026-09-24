@@ -20,7 +20,7 @@ The multi-artifact split is the agent's central design decision. A full review s
 
 ## Important behavior notes
 
-**Fixed scope.** The system prompt as published targets cluster `retail-store-demo` in `us-east-1` and does not enumerate clusters. Change the cluster name and region in the prompt's Workflow step 1 before using it against your own cluster, or the run will stop when it cannot find that cluster.
+**One cluster per run, resolved from placeholders.** The system prompt ships with `<CLUSTER_NAME>` and `<REGION>` placeholders in Workflow step 1 — **replace both with your cluster's name and region before saving the prompt**. That is the only edit the prompt needs; if you skip it, the run stops immediately with a clear "cluster not found" report instead of reviewing anything. A run's request can also override the default: invoking the agent with an explicit cluster name (for example, `Run the operations review on cluster payments-prod in eu-west-1`) reviews that cluster directly, without first looking up the one written in the prompt. The agent never enumerates clusters — exactly one is in scope per run.
 
 **Read-only.** `use_kubectl` is limited to `get`, `describe`, `logs`, `version`, `config current-context`, `cluster-info`, `top`, and `get --raw`. Kubernetes Secret values are never fetched. Remediations are proposals for human approval — the agent performs no mutations.
 
@@ -67,7 +67,7 @@ If the agent cannot reach the cluster at all, confirm the access entry uses the 
 3. In the dialog, click "Form".
 4. Fill out the form:
    - **Name** — `aws-eks-operations-review` (lowercase letters, numbers, hyphens only).
-   - **System prompt** — copy the content of `SYSTEM_PROMPT.md` from this directory and paste it in. If your target cluster is not `retail-store-demo` in `us-east-1`, edit Workflow step 1 before saving.
+   - **System prompt** — copy the content of `SYSTEM_PROMPT.md` from this directory and paste it in, then replace the `<CLUSTER_NAME>` and `<REGION>` placeholders in Workflow step 1 with your cluster's name and region (for example, `my-cluster` and `eu-west-1`) before saving. This is required — a prompt saved with the placeholders intact stops every run at "cluster not found".
    - **Skills** — select the skill listed in [Skills to add](#skills-to-add) below.
 5. Click "Create agent".
 6. Assign the tools and memory stores as described in the two sections below. Tools and memory stores are configured through Chat, not the Form.
