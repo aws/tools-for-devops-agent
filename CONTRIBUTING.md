@@ -148,6 +148,10 @@ An exemption excuses the tool's results, not the testing itself. Still test the 
 
 The file fails closed: invalid JSON, an unknown test type, or a missing or empty `reason` grants no exemption and is reported as a problem in its own right, so a typo can't silently waive a requirement. Because the file is part of the PR, granting an exemption goes through normal review like any other change — don't add one without agreement from a maintainer.
 
+An exemption is a claim about what can't be produced, and a maintainer who doesn't accept the claim can reject it by adding the `enforce-evals` label to the pull request. That withdraws every exemption the PR's skills claim — each exempted type is checked as though the file weren't there, and the check's log names the reason it rejected next to the results now required.
+
+The label is all-or-nothing for the whole pull request: it withdraws every exempted test type on every skill the PR touches, not just the claim a maintainer means to refuse. On a PR where one exemption is unfounded and another is legitimate, applying the label requires the results for both, and the legitimate one has to be settled in review — either by producing those results too, or by splitting the skills across separate PRs.
+
 Everything below that depth is left unchecked, so `outputs/`, `_metadata.json`, `cli_debug/`, `sdk_debug/`, iteration counts, and scenario names are all free to vary, as are any extra files.
 
 The check is rolling out gradually, so whether a violation fails the check or is only reported depends on the skill:
@@ -167,7 +171,7 @@ Pull requests that were already open when this check was introduced are listed b
 
 Two things are outside that, because they aren't about producing results you were never asked for. A skill that already carries eval results on `main` still can't lose them, and a PR that ships *part* of the new layout still has to finish it or exempt the rest — the same rule as the third row of the table above, for the same reason.
 
-A maintainer can still hold one of these pull requests to the full requirement, by adding the `enforce-evals` label to it. That makes every skill the PR touches enforced, the same as for a new skill, and it applies to any pull request rather than only the listed ones. Adding it re-runs the check straight away. It stays on the PR once applied, so the requirement doesn't lapse on the next push — which is why it's a separate label from `needs-evals`, the one automation clears whenever the check passes.
+A maintainer can still hold one of these pull requests to the full requirement, by adding the `enforce-evals` label to it. That makes every skill the PR touches enforced, the same as for a new skill, and it withdraws any exemptions those skills claim, as described above — otherwise a PR exempting all three test types would stay green whatever the label said, since an exemption removes the very violations that enforcement decides the severity of. It applies to any pull request rather than only the listed ones. Adding it re-runs the check straight away. It stays on the PR once applied, so the requirement doesn't lapse on the next push — which is why it's a separate label from `needs-evals`, the one automation clears whenever the check passes.
 
 The list is a one-off for the transition and shrinks as those pull requests close. It'll be deleted once they're all closed.
 
