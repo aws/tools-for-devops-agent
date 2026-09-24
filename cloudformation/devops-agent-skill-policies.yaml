@@ -20,6 +20,7 @@ Metadata:
           - EnableSupportCases
           - EnableRdsOperationReview
           - EnableEksOperationReview
+          - EnableEcsOperationReview
           - EnableInvestigationCostGuardrail
           - EnableEnrichWithSecurityAgent
           - EnableCrmInvestigationGuidelines
@@ -68,6 +69,12 @@ Parameters:
   EnableEksOperationReview:
     Type: String
     Description: EKS Operation Review skill (covered by managed policy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableEcsOperationReview:
+    Type: String
+    Description: ECS Operation Review skill (adds compute-optimizer:GetECSServiceRecommendations for the PERF8 rightsizing check).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -130,6 +137,7 @@ Conditions:
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
   SkillSupportCases: !Equals [!Ref EnableSupportCases, 'true']
   SkillRdsOperationReview: !Equals [!Ref EnableRdsOperationReview, 'true']
+  SkillEcsOperationReview: !Equals [!Ref EnableEcsOperationReview, 'true']
   SkillInvestigationCostGuardrail: !Equals [!Ref EnableInvestigationCostGuardrail, 'true']
   SkillMskOperations: !Equals [!Ref EnableMskOperations, 'true']
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
@@ -234,6 +242,24 @@ Resources:
             Effect: Allow
             Action:
               - logs:GetLogEvents
+            Resource: '*'
+
+  # ecs-operation-review: adds compute-optimizer:GetECSServiceRecommendations (PERF8 rightsizing);
+  # every other API the skill uses is covered by AIDevOpsAgentAccessPolicy
+  PolicyEcsOperationReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillEcsOperationReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-EcsOperationReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ComputeOptimizerEcsRecommendations
+            Effect: Allow
+            Action:
+              - compute-optimizer:GetECSServiceRecommendations
             Resource: '*'
 
   # investigation-cost-guardrail: adds pricing:GetProducts
@@ -447,6 +473,7 @@ Outputs:
         - aws-health-events: ${EnableAwsHealthEvents} (health:DescribeEventTypes)
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
+        - ecs-operation-review: ${EnableEcsOperationReview} (compute-optimizer:GetECSServiceRecommendations)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
         - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
