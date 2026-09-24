@@ -48,7 +48,7 @@ Execute a comprehensive Amazon ECS operations review across the 6 review pillars
 - **references/pillars/resiliency.md** — Resiliency & HA checks (REL1-REL14). Read only when running the Resiliency pillar.
 - **references/pillars/observability.md** — Observability checks (OBS1-OBS9). Read only when running the Observability pillar.
 - **references/pillars/security.md** — Security checks (SEC1-SEC20). Read only when running the Security pillar.
-- **references/pillars/operations.md** — Operations checks (OPS1-OPS8). Read only when running the Operations pillar.
+- **references/pillars/operations.md** — Operations checks (OPS1-OPS9). Read only when running the Operations pillar.
 - **references/pillars/performance.md** — Performance checks (PERF1-PERF11). Read only when running the Performance pillar.
 - **references/pillars/additional-analysis.md** — Additional Analysis checks (ADD1-ADD7). Read only when running the Additional pillar.
 - **references/alarm-thresholds.md** — Recommended CloudWatch alarm thresholds for IDR onboarding.
@@ -73,7 +73,7 @@ This skill is self-contained — the procedural workflow is embedded below (this
 - **Resiliency and High Availability (REL1-REL14)** — Multi-AZ, desired count, deployment config, circuit breaker, deployment alarms, health checks, subnet AZ spread, capacity-provider managed termination protection, target-group deregistration delay, capacity provider infrastructure multi-AZ
 - **Observability (OBS1-OBS9)** — Container Insights, CloudWatch alarms, logging, log retention, distributed tracing, metrics monitoring
 - **Security (SEC1-SEC20)** — IAM least privilege, network mode, secrets management, ECR image scanning, security groups, VPC endpoints, private connectivity, encryption at rest, encryption in transit (TLS), VPC Flow Logs, GuardDuty Runtime Monitoring
-- **Operations (OPS1-OPS8)** — Deployment controller, resource tagging, IaC-managed, platform version, ECS agent version
+- **Operations (OPS1-OPS9)** — Deployment controller, resource tagging, IaC-managed, platform version, ECS agent version, ECS Exec posture and session audit logging
 - **Performance (PERF1-PERF11)** — Auto scaling, CPU/memory rightsizing, capacity provider strategy, managed scaling / targetCapacity headroom, CapacityProviderReservation 7-day baseline analysis, base/weight strategy design, Compute Optimizer recommendations
 - **Additional Analysis & Recommendations (ADD1-ADD7)** — Graviton/ARM64, Fargate Spot, Service Connect, cost optimization, CloudWatch Logs Insights queries, ECS Managed Instances evaluation
 
@@ -86,7 +86,7 @@ All calls below are public AWS API operations. Use read-only (describe/list/get)
 |-----|------|---------|
 | ecs.describeServices | 1 | Foundation — service config, task def, LB, deployment, network |
 | ecs.describeTaskDefinition | 2 | Container defs, CPU/memory, roles, log config, network mode |
-| ecs.describeClusters | 2 | Cluster settings, Container Insights, capacity providers |
+| ecs.describeClusters | 2 | Cluster settings, Container Insights, capacity providers, Exec logging config (`include=["CONFIGURATIONS"]` for OPS9) |
 | ecs.listTasks | 2 | Running task ARNs for the service |
 | ecs.describeTasks | 3 | Task health, AZ spread, connectivity status |
 | ecs.listContainerInstances | 2 | Container instance ARNs for EC2 launch type clusters |

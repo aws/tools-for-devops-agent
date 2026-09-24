@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.5.0
+
+Review feedback from PR #42 (70 baseline checks, up from 69):
+
+- **OPS9 (new): ECS Exec audit logging** — when `enableExecuteCommand` is
+  true, grade the cluster's `executeCommandConfiguration.logging`
+  (CloudWatch Logs / S3, not `NONE`) via `ecs.describeClusters` with
+  `include=["CONFIGURATIONS"]`. OPS3 keeps grading whether Exec is enabled
+  in production; OPS9 grades whether enabled Exec sessions leave an audit
+  trail. N/A when Exec is disabled.
+- **SEC19 applicability fixed** — GuardDuty Runtime Monitoring does not
+  support ECS Managed Instances; "Applies To" narrowed from All to
+  Fargate/EC2 and the MI N/A rule added to the compute-platform note in
+  `references/checks.md`.
+- **SEC5 caveat** — `readonlyRootFilesystem` is incompatible with ECS Exec;
+  the recommendation now says to note the tradeoff where Exec is in use
+  instead of recommending the setting unconditionally.
+- **Header fixes** — `pillars/operations.md` said OPS1-OPS7 (now OPS1-OPS9)
+  and `pillars/security.md` said SEC1-SEC19 (now SEC1-SEC20); both headers
+  now match their tables and the checks index.
+
 ## 2.4.0
 
 Capacity provider depth + compute platform awareness (69 baseline checks, up
