@@ -3,7 +3,7 @@ name: firehose-operation-review
 description: 'Comprehensive Amazon Data Firehose (formerly Kinesis Data Firehose) review aligned with the AWS Well-Architected Framework and Firehose best practices. Use this skill when a user asks to review, audit, or assess Amazon Data Firehose delivery streams for best-practices compliance, security posture, reliability, delivery health, performance, cost optimization, service quotas, operational excellence, or sustainability. Triggers on requests like "Firehose review", "Kinesis Firehose best practices audit", "review my delivery streams", "Firehose health check", "why is my Firehose lagging", "Firehose delivery failures", "Firehose cost optimization review", or "ORR for Firehose".'
 metadata:
   author: stharolz
-  version: "1.2.0"
+  version: "1.4.0"
   aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
   aws-devops-agent-skills.aws-services: "Amazon Data Firehose"
   aws-devops-agent-skills.technical-domains: "Analytics, Streaming Data"
@@ -29,6 +29,19 @@ Activate this skill when the user asks to:
 - Evaluate Firehose security, reliability, delivery health, performance, cost, or quotas
 - Perform a Firehose operational readiness review (ORR)
 - Investigate delivery lag (data freshness), delivery failures, throttling, or cost drivers
+
+## Review Checklist
+
+Work through these steps in order — each depends on the outputs of the ones before it.
+Track progress against this checklist and do not skip a step unless its scope makes it
+inapplicable (e.g. a single-stream review skips the account rollup).
+
+- [ ] Step 1: Identify target scope (accounts, regions, streams, pillars, window)
+- [ ] Step 2: Discover Firehose resources and capture per-stream config
+- [ ] Step 3: Collect CloudWatch metrics (load the thresholds reference first)
+- [ ] Step 4: Analyze against best practices (load the checklist reference first)
+- [ ] Step 5: Generate the report (load the report template)
+- [ ] Step 6: Track findings over time (recurring reviews)
 
 ## Step 1: Identify Target Scope
 
@@ -115,7 +128,9 @@ or no metrics, and analyzing them produces misleading "0 IncomingRecords" findin
 
 ## Step 3: Collect CloudWatch Metrics (namespace `AWS/Firehose`)
 
-**Before querying metrics, load the authoritative thresholds reference:**
+**Before querying metrics**, and whenever classifying a metric value as Normal, Warning,
+or Critical in this step or Step 4, load the authoritative thresholds reference —
+[references/metrics-thresholds.md](references/metrics-thresholds.md) — with:
 ```
 read_skill_resource(skill_id="firehose-operation-review", path="references/metrics-thresholds.md")
 ```
@@ -130,55 +145,31 @@ best-effort general guidance. Surfacing the gap keeps reviews consistent and aud
 
 All Firehose metrics use the dimension `DeliveryStreamName`. Pull metric data with
 `cloudwatch.GetMetricData` over the selected window (default 7 days). Firehose
-publishes metrics at 1-minute granularity. Select the metric set based on the stream's
-**source** and **destination** discovered in Step 2 — many metrics are only emitted for
-a specific destination or when a feature (backup, transform, format conversion,
-dynamic partitioning) is enabled.
+publishes metrics at 1-minute granularity, and `GetMetricData` allows up to 500
+metric-data queries per call — batch requests and paginate when a region has many streams.
 
-Core ingestion metrics (all streams):
+**Select which metrics to pull from the stream's source and destination (Step 2), then
+use the thresholds reference as the authoritative catalog.** `metrics-thresholds.md`
+lists every metric — by group (ingestion, source-specific for Kinesis/MSK, per-destination
+delivery, backup-to-S3, and feature metrics for transform / format conversion / dynamic
+partitioning / SSE / CloudWatch-Logs decompression) — with its statistic and its
+Normal/Warning/Critical bands. Pull only the groups that apply:
+- **Always**: the ingestion metrics (volume, `ThrottledRecords`, the `*PerSecondLimit`
+  metrics).
+- **By source**: the Kinesis-source or MSK-source metric group.
+- **By destination**: the `DeliveryTo<Dest>.*` group for the stream's one active
+  destination (`<Dest>` ∈ `S3`, `Redshift`, `AmazonOpenSearchService`,
+  `AmazonOpenSearchServerless`, `Splunk`, `HttpEndpoint`, `Snowflake`), plus `BackupToS3.*`
+  when backup is enabled.
+- **By enabled feature**: the transform, format-conversion, dynamic-partitioning, SSE, or
+  decompression group — only when Step 2 showed that feature is on.
 
-| Metric | Stat | Signal |
-|--------|------|--------|
-| IncomingRecords / IncomingBytes | Sum | Volume; denominator for rate calcs (throttled data is excluded) |
-| IncomingPutRequests | Sum | Direct PUT request volume |
-| ThrottledRecords | Sum | Records dropped because an ingestion limit was exceeded |
-| RecordsPerSecondLimit / BytesPerSecondLimit / PutRequestsPerSecondLimit | Max | Current throttling limits — compare observed load against these |
+Do not hand-copy metric names from memory; take them and their bands from the loaded
+reference so the classification is consistent across runs.
 
-Source-specific ingestion metrics:
-- **Kinesis Data Streams source**: `DataReadFromKinesisStream.Records/Bytes`,
-  `KinesisMillisBehindLatest` (read lag), `ThrottledGetRecords`,
-  `ThrottledGetShardIterator`, `ThrottledDescribeStream`.
-- **MSK source**: `DataReadFromSource.Records/Bytes`, `KafkaOffsetLag`,
-  `DataReadFromSource.Backpressured`, `SourceThrottled.Delay`.
-
-Delivery metrics — pick the set matching the destination (`<Dest>` is one of
-`S3`, `Redshift`, `AmazonOpenSearchService`, `AmazonOpenSearchServerless`, `Splunk`,
-`HttpEndpoint`, `Snowflake`):
-
-| Metric | Stat | Signal |
-|--------|------|--------|
-| DeliveryTo`<Dest>`.Success | Average | Delivery success ratio (successful / total). < 1.0 = retries/failures |
-| DeliveryTo`<Dest>`.Records / .Bytes | Sum | Delivered volume |
-| DeliveryTo`<Dest>`.DataFreshness (or `DeliveryToS3.DataFreshness` for warehouse dests) | Max | Age of oldest undelivered record (seconds) — the key delivery-lag signal |
-| DeliveryToSplunk.DataAckLatency | Average | Splunk ack latency (rising trend = slow indexers) |
-| DeliveryToSnowflake.DataCommitLatency | Average | Snowflake commit latency after insert |
-| BackupToS3.Success / .Records / .DataFreshness | Avg / Sum / Max | Fallback-to-S3 activity for failed (or all) records |
-
-Feature metrics (only when the feature is enabled):
-- **Transform Lambda**: `ExecuteProcessing.Success` (ratio), `ExecuteProcessing.Duration`
-  (ms), `SucceedProcessing.Records/Bytes`.
-- **Format conversion**: `SucceedConversion.Records/Bytes`, `FailedConversion.Records/Bytes`.
-- **Dynamic partitioning**: `PartitionCount`, `PartitionCountExceeded` (1/0),
-  `ActivePartitionsLimit`, `PerPartitionThroughput`, `DeliveryToS3.ObjectCount`.
-- **SSE**: `KMSKeyAccessDenied`, `KMSKeyDisabled`, `KMSKeyInvalidState`, `KMSKeyNotFound`.
-- **CloudWatch Logs decompression**: `OutputDecompressedRecords.Failed`,
-  `OutputDecompressedBytes.Failed`.
-
-`cloudwatch.GetMetricData` allows up to 500 metric-data queries per call — batch
-requests and paginate when a region has many streams.
-
-**Alarm coverage.** To evaluate the alarm-coverage checks (Steps 4.4 and the
-best-practices checklist), call `cloudwatch.DescribeAlarms` and match alarms whose
+**Alarm coverage.** To evaluate the alarm-coverage checks (the Service Quotas and
+Operational Excellence items in the best-practices checklist), call
+`cloudwatch.DescribeAlarms` and match alarms whose
 `MetricName` is `ThrottledRecords` or `DeliveryTo<Dest>.DataFreshness` with a
 `Dimensions` entry of `DeliveryStreamName` = the stream under review. A stream with no
 such alarm is a coverage gap.
@@ -195,7 +186,8 @@ from a permission denial.
 
 ## Step 4: Analyze Against Best Practices
 
-**Before evaluating findings, load the best-practices checklist:**
+**Before evaluating findings**, load the best-practices checklist —
+[references/best-practices-checklist.md](references/best-practices-checklist.md) — with:
 ```
 read_skill_resource(skill_id="firehose-operation-review", path="references/best-practices-checklist.md")
 ```
@@ -217,204 +209,38 @@ The overall review *is* a best-practices assessment: every finding maps to an it
 `best-practices-checklist.md`. "Best Practices" is therefore the framing for the whole
 review, not a separate pillar — do not create a "Best Practices" pillar section.
 
-The inline `→ SEVERITY` tags below assign each finding's severity; the **Severity
-Definitions** table (near the end of this file) is the single source of truth for what
-each level *means* and its remediation SLA. If an SLA changes, update that table only —
-the inline tags reference it, they do not restate the SLA.
+Each checklist item carries a **base severity** (and any escalation conditions); the
+**Severity Definitions** table (near the end of this file) is the single source of truth
+for what each level *means* and its remediation SLA. If an SLA changes, update that table
+only.
 
-### 4.1 Security
-Ref: [Data protection in Amazon Data Firehose](https://docs.aws.amazon.com/firehose/latest/dev/encryption.html)
+### Pillar checks: Security, Reliability, Performance, Service Quotas, Operational Excellence, Sustainability
 
-- **Encryption at rest**: Direct PUT streams without server-side encryption (SSE)
-  enabled → HIGH. For streams sourced from a Kinesis data stream, encryption is
-  inherited from the source stream — verify the source stream is encrypted → HIGH if
-  not.
-  [Server-side encryption](https://docs.aws.amazon.com/firehose/latest/dev/encryption.html)
-- **Customer-managed KMS keys**: state the factual signal first — "stream uses an
-  AWS-owned key (`AWS_OWNED_CMK`), not a customer-managed CMK, so there is no independent
-  key rotation control or CloudTrail key-usage audit trail." Only escalate to → MEDIUM
-  when there is an **objective data-classification signal** that the stream carries
-  regulated/sensitive data — e.g. a data-classification tag such as
-  `data-classification` / `classification` / `pii` = `sensitive`/`confidential`/`pci`/`phi`
-  (from `ListTagsForDeliveryStream`), or a user-provided statement that the stream is
-  in scope for a compliance regime. Absent such a signal, report it as **INFO**
-  ("consider a CMK if this stream ingests regulated data") rather than assuming
-  sensitivity.
-- **Destination S3 encryption**: an S3/Extended-S3 destination writing objects without
-  KMS encryption → MEDIUM.
-- **KMS key health**: any non-zero `KMSKeyAccessDenied`, `KMSKeyDisabled`,
-  `KMSKeyInvalidState`, or `KMSKeyNotFound` → CRITICAL (records cannot be delivered and
-  are dropped or backed up — active data-loss risk).
-- **IAM role scoping**: report the factual signal — the stream's delivery IAM role grants
-  an action on `Resource: "*"` (rather than the specific destination / transform Lambda /
-  KMS key ARNs). Flag any such `*`-resource grant at **INFO** with the specific
-  statement quoted, and recommend narrowing to the concrete ARNs the stream actually uses;
-  do not judge whether the breadth is "justified" — that's the owner's call, and a
-  comprehensive least-privilege audit is out of scope. State the fact and the
-  least-privilege alternative; let the reader decide.
-  [Controlling access](https://docs.aws.amazon.com/firehose/latest/dev/controlling-access.html)
-- **Access control beyond the delivery role**: the delivery IAM role governs what Firehose
-  can write to the destination, but *who/what can put records to, or administer, the stream*
-  is controlled by identity/SCP policies granting `firehose:PutRecord*` / `firehose:*` on
-  the stream ARN. Flag overly broad grants of `firehose:PutRecord*` or admin actions (e.g.
-  `firehose:*` on `*`) where visible → INFO (a full identity-policy audit is out of scope).
-  Also treat delivery-stream tags as an access-control input: tags can back ABAC / condition
-  keys, so missing or inconsistent tags weaken tag-based access control (this overlaps the
-  Operational Excellence tagging check — report the security angle only where tags are
-  actually used in a policy condition).
-- **VPC / private connectivity**: OpenSearch or Redshift destinations reachable over
-  the public internet where a VPC configuration is available and appropriate → MEDIUM.
-- **Cross-account / PrivateLink destinations**: for OpenSearch, Redshift, and HTTP-endpoint
-  destinations that write cross-account or over a public endpoint, prefer a VPC/PrivateLink
-  path so delivery traffic stays off the public internet, and confirm the destination
-  resource policy and the delivery IAM role are scoped to the specific cross-account
-  resource → MEDIUM. A cross-account destination reachable only over the public internet
-  with a broadly-scoped role → HIGH.
-  [Firehose and interface VPC endpoints (PrivateLink)](https://docs.aws.amazon.com/firehose/latest/dev/vpc.html)
-- **HTTP endpoint destinations**: verify TLS (HTTPS) is used and the access key is
-  stored securely → HIGH if a non-HTTPS endpoint is configured.
-- **CloudWatch error logging**: evaluated under Operational Excellence (4.6) — a
-  disabled log config blocks diagnosis of delivery/transform errors. Not double-reported
-  here.
+For these six pillars, **work the loaded `references/best-practices-checklist.md` item by
+item** — it is the canonical list of checks, and it carries each check's base severity,
+escalation conditions, and the judgment rules that must be applied verbatim (e.g. the
+customer-managed-KMS data-classification escalation, the "state the fact, don't judge it"
+rule for `Resource: "*"` IAM grants, the Redshift-COPY vs Firehose root-causing, Iceberg
+landing reconciliation, and the "report CloudWatch error logging once under Operational
+Excellence" cross-reference). Classify every metric value against the bands in
+`references/metrics-thresholds.md`. Do not re-derive checks or severities from memory —
+apply the reference so two runs of the same stream agree.
 
-### 4.2 Reliability
-Ref: [Troubleshooting Amazon Data Firehose](https://docs.aws.amazon.com/firehose/latest/dev/troubleshoot-common-issues.html)
+Two procedural rules that span the pillars:
+- **Service Quotas**: read every quota value from `servicequotas.GetServiceQuota` and the
+  `*PerSecondLimit` CloudWatch metrics — never hardcode the Region-dependent defaults —
+  then apply the Warning/Critical bands from the *Service Quota Utilization* table.
+- **Sustainability** overlaps Cost Optimization: cross-reference the Cost items rather than
+  duplicating rationale, and raise a finding one severity level only when the waste is
+  "large" per `references/metrics-thresholds.md`.
 
-- **Data freshness (delivery lag)**: `DeliveryTo<Dest>.DataFreshness` (Max)
-  **sustained** (per the "sustained" definition in `references/metrics-thresholds.md` —
-  ≥ 3 consecutive datapoints) above the configured buffering interval plus the retry
-  duration indicates records are aging out and at risk of loss → HIGH; freshness
-  **climbing monotonically** (per that file's definition — non-decreasing across ≥ 6
-  consecutive 5-min datapoints, ~30 min, delivery stalled) → CRITICAL. This is the single
-  most important Firehose health signal.
-  [Data freshness](https://docs.aws.amazon.com/firehose/latest/dev/troubleshoot-common-issues.html)
-- **Delivery success ratio**: `DeliveryTo<Dest>.Success` (Average) < 1.0 indicates
-  retries; a sustained ratio well below 1.0 with no S3 backup configured → HIGH
-  (records can be lost after retries exhaust). Use the **exact per-destination metric
-  name** for `<Dest>`: `DeliveryToS3`, `DeliveryToRedshift`,
-  `DeliveryToAmazonOpenSearchService`, `DeliveryToAmazonOpenSearchServerless`,
-  `DeliveryToSplunk`, `DeliveryToHttpEndpoint`, `DeliveryToSnowflake`, `DeliveryToIceberg`.
-  Note the OpenSearch metric is `DeliveryToAmazonOpenSearchService.*` — there is **no**
-  `DeliveryToElasticsearch.*` metric (the service was renamed; the old name does not exist
-  in `AWS/Firehose`). Do not invent a metric for a destination not in this list.
-- **S3 backup for failed records**: streams to Redshift/OpenSearch/Splunk/HTTP/Snowflake
-  with `S3BackupMode` = `Disabled` → MEDIUM (failed records are not recoverable). For
-  sensitive or non-reproducible data → HIGH.
-- **Redshift-specific delivery failures**: for Redshift destinations, a sustained
-  `DeliveryToRedshift.Success` < 1.0 (with healthy `DeliveryToS3.Success` for the staging
-  step) points to Redshift-side COPY failures, not a Firehose problem — common causes are a
-  **paused/resized cluster**, an **invalid or missing COPY IAM role**, a bad COPY option
-  string, or a schema/column mismatch. These surface in `STL_LOAD_ERRORS` on the cluster,
-  not in `AWS/Firehose` → MEDIUM (HIGH if the staging S3 backup is also disabled, since
-  rows then have no recoverable copy). Recommend confirming cluster availability and the
-  COPY role separately from the generic delivery-success check.
-- **Retry duration**: destination `RetryOptions.DurationInSeconds` set to 0 or very low
-  for a destination that can experience transient failures → MEDIUM.
-- **Source read lag**: for Kinesis-sourced streams, high `KinesisMillisBehindLatest` →
-  MEDIUM (Firehose is falling behind the source; check for throttling on the source
-  stream). For MSK-sourced streams, high `KafkaOffsetLag` or
-  `DataReadFromSource.Backpressured` = true → MEDIUM.
-- **Transform Lambda failures**: `ExecuteProcessing.Success` < 1.0 or elevated
-  `ExecuteProcessing.Duration` approaching the transform timeout → MEDIUM (failed
-  transforms are sent to the S3 error prefix; confirm backup is configured).
-- **Format conversion failures**: non-zero `FailedConversion.Records` → MEDIUM
-  (records that fail Parquet/ORC conversion go to the S3 error prefix).
-- **Dynamic partitioning key-extraction failures**: for streams with dynamic partitioning
-  enabled, records whose partition keys can't be extracted are routed to the S3 error
-  prefix rather than delivered — a common cause is a **JQ expression error** (partitioning
-  via `MetadataExtraction`/JQ) or records that aren't newline-delimited / valid JSON when
-  the config expects them to be. Watch `JQProcessing.Duration` (present only when JQ-based
-  partitioning is enabled) and, more importantly, **check the S3 error prefix for
-  partitioning-error records** and reconcile against `IncomingRecords` → MEDIUM when the
-  error prefix is accumulating partitioning failures (HIGH if no one is monitoring the
-  error prefix). Validate the JQ expression and the source record format against the
-  partitioning config.
-- **Iceberg delivery correctness (CloudWatch is not sufficient)**: for Apache Iceberg
-  destinations, delivery metrics (`DeliveryToIceberg.Bytes`/`.Records`) and the S3 error
-  prefix are **necessary but not sufficient** evidence that data landed. Records must be
-  **one JSON object per record**; aggregated or compressed source records — notably from a
-  **CloudWatch Logs subscription filter** (gzipped, multi-event payloads) or KPL
-  aggregation — can fail to land in the Iceberg table. Confirm the source emits a single
-  JSON object per record (decompress/split upstream, e.g. in the transform Lambda), and
-  recommend an **independent row-count reconciliation** between records ingested
-  (`IncomingRecords`) and rows actually present in the Iceberg table → MEDIUM where a
-  compressed/aggregated source feeds an Iceberg destination without a decompression/split
-  step; recommend reconciliation regardless.
-  [Iceberg considerations — one JSON object per record](https://docs.aws.amazon.com/firehose/latest/dev/apache-iceberg-considerations.html)
-- **Multi-region / DR posture (architecture consideration, not API-verifiable)**: Firehose
-  has no native cross-region delivery or replication, so DR for a critical stream is an
-  architecture decision (e.g. a parallel stream in a second Region, or region-redundant
-  producers) that the skill cannot confirm from Firehose APIs. For streams the user
-  designates business-critical, surface this as an **INFO** consideration — prompt whether a
-  regional-failover path exists — rather than a graded finding.
-
-### 4.3 Performance
-Ref: [Amazon Data Firehose data delivery](https://docs.aws.amazon.com/firehose/latest/dev/basic-deliver.html)
-
-- **Throttling**: sustained non-zero `ThrottledRecords` → HIGH (ingestion exceeds a
-  stream limit; request a quota increase and/or add producer-side backoff). Correlate
-  with `RecordsPerSecondLimit` / `BytesPerSecondLimit` / `PutRequestsPerSecondLimit`.
-- **Buffering hints tuning**: buffering interval much larger than the workload's
-  latency requirement inflates delivery lag; interval/size too small drives excessive
-  small-object writes (cost + downstream inefficiency). Flag hints misaligned with the
-  destination and freshness target → MEDIUM.
-- **Splunk ack latency**: rising `DeliveryToSplunk.DataAckLatency` trend → MEDIUM (slow
-  Splunk indexers; scale HEC/indexers).
-- **Dynamic partitioning limits**: `PartitionCountExceeded` emitting 1, or
-  `PartitionCount` approaching `ActivePartitionsLimit` (default 500) → MEDIUM (records
-  over the limit go to the error bucket; request a limit increase or reduce
-  partition cardinality).
-
-### 4.4 Service Quotas
-Ref: [Amazon Data Firehose quotas](https://docs.aws.amazon.com/firehose/latest/dev/limits.html)
-
-- **Streams per region**: default 50 delivery streams per account per Region. Compare the
-  stream count against the quota from `servicequotas.GetServiceQuota` and apply the
-  utilization bands in the "Service Quota Utilization" table of
-  `references/metrics-thresholds.md` → MEDIUM in the Warning band (request an increase
-  before hitting `LimitExceededException` on create).
-- **Per-stream throughput (Direct PUT)**: default 2,000 transactions/s, 5,000 records/s,
-  and (region-dependent) 5 MB/s — these three scale proportionally. Compare observed P95
-  ingestion (records/s, bytes/s from `IncomingRecords`/`IncomingBytes`, PUT rate from
-  `IncomingPutRequests`) against `RecordsPerSecondLimit` / `BytesPerSecondLimit` /
-  `PutRequestsPerSecondLimit`, and apply the utilization bands from the "Service Quota
-  Utilization" table in `references/metrics-thresholds.md` → MEDIUM in the Warning band;
-  Critical band with non-zero `ThrottledRecords` → HIGH.
-- **Iceberg-table throughput**: Direct PUT to Apache Iceberg tables has a lower,
-  Region-dependent, evolving per-stream limit. **Do not hardcode it** — see the Iceberg
-  throughput note in `references/metrics-thresholds.md` (Service Quota Utilization section)
-  for the current values, the `AppendOnly` auto-scaling behavior, and the
-  throughput-vs-active-partitions tradeoff. "Approaching the limit" = the Warning band
-  (> 75% of the `GetServiceQuota` value) from that file → MEDIUM.
-- **Quota-utilization alarming**: recommend a CloudWatch alarm that fires as observed
-  throughput approaches the `*PerSecondLimit` values → LOW where missing. General alarm
-  coverage (`ThrottledRecords`, `DataFreshness`) is assessed under Operational Excellence
-  (4.6) to avoid double-reporting.
-
-### 4.5 Cost Optimization
+### Cost Optimization — impact-estimation procedure
 Ref: [Amazon Data Firehose pricing](https://aws.amazon.com/firehose/pricing/)
 
-- **Compression**: an S3/Extended-S3 destination with `CompressionFormat` = UNCOMPRESSED
-  → MEDIUM (GZIP/Snappy/Zip cut S3 storage and downstream scan cost; Snappy/ZIP are
-  splittable for query engines).
-  [Compression](https://docs.aws.amazon.com/firehose/latest/dev/create-configure.html)
-- **Format conversion to columnar**: S3 data queried by Athena/EMR/Redshift Spectrum
-  stored as JSON/CSV rather than Parquet/ORC → MEDIUM opportunity (columnar formats cut
-  scan cost dramatically).
-  [Record format conversion](https://docs.aws.amazon.com/firehose/latest/dev/record-format-conversion.html)
-- **Buffering sized for fewer, larger objects**: very small buffer size/interval on
-  high-volume S3 streams produces many small objects → MEDIUM (higher S3 PUT cost and
-  poor query performance). Increase buffer size where the freshness target allows.
-- **Dynamic partitioning efficiency**: dynamic partitioning producing many tiny
-  partitions (low `PerPartitionThroughput`, high `DeliveryToS3.ObjectCount`) → LOW
-  opportunity (consolidate partition keys).
-- **Idle streams**: `IncomingRecords` ≈ 0 over the full window on an existing stream →
-  INFO (candidate for decommissioning; Firehose bills on ingested volume, but idle
-  streams still consume the per-region stream quota). **Guard against false positives on
-  new streams:** `IncomingRecords` ≈ 0 alone does not distinguish "abandoned" from "newly
-  created, not yet in use." Only flag as idle when `CreateTimestamp` age exceeds the
-  idle-stream minimum-age threshold in `references/metrics-thresholds.md`; for younger
-  streams, note "recently created — insufficient history to judge idleness" instead.
+The Cost checklist items (compression, columnar conversion, buffering, dynamic-partitioning
+efficiency, idle streams) live in `references/best-practices-checklist.md`. This section is
+the **procedure for the "Est. Impact" column** those findings reference — it stays in the
+body because it is analysis logic, not a lookup table.
 
 **Estimating the "Est. Impact" column (rough, directional).** These are back-of-envelope
 figures for prioritization, not billing forecasts — always confirm against the current
@@ -464,148 +290,27 @@ Never emit a dollar figure without stating which rate source (1/2/3) was used.
   ingesting less data — e.g. filtering/decommissioning idle streams, covered separately.)
 Keep every figure clearly marked as an estimate with its assumptions and rate source stated.
 
-### 4.6 Operational Excellence
-Ref: [Monitoring Amazon Data Firehose](https://docs.aws.amazon.com/firehose/latest/dev/monitoring.html)
-
-- **CloudWatch error logging**: `CloudWatchLoggingOptions.Enabled` = false means
-  delivery and transform failures land in the S3 error prefix with no queryable error
-  detail → MEDIUM (blocks incident diagnosis). (This is the operational-diagnosis angle;
-  the Security pillar flags the same setting for its incident-response impact — report it
-  once, under Operational Excellence, and cross-reference.)
-- **Alarm coverage**: using the `cloudwatch.DescribeAlarms` results from Step 3, a stream
-  with no alarm on `ThrottledRecords` or `DeliveryTo<Dest>.DataFreshness` → MEDIUM (no
-  proactive signal for throttling or delivery lag). Also recommend alarms on
-  `DeliveryTo<Dest>.Success` (Minimum) and any `KMSKey*` metric. If alarm state could not
-  be read, report "alarm coverage not verified" rather than a gap.
-- **Tagging / ownership**: streams missing ownership and cost-allocation tags (from
-  `ListTagsForDeliveryStream`) → LOW (hinders cost attribution and incident routing). Note
-  that tags only drive cost visibility once **activated as cost-allocation tags in the
-  Billing console** — that activation state is a billing-account setting not readable
-  through this skill's APIs, so recommend the user verify activation in Billing / Cost
-  Explorer rather than reporting it as verified here. **If the user provides an org tagging
-  standard**, check completeness against their required keys (commonly `team`/`owner`,
-  `environment`, `cost-center`, `application`) and flag streams missing any required key;
-  absent a stated standard, flag only fully-untagged streams and suggest a baseline
-  ownership + environment + cost-center tag set rather than asserting specific keys.
-- **Configuration management**: streams whose config drifts from an IaC baseline, or that
-  appear hand-edited (frequent `LastUpdateTimestamp` changes with no change record) → LOW
-  (prefer CloudFormation/CDK/Terraform-managed streams for repeatability and auditability).
-- **Observability of transforms**: transform-Lambda-enabled streams without an alarm on
-  `ExecuteProcessing.Success` / `.Duration`, or without the Lambda's own logging → LOW.
-- **Runbook readiness**: destinations prone to transient failure (Splunk, HTTP endpoint,
-  Snowflake) without a documented backup/replay procedure for the S3 error prefix → LOW.
-
-### 4.7 Sustainability
-Ref: [Sustainability Pillar — AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/sustainability-pillar/sustainability-pillar.html)
-
-Firehose sustainability levers overlap heavily with Cost Optimization — the same
-efficiency measures reduce both spend and the energy/storage footprint of the data. Flag
-these under Sustainability with a cross-reference to 4.5 rather than duplicating the cost
-rationale; keep severities at LOW/INFO unless the waste is **large** — see the
-"large waste" definition in `references/metrics-thresholds.md` (≥ 25% of the stream's
-estimated monthly delivered-storage cost, or ≥ 100 GB/month of avoidable volume), which
-raises the finding one severity level.
-
-- **Data reduction before storage**: uncompressed S3 output, or row-oriented (JSON/CSV)
-  data that could be columnar (Parquet/ORC), stores and later scans more bytes than
-  necessary → LOW (less data provisioned and processed downstream). Cross-ref 4.5
-  Compression / Format conversion.
-- **Efficient object sizing**: many tiny S3 objects (low `PerPartitionThroughput`, high
-  `DeliveryToS3.ObjectCount`) increase request overhead and downstream scan inefficiency →
-  LOW. Right-size buffering. Cross-ref 4.5.
-- **Decommission idle streams**: streams with `IncomingRecords` ≈ 0 over the window hold
-  provisioned resources for no workload → INFO (remove to shrink the footprint). Cross-ref
-  4.5 Idle streams.
-- **Right-size retention downstream**: where Firehose feeds an S3 data lake, recommend S3
-  lifecycle policies / tiering on the delivered prefixes so cold data is not kept on hot
-  storage indefinitely → INFO (Firehose does not set these, but the review should surface
-  the opportunity for the destination bucket).
-
 ## Step 5: Generate Report
 
-Generate a shareable report artifact for the review.
-
-Artifact naming: `firehose-review-<stream-or-account>-<region>-<YYYY-MM-DD>.md`
-Examples: `firehose-review-orders-stream-us-east-1-2026-09-17.md` (single stream),
-`firehose-review-123456789012-us-east-1-2026-10-02.md` (account/region rollup)
-
-Structure the Markdown document with:
-
-### Report Header
+Generate a shareable Markdown report artifact for the review. **Before writing the
+report, load the report template** — [assets/report-template.md](assets/report-template.md)
+— and follow its section order and tables exactly:
 ```
-# Amazon Data Firehose Operational Review — <stream or account-id> / <region>
-Date: <YYYY-MM-DD> | Analysis window: <start> to <end>
-Pillars reviewed: <list>
+read_skill_resource(skill_id="firehose-operation-review", path="assets/report-template.md")
 ```
+The template covers the artifact naming convention, header, executive summary, the
+"Change Since Last Review" diff (Step 6), the account-level rollup, per-pillar findings
+tables, configuration and metrics summaries, quota utilization, the combined
+cost/sustainability opportunities table, the priority matrix, next steps, and the
+reference-links appendix. Populate every applicable section and omit the ones the
+template marks as scope-dependent (e.g. skip the account rollup for a single-stream
+review).
 
-### Executive Summary
-- Health: ✅ HEALTHY / ⚠️ WARNINGS / ❌ CRITICAL
-- Finding counts by severity
-- Top 3 critical/high items
-
-### Change Since Last Review (recurring runs only — see Step 6)
-When a prior report for this scope exists, summarize before the detailed findings:
-- New (with severity), Resolved, and Persistent (with any severity change) counts
-- Call out any new or persistent CRITICAL/HIGH explicitly
-Omit this section (or note "baseline review") when there is no prior run to compare.
-
-### Account-Level Rollup (when scope spans multiple streams/regions)
-When the review covers more than one stream, lead with an account/region rollup before
-the per-stream detail so the reader sees systemic gaps at a glance:
-
-| Region | Streams | Encryption gaps | Streams w/o backup | Streams throttling | Delivery-lag alerts | Uncompressed S3 |
-|--------|---------|-----------------|--------------------|--------------------|--------------------|-----------------|
-
-Summarize as "X of Y streams" per issue class, and call out any finding that affects a
-**majority of streams** — per the "majority of streams" definition in
-`references/metrics-thresholds.md` (≥ 60% of in-scope streams) — as a systemic
-(account-level) item rather than repeating it per stream. Skip this section for a
-single-stream review.
-
-### Findings by Pillar
-For each of Security, Reliability, Performance, Service Quotas, Cost Optimization,
-Operational Excellence, and Sustainability:
-
-| # | Finding | Severity | Current State | Recommendation |
-
-Include a pillar even when it has no findings — show it with a "No findings — ✅" row so
-the reader can see the pillar was assessed (Sustainability and Operational Excellence will
-often be light).
-
-### Delivery Stream Configuration
-Per stream: source type, destination, buffering hints, compression, encryption,
-backup mode, transform/format-conversion status, and CloudWatch logging.
-
-### CloudWatch Metrics Summary
-| Stream | Metric | Stat | Value | Status | Finding |
-
-### Service Quota Utilization
-| Quota | Value | Observed P95 | Utilization % | Risk |
-
-### Cost Optimization & Sustainability Opportunities
-Cost and sustainability opportunities share the same efficiency levers — list them
-together, marking which pillar(s) each serves:
-
-| Opportunity | Signal | Pillar(s) | Est. Impact | Effort |
-
-### Priority Matrix
-| # | Finding | Severity | Pillar | Effort | Impact |
-
-### Next Steps
-- Immediate (CRITICAL/HIGH — 7 days)
-- Short-term (MEDIUM — 30 days)
-- Long-term (LOW — 90 days)
-
-### Appendix — Reference Links
-- [Amazon Data Firehose Developer Guide](https://docs.aws.amazon.com/firehose/latest/dev/what-is-this-service.html)
-- [Monitoring with CloudWatch metrics](https://docs.aws.amazon.com/firehose/latest/dev/monitoring-with-cloudwatch-metrics.html)
-- [CloudWatch alarm best practices](https://docs.aws.amazon.com/firehose/latest/dev/firehose-cloudwatch-metrics-best-practices.html)
-- [Firehose quotas](https://docs.aws.amazon.com/firehose/latest/dev/limits.html)
-- [Data protection / encryption](https://docs.aws.amazon.com/firehose/latest/dev/encryption.html)
-- [Record format conversion](https://docs.aws.amazon.com/firehose/latest/dev/record-format-conversion.html)
-- [Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html)
-- [Operational Excellence Pillar](https://docs.aws.amazon.com/wellarchitected/latest/operational-excellence-pillar/welcome.html)
-- [Sustainability Pillar](https://docs.aws.amazon.com/wellarchitected/latest/sustainability-pillar/sustainability-pillar.html)
+**If this `read_skill_resource` call fails**, note it at the top of the report —
+"⚠️ report template (`assets/report-template.md`) could not be loaded; report structure
+follows the skill's general guidance" — and still produce the standard sections
+(header, executive summary, findings by pillar, configuration, metrics, quotas, cost,
+priority matrix, next steps).
 
 **Re-run behavior:** Before creating a new report artifact, check for an existing report
 for the same stream/account and region. If one exists, refresh it with the latest data
@@ -677,7 +382,7 @@ This skill collects data exclusively through native AWS APIs
   the DevOps Agent's primary cloud-source IAM role.
 
 **Runtime inputs vs. eval fixtures.** At review time the skill reads only live AWS APIs
-and its own `references/` files. `evals/files/firehose-context.json` is an **evaluation
+and its own `references/` and `assets/` files. `evals/files/firehose-context.json` is an **evaluation
 fixture** used solely by the skill-evaluation harness — it is **not** a runtime input and
 is not read during an actual review (interactive, scheduled, or automated). If it is
 absent or unreadable, real reviews are unaffected; only eval runs that reference it would

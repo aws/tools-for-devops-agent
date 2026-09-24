@@ -200,7 +200,7 @@ SKILL.md and the checklist inherit the change.
 | **"Sustained"** (default definition) | a condition true in **≥ 3 consecutive datapoints** at the metric's native period (1-min for most `AWS/Firehose` metrics; 5-min where aggregated) — i.e. not a single spike | Data freshness, throttling, delivery-success, quota-Critical, and any check that says "sustained" |
 | **"Climbing monotonically" / stalled** | `DataFreshness` (Max) **non-decreasing across ≥ 6 consecutive 5-min datapoints (~30 min)** with no return toward the buffering interval | Reliability data-freshness "delivery stalled → CRITICAL" |
 | **"Majority of streams"** (account rollup) | **≥ 60%** of the in-scope streams share the same finding class → treat as a systemic/account-level item | Step 5 account-level rollup |
-| **"Large" waste** (Sustainability/Cost escalation) | an opportunity whose estimated monthly impact is **≥ 25%** of the stream's estimated monthly delivered-storage cost, **or** ≥ 100 GB/month of avoidable stored volume — above this, raise severity one level (INFO→LOW, LOW→MEDIUM) | Sustainability 4.7, Cost 4.5 |
+| **"Large" waste** (Sustainability/Cost escalation) | an opportunity whose estimated monthly impact is **≥ 25%** of the stream's estimated monthly delivered-storage cost, **or** ≥ 100 GB/month of avoidable stored volume — above this, raise severity one level (INFO→LOW, LOW→MEDIUM) | Sustainability and Cost Optimization pillars |
 
 † Heuristic, not an AWS-published number — see the ingestion-metrics footnote earlier in this file.
 All rows in this table are skill heuristics for consistency, not AWS-published SLAs — tune per environment, but apply them uniformly within a review so two runs agree.

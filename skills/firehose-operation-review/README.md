@@ -28,7 +28,7 @@ All data is gathered through native AWS APIs (`firehose`, `cloudwatch`, `service
 
 This skill is intended for the following agent types (selected in the Operator Web App at upload time):
 
-- **On-demand** — conversational invocation in Chat ("review my Firehose streams", "why is my Firehose lagging").
+- **Chat tasks** — conversational invocation in Chat ("review my Firehose streams", "why is my Firehose lagging").
 - **Evaluation** — proactive operational improvement recommendations.
 
 Select **Generic** instead if you want the skill available to all agent types. When using this skill through the [aws-operation-review custom agent](../../custom-agents/aws-operation-review/), select **All agents / Generic** so the custom agent can load it.
@@ -74,9 +74,21 @@ SKILL.md              # frontmatter + skill instructions (required)
 references/
 ├── best-practices-checklist.md
 └── metrics-thresholds.md
+assets/
+└── report-template.md
 ```
 
-`README.md`, `CHANGELOG.md`, `.skilleval.yaml`, and `evals/` are development-only files excluded from the upload.
+> **Important:** `SKILL.md` must sit at the **archive root**, not nested under a
+> `firehose-operation-review/` parent folder. `read_skill_resource` resolves resource
+> paths (`references/…`, `assets/…`) relative to that root, so a nested zip makes every
+> resource fetch fail with *"Failed to get skill resource."* Always build the zip from
+> **inside** the skill directory (as shown above), and confirm with
+> `unzip -l firehose-operation-review.zip` that the first entry is `SKILL.md` and the
+> resources appear as `references/…` and `assets/…` (no leading directory).
+
+`SKILL.md`, `references/`, and `assets/` are the runtime skill payload and **must** be in
+the zip. `README.md`, `CHANGELOG.md`, `.skilleval.yaml`, and `evals/` are development-only
+files excluded from the upload.
 
 Constraints (enforced at upload time):
 
@@ -89,7 +101,7 @@ Constraints (enforced at upload time):
 1. Navigate to the **Skills** page in your Agent Space Operator Web App.
 2. Click **Add skill** → **Upload skill**.
 3. Drag and drop `firehose-operation-review.zip` (or browse to it).
-4. Select agent types: **On-demand** and **Evaluation** (or leave **Generic** to make it available to all agent types).
+4. Select agent types: **Chat tasks** and **Evaluation** (or leave **Generic** to make it available to all agent types).
 5. Review the validation results.
 6. Click **Upload**.
 
@@ -123,7 +135,28 @@ firehose-operation-review/
 ├── references/
 │   ├── best-practices-checklist.md    # checklist mapped to Firehose best practices
 │   └── metrics-thresholds.md          # CloudWatch metric thresholds & severity rules
+├── assets/
+│   └── report-template.md             # report artifact structure loaded in Step 5
 └── evals/                             # evaluation data (not included in upload zip)
+    ├── evals.json                     # eval definitions (hand-written)
+    ├── files/                         # fixture data for functional runs
+    │   └── firehose-context.json
+    ├── structure/                     # structure-test results (one file per run)
+    │   └── structure-tests-results-v<N>.json
+    ├── best-practices/                # best-practices results, one dir per run
+    │   └── v<N>/
+    │       ├── benchmark.json
+    │       └── iteration-<n>/
+    │           └── best-practices-tests-results.json
+    └── functional/                    # functional results, one dir per run
+        └── v<N>/
+            ├── benchmark.json
+            ├── evals.json
+            ├── _metadata.json
+            └── iteration-<n>/
+                └── <scenario>/
+                    ├── with_skill/
+                    └── without_skill/
 ```
 
 ## Best-Practices Pillars Covered

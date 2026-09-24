@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0] - 2026-09-24
+### Changed
+- Addressed best-practices evaluation finding **BP-03 (detailed reference materials must not be in body)** by applying progressive disclosure to the two content areas the evaluator flagged:
+  - **Step 3 (metrics):** removed the inline CloudWatch metric tables (core ingestion, source-specific, per-destination delivery, and feature metrics). `SKILL.md` now instructs which metric *groups* to pull based on the stream's source/destination/enabled features and defers every metric name, statistic, and Normal/Warning/Critical band to `references/metrics-thresholds.md` (which already held them, in richer form)
+  - **Step 4 (pillar checks):** removed the verbose per-pillar bullet lists (old §4.1–4.7) that restated each check with its severity inline. The pillar checks now direct the agent to work `references/best-practices-checklist.md` item by item as the canonical list; the body retains only the cross-pillar procedural rules (Service Quotas read from `GetServiceQuota`; Sustainability cross-reference + large-waste escalation) and the Cost "Est. Impact" estimation *procedure* (analysis logic, not a lookup table)
+- Moved each check's **base severity, escalation conditions, and judgment rules** (customer-managed-KMS data-classification escalation, the "state the fact, don't judge" rule for `Resource: "*"` IAM grants, Redshift-COPY vs Firehose root-causing, Iceberg landing reconciliation, and the "report CloudWatch error logging once under Operational Excellence" cross-reference) into `references/best-practices-checklist.md` so no analysis detail was lost in the move
+- Restored the **dynamic-partitioning key-extraction failure** check (JQ expression/record-format errors, `JQProcessing.Duration`, reconcile the S3 error prefix against `IncomingRecords`) into the checklist's Reliability section
+
+## [1.3.0] - 2026-09-24
+### Changed
+- Addressed best-practices evaluation findings (BP-12, BP-16, BP-04/BP-05):
+  - **BP-16 (step-by-step guidance):** added a top-level `- [ ]` checkbox "Review Checklist" summarizing Steps 1–6 so the multi-step workflow uses checklist format, not just `## Step N:` headings
+  - **BP-12 (templates must not be in body):** moved the full Step 5 report template out of `SKILL.md` into `assets/report-template.md`, loaded conditionally via `read_skill_resource`; Step 5 now keeps only a brief summary plus a load-failure fallback
+  - **BP-04/BP-05 (reference links + when to load):** the thresholds and best-practices-checklist references and the new report template are now cited with markdown links (`[references/…](references/…)`, `[assets/report-template.md](assets/report-template.md)`) at their load points, each with an explicit "when to load" condition
+- Data Source Boundaries note updated to mention the skill's `assets/` files alongside `references/`
+
 ## [1.2.0] - 2026-09-23
 ### Changed
 - Defined previously-vague judgment thresholds concretely and single-sourced them in the `references/metrics-thresholds.md` "Derived / tunable thresholds" table: **"sustained"** = ≥ 3 consecutive datapoints; **"climbing monotonically"/stalled** = non-decreasing across ≥ 6 consecutive 5-min datapoints (~30 min); **"majority of streams"** = ≥ 60% of in-scope streams; **"large waste"** = ≥ 25% of a stream's estimated monthly delivered-storage cost or ≥ 100 GB/month avoidable; quota Critical band tightened to ≥ 90%. SKILL.md data-freshness, Iceberg "approaching the limit", account-rollup, and Sustainability wording now reference these definitions
