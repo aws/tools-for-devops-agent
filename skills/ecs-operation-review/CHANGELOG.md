@@ -1,9 +1,28 @@
 # Changelog
 
-## 2.5.0
+## [2.5.0] - 2026-09-24
 
 Review feedback from PR #42 (70 baseline checks, up from 69):
 
+- **Renamed `aws-ecs-operations-review` → `ecs-operation-review`** to match
+  the skill family convention (`eks-operation-review`,
+  `rds-operation-review`): no `aws-` prefix, singular "operation". Directory,
+  frontmatter `name`, and the `llms.txt` entry all updated.
+- **Compute Optimizer permission gated in CloudFormation** — the live
+  `AIDevOpsAgentAccessPolicy` grants no `compute-optimizer` actions, so
+  PERF8's `computeoptimizer.getECSServiceRecommendations` call would return
+  AccessDenied under the agent's own role. Added
+  `EnableEcsOperationReview` parameter, condition, inline policy
+  (`compute-optimizer:GetECSServiceRecommendations`), and a
+  `SkillPolicySummary` line to
+  `cloudformation/devops-agent-skill-policies.yaml`; reframed the README
+  permissions section around `AIDevOpsAgentAccessPolicy` coverage instead
+  of `ReadOnlyAccess`.
+- **Strict docs build fixed** — removed the two relative `.md` links in
+  `README.md` (`evals/TESTING.md`, `references/report-format.md`) that
+  failed `mkdocs build --strict`.
+- **Frontmatter version aligned with this changelog** (was `1.0.0`), and
+  frontmatter `author` set to the GitHub username.
 - **OPS9 (new): ECS Exec audit logging** — when `enableExecuteCommand` is
   true, grade the cluster's `executeCommandConfiguration.logging`
   (CloudWatch Logs / S3, not `NONE`) via `ecs.describeClusters` with
@@ -21,7 +40,7 @@ Review feedback from PR #42 (70 baseline checks, up from 69):
   and `pillars/security.md` said SEC1-SEC19 (now SEC1-SEC20); both headers
   now match their tables and the checks index.
 
-## 2.4.0
+## [2.4.0] - 2026-08-09
 
 Capacity provider depth + compute platform awareness (69 baseline checks, up
 from 64):
@@ -52,7 +71,7 @@ from 64):
   (`CapacityProviderReservation` saturation alarm) and baseline-metrics row;
   report header now records the resolved compute platform.
 
-## 2.3.2
+## [2.3.2] - 2026-08-09
 
 Fix skill upload rejection (`400 ValidationException` from the AWS DevOps Agent
 Asset API):
@@ -66,26 +85,26 @@ Asset API):
   frontmatter. Description (with its trigger phrases) is unchanged and within
   the 1024-char limit.
 
-## 2.3.1
+## [2.3.1] - 2026-08-09
 
 Compliance with the AgentSkills.io open standard (aligns this skill with the
 `aws-eks-operations-review` skill):
 
-- Renamed directory to `aws-ecs-operations-review` (registry
+- Renamed directory to `ecs-operation-review` (registry
   `aws-<service>-<capability>` naming convention).
 - Rewrote SKILL.md frontmatter to the spec: only `name`, `description`,
   `license`, `compatibility`, and `metadata` at the top level. Moved `version`
   and `tags` inside `metadata:`; added `license`, `compatibility`, and the
   `aws-devops-agent-skills.*` + `devops-agent-tools.*` registry metadata.
   Front-loaded the `description` with trigger phrases for discovery.
-- Fixed the `name` field to match the directory (`aws-ecs-operations-review`).
+- Fixed the `name` field to match the directory (`ecs-operation-review`).
 - Renamed `reference/` → `references/` (spec convention) and updated all
   SKILL.md links.
 - Added `README.md` (packaging / prerequisites / upload / usage) and an
   `evals/` harness (routing + knowledge evals) mirroring the EKS skill. No
   change to the assessment workflow, pillars, checks, or report format.
 
-## 2.3.0
+## [2.3.0] - 2026-08-09
 
 - Baseline: comprehensive ECS operations review across the 6 review pillars
   (Resiliency & HA, Observability, Security, Operations, Performance,

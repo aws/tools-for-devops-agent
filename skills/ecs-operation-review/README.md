@@ -43,7 +43,7 @@ An existing [Agent Space](https://docs.aws.amazon.com/devopsagent/latest/usergui
 
 ### 2. Read-only permissions
 
-The Agent Space IAM role needs read-only (`describe*` / `list*` / `get*`) access to: ECS, CloudWatch, CloudWatch Logs, IAM, Application Auto Scaling, Elastic Load Balancing v2, ECR, EC2/VPC, GuardDuty, and Compute Optimizer. The AWS managed **`ReadOnlyAccess`** policy (or a least-privilege subset of the above) is sufficient. No cluster-level access entry or kubectl connectivity is required — ECS is assessed entirely through AWS control-plane APIs.
+The Agent Space IAM role needs read-only (`describe*` / `list*` / `get*`) access to: ECS, CloudWatch, CloudWatch Logs, IAM, Application Auto Scaling, Elastic Load Balancing v2, ECR, EC2/VPC, GuardDuty, and Compute Optimizer. The DevOps Agent managed policy **`AIDevOpsAgentAccessPolicy`** covers all of these except one: it grants no `compute-optimizer` actions, so the PERF8 rightsizing check needs `compute-optimizer:GetECSServiceRecommendations` added. Deploy `cloudformation/devops-agent-skill-policies.yaml` with `EnableEcsOperationReview=true` to attach it as a gated inline policy. Without it the skill still runs — PERF8 is marked N/A under the access-limitation protocol. No cluster-level access entry or kubectl connectivity is required — ECS is assessed entirely through AWS control-plane APIs.
 
 ### 3. AWS Knowledge MCP
 
@@ -51,10 +51,10 @@ Used for documentation-link lookups on findings and alarm recommendations. This 
 
 ## Packaging the skill
 
-From the directory **containing** `aws-ecs-operations-review/`:
+From the directory **containing** `ecs-operation-review/`:
 
 ```bash
-zip -r aws-ecs-operations-review.zip aws-ecs-operations-review/ \
+zip -r ecs-operation-review.zip ecs-operation-review/ \
   -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' \
   -x '*/.git/*' '*/evals/*' '*/CHANGELOG.md' '*/README.md' '*.DS_Store'
 ```
@@ -62,7 +62,7 @@ zip -r aws-ecs-operations-review.zip aws-ecs-operations-review/ \
 The uploaded zip contains:
 
 ```
-aws-ecs-operations-review/
+ecs-operation-review/
 ├── SKILL.md                    # frontmatter + skill instructions (required)
 └── references/
     ├── checks.md               # checks index (read first)
@@ -80,7 +80,7 @@ Upload-time constraints: `SKILL.md` required with `name` + `description` frontma
 
 1. Open the **Skills** page in your Agent Space Operator Web App.
 2. **Add skill** → **Upload skill**.
-3. Drag and drop `aws-ecs-operations-review.zip`.
+3. Drag and drop `ecs-operation-review.zip`.
 4. Select agent types: **On-demand** and **Evaluation** (or **Generic**).
 5. Review validation results → **Upload**.
 
@@ -101,11 +101,11 @@ The `evals/` directory holds an evaluation harness:
 - `eval_queries.json` — routing checks (does the right query trigger the skill?).
 - `evals.json` — skill-knowledge evals (six pillars, read-only contract, ARN validation, coverage gate, alarm deliverable), run against `evals/files/service-context.json`.
 
-Run them with your skill-eval runner. Record results in [`evals/TESTING.md`](evals/TESTING.md) (model × eval-suite pass-rate matrix) and re-run after any change to the frontmatter or workflow steps. Results are recorded from real runs, never fabricated.
+Run them with your skill-eval runner. Record results in `evals/TESTING.md` (model × eval-suite pass-rate matrix) and re-run after any change to the frontmatter or workflow steps. Results are recorded from real runs, never fabricated.
 
 ## Severity
 
-Internally the skill grades on `Critical / High / Medium / Low / Info` tiers; the report writer maps these to customer-facing descriptive labels (see [`references/report-format.md`](references/report-format.md)). It never emits internal severity numbers in customer-facing output.
+Internally the skill grades on `Critical / High / Medium / Low / Info` tiers; the report writer maps these to customer-facing descriptive labels (see `references/report-format.md`). It never emits internal severity numbers in customer-facing output.
 
 ## Source attribution
 

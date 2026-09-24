@@ -1,5 +1,5 @@
 ---
-name: aws-ecs-operations-review
+name: ecs-operation-review
 description: >
   Performs a comprehensive Amazon ECS operations review across the 6 review
   pillars (Resiliency & HA, Observability, Security, Operations, Performance,
@@ -11,8 +11,8 @@ description: >
   "ECS security review", "ECS best practices audit", "review ECS services
   for a workload".
 metadata:
-  author: kulkshya
-  version: "1.0.0"
+  author: shyamkulkarni
+  version: "2.5.0"
   aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
   aws-devops-agent-skills.aws-services: "Amazon ECS"
 ---
