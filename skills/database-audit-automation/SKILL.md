@@ -35,7 +35,7 @@ Produce an actionable **Database Audit Review** — not a copy of the report, no
 - [ ] **Step 1: Locate the report.** If the user pasted the report into chat, use that and skip to Step 3. Otherwise ask for the account ID (and prefix, if customized) and the month; if the month is unknown, list `s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/` to show available reports.
   - Expected: you have the report path or its content.
   - On failure (access denied listing/reading S3): tell the user the missing permission (see `README.md`) and ask them to paste the report instead.
-- [ ] **Step 2: Read the report object** (`s3:GetObject`) at `monthly-reports/<YYYY-MM>/audit-report.txt`.
+- [ ] **Step 2: Read the report object** (`s3:GetObject`) at `monthly-reports/<YYYY>/<MM>/audit-report.txt`.
   - Expected: the full report text is loaded.
 - [ ] **Step 3: Extract findings by section.** The report has: Executive Summary, Login Activity Analysis, Privileged Access Monitoring, Change Pattern Analysis, Compliance Findings, Risk Assessment, Recommendations. Pull the concrete facts (principals, objects, times, counts) from each.
   - Expected: a list of raw findings with their supporting detail.
@@ -75,7 +75,7 @@ Work through the pipeline in order until you find the broken stage:
 
 ### Reports not generated
 - [ ] **Step 1:** Check the report generator's schedule (EventBridge) and that `db-audit-ai-report-generator` timeout is 900s.
-- [ ] **Step 2:** Check that the expected month exists under `monthly-reports/<YYYY-MM>/`.
+- [ ] **Step 2:** Check that the expected month exists under `monthly-reports/<YYYY>/<MM>/`.
 - [ ] **Step 3:** Check the report-generator Lambda logs for errors.
 
 ### Bedrock access denied

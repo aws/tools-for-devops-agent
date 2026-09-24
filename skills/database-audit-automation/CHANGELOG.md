@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.1.0] - 2026-09-23
+
+### Added
+- Real **functional** eval results (`evals/functional/v1/`) from running the skill-eval tool
+  against a live deployment of the solution. 27/27 runs succeeded. Across all four scored evals,
+  with-skill passed the expected-output bar 67–100% while without-skill passed 0%, and with-skill
+  output was rated consistent vs. inconsistent without it — a clear, repeated positive delta.
+- Removed `evals/exemptions.json` entirely: all three eval types (structure, best-practices,
+  functional) now have real results, satisfying the enforce-evals requirement.
+
+### Fixed
+- Corrected the monthly report S3 path to `monthly-reports/<YYYY>/<MM>/audit-report.txt` (nested
+  year/month) to match the actually deployed solution. The earlier `<YYYY-MM>` single-segment form
+  came from the source template and did not match the live layout — caught by testing against the
+  real setup.
+
+### Security
+- Scrubbed account-specific identifiers (account IDs, an IAM principal ID, RDS endpoints, resource
+  names) from the committed functional eval artifacts, replacing them with documentation
+  placeholders, since these were produced against a live account and this repo is public.
+- Excluded the functional `journal_records.json` files from the commit (and gitignored them): they
+  captured extensive live-account data (KMS key ARNs, resource UUIDs) that a public repo should not
+  carry. The committed `benchmark.json`, per-scenario `functional-tests-results.json`, and
+  `_metadata.json` contain the scores and verdicts and are free of that data.
+
 ## [3.0.0] - 2026-09-22
 
 ### Changed

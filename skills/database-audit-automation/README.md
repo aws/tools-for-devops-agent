@@ -59,7 +59,7 @@ Default names created by the solution's CloudFormation stack (prefix `db-audit-a
 - **S3:** `db-audit-ai-audit-logs-{ACCOUNT-ID}`, `db-audit-ai-reports-{ACCOUNT-ID}`
 - **SNS topic:** `db-audit-ai-anomaly-alerts`
 - **EventBridge (anomaly schedule):** `db-audit-ai-hourly-anomaly-check`
-- **Report path:** `s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/<YYYY-MM>/audit-report.txt`
+- **Report path:** `s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/<YYYY>/<MM>/audit-report.txt`
 - **Audit log path:** `s3://db-audit-ai-audit-logs-{ACCOUNT-ID}/<db_type>/audit-logs/<date>/` (`db_type` = `postgresql` | `sqlserver`)
 
 ## Anomaly detection categories (reference)
