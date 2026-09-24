@@ -29,6 +29,7 @@ Metadata:
           - EnableDmsOperationReview
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
+          - EnableSageMakerOpsReview
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -124,6 +125,11 @@ Parameters:
     Description: AgentCore Operational Review skill (adds read-only bedrock-agentcore control-plane List/Get and ec2:DescribeSubnets for the multi-AZ check; observability-only mode needs none of these).
     AllowedValues: ['true', 'false']
     Default: 'true'
+  EnableSageMakerOpsReview:
+    Type: String
+    Description: SageMaker AI Operational Review skill (adds savingsplans:DescribeSavingsPlans for the Savings Plan check).
+    Default: 'true'
+    AllowedValues: ['true', 'false']
 
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
@@ -136,6 +142,7 @@ Conditions:
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
+  SkillSageMakerOpsReview: !Equals [!Ref EnableSageMakerOpsReview, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -428,6 +435,29 @@ Resources:
                   - support.amazonaws.com
                   - ce.amazonaws.com
 
+
+  # sagemaker-ops-review: adds savingsplans:DescribeSavingsPlans for the Savings Plan check.
+  # Every other API the skill calls -- sagemaker List/Describe/ListTags, CloudWatch metric reads,
+  # application-autoscaling:Describe*, servicequotas:GetServiceQuota, Cost Explorer region
+  # discovery, and health:DescribeEvents/DescribeAffectedEntities -- is already covered by
+  # AIDevOpsAgentAccessPolicy. Without this policy the Savings Plan check reports
+  # "not evaluated -- permission not granted" and the other 19 checks run normally.
+  PolicySageMakerOpsReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillSageMakerOpsReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-SageMakerOpsReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SageMakerOpsReviewSavingsPlansRead
+            Effect: Allow
+            Action:
+              - savingsplans:DescribeSavingsPlans
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -453,6 +483,7 @@ Outputs:
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
+        - sagemaker-ops-review: ${EnableSageMakerOpsReview} (savingsplans:DescribeSavingsPlans)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
