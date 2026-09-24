@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.2.0] - 2026-09-24
+
+### Changed
+- Upgraded the Bedrock model from the deprecated Claude 3.5 Sonnet to **Claude Sonnet 4.5**
+  (`us.anthropic.claude-sonnet-4-5-20250929-v1:0` inference profile), and updated the skill docs
+  (SKILL.md, README.md) to match. The deployed solution's Lambdas were updated and redeployed to
+  the new model, a fresh report was generated with it, and the functional eval was re-run
+  end-to-end against the redeployed solution (`evals/functional/v2/`, replacing v1).
+
 ## [3.1.0] - 2026-09-23
 
 ### Added

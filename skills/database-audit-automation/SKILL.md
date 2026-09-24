@@ -79,7 +79,7 @@ Work through the pipeline in order until you find the broken stage:
 - [ ] **Step 3:** Check the report-generator Lambda logs for errors.
 
 ### Bedrock access denied
-Claude 3.5 Sonnet model access must be enabled in the account/region (Console → Bedrock → Model access). User action.
+Claude Sonnet 4.5 model access must be enabled in the account/region (Console → Bedrock → Model access). User action.
 
 ### High Lambda cost
 Suggest (as user changes): reduce anomaly-detection frequency (hourly → every 4 hours) via the EventBridge schedule, reduce `max_tokens` in the Bedrock calls, or filter low-value log events before sending to Bedrock.

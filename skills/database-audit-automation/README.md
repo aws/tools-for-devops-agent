@@ -45,7 +45,7 @@ The agent needs **no** write permissions.
 
 ### 4. Amazon Bedrock access
 
-The solution itself uses Amazon Bedrock (Claude 3.5 Sonnet) for its anomaly detection and report generation — enable model access in the target account/region when you deploy it.
+The solution itself uses Amazon Bedrock (Claude Sonnet 4.5, via the `us.anthropic.claude-sonnet-4-5-20250929-v1:0` inference profile) for its anomaly detection and report generation — enable model access in the target account/region when you deploy it.
 
 ## Expected output
 
