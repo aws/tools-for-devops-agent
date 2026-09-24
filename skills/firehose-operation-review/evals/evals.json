@@ -1,40 +1,5 @@
 [
   {
-    "id": "firehose-review-smoke-test",
-    "prompt": "Read firehose-context.json. List each delivery stream's name, source type, destination, region, and account. No analysis needed.",
-    "expected_output": "Lists every delivery stream from files/firehose-context.json with its name, source type, destination, region, and account exactly as defined in the file.",
-    "files": ["files/firehose-context.json"],
-    "assertions": [
-      "matches regex /[a-z]{2}-[a-z]+-\\d/",
-      "contains 'DirectPut' or contains 'Direct PUT'",
-      "contains 'destination' or contains 'S3' or contains 'OpenSearch'",
-      "contains 'region'",
-      "contains 'account'"
-    ]
-  },
-  {
-    "id": "firehose-review-artifact-naming",
-    "prompt": "Read firehose-context.json. Identify the FIRST delivery stream listed and its region, then state the report artifact filename you would generate for a single-stream review (use today's date in YYYY-MM-DD form). Do not run the audit.",
-    "expected_output": "Identifies the first stream and region from files/firehose-context.json and proposes an artifact name of the form firehose-review-<stream-or-account>-<region>-<YYYY-MM-DD>.md.",
-    "files": ["files/firehose-context.json"],
-    "assertions": [
-      "matches regex /firehose-review-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md/",
-      "matches regex /[a-z]{2}-[a-z]+-\\d/"
-    ]
-  },
-  {
-    "id": "firehose-review-data-source-priority",
-    "prompt": "According to the skill, which AWS APIs does the Firehose operational review use to collect data? Name at least three specific API calls or namespaces the skill mentions. Confirm whether the skill puts, reads, or transforms any records. No account access required.",
-    "expected_output": "States the skill uses Firehose, CloudWatch, and Service Quotas APIs and explicitly does NOT put/read/transform records (no data-plane calls). Names specific calls such as firehose.ListDeliveryStreams, firehose.DescribeDeliveryStream, cloudwatch.GetMetricData, cloudwatch.DescribeAlarms, or servicequotas.GetServiceQuota.",
-    "files": [],
-    "assertions": [
-      "contains 'Firehose' or contains 'firehose'",
-      "contains 'CloudWatch' or contains 'cloudwatch'",
-      "contains 'ListDeliveryStreams' or contains 'DescribeDeliveryStream' or contains 'GetMetricData' or contains 'DescribeAlarms' or contains 'GetServiceQuota'",
-      "contains 'not' or contains 'no '"
-    ]
-  },
-  {
     "id": "firehose-review-severity-definitions",
     "prompt": "List the five severity levels the skill uses for findings, in order from most to least urgent. No account access required.",
     "expected_output": "Lists CRITICAL, HIGH, MEDIUM, LOW, INFO in that order.",
@@ -63,13 +28,49 @@
     ]
   },
   {
-    "id": "firehose-review-data-freshness",
-    "prompt": "According to the skill, which single CloudWatch metric is the most important Firehose delivery-health signal, and what does a monotonically rising value of it indicate? No account access required.",
-    "expected_output": "Identifies DeliveryTo<Dest>.DataFreshness (the age of the oldest undelivered record) as the key delivery-lag signal, and explains that a monotonically rising value means delivery has stalled (CRITICAL).",
-    "files": [],
+    "id": "firehose-review-threshold-lookup",
+    "prompt": "Read the skill's thresholds reference file at references/metrics-thresholds.md. According to it, what is the exact rule that defines a Firehose delivery as 'stalled' (climbing monotonically), and what severity does a stalled delivery receive? Quote the datapoint rule from the file.",
+    "expected_output": "Reads references/metrics-thresholds.md and states that 'stalled'/'climbing monotonically' is defined as DataFreshness (Max) non-decreasing across >= 6 consecutive 5-minute datapoints (~30 min), and that a stalled delivery is CRITICAL.",
+    "files": ["../references/metrics-thresholds.md"],
     "assertions": [
-      "contains 'DataFreshness' or contains 'data freshness' or contains 'freshness'",
-      "contains 'stall' or contains 'stalled' or contains 'lag' or contains 'oldest'"
+      "contains '6 consecutive' or contains 'six consecutive'",
+      "contains '5-min' or contains '5 min' or contains 'five-min' or contains '30 min'",
+      "contains 'CRITICAL' or contains 'critical'",
+      "contains 'DataFreshness' or contains 'freshness'"
+    ]
+  },
+  {
+    "id": "firehose-review-sustained-definition",
+    "prompt": "Read references/metrics-thresholds.md. What is the skill's default definition of 'sustained' (used for data-freshness, throttling, and quota-Critical checks)? Give the exact consecutive-datapoint rule from the file.",
+    "expected_output": "Reads references/metrics-thresholds.md and states that 'sustained' means a condition true in >= 3 consecutive datapoints at the metric's native period (not a single spike).",
+    "files": ["../references/metrics-thresholds.md"],
+    "assertions": [
+      "contains '3 consecutive' or contains 'three consecutive'",
+      "contains 'datapoint'",
+      "contains 'sustained' or contains 'spike'"
+    ]
+  },
+  {
+    "id": "firehose-review-fixture-security-findings",
+    "prompt": "Read files/firehose-context.json. Applying the skill's Security and Reliability checks, which of the two delivery streams has more findings, and list the specific issues for that stream (encryption, backup, and logging configuration).",
+    "expected_output": "Reads files/firehose-context.json and identifies orders-ingest-stream as the stream with more findings: it uses an AWS-owned KMS key (not customer-managed), has S3 backup disabled (S3BackupMode Disabled), and has CloudWatch logging disabled. events-to-opensearch is comparatively clean (customer-managed CMK, FailedDataOnly backup, logging enabled).",
+    "files": ["files/firehose-context.json"],
+    "assertions": [
+      "contains 'orders-ingest-stream'",
+      "contains 'AWS_OWNED_CMK' or contains 'AWS-owned' or contains 'AWS owned'",
+      "contains 'backup' or contains 'S3BackupMode' or contains 'Disabled'",
+      "contains 'logging' or contains 'CloudWatch'"
+    ]
+  },
+  {
+    "id": "firehose-review-fixture-cost-finding",
+    "prompt": "Read files/firehose-context.json. Which stream would the skill flag under the Cost Optimization pillar for its compression setting, what is the setting, and what is the recommended change? Analyze only what the file shows.",
+    "expected_output": "Reads files/firehose-context.json and identifies orders-ingest-stream (ExtendedS3 destination) with CompressionFormat UNCOMPRESSED as the Cost Optimization finding, recommending GZIP/Snappy/Zip compression. events-to-opensearch already uses GZIP.",
+    "files": ["files/firehose-context.json"],
+    "assertions": [
+      "contains 'orders-ingest-stream'",
+      "contains 'UNCOMPRESSED' or contains 'uncompressed'",
+      "contains 'GZIP' or contains 'Snappy' or contains 'Zip' or contains 'compress'"
     ]
   }
 ]
