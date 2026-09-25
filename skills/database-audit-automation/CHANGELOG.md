@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.3.0] - 2026-09-25
+
+### Changed
+- Migrated the Bedrock model to the latest **Claude Sonnet 5** (`us.anthropic.claude-sonnet-5`
+  inference profile). Claude Sonnet 4.5 is also approaching deprecation, so this moves to the
+  current generation. Verified the solution's Lambdas are compatible (Bedrock Messages API,
+  `max_tokens`, no `temperature` field — so Sonnet 5's field changes don't affect them); the
+  deployed stack was updated and both Lambdas confirmed working on Sonnet 5, and the functional
+  eval was re-run (5 iterations) against the Sonnet 5 deployment — 45 runs, no failures, skill
+  still shows a consistent positive with/without-skill delta. Updated SKILL.md and README.md.
+- Flattened `assets/`: moved the output template to `assets/audit-report-review.md` (removed the
+  nested `templates/` dir) per the Agent Skills spec's guidance to avoid nested reference chains,
+  and updated the references in SKILL.md and README.md to markdown-link format. Re-ran
+  best-practices afterward (now 16/17, 5/5 iterations, 100% consistency — the asset checks run
+  now that the file sits directly under `assets/`).
+- Trimmed the `aws-devops-agent-skills.aws-services` metadata to the core services the skill is
+  for (Amazon RDS, Amazon Aurora), removing the supporting-solution services (Bedrock, Lambda,
+  S3, EventBridge, SNS).
+
 ## [3.2.0] - 2026-09-24
 
 ### Changed

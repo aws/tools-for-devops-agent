@@ -45,11 +45,11 @@ The agent needs **no** write permissions.
 
 ### 4. Amazon Bedrock access
 
-The solution itself uses Amazon Bedrock (Claude Sonnet 4.5, via the `us.anthropic.claude-sonnet-4-5-20250929-v1:0` inference profile) for its anomaly detection and report generation — enable model access in the target account/region when you deploy it.
+The solution itself uses Amazon Bedrock (Claude Sonnet 5, via the `us.anthropic.claude-sonnet-5` inference profile) for its anomaly detection and report generation — enable model access in the target account/region when you deploy it.
 
 ## Expected output
 
-For a report review, the agent produces a **Database Audit Review** following the template at [`assets/templates/audit-report-review.md`](assets/templates/audit-report-review.md): a summary, compliance posture, a severity-ordered findings table, a privileged-access review, prioritized recommended actions, and an explicit gaps/caveats section. It is an actionable review grounded in the report and logs — not a copy or a bare restatement of the report.
+For a report review, the agent produces a **Database Audit Review** following the template at [`assets/audit-report-review.md`](assets/audit-report-review.md): a summary, compliance posture, a severity-ordered findings table, a privileged-access review, prioritized recommended actions, and an explicit gaps/caveats section. It is an actionable review grounded in the report and logs — not a copy or a bare restatement of the report.
 
 ## Deployed resource names (reference)
 
@@ -80,8 +80,9 @@ database-audit-automation/
 ├── README.md                             # this file — deployment pointer, prerequisites, reference
 ├── CHANGELOG.md                          # version history
 ├── assets/
-│   └── templates/
-│       └── audit-report-review.md        # output template the agent fills for a report review
+│   └── audit-report-review.md            # output template the agent fills for a report review
+├── references/
+│   └── solution-facts.md                 # resource names, S3 paths, anomaly thresholds
 └── evals/                                # evaluation data (not included in upload zip)
 ```
 

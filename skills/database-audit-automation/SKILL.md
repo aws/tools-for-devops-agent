@@ -5,7 +5,7 @@ metadata:
   author: bbhavini0502
   version: "3.0.0"
   aws-devops-agent-skills.agent-types: "Chat tasks"
-  aws-devops-agent-skills.aws-services: "Amazon RDS, Amazon Aurora, Amazon Bedrock, AWS Lambda, Amazon S3, Amazon EventBridge, Amazon SNS"
+  aws-devops-agent-skills.aws-services: "Amazon RDS, Amazon Aurora"
   aws-devops-agent-skills.technical-domains: "Databases, Security"
 ---
 
@@ -30,7 +30,7 @@ findings file — never tell the user to fetch one.
 
 ## Task 1: Review a compliance report
 
-Produce an actionable **Database Audit Review** — not a copy of the report, not a bland restatement. Follow the template at `assets/templates/audit-report-review.md`. Work through these steps in order:
+Produce an actionable **Database Audit Review** — not a copy of the report, not a bland restatement. Follow the output template at [`assets/audit-report-review.md`](assets/audit-report-review.md). Work through these steps in order:
 
 - [ ] **Step 1: Locate the report.** If the user pasted the report into chat, use that and skip to Step 3. Otherwise ask for the account ID (and prefix, if customized) and the month; if the month is unknown, list `s3://db-audit-ai-reports-{ACCOUNT-ID}/monthly-reports/` to show available reports.
   - Expected: you have the report path or its content.
@@ -39,11 +39,11 @@ Produce an actionable **Database Audit Review** — not a copy of the report, no
   - Expected: the full report text is loaded.
 - [ ] **Step 3: Extract findings by section.** The report has: Executive Summary, Login Activity Analysis, Privileged Access Monitoring, Change Pattern Analysis, Compliance Findings, Risk Assessment, Recommendations. Pull the concrete facts (principals, objects, times, counts) from each.
   - Expected: a list of raw findings with their supporting detail.
-- [ ] **Step 4: Classify and prioritize.** Map each finding to an anomaly category and severity from the table in `references/solution-facts.md`. Order CRITICAL → LOW.
+- [ ] **Step 4: Classify and prioritize.** Map each finding to an anomaly category and severity from the table in [`references/solution-facts.md`](references/solution-facts.md). Order CRITICAL → LOW.
   - Expected: each finding tagged with a category and severity.
 - [ ] **Step 5: Corroborate the notable findings** (optional but preferred). For a HIGH/CRITICAL item, read the relevant window under `s3://db-audit-ai-audit-logs-{ACCOUNT-ID}/<db_type>/audit-logs/<date>/` to confirm it against the raw logs, and cite what you saw as evidence.
   - Expected: HIGH/CRITICAL findings backed by a log reference, or a note in Gaps if logs weren't accessible.
-- [ ] **Step 6: Write the review** using `assets/templates/audit-report-review.md`: fill every placeholder from data you actually read; put anything you could not determine in "Gaps and Caveats"; cite the report path and any log objects in "Source".
+- [ ] **Step 6: Write the review** using the output template [`assets/audit-report-review.md`](assets/audit-report-review.md): fill every placeholder from data you actually read; put anything you could not determine in "Gaps and Caveats"; cite the report path and any log objects in "Source".
   - Expected output: a completed review following the template, with a prioritized findings table, a privileged-access section, concrete recommended actions, and explicit gaps.
   - Do not fabricate values to fill the template. An empty section with a stated reason is correct; invented data is not.
 
@@ -55,7 +55,7 @@ The user received an SNS alert (or asks why one did/didn't fire). There is no fi
   - Expected: a concrete time window and `<db_type>`.
 - [ ] **Step 2: Read the audit logs** for that window at `s3://db-audit-ai-audit-logs-{ACCOUNT-ID}/<db_type>/audit-logs/<date>/`.
   - Expected: the relevant log entries are loaded. On access denied, name the missing permission (see `README.md`).
-- [ ] **Step 3: Apply the detection rules** from the anomaly-categories table in `references/solution-facts.md` to the log entries. Determine whether the pattern meets a threshold and at what severity.
+- [ ] **Step 3: Apply the detection rules** from the anomaly-categories table in [`references/solution-facts.md`](references/solution-facts.md) to the log entries. Determine whether the pattern meets a threshold and at what severity.
   - Expected: a category + severity verdict, or "no threshold met."
 - [ ] **Step 4: Explain the verdict** — state which category fired (or why none did), cite the specific log entries as evidence, and give the user the concrete next step.
   - Expected output: a short assessment naming the category, severity, the evidence from the logs, and a recommended action — or a clear "no threshold met, here's why."
@@ -79,7 +79,7 @@ Work through the pipeline in order until you find the broken stage:
 - [ ] **Step 3:** Check the report-generator Lambda logs for errors.
 
 ### Bedrock access denied
-Claude Sonnet 4.5 model access must be enabled in the account/region (Console → Bedrock → Model access). User action.
+Claude Sonnet 5 model access must be enabled in the account/region (Console → Bedrock → Model access). User action.
 
 ### High Lambda cost
 Suggest (as user changes): reduce anomaly-detection frequency (hourly → every 4 hours) via the EventBridge schedule, reduce `max_tokens` in the Bedrock calls, or filter low-value log events before sending to Bedrock.
