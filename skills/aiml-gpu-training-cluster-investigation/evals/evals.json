@@ -1,0 +1,237 @@
+[
+  {
+    "id": "hyperpod-xid-hardware-fault",
+    "prompt": "HyperPod Slurm cluster llm-pretrain in us-west-2, account 111122223333. Our training job crashed around 03:10 UTC today and one node is in Failure. Find the root cause.",
+    "expected_output": "Inventories the cluster with DescribeCluster and ListClusterNodes, pulls HealthMonitoringAgentDetectionEvent entries from the /aws/sagemaker/Clusters log group, classifies the Xid using the reference, ties it to the failed node before 03:10, and recommends replacing the node as an operator action without executing it.",
+    "files": [],
+    "assertions": [
+      "contains 'ListClusterNodes'",
+      "contains 'HealthMonitoringAgentDetectionEvent'",
+      "matches regex /Xid/",
+      "The output states the impact window and orders evidence on a timeline",
+      "The output marks every root-cause branch with a status rather than only naming one cause",
+      "The output does not execute BatchReplaceClusterNodes, BatchRebootClusterNodes, or any other mutating call"
+    ]
+  },
+  {
+    "id": "capacity-block-expiry",
+    "prompt": "Account 111122223333 us-east-1: 32 of our 64 p5.48xlarge nodes were terminated at the same time this morning around 11:00 UTC. Nobody touched the cluster. What happened?",
+    "expected_output": "Checks DescribeCapacityReservations for capacity-block reservations, compares the termination time with the EndDate and the documented 30-minute pre-expiry termination window, and reports Capacity Block expiry as expected behavior with a planning recommendation rather than a hardware fault.",
+    "files": [],
+    "assertions": [
+      "contains 'DescribeCapacityReservations'",
+      "matches regex /capacity.block/i",
+      "matches regex /30 minutes|11:00 UTC/",
+      "The output checks CloudTrail or cluster changes before concluding nobody changed the cluster",
+      "The output does not attribute the mass termination to GPU hardware without node-level evidence"
+    ]
+  },
+  {
+    "id": "fsx-metadata-bound-slowdown",
+    "prompt": "Cluster ft-cluster in us-west-2 (account 111122223333) got about 50% slower since yesterday afternoon. The data is on FSx for Lustre. Should we increase FSx throughput?",
+    "expected_output": "Discovers dimensions with ListMetrics, pulls NetworkThroughputUtilization, FileServerDiskThroughputUtilization, DiskIopsUtilization, metadata CPUUtilization and MetadataOperations, and recommends a throughput increase only if a throughput metric is saturated; otherwise identifies metadata-bound or non-storage causes.",
+    "files": [],
+    "assertions": [
+      "contains 'MetadataOperations'",
+      "matches regex /NetworkThroughputUtilization|FileServerDiskThroughputUtilization/",
+      "contains 'ListMetrics'",
+      "The output distinguishes throughput-bound from metadata-bound before recommending a change",
+      "The output does not recommend increasing throughput capacity without showing a saturated throughput metric"
+    ]
+  },
+  {
+    "id": "auto-resume-not-replacing",
+    "prompt": "On HyperPod cluster research-cluster (us-east-2, account 111122223333), a node failed two hours ago and auto-resume never replaced it. Why?",
+    "expected_output": "Checks NodeRecovery on DescribeCluster, CurrentCount versus TargetCount, the LifecycleConfig log stream for the replacement instance, and capacity reservation availability, and reports which of these blocked recovery.",
+    "files": [],
+    "assertions": [
+      "contains 'NodeRecovery'",
+      "matches regex /TargetCount/",
+      "matches regex /LifecycleConfig/",
+      "The output considers whether there was capacity to replace into",
+      "The output does not run a replace or reboot command"
+    ]
+  },
+  {
+    "id": "nccl-hang-visibility-gap",
+    "prompt": "Our 16-node training job on HyperPod cluster dist-train (us-west-2, 111122223333) has been stuck with an NCCL timeout for an hour. GPUs look idle. What's wrong?",
+    "expected_output": "Checks HMA logs and Xids on all nodes, checks the cluster security group for the EFA self-referencing rule, checks deep health check results and recent cluster changes, and if no AWS-visible cause is found names the visibility gap and asks for NCCL_DEBUG=INFO logs instead of guessing.",
+    "files": [],
+    "assertions": [
+      "matches regex /security group/i",
+      "matches regex /NCCL_DEBUG|NCCL debug/",
+      "matches regex /InstanceConnectivity|deep health check/i",
+      "The output states which signals were not observable through AWS APIs",
+      "The output does not state a network root cause without evidence"
+    ]
+  },
+  {
+    "id": "parallelcluster-xid-in-system-messages",
+    "prompt": "AWS ParallelCluster cluster training-b200 in us-west-2, account 111122223333. A job on the gpu queue died at 14:20 UTC today. Were there GPU Xid errors on the compute nodes, and did they cause it?",
+    "expected_output": "Identifies ParallelCluster from instance tags, searches the /aws/parallelcluster/<cluster>-<timestamp> system-messages (or syslog) streams and any customer-shipped kernel log groups for NVRM: Xid, proves kernel-log coverage per compute node before interpreting a zero, and only names an Xid as root cause if it is on an affected node before 14:20.",
+    "files": [],
+    "assertions": [
+      "matches regex /system-messages|syslog/",
+      "contains 'NVRM'",
+      "matches regex /parallelcluster/i",
+      "The output checks that kernel log lines are present for each affected node before concluding there are no Xids",
+      "The output does not look only in the HyperPod /aws/sagemaker/Clusters log group"
+    ]
+  },
+  {
+    "id": "kernel-log-not-shipped",
+    "prompt": "Self-managed p5.48xlarge instances i-0aaa111122223333a and i-0bbb111122223333b in us-east-1 (account 111122223333) crashed a training run last night. Check for GPU Xid errors.",
+    "expected_output": "Searches log groups for streams matching the instance IDs, finds no kernel log source or zero kernel lines, and reports Xid status as Not observable with dmesg or journalctl steps, rather than stating there were no GPU errors.",
+    "files": [],
+    "assertions": [
+      "matches regex /[Nn]ot observable/",
+      "matches regex /dmesg|journalctl/",
+      "contains 'DescribeLogGroups'",
+      "The output does not state that the GPUs had no errors when no kernel log source was found",
+      "The output distinguishes a measured zero from missing log coverage"
+    ]
+  },
+  {
+    "id": "boot-only-log-stream",
+    "prompt": "ParallelCluster cluster training-b200 in us-west-2 (account 111122223333): a job crashed at 02:00 UTC today. Check both compute nodes for Xid errors in CloudWatch Logs.",
+    "expected_output": "Checks each log source's first and last event time against the impact window, recognizes that a system-messages stream that stopped shortly after boot gives no coverage for 02:00, reports that source as Not observable for the window, and only reports a measured Xid count from a source that is live across the window and has carried kernel lines.",
+    "files": [],
+    "assertions": [
+      "matches regex /[Nn]ot observable/",
+      "matches regex /last event|lastEventTimestamp|max\\(@timestamp\\)/",
+      "The output does not treat the presence of boot-time kernel lines as proof that kernel logging covers the impact window",
+      "The output reports coverage per log source rather than one combined verdict"
+    ]
+  },
+  {
+    "id": "gap-inside-stream-lifetime",
+    "prompt": "ParallelCluster cluster training-b200 (us-west-2, account 111122223333): a job failed yesterday at 18:30 UTC. The compute nodes' system-messages streams have events from two days ago and from today. Were there Xid errors at the time of the failure?",
+    "expected_output": "Identifies the kernel-carrying stream per node, bins that exact stream by hour across the padded impact window, finds the hours around 18:30 empty, and reports Not observable for that period instead of treating first and last event times as proof of coverage.",
+    "files": [],
+    "assertions": [
+      "matches regex /bin\\(1h\\)|hour/",
+      "matches regex /[Nn]ot observable/",
+      "The output does not conclude coverage from first and last event timestamps alone",
+      "The output filters on the exact kernel-carrying stream rather than every stream matching the instance ID"
+    ]
+  },
+  {
+    "id": "preflight-capacity-block-run",
+    "prompt": "We want to start a 72-hour training run at 00:00 UTC tomorrow on ParallelCluster cluster training-b200 (us-west-2, account 111122223333), checkpointing every 6 hours. Is the cluster ready?",
+    "expected_output": "Runs Mode P: compares the Capacity Block EndDate minus the 30-minute termination lead with the run end, checks extension offerings, spare capacity for replacements, recovery settings, EFA security group, log coverage, idle reserved GPU hours, and an EventBridge rule for the expiration warning, and leads with FAIL and RISK items.",
+    "files": [],
+    "assertions": [
+      "contains 'DescribeCapacityReservations'",
+      "contains 'DescribeCapacityBlockExtensionOfferings'",
+      "matches regex /30 minutes|termination/",
+      "The output scores each readiness check as PASS, RISK, FAIL, UNVERIFIED, or Needs input",
+      "The output does not treat a Service Quotas value alone as proof that a failed node can be replaced"
+    ]
+  },
+  {
+    "id": "verdict-app-xid-headline",
+    "prompt": "HyperPod cluster research-eks (EKS orchestrated, us-west-2, 111122223333): a pod failed with CUDA illegal memory access and the health agent logged Xid 31 with reason XidUserAppError. Is the GPU broken?",
+    "expected_output": "Gives the node verdict LEAVE ALONE because the only Xid is application-class, HMA classified it XidUserAppError, and the node is Running, and does not headline a hardware error.",
+    "files": [],
+    "assertions": [
+      "contains 'LEAVE ALONE'",
+      "contains 'XidUserAppError'",
+      "The output headline does not say the GPU or hardware is faulty",
+      "The output hands the process name or PID to the application owner rather than recommending node replacement"
+    ]
+  },
+  {
+    "id": "idle-reserved-gpus",
+    "prompt": "Our p6-b200 Capacity Block on cluster training-b200 (us-west-2, 111122223333) has been running for two days. Are we actually using the GPUs?",
+    "expected_output": "Pulls AWS/EC2 GPUPowerUtilization per GpuId, reads the unit as percent, counts idle reserved hours, and reports them without treating missing metrics as zero.",
+    "files": [],
+    "assertions": [
+      "contains 'GPUPowerUtilization'",
+      "matches regex /[Pp]ercent/",
+      "matches regex /idle/",
+      "The output interprets a value such as 0.3 as 0.3 percent rather than 30 percent"
+    ]
+  },
+  {
+    "id": "nccl-transport-not-observable",
+    "prompt": "ParallelCluster cluster training-b200 (us-west-2, 111122223333) with p6-b200 nodes: is NCCL actually using EFA and NVLink, or falling back to TCP?",
+    "expected_output": "Searches every log source for NCCL INFO lines, finds none, and reports NCCL transport as Not observable with the NCCL_DEBUG collection command, while separately reporting Fabric Manager start status and NVLink Xids from the kernel log.",
+    "files": [],
+    "assertions": [
+      "matches regex /[Nn]ot observable/",
+      "contains 'NCCL_DEBUG'",
+      "matches regex /Fabric Manager|fabricmanager/",
+      "The output does not conclude NCCL uses EFA from the instance type or the security group alone",
+      "The output does not count the systemd PIDFile warning as a Fabric Manager error"
+    ]
+  },
+  {
+    "id": "nccl-socket-fallback",
+    "prompt": "Our NCCL log on HyperPod cluster llm-pretrain shows lines like 'Channel 00/0 : 0[0] -> 8[0] [send] via NET/Socket/0'. Training is 3x slower than expected on p5.48xlarge. Why?",
+    "expected_output": "Identifies that NCCL is using TCP sockets instead of EFA, labels it the likely cause of the slowdown with the NCCL line as evidence, and checks the EFA security group, plugin presence, and EFA counters.",
+    "files": [],
+    "assertions": [
+      "matches regex /[Ss]ocket|TCP/",
+      "matches regex /EFA/",
+      "matches regex /aws-ofi-nccl|OFI|Libfabric/",
+      "The output checks the EFA security group self-referencing rule"
+    ]
+  },
+  {
+    "id": "generic-instance-profile",
+    "prompt": "We run a HyperPod Slurm cluster with ml.p5.48xlarge and ml.g6e.48xlarge groups (us-east-1, 111122223333). Which GPU interconnect and network checks apply to each, and is everything attached correctly?",
+    "expected_output": "Reads DescribeInstanceTypes for p5.48xlarge and g6e.48xlarge (stripping the ml. prefix), reports GPU count, EFA support, and attached versus maximum EFA interfaces per node, treats p5.48xlarge as NVSwitch per the documented table, and marks NVSwitch presence on g6e.48xlarge as unverified instead of expecting Fabric Manager.",
+    "files": [],
+    "assertions": [
+      "contains 'DescribeInstanceTypes'",
+      "matches regex /MaximumEfaInterfaces|EFA interfaces/",
+      "matches regex /unverified/i",
+      "The output does not expect Fabric Manager on the g6e.48xlarge group",
+      "The output does not infer NVSwitch from the GPU model name"
+    ]
+  },
+  {
+    "id": "xid-48-reboot-first",
+    "prompt": "A p5.48xlarge node on HyperPod cluster train-a logged 'NVRM: Xid (PCI:0000:53:00): 48, pid=..., DBE' once, and nothing since. Should we replace the node?",
+    "expected_output": "Gives verdict REBOOT (a reboot retires the page or activates remapped rows), escalating to REPLACE only if Xid 64, a remap failure, or a recurrence follows.",
+    "files": [],
+    "assertions": [
+      "contains 'REBOOT'",
+      "The output does not recommend immediate replacement for a single Xid 48",
+      "matches regex /remap|retire/i"
+    ]
+  },
+  {
+    "id": "xid-119-gsp",
+    "prompt": "Our g6e nodes keep logging 'NVRM: Xid 119 ... Timeout waiting for RPC from GSP' after every reboot. Is the GPU failing?",
+    "expected_output": "Identifies Xid 119 as a GSP firmware issue whose documented fix is deactivating GSP in the driver, not rebooting or replacing the node.",
+    "files": [],
+    "assertions": [
+      "matches regex /GSP/",
+      "matches regex /deactivat|disabl/i",
+      "The output does not recommend replacing the node as the fix"
+    ]
+  },
+  {
+    "id": "subnet-ip-exhaustion",
+    "prompt": "HyperPod cluster big-train in us-east-1 has 64 ml.p5.48xlarge nodes on Slurm; a failed node has been Pending for an hour and never comes back. Capacity reservation still has spare instances. Why?",
+    "expected_output": "Checks subnet AvailableIpAddressCount against about 32 IPs per P5 node on Slurm and the network interface quota L-DF5E4CA3, and treats IP or ENI exhaustion as a network capacity cause rather than hardware.",
+    "files": [],
+    "assertions": [
+      "contains 'AvailableIpAddressCount'",
+      "matches regex /32/",
+      "The output considers IP or network interface exhaustion before blaming hardware"
+    ]
+  },
+  {
+    "id": "control-plane-log-dead",
+    "prompt": "On ParallelCluster cluster c1, two compute nodes launched and vanished within minutes yesterday. Why?",
+    "expected_output": "Uses CloudTrail by event name for RunInstances and TerminateInstances, checks clustermgtd stream liveness before relying on it, and labels any cause a hypothesis when the head-node logs are missing.",
+    "files": [],
+    "assertions": [
+      "contains 'RunInstances'",
+      "contains 'clustermgtd'",
+      "The output does not state a definite cause when the evidence is missing"
+    ]
+  }
+]
