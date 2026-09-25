@@ -1,12 +1,11 @@
 ---
 name: storage-fsx-windows-sla-optimizer
-description: >
-  Read-only SLA-readiness, availability, and cost review of Amazon FSx for Windows
-  File Server. Assesses one or many file systems across seven dimensions —
-  deployment type (Single-AZ vs Multi-AZ), Active Directory health, throughput
-  sizing, storage headroom, backups, maintenance window, and CloudWatch alarms —
-  and returns a rated report with prioritized findings and remediation. Also flags
-  over-provisioned throughput or storage for cost savings. Single- and
+description: Read-only SLA-readiness, availability, and cost review of Amazon FSx
+  for Windows File Server. Assesses one or many file systems across seven
+  dimensions — deployment type (Single-AZ vs Multi-AZ), Active Directory health,
+  throughput sizing, storage headroom, backups, maintenance window, and CloudWatch
+  alarms — and returns a rated report with prioritized findings and remediation.
+  Also flags over-provisioned throughput or storage for cost savings. Single- and
   multi-file-system (fleet) reviews route automatically by count.
 
   Use when a user asks to review, audit, assess, or optimize an FSx for Windows

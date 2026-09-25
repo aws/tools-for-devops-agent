@@ -92,5 +92,5 @@ Initial release for AWS DevOps Agent.
   anti-malware) so the skill does not over-promise.
 
 ### Notes
-- The frontmatter `description` is 965 characters, within the AWS DevOps Agent upload
-  validator's 1024-character limit.
+- The frontmatter description uses the repository's standard plain multiline YAML
+  style and remains within the AWS DevOps Agent 1024-character limit.
