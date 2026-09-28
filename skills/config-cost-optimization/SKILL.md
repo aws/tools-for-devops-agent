@@ -14,7 +14,7 @@ description: Identify and quantify AWS Config cost optimization opportunities.
   of savings.
 metadata:
   author: holmalla
-  version: "1.0.0"
+  version: "1.1.0"
   aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
   aws-devops-agent-skills.aws-services: "AWS Config"
   aws-devops-agent-skills.technical-domains: "Governance, Cost Optimization"
@@ -156,13 +156,61 @@ Ref: [Optimize AWS Config costs](https://repost.aws/knowledge-center/optimize-aw
 
 - Rules that are redundant, disabled-in-intent, or no longer mapped to a live
   requirement → each evaluation is billed → remove or turn off → **MEDIUM**.
-- Overlap between standalone rules and rules already inside a conformance pack →
-  consolidate → **MEDIUM**.
+- A **standalone (user-managed) rule** that duplicates a rule already delivered inside
+  a conformance pack, with **no distinct purpose** (same source identifier, same
+  parameters, and the standalone copy is not wired to a separate remediation,
+  notification, or reporting path) → the standalone copy is pure duplicated evaluation
+  cost → remove the standalone rule and rely on the pack's copy → **MEDIUM**. Before
+  recommending removal, confirm the standalone rule's parameters match the pack's
+  (e.g. an `acm-certificate-expiration-check` with a *stricter* threshold than the
+  pack is **not** a duplicate — it enforces a different requirement; flag the conflict
+  for the customer to reconcile rather than deleting it).
 
-### 4.6 Conformance pack efficiency
-- Conformance packs whose evaluations exceed the value they provide, or where a small
-  number of individual rules would be cheaper than the full pack → evaluate individual
-  rules vs the pack → **MEDIUM**.
+### 4.6 Conformance pack overlap and efficiency
+
+Two conformance packs sharing rules is **not automatically waste**, and consolidating
+them is frequently the wrong call. Reason explicitly about *why* the packs exist
+before recommending anything.
+
+**How pack overlap is billed and reported.** Each conformance pack evaluates its own
+rules, so a rule that appears in two packs (e.g. `encrypted-volumes` in both a PCI
+pack and a NIST 800-53 pack) is evaluated — and billed — once per pack. But that
+second evaluation also produces a **second, independent per-framework compliance
+result**: AWS Config tracks compliance per pack (the `AWS::Config::ConformancePackCompliance`
+resource and each pack's own dashboard/compliance history), and the AWS-provided pack
+templates deliberately map the *same* technical control to *different* framework
+controls (one PCI DSS requirement, one NIST 800-53 control). The overlap is the
+mechanism by which one resource check satisfies two frameworks' attestations
+simultaneously.
+
+**Decision — do NOT default to "merge into one pack".** Apply this test:
+
+- **Keep both packs (overlap is acceptable, usually INFO, not a saving)** when the
+  customer must **attest to both frameworks independently** — i.e. an auditor, GRC
+  tool, or regulator consumes the PCI scorecard and the NIST scorecard separately. A
+  merged "union" pack collapses the two into one compliance view and destroys the
+  per-framework control-to-rule traceability that the attestation depends on. The
+  duplicate-evaluation cost (only the *overlapping* rules, at the conformance-pack
+  evaluation price) is the deliberate price of dual attestation. Report it as an
+  **INFO** observation with the tradeoff stated, and size the ceiling (overlapping
+  rule count × evaluations × pack-eval price) so the customer sees the cost is small
+  relative to losing separate reporting. Do **not** present merging as the
+  recommended action.
+- **Recommend consolidation or trimming (MEDIUM)** only when separate per-framework
+  attestation is genuinely **not** required — for example: one framework is
+  aspirational/internal and not separately audited; one framework's control set is
+  fully subsumed by the other and the customer confirms they only report against the
+  superset; or a pack is deployed but no one consumes its compliance dashboard. In
+  that case, either drop the redundant pack or build a single tailored pack, and state
+  that per-framework reporting for the dropped framework is lost.
+- **Always verify the consumer first.** Ask (or instruct the customer to confirm) who
+  reads each pack's compliance status and whether any GRC/audit tooling maps to the
+  pack ARNs. Never recommend collapsing packs before that dependency is confirmed —
+  the saving is single-digit dollars and the downside is an audit-reporting gap.
+
+A pack whose evaluations genuinely exceed its value (e.g. a pack no one attests
+against, or where a handful of individual rules would cover the live requirement more
+cheaply than the full template) → evaluate individual rules vs the pack → **MEDIUM**.
 
 ### 4.7 S3 storage lifecycle
 Ref: [S3 lifecycle management](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html)
@@ -247,6 +295,12 @@ Date: <YYYY-MM-DD> | Scope: <regions / organization> | Analysis window: <start> 
   to daily, or removing a rule, state the compliance/security tradeoff. Real-time
   detection of IAM and security-group changes is often worth the continuous cost.
   Never recommend dropping recording below the organization's audit requirements.
+- **Never collapse compliance frameworks to save evaluation cost.** Two conformance
+  packs that overlap (e.g. PCI DSS and NIST 800-53) usually exist to produce two
+  independent per-framework attestations. Do not recommend merging them into a union
+  pack, or deleting one, unless the customer confirms separate per-framework reporting
+  is not required. The overlapping-rule evaluation cost is small; the lost per-framework
+  compliance view is not recoverable by re-running the report.
 - **Proposed changes are suggestions.** Every recommendation is for a human to review
   and apply.
 
@@ -264,3 +318,11 @@ Date: <YYYY-MM-DD> | Scope: <regions / organization> | Analysis window: <start> 
   applied through the landing-zone customization path rather than per-account.
 - Global resource types recorded in multiple Regions are the classic silent multiplier
   — always check `includeGlobalResourceTypes` across all recording Regions.
+- **Overlapping conformance packs are usually intentional, not waste.** AWS Config
+  tracks compliance per pack, and the AWS-provided templates deliberately map the same
+  technical rule to different framework controls. A rule shared between a PCI pack and
+  a NIST pack is billed twice but also produces two independent framework scorecards —
+  that is how one resource check satisfies two attestations. Only treat the overlap as
+  a saving when the customer confirms they do not need to attest to both frameworks
+  separately; otherwise report it as an INFO observation with the cost ceiling, not a
+  consolidation recommendation.
