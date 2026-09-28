@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0] - 2026-09-28
+### Changed
+- Added an explicit interaction rule to §4.1: de-duplicating to a single management-event trail makes the survivor the free first copy, so KMS/RDS exclusion and Read-event trimming must not also be recommended on it. Prevents the contradictory "delete the duplicate trail and exclude KMS/RDS on the surviving trail" recommendation that leaves no trail capturing those events.
+- Rewrote §4.3 to require that a paid (second-or-later) management-event copy actually exists and is kept before recommending KMS/RDS exclusion. Excluding on the single/soon-to-be-single authoritative trail saves ~$0 (first copy per Region is free) and is now reported as inapplicable rather than as a saving.
+### Added
+- Known Quirk: de-duplication and management-event filtering are mutually exclusive on the same copy; never stack the two savings.
+
 ## [1.0.0] - 2026-09-24
 ### Added
 - Initial release of the CloudTrail cost optimization skill for AWS DevOps Agent
