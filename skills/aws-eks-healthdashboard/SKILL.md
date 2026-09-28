@@ -11,6 +11,8 @@ description: Produces an Amazon EKS health dashboard — a point-in-time snapsho
   Dynatrace / Splunk source. Read-only. Triggers on: "EKS health dashboard",
   "EKS control plane health", "EKS node health", "is my EKS cluster healthy",
   "check EKS cluster health", "EKS etcd / APF / API latency", "EKS node status".
+metadata:
+  version: "1.0.0"
 ---
 
 # EKS Health Dashboard — DevOps Agent Skill
