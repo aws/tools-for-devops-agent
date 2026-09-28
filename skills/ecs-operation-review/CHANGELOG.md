@@ -1,0 +1,114 @@
+# Changelog
+
+## [2.5.0] - 2026-09-24
+
+Review feedback from PR #42 (70 baseline checks, up from 69):
+
+- **Renamed `aws-ecs-operations-review` → `ecs-operation-review`** to match
+  the skill family convention (`eks-operation-review`,
+  `rds-operation-review`): no `aws-` prefix, singular "operation". Directory,
+  frontmatter `name`, and the `llms.txt` entry all updated.
+- **Compute Optimizer permission gated in CloudFormation** — the live
+  `AIDevOpsAgentAccessPolicy` grants no `compute-optimizer` actions, so
+  PERF8's `computeoptimizer.getECSServiceRecommendations` call would return
+  AccessDenied under the agent's own role. Added
+  `EnableEcsOperationReview` parameter, condition, inline policy
+  (`compute-optimizer:GetECSServiceRecommendations`), and a
+  `SkillPolicySummary` line to
+  `cloudformation/devops-agent-skill-policies.yaml`; reframed the README
+  permissions section around `AIDevOpsAgentAccessPolicy` coverage instead
+  of `ReadOnlyAccess`.
+- **Strict docs build fixed** — removed the two relative `.md` links in
+  `README.md` (`evals/TESTING.md`, `references/report-format.md`) that
+  failed `mkdocs build --strict`.
+- **Frontmatter version aligned with this changelog** (was `1.0.0`), and
+  frontmatter `author` set to the GitHub username.
+- **OPS9 (new): ECS Exec audit logging** — when `enableExecuteCommand` is
+  true, grade the cluster's `executeCommandConfiguration.logging`
+  (CloudWatch Logs / S3, not `NONE`) via `ecs.describeClusters` with
+  `include=["CONFIGURATIONS"]`. OPS3 keeps grading whether Exec is enabled
+  in production; OPS9 grades whether enabled Exec sessions leave an audit
+  trail. N/A when Exec is disabled.
+- **SEC19 applicability fixed** — GuardDuty Runtime Monitoring does not
+  support ECS Managed Instances; "Applies To" narrowed from All to
+  Fargate/EC2 and the MI N/A rule added to the compute-platform note in
+  `references/checks.md`.
+- **SEC5 caveat** — `readonlyRootFilesystem` is incompatible with ECS Exec;
+  the recommendation now says to note the tradeoff where Exec is in use
+  instead of recommending the setting unconditionally.
+- **Header fixes** — `pillars/operations.md` said OPS1-OPS7 (now OPS1-OPS9)
+  and `pillars/security.md` said SEC1-SEC19 (now SEC1-SEC20); both headers
+  now match their tables and the checks index.
+
+## [2.4.0] - 2026-08-09
+
+Capacity provider depth + compute platform awareness (69 baseline checks, up
+from 64):
+
+- **Compute platform decision step** (new workflow step 4, rules in
+  `references/checks.md`): the agent now classifies the service as Fargate
+  (± Spot), EC2 ASG capacity provider, **ECS Managed Instances**
+  (`managedInstancesProvider`), launchType-only, or ECS Anywhere — including
+  mixed strategies — and this decision drives "Applies To" applicability in
+  every pillar. New applicability values: `EC2-ASG-CP`, `MI`, `CP-strategy`.
+- **PERF7 deepened** (Low → Medium): flags launchType-only services (ignored
+  by managed scaling) and missing cluster `defaultCapacityProviderStrategy`.
+- **PERF9 (new)**: managed scaling enabled with `targetCapacity` headroom
+  (80-100, <100 for spiky workloads) and `instanceWarmupPeriod` sanity.
+- **PERF10 (new)**: metrics-driven capacity analysis — 7-day
+  `CapacityProviderReservation` (AWS/ECS/ManagedScaling) baseline compared
+  against configured `targetCapacity` to detect capacity-constrained
+  scale-outs vs idle over-provisioning.
+- **PERF11 (new)**: capacity provider strategy base/weight design — on-demand
+  base for production, Spot burst by weight, task-size-fits-instance check.
+- **REL14 (new)**: capacity provider infrastructure multi-AZ (ASG subnets or
+  Managed Instances `networkConfiguration.subnets` span 2+ AZs).
+- **ADD7 (new)**: ECS Managed Instances migration evaluation for self-managed
+  EC2 services, keyed off OPS6/OPS7 (agent/AMI currency) signals.
+- **OPS6/OPS7/OPS2** now explicitly N/A for Managed Instances (AWS manages
+  agent/AMI lifecycle).
+- **alarm-thresholds.md**: new Capacity Provider Alarms section
+  (`CapacityProviderReservation` saturation alarm) and baseline-metrics row;
+  report header now records the resolved compute platform.
+
+## [2.3.2] - 2026-08-09
+
+Fix skill upload rejection (`400 ValidationException` from the AWS DevOps Agent
+Asset API):
+
+- Reduced `SKILL.md` frontmatter to **only `name` and `description`**, the
+  fields the DevOps Agent uploader supports for zip skills. Removed the
+  `license`, `compatibility`, and nested `metadata` blocks added in 2.3.1 — the
+  DevOps Agent parser reads only `name`/`description` from frontmatter and
+  rejects the extra keys. `agent_types` and other asset metadata are supplied
+  in the Asset API request (or the Operator Web App) at upload time, not in
+  frontmatter. Description (with its trigger phrases) is unchanged and within
+  the 1024-char limit.
+
+## [2.3.1] - 2026-08-09
+
+Compliance with the AgentSkills.io open standard (aligns this skill with the
+`aws-eks-operations-review` skill):
+
+- Renamed directory to `ecs-operation-review` (registry
+  `aws-<service>-<capability>` naming convention).
+- Rewrote SKILL.md frontmatter to the spec: only `name`, `description`,
+  `license`, `compatibility`, and `metadata` at the top level. Moved `version`
+  and `tags` inside `metadata:`; added `license`, `compatibility`, and the
+  `aws-devops-agent-skills.*` + `devops-agent-tools.*` registry metadata.
+  Front-loaded the `description` with trigger phrases for discovery.
+- Fixed the `name` field to match the directory (`ecs-operation-review`).
+- Renamed `reference/` → `references/` (spec convention) and updated all
+  SKILL.md links.
+- Added `README.md` (packaging / prerequisites / upload / usage) and an
+  `evals/` harness (routing + knowledge evals) mirroring the EKS skill. No
+  change to the assessment workflow, pillars, checks, or report format.
+
+## [2.3.0] - 2026-08-09
+
+- Baseline: comprehensive ECS operations review across the 6 review pillars
+  (Resiliency & HA, Observability, Security, Operations, Performance,
+  Additional Analysis) with a 7-day CloudWatch metrics baseline, recommended
+  alarm thresholds for IDR onboarding, per-pillar ✓/✗/N/A scorecards, a
+  coverage gate, and the `review-common` baseline crosswalk. Read-only AWS API
+  data collection; Markdown report by default, DOCX on request.
