@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.1] - 2026-09-29
+### Changed
+- Restructured the skill for progressive disclosure: the SKILL.md body is now a slim
+  checkbox-checklist workflow with a dedicated validate-findings step, and detailed
+  material lives in `references/` (billing-model, api-inventory, opportunities) and
+  `assets/report-template.md`. Best-practices evals score 100/100.
+### Added
+- Migrated `evals/evals.json` to the current schema and made the functional suite
+  file-independent and uplift-oriented (6 scenarios): inlined the duplicate-reasoning
+  and artifact-naming data, added a dedup-vs-exclusion interaction scenario exercising
+  the §4.1/§4.3 rule, and added a negative-trigger case. Structure, best-practices, and
+  functional eval results committed.
+
 ## [1.1.0] - 2026-09-28
 ### Changed
 - Added an explicit interaction rule to §4.1: de-duplicating to a single management-event trail makes the survivor the free first copy, so KMS/RDS exclusion and Read-event trimming must not also be recommended on it. Prevents the contradictory "delete the duplicate trail and exclude KMS/RDS on the surviving trail" recommendation that leaves no trail capturing those events.
