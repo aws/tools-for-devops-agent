@@ -1,18 +1,19 @@
 ---
 name: aws-eks-healthdashboard
-description: Produces an Amazon EKS health dashboard — a point-in-time snapshot of
-  control-plane health (etcd, API Priority & Fairness, API-server latency/5xx,
-  kube-controller-manager, scheduler, eviction) and node / data-plane health
-  (node conditions, node & pod utilization, EC2 status, ENA network allowances,
-  EBS volume performance, NAT, CoreDNS, Karpenter, and AWS-side nodegroup /
-  registration facts). Reviews all available metrics and logs from CloudWatch
-  Logs Insights, CloudWatch metrics / Container Insights, native EKS
-  control-plane metrics, and any connected Prometheus / Datadog / New Relic /
-  Dynatrace / Splunk source. Read-only. Triggers on: "EKS health dashboard",
-  "EKS control plane health", "EKS node health", "is my EKS cluster healthy",
-  "check EKS cluster health", "EKS etcd / APF / API latency", "EKS node status".
-metadata:
-  version: "1.0.0"
+description: >-
+  Use this skill when the user wants to know whether an Amazon EKS cluster is
+  healthy right now, or asks you to assess, triage, or report on the state of an
+  EKS cluster, its control plane, or its nodes — even when they don't say
+  "dashboard" or name a specific subsystem. It produces a read-only, point-in-time
+  health snapshot that grades control-plane signals (etcd, API Priority & Fairness,
+  API-server latency and errors, controller-manager, scheduler) and
+  node/data-plane signals (node conditions, node and pod utilization, EC2 status,
+  ENA network allowances, EBS performance, NAT, CoreDNS, Karpenter, nodegroup
+  registration), reading from whatever observability is connected (CloudWatch Logs
+  Insights and metrics/Container Insights, native EKS control-plane metrics, and
+  Prometheus, Datadog, New Relic, Dynatrace, or Splunk). Reach for it for "is my
+  cluster okay" questions, control-plane or node-health checks, latency/throttling
+  spikes, or a general EKS health review. It only reads state; it does not remediate.
 ---
 
 # EKS Health Dashboard — DevOps Agent Skill
@@ -55,6 +56,15 @@ a signal. Output is a **health dashboard artifact**, not a best-practices audit 
 
 ## Workflow
 
+Work through these steps in order — each depends on the ones before it. Check each box off only after that step is complete:
+
+- [ ] **Step 0: Confirm the cluster** — pin down name, region, and account.
+- [ ] **Step 1: Detect observability sources** — probe what's enabled and record coverage.
+- [ ] **Step 2: Grade cluster, version & add-on health** — the CA-series.
+- [ ] **Step 3: Grade control-plane health** — CP1–CP11 + CP-M1–CP-M9.
+- [ ] **Step 4: Grade node & data-plane health** — NH-series + NH-P + NET.
+- [ ] **Step 5: Validate, then produce the dashboard** — self-check the findings, then write the artifact.
+
 ### Step 0 — Confirm the cluster
 Confirm cluster name + region + account before collecting anything (restate it back). Never assume the current context.
 
@@ -79,8 +89,17 @@ Grade **CP1–CP11 + CP-M1–CP-M9** from [`references/control-plane-health.md`]
 ### Step 4 — Node & Data-Plane Health
 Grade the **NH-series** from [`references/node-health.md`](references/node-health.md): node conditions + Node Monitoring Agent conditions (`use_kubectl`), node/pod utilization + EC2/ENA/EBS/NAT/CoreDNS/Karpenter metrics (`use_aws`), the workload/pod health rollup (CrashLoopBackOff/ImagePullBackOff/Pending/OOMKilled/Warning events), and AWS-side nodegroup/registration facts. Also grade the **NH-P depth checks** (NH-P1/P2/P6/P7/P9/P10/P11 — kubelet running pods, true allocatable headroom, `MemAvailable`, NIC errors, node `Ready=Unknown`, Failed-pod accumulation, PVC Pending) and the **NET series** (NET-P1/P2/P3 — VPC CNI IP exhaustion / allocation errors / stuck IPAMD). Detect conditional sources (ENA ethtool, CoreDNS Prometheus, Karpenter, **kube-state-metrics, node-exporter, cni-metrics-helper**) and mark absent ones ⚪ N/A (the absence is itself an observability gap).
 
-### Step 5 — Produce the dashboard
-Write the artifact per [`references/report-format.md`](references/report-format.md): header, overall health, sources & coverage, Control Plane scorecard (CP + CP-M), Node & Data-Plane scorecard (NH + NH-P + NET), detailed findings for every ❌/⚠️ with remediation + AWS link, recommended CloudWatch alarms, and "what was not assessed." Refresh a same-day artifact instead of duplicating. Default `eks-health-{cluster}-{date}.md`.
+### Step 5 — Validate, then produce the dashboard
+
+**Validate before you write.** Run this self-check over every graded status and finding, and fix any item that fails before emitting the artifact:
+
+- [ ] Every status cites a real query ID or metric name that appears in the reference files — no invented IDs, no invented metric names.
+- [ ] Every threshold used came from [`references/thresholds.md`](references/thresholds.md) — no fabricated or remembered numbers.
+- [ ] Every ⚪ N/A carries a concrete reason (source attempted and absent), never "pending" or a silent skip.
+- [ ] No empty-result was scored as PASS (FP11), and every verdict has its applied guard ID and confidence recorded ([`references/grading-guards.md`](references/grading-guards.md)).
+- [ ] Findings analysis reasons from observed evidence and does not recite canned definitions.
+
+Then write the artifact per [`references/report-format.md`](references/report-format.md): header, overall health, sources & coverage, Control Plane scorecard (CP + CP-M), Node & Data-Plane scorecard (NH + NH-P + NET), detailed findings for every ❌/⚠️ with remediation + AWS link, recommended CloudWatch alarms, and "what was not assessed." Refresh a same-day artifact instead of duplicating. Default `eks-health-{cluster}-{date}.md`.
 
 For each ❌/⚠️ finding, follow the **findings-analysis contract** in [`references/report-format.md`](references/report-format.md) §7 — *reason* from the observed evidence (what it means, symptoms, ranked probable causes, cascade risk, confidence) using your own EKS knowledge; do not recite a canned definition, and never invent thresholds or metric names (those come only from the reference files).
 
@@ -90,7 +109,7 @@ Emit the dashboard as **one Markdown `text` artifact element** — Markdown `##`
 
 - **Read-only.** No mutating `use_kubectl` verbs, no destructive `use_aws` calls. Remediations are recommendations drafted for human approval.
 - **Never print Secret values** — metadata only.
-- Every status cites its query ID / metric; ⚪ N/A always carries the real reason. Never guess or silently skip.
+- Every status cites its query ID / metric; N/A always carries the real reason. Never guess or silently skip.
 - Customer-facing output uses descriptive status labels — no internal severity numbers.
 
 ## Reference files
