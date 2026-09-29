@@ -14,7 +14,7 @@ description: Identify and quantify Amazon GuardDuty cost optimization opportunit
   severity-ranked report of savings.
 metadata:
   author: holmalla
-  version: "1.0.0"
+  version: "1.1.1"
   aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
   aws-devops-agent-skills.aws-services: "Amazon GuardDuty"
   aws-devops-agent-skills.technical-domains: "Security, Cost Optimization"
@@ -43,195 +43,75 @@ Activate this skill when the user asks to:
 
 ## How GuardDuty Billing Works
 
-GuardDuty is pay-as-you-go, **per protection plan**, priced on the volume of data
-each plan analyzes. There are no upfront costs and no per-detector fee — cost is
-driven entirely by analyzed volume. Each plan meters on its own unit:
+The pricing model is the foundation of every finding below. The essentials:
 
-| Protection Plan | Data Source | Metric (namespace `AWS/GuardDuty`) | Unit | Priced on |
-|-----------------|-------------|------------------------------------|------|-----------|
-| Foundational Threat Detection | CloudTrailEvents | AnalyzedCount | Count | Management events analyzed |
-| Foundational Threat Detection | VPCFlowLogDNSLogEvents | AnalyzedBytes | Bytes | VPC flow + DNS log volume |
-| S3 Protection | S3DataEvents | AnalyzedCount | Count | S3 data events analyzed |
-| EKS Protection | KubernetesAuditLogs | AnalyzedCount | Count | EKS audit log events |
-| Runtime Monitoring | RuntimeMonitoringEC2 / EKS / Fargate | MonitoredVcpuHours | vCPU-Hours | vCPU hours monitored |
-| Malware Protection for EC2 | MalwareProtectionEBS / OnDemandEBS* | ScannedBytes | Bytes | EBS data scanned |
-| RDS Protection | RDS / RDSLimitless / AuroraScaleout | MonitoredAcuHours / MonitoredVcpuHours | ACU/vCPU-Hours | RDS/Aurora capacity monitored |
-| Lambda Protection | LambdaNetworkLogs | AnalyzedBytes | Bytes | Lambda network log volume |
-| AI Protection | AIDataEvents | AnalyzedBytes | Bytes | AI data events analyzed |
+- GuardDuty is pay-as-you-go, **per protection plan**, priced on the volume of data
+  each plan analyzes. There is no per-detector fee — cost is driven entirely by
+  analyzed volume, and each plan meters on its own unit (counts, bytes, or vCPU/ACU
+  hours).
+- **Runtime Monitoring offsets VPC Flow Log charges** — for instances the Runtime
+  Monitoring agent covers, GuardDuty stops charging for VPC Flow Log processing. The
+  two line items trade against each other; size the net effect.
+- **Your own log configuration does not reduce GuardDuty cost** — GuardDuty ingests
+  from independent internal sources. The only cost lever is the GuardDuty
+  **protection-plan** configuration itself.
 
-Malware Protection for S3 meters separately under the `AWS/GuardDuty/MalwareProtection`
-namespace (`CompletedScanBytes`, `CompletedScanCount`, etc.).
+For the full per-plan metric/unit/pricing table, the two critical billing behaviors,
+and byte-to-GB/TB conversions, load
+[references/billing-model.md](references/billing-model.md) when identifying which plan
+drives a charge or reasoning about the Runtime Monitoring offset.
 
-Two critical billing behaviors the skill reasons about:
-- **Runtime Monitoring offsets VPC Flow Log charges.** For instances actively
-  monitored by the Runtime Monitoring agent, GuardDuty does **not** charge for VPC
-  Flow Logs processing on those instances. Enabling Runtime Monitoring *decreases*
-  `VPCFlowLogDNSLogEvents` usage; disabling it restores the charge. The two line items
-  trade against each other.
-- **Service-log configuration does not reduce GuardDuty cost.** Filtering or disabling
-  your own VPC Flow Logs, CloudTrail, or S3 data event logging does **not** reduce
-  what GuardDuty analyzes — GuardDuty ingests from independent internal sources. The
-  only cost lever is the GuardDuty **protection-plan** configuration itself.
+## Workflow
 
-## Step 1: Identify Target Scope
+Work through these steps in order — each depends on the output of the one before it.
 
-Ask the user which accounts and Regions to review, and whether this is a standalone
-account, a GuardDuty delegated-administrator account, or a member account. Accept
-specific account IDs and Regions, "all regions", or "organization". If no scope is
-given, default to the current account across all Regions with a 30-day analysis
-window.
+- [ ] **Step 1: Identify target scope.** Ask the user which accounts and Regions to
+  review, and whether this is a standalone account, a GuardDuty
+  delegated-administrator account, or a member account. Accept specific account IDs
+  and Regions, "all regions", or "organization". If no scope is given, default to the
+  current account across all Regions with a 30-day analysis window. Delegated-admin
+  accounts additionally receive **aggregated** organization usage metrics — use them
+  for org-wide sizing.
 
-Delegated-administrator accounts additionally receive **aggregated** organization
-usage metrics — use them for org-wide sizing.
+- [ ] **Step 2: Inventory detectors and protection plans.** Enumerate detectors,
+  enabled protection plans/features, Runtime Monitoring agent coverage, and (on a
+  delegated admin) member-account coverage, using read-only APIs. Also pull finding
+  statistics as the value signal. For the exact API calls and what each returns, load
+  [references/data-collection.md](references/data-collection.md).
 
-## Step 2: Inventory Detectors and Protection Plans
+- [ ] **Step 3: Collect per-plan usage metrics.** Pull the `AWS/GuardDuty` usage
+  metrics via `cloudwatch.GetMetricData` broken down by the `DataSource` dimension
+  over the window (plus `AWS/GuardDuty/MalwareProtection` for S3 malware scans), and
+  prefer Cost Explorer as the dollar signal, reconciled against the usage metrics. The
+  exact metrics, dimensions, lag caveats, and unit conversions are in
+  [references/data-collection.md](references/data-collection.md). If neither Cost
+  Explorer nor usage metrics are available, still report configuration findings and
+  label dollar impact as "not quantified — enable Cost Explorer for sizing".
 
-```
-guardduty.ListDetectors / GetDetector             # detector status, enabled features,
-                                                   # data sources, per-plan config
-guardduty.ListMembers / GetMemberDetectors        # org member coverage (deleg. admin)
-guardduty.GetMasterAccount / ListOrganizationAdminAccounts
-guardduty.GetFindingsStatistics                   # finding counts by type/severity
-                                                   # (value signal — statistics only,
-                                                   # not finding detail content)
-```
+- [ ] **Step 4: Analyze cost optimization opportunities.** Rank each enabled
+  protection plan by its share of total GuardDuty spend, then evaluate the seven
+  opportunity checks (§4.1 high-cost/low-signal plans, §4.2 Runtime Monitoring ↔ VPC
+  Flow Log offset, §4.3 S3 Protection cost vs value, §4.4 Malware Protection for S3
+  scan volume, §4.5 free-trial cost projection, §4.6 duplicate/inconsistent
+  multi-account coverage, §4.7 Security Hub consolidated pricing). Load
+  [references/opportunities.md](references/opportunities.md) for the full check
+  definitions and severity guidance. **Frame every recommendation against security
+  value** — never recommend disabling a plan purely on cost. Assign each finding a
+  severity (CRITICAL, HIGH, MEDIUM, LOW, INFO) and, where a usage/cost signal exists,
+  an estimated monthly saving.
 
-Capture per Region: whether GuardDuty is enabled, which protection plans/features are
-on, Runtime Monitoring agent coverage, and member-account coverage.
+- [ ] **Step 5: Validate findings.** Before writing the report, self-check the
+  findings: confirm estimated savings sum correctly and each traces to a cited metric
+  or cost signal; confirm byte-to-GB/TB conversions are correct; confirm every plan
+  reduction is framed as a cost-vs-risk tradeoff citing that plan's finding activity
+  (never a cost-only "disable"); confirm no VPC Flow Log saving ignores the Runtime
+  Monitoring offset; and confirm no mutation API was called. Drop or re-label any
+  finding that fails these checks.
 
-## Step 3: Collect Per-Plan Usage Metrics
-
-Pull the `AWS/GuardDuty` usage metrics with `cloudwatch.GetMetricData`, using the
-`DataSource` dimension (and `AccountId`) to break usage down by protection plan over
-the analysis window. Also pull `AWS/GuardDuty/MalwareProtection` for S3 malware scans.
-
-- Usage metrics are published **hourly** and can lag up to ~24 hours.
-- On a delegated-administrator account, the aggregated `DataSource` dimensions give
-  org-wide totals per plan.
-- **Cost Explorer** (`ce.GetCostAndUsage`, filtered to the `AmazonGuardDuty` service,
-  grouped by `USAGE_TYPE` and/or `REGION`) is the most direct dollar signal — prefer
-  it when available and reconcile it against the per-plan usage metrics.
-
-Convert byte metrics to GB/TB when sizing (1 GB = 1,073,741,824 bytes; 1 TB =
-1,099,511,627,776 bytes) to match pricing units.
-
-## Step 4: Analyze Cost Optimization Opportunities
-
-Rank each enabled protection plan by its share of total GuardDuty spend, then evaluate
-the checks below. Assign each finding a severity (CRITICAL, HIGH, MEDIUM, LOW, INFO)
-and, where usage/cost signal exists, an estimated monthly saving. **Frame every
-recommendation against security value** — GuardDuty is a security control, and cost
-reductions must not silently remove needed coverage.
-
-### 4.1 High-cost / low-signal protection plans
-Ref: [GuardDuty pricing](https://aws.amazon.com/guardduty/pricing/)
-
-- A protection plan consuming a large share of spend while producing few or no
-  findings over a representative window → review whether its coverage is warranted for
-  the workload → **MEDIUM** (present as a value/cost tradeoff, not an automatic
-  "disable"). Use `GetFindingsStatistics` for the value side.
-
-### 4.2 Runtime Monitoring ↔ VPC Flow Log offset
-Ref: [Monitoring GuardDuty usage and estimating costs](https://docs.aws.amazon.com/guardduty/latest/ug/monitoring_costs.html)
-
-- High `VPCFlowLogDNSLogEvents` (AnalyzedBytes) spend **and** EC2/EKS workloads not
-  covered by the Runtime Monitoring agent → enabling Runtime Monitoring stops VPC Flow
-  Log processing charges on monitored instances and adds deeper runtime detection →
-  compare `MonitoredVcpuHours` cost vs the avoided VPC Flow Log cost → **MEDIUM**
-  opportunity when the offset is favorable.
-- Runtime Monitoring enabled but the **agent not actually transmitting** on many
-  instances → paying for VPC Flow Logs *and* getting no runtime coverage → fix agent
-  coverage → **MEDIUM**.
-
-### 4.3 S3 Protection cost vs value
-Ref: [GuardDuty S3 Protection](https://docs.aws.amazon.com/guardduty/latest/ug/s3-protection.html)
-
-- High `S3DataEvents` (AnalyzedCount) spend on buckets with predictable,
-  high-volume, low-risk access patterns (e.g. internal data-lake churn) → weigh S3
-  Protection cost against exfiltration/destruction risk for those buckets → **MEDIUM**
-  tradeoff.
-
-### 4.4 Malware Protection for S3 scan volume
-Ref: [Pricing in GuardDuty](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-pricing.html)
-
-- High `CompletedScanBytes` (namespace `AWS/GuardDuty/MalwareProtection`) driven by
-  scanning large, low-risk, or frequently-rewritten objects → scope Malware Protection
-  for S3 to the buckets/prefixes that need it → **MEDIUM**. Note On-demand malware
-  scan has **no** free tier.
-
-### 4.5 Free-trial cost projection (proactive)
-Ref: [Estimating GuardDuty cost](https://docs.aws.amazon.com/guardduty/latest/ug/monitoring_costs.html#estimating_guardduty_cost)
-
-- One or more plans within the **30-day free trial** → project post-trial monthly cost
-  from the observed trial usage metrics **before** the bill lands, per plan → **HIGH**
-  visibility (prevents bill shock; lets the user disable a plan before it starts
-  charging if the projected cost outweighs value).
-
-### 4.6 Duplicate / inconsistent multi-account coverage
-Ref: [GuardDuty pricing](https://aws.amazon.com/guardduty/pricing/)
-
-- In an organization, protection plans enabled inconsistently across members, or
-  enabled on accounts/Regions with no meaningful workload → align coverage to where
-  workloads and risk actually are → **MEDIUM**.
-- GuardDuty enabled in Regions the organization does not use → disable in unused
-  Regions → **MEDIUM**.
-
-### 4.7 Security Hub consolidated pricing (informational)
-Ref: [Monitoring GuardDuty usage and estimating costs](https://docs.aws.amazon.com/guardduty/latest/ug/monitoring_costs.html#security-hub-customers)
-
-- If the account uses (or is considering) the Security Hub Threat Analytics plan, note
-  that it consolidates metering of multiple GuardDuty data sources and can change the
-  effective cost model → **INFO** (surface for the user's FinOps decision; the free
-  trial status is independent of Security Hub).
-
-## Step 5: Generate Report
-
-Generate a shareable Markdown report artifact.
-
-Artifact naming: `guardduty-cost-optimization-<account-id>-<YYYY-MM-DD>.md`
-Example: `guardduty-cost-optimization-123456789012-2026-09-24.md`
-
-Structure:
-
-### Report Header
-```
-# Amazon GuardDuty Cost Optimization — <account-id>
-Date: <YYYY-MM-DD> | Scope: <regions / organization> | Analysis window: <start> to <end>
-```
-
-### Executive Summary
-- Estimated total monthly savings (sum of quantified opportunities) or "not quantified"
-- Finding counts by severity
-- Top 3 opportunities by estimated saving
-- Any plan still in the 30-day free trial with projected post-trial cost
-
-### Protection Plan Usage & Spend
-| Protection Plan | Data Source | Usage (window) | Est. Monthly Cost | Findings (window) | Share |
-|-----------------|-------------|----------------|-------------------|-------------------|-------|
-
-### Cost Optimization Opportunities
-| # | Opportunity | Severity | Current State | Recommendation (value tradeoff) | Est. Monthly Saving |
-|---|-------------|----------|---------------|----------------------------------|---------------------|
-
-### Free-Trial Projection (if any plan in trial)
-| Protection Plan | Trial usage rate | Projected monthly cost | Trial ends |
-|-----------------|------------------|------------------------|------------|
-
-### Priority Matrix
-| # | Opportunity | Severity | Effort | Est. Saving |
-|---|-------------|----------|--------|-------------|
-
-### Next Steps
-- Immediate (HIGH — within 7 days, e.g. free-trial decisions)
-- Short-term (MEDIUM — within 30 days)
-- Long-term (LOW/INFO)
-
-### Appendix — Reference Links
-- [Monitoring GuardDuty usage and estimating costs](https://docs.aws.amazon.com/guardduty/latest/ug/monitoring_costs.html)
-- [GuardDuty pricing](https://aws.amazon.com/guardduty/pricing/)
-- [Pricing in GuardDuty](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-pricing.html)
-- [GuardDuty S3 Protection](https://docs.aws.amazon.com/guardduty/latest/ug/s3-protection.html)
-- [Runtime Monitoring](https://docs.aws.amazon.com/guardduty/latest/ug/runtime-monitoring.html)
+- [ ] **Step 6: Generate report.** Produce a shareable Markdown report artifact
+  following the structure, section order, and table schemas in
+  [assets/report-template.md](assets/report-template.md). Load that template when
+  generating the report.
 
 ## Severity Definitions
 
