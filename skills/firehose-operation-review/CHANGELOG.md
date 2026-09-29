@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.1] - 2026-09-24
+### Changed
+- **HTTP endpoint check corrected to INFO (was HIGH).** Firehose only accepts `https://` endpoint URLs — the `HttpEndpointConfiguration.Url` API pattern is `https://.*` and the restriction is enforced at delivery-stream configuration time — so a non-HTTPS HTTP endpoint is not a reachable state. The `best-practices-checklist.md` item no longer flags "non-HTTPS → HIGH" (an unreachable finding); it now confirms HTTPS as a fact at INFO and refocuses on secure access-key storage and a VPC/PrivateLink path for private/cross-account endpoints.
+
+### Notes (review responses, no code change)
+- **Metric-table / Iceberg-throughput duplication:** already single-sourced as of 1.4.0 — `references/metrics-thresholds.md` is the sole home for the CloudWatch metric tables and the Iceberg-table throughput detail; `SKILL.md` (Step 3, Region-Restricted Checks) and `references/best-practices-checklist.md` only point to it.
+- **`PartitionCountExceeded` semantics:** confirmed against the [Firehose CloudWatch metrics doc](https://docs.aws.amazon.com/firehose/latest/dev/monitoring-with-cloudwatch-metrics.html) — it "emits 1 or 0 based on whether limit is breached," i.e. a 1/0 gauge, which is how both `metrics-thresholds.md` and the checklist already treat it. The count metric is `PartitionCount` (1–500).
+
 ## [1.4.0] - 2026-09-24
 ### Changed
 - Addressed best-practices evaluation finding **BP-03 (detailed reference materials must not be in body)** by applying progressive disclosure to the two content areas the evaluator flagged:

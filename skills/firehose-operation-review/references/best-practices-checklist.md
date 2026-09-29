@@ -44,8 +44,12 @@ Ref: [Data protection in Amazon Data Firehose](https://docs.aws.amazon.com/fireh
   HTTP destinations should use a VPC/PrivateLink path (not the public internet), with the
   delivery role and destination resource policy scoped to the specific cross-account resource.
   → **HIGH** if reachable only over the public internet with a broadly-scoped role.
-- [ ] **HTTP endpoint destinations** (HIGH if violated) — HTTPS (TLS) only; access key stored
-  securely. A non-HTTPS endpoint is HIGH.
+- [ ] **HTTP endpoint destinations** (INFO) — Firehose only accepts `https://` endpoint URLs
+  (enforced at create time; the `HttpEndpointConfiguration.Url` API pattern is `https://.*`), so a
+  non-HTTPS endpoint is not a reachable state to flag. Confirm HTTPS as a fact and focus on the
+  access key: it should be stored/rotated securely (e.g. sourced from Secrets Manager rather than
+  hardcoded), and delivery should prefer a VPC/PrivateLink path for cross-account or private
+  endpoints (see Cross-account / PrivateLink destinations).
 - [ ] **CloudWatch error logging** — enabled so delivery/transform errors can be diagnosed.
   Report this **once, under Operational Excellence** (its incident-diagnosis home); cross-ref
   the security/incident-response angle rather than double-reporting.

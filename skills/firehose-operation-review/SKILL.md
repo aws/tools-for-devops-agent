@@ -3,7 +3,7 @@ name: firehose-operation-review
 description: 'Comprehensive Amazon Data Firehose (formerly Kinesis Data Firehose) review aligned with the AWS Well-Architected Framework and Firehose best practices. Use this skill when a user asks to review, audit, or assess Amazon Data Firehose delivery streams for best-practices compliance, security posture, reliability, delivery health, performance, cost optimization, service quotas, operational excellence, or sustainability. Triggers on requests like "Firehose review", "Kinesis Firehose best practices audit", "review my delivery streams", "Firehose health check", "why is my Firehose lagging", "Firehose delivery failures", "Firehose cost optimization review", or "ORR for Firehose".'
 metadata:
   author: stharolz
-  version: "1.4.0"
+  version: "1.4.1"
   aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
   aws-devops-agent-skills.aws-services: "Amazon Data Firehose"
   aws-devops-agent-skills.technical-domains: "Analytics, Streaming Data"
