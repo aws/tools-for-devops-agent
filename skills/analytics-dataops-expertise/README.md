@@ -22,18 +22,28 @@ It is **100% control-plane / API-driven** — no data-plane access (no catalog/t
 - **AWS resources:** one or more analytics/data services in the target account/region (Glue, Kinesis, MSK, DMS, DynamoDB, RDS, OpenSearch, Redshift, EMR, MWAA, etc.). Absence of a service is itself a valid low-maturity signal.
 - **Cost Explorer** must be enabled and is called in `us-east-1` (used by the two cost questions Q37/Q39). If it's unavailable, those score from tagging signals with the gap noted.
 
-**IAM permissions** the DevOps Agent execution role needs — all read-only. Most are covered by a ViewOnly/read-only managed policy; attach a supplemental policy for any gaps:
+**IAM permissions** the DevOps Agent execution role needs — all read-only. The agent's own managed policy, `AIDevOpsAgentAccessPolicy`, already grants the large majority of them. Only **five** actions the skill uses are not in the managed policy, and they are added by an opt-in inline policy in `cloudformation/devops-agent-skill-policies.yaml` (set `EnableAnalyticsDataopsExpertise=true`, the default):
+
+- `cost-optimization-hub:ListRecommendations` — no `cost-optimization-hub` actions in the managed policy
+- `quicksight:ListDashboards` — no `quicksight` actions in the managed policy
+- `glue:GetJobs` — the managed policy grants `glue:GetJob` (singular) and `glue:List*`, not the plural `GetJobs`
+- `iam:ListPolicies` — the managed policy grants `iam:ListRoles`/`ListUsers`/`ListEntitiesForPolicy`, not `ListPolicies`
+- `lakeformation:GetDataLakeSettings` — the managed policy grants Lake Formation `Describe*`/`GetLFTag`/`GetResourceLFTags`/`List*`, not `GetDataLakeSettings`
+
+The skill degrades gracefully if any of these is absent — the affected question is scored as a floor (with a caveat) rather than failing the assessment.
+
+The full set of read-only actions the skill relies on, by area (IAM action names shown — a few differ from the SDK/API call name):
 
 - Glue / Lake Formation: `glue:GetDatabases`, `glue:GetJobs`, `glue:GetCrawlers`, `glue:ListRegistries`, `glue:ListSchemas`, `glue:ListDataQualityRulesets`, `glue:ListDataQualityResults`, `glue:ListWorkflows`, `lakeformation:GetDataLakeSettings`, `lakeformation:ListPermissions`, `lakeformation:ListDataCellsFilter`
-- Streaming: `kinesis:ListStreams`, `firehose:ListDeliveryStreams`, `kinesisanalyticsv2:ListApplications`, `kafka:ListClustersV2`
+- Streaming: `kinesis:ListStreams`, `firehose:ListDeliveryStreams`, `kinesisanalytics:ListApplications` (Kinesis Analytics v2 authorizes under the `kinesisanalytics` prefix), `kafka:ListClustersV2`
 - Migration/CDC: `dms:DescribeReplicationTasks`, `dms:DescribeReplicationInstances`, `dms:DescribeEndpoints`, `dms:DescribeEventSubscriptions`
 - Databases: `dynamodb:ListTables`, `dynamodb:DescribeTable`, `dynamodb:DescribeContinuousBackups`, `rds:DescribeDBInstances`, `rds:DescribeDBEngineVersions`, `redshift:DescribeClusters`, `es:DescribeDomain`, `es:ListDomainNames`
 - Scaling: `application-autoscaling:DescribeScalableTargets`, `autoscaling:DescribeAutoScalingGroups`
 - Resilience: `backup:ListBackupPlans`
 - Observability: `cloudwatch:DescribeAlarms`, `cloudwatch:ListDashboards`, `cloudwatch:GetMetricData`, `sns:ListTopics`, `events:ListRules`, `xray:GetSamplingRules`, `xray:GetGroups`, `rum:ListAppMonitors`, `quicksight:ListDashboards`
-- Automation: `cloudformation:ListStacks`, `codepipeline:ListPipelines`, `codecommit:ListRepositories`, `mwaa:ListEnvironments`, `states:ListStateMachines`, `ssm:DescribePatchBaselines`, `lambda:ListFunctions`
-- Governance/Security: `macie2:GetMacieSession`, `macie2:ListClassificationJobs`, `kms:ListKeys`, `s3:ListAllMyBuckets`, `s3:GetBucketLifecycleConfiguration`, `iam:ListPolicies`, `config:DescribeConfigRules`, `config:DescribeComplianceByConfigRule`
-- Cost: `resourcegroupstaggingapi:GetResources`, `ce:GetCostAndUsage`, `ce:GetTags`, `cost-optimization-hub:ListRecommendations`
+- Automation: `cloudformation:ListStacks`, `codepipeline:ListPipelines`, `codecommit:ListRepositories`, `airflow:ListEnvironments` (MWAA authorizes under the `airflow` prefix), `states:ListStateMachines`, `ssm:DescribePatchBaselines`, `lambda:ListFunctions`
+- Governance/Security: `macie2:GetMacieSession`, `macie2:ListClassificationJobs`, `kms:ListKeys`, `s3:ListAllMyBuckets`, `s3:GetLifecycleConfiguration` (IAM action for the `GetBucketLifecycleConfiguration` API), `iam:ListPolicies`, `config:DescribeConfigRules`, `config:DescribeComplianceByConfigRule`
+- Cost: `tag:GetResources` (Resource Groups Tagging API authorizes under the `tag` prefix), `ce:GetCostAndUsage`, `ce:GetTags`, `cost-optimization-hub:ListRecommendations`
 
 ## How to use it with DevOps Agent
 

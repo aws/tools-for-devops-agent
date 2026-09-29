@@ -2,6 +2,23 @@
 
 All notable changes to the `analytics-dataops-expertise` skill are documented here.
 
+## [1.1.1] - 2026-09-29
+### Added
+- Gated IAM policy `DevOpsAgentSkill-AnalyticsDataopsExpertise` in
+  `cloudformation/devops-agent-skill-policies.yaml` (parameter
+  `EnableAnalyticsDataopsExpertise`) granting the five read-only actions the skill
+  uses that `AIDevOpsAgentAccessPolicy` does not: `cost-optimization-hub:ListRecommendations`,
+  `quicksight:ListDashboards`, `glue:GetJobs`, `iam:ListPolicies`,
+  `lakeformation:GetDataLakeSettings`.
+### Fixed
+- Corrected four IAM action names in the permissions list (docs-only — capability was
+  already granted under the correct name): `mwaa:ListEnvironments` → `airflow:ListEnvironments`,
+  `resourcegroupstaggingapi:GetResources` → `tag:GetResources`,
+  `kinesisanalyticsv2:ListApplications` → `kinesisanalytics:ListApplications`,
+  `s3:GetBucketLifecycleConfiguration` → `s3:GetLifecycleConfiguration`.
+- Reframed the README IAM section against the agent's own `AIDevOpsAgentAccessPolicy`
+  and pointed at the CloudFormation gate for the five supplemental actions.
+
 ## [1.1.0] - 2026-08-28
 ### Added
 - Optional downloadable **HTML report**: a self-contained, styled template at

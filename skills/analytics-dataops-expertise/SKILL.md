@@ -2,7 +2,7 @@
 name: analytics-dataops-expertise
 description: "Amazon DataOps maturity assessment. Performs read-only, API-driven scoring of a customer's data platform across five fixed dimensions: Architecture, Security & Governance, Incident Management & Observability, Automation & Testing, and Cost. Activate this skill for requests about DataOps maturity, data-platform assessment, analytics maturity, data architecture review, data governance posture, pipeline/orchestration maturity, real-time/streaming data, or data cost optimization. Given an account ID and region, it scores 26 questions 1-5 from live account signals, rolls them up into those five dimensions, and produces a structured scorecard with prioritized recommendations. All checks use read-only AWS control-plane APIs (glue, kinesis, dms, rds, cloudwatch, kms, s3, iam, config, backup, mwaa, sfn, macie2, resourcegroupstaggingapi, costexplorer, costoptimizationhub) — no data-plane access required."
 metadata:
-  version: "1.1.0"
+  version: "1.1.1"
   author: prasadnu
 ---
 
@@ -34,7 +34,7 @@ structured scorecard with findings and actionable recommendations.
   ViewOnly managed policy; attach the supplemental permissions for any gaps:
   - `glue:GetDatabases`, `glue:GetJobs`, `glue:GetCrawlers`, `glue:ListRegistries`, `glue:ListSchemas`, `glue:ListDataQualityRulesets`, `glue:ListDataQualityResults`, `glue:ListWorkflows`, `glue:GetJob`
   - `lakeformation:GetDataLakeSettings`, `lakeformation:ListPermissions`, `lakeformation:ListDataCellsFilter`
-  - `kinesis:ListStreams`, `firehose:ListDeliveryStreams`, `kinesisanalyticsv2:ListApplications`, `kafka:ListClustersV2`
+  - `kinesis:ListStreams`, `firehose:ListDeliveryStreams`, `kinesisanalytics:ListApplications` (the Kinesis Analytics v2 `ListApplications` API authorizes under the `kinesisanalytics` prefix), `kafka:ListClustersV2`
   - `dms:DescribeReplicationTasks`, `dms:DescribeReplicationInstances`, `dms:DescribeEndpoints`, `dms:DescribeEventSubscriptions`
   - `dynamodb:ListTables`, `dynamodb:DescribeTable`, `dynamodb:DescribeContinuousBackups`
   - `application-autoscaling:DescribeScalableTargets`, `autoscaling:DescribeAutoScalingGroups`
@@ -45,12 +45,12 @@ structured scorecard with findings and actionable recommendations.
   - `sns:ListTopics`, `events:ListRules`
   - `xray:GetSamplingRules`, `xray:GetGroups`, `rum:ListAppMonitors`, `quicksight:ListDashboards`
   - `cloudformation:ListStacks`, `codepipeline:ListPipelines`, `codecommit:ListRepositories`
-  - `mwaa:ListEnvironments`, `states:ListStateMachines`, `ssm:DescribePatchBaselines`
+  - `airflow:ListEnvironments` (MWAA authorizes under the `airflow` prefix), `states:ListStateMachines`, `ssm:DescribePatchBaselines`
   - `lambda:ListFunctions`
   - `macie2:GetMacieSession`, `macie2:ListClassificationJobs`
-  - `kms:ListKeys`, `s3:ListAllMyBuckets`, `s3:GetBucketLifecycleConfiguration`
+  - `kms:ListKeys`, `s3:ListAllMyBuckets`, `s3:GetLifecycleConfiguration` (the IAM action for the `GetBucketLifecycleConfiguration` API)
   - `iam:ListPolicies`, `config:DescribeConfigRules`, `config:DescribeComplianceByConfigRule`
-  - `resourcegroupstaggingapi:GetResources`
+  - `tag:GetResources` (the Resource Groups Tagging API authorizes under the `tag` prefix)
   - `ce:GetCostAndUsage`, `ce:GetTags` (Cost Explorer must be enabled; call in `us-east-1`)
   - `cost-optimization-hub:ListRecommendations`
 
