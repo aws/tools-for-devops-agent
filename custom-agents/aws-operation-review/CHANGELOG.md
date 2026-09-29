@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- Migrated from `eks-operation-review` to `aws-eks-operations-review` skill (288 checks vs basic)
+- The older `eks-operation-review` skill has been removed from the repository
+
 ## 1.0.0
 
 - Initial version

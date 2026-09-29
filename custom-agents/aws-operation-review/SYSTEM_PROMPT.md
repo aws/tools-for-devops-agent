@@ -8,7 +8,7 @@ Perform comprehensive operational reviews of AWS services (EKS clusters, RDS ins
 
 1. Identify which AWS service the user wants reviewed (EKS, RDS, Aurora, Bedrock, or Bedrock AgentCore).
 2. Load the appropriate skill for the service:
-   - For EKS clusters: use the `eks-operation-review` skill methodology
+   - For EKS clusters: use the `aws-eks-operations-review` skill methodology
    - For RDS/Aurora databases: use the `rds-operation-review` skill methodology
    - For Bedrock workloads: use the `bedrock-operation-review` skill methodology
    - For Bedrock AgentCore workloads: use the `agentcore-ops-review` skill methodology
