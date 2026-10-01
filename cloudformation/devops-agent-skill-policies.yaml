@@ -31,6 +31,7 @@ Metadata:
           - EnableAwsBackupCoverageReview
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
+          - EnableAnalyticsDataopsExpertise
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -141,6 +142,16 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAnalyticsDataopsExpertise:
+    Type: String
+    Description: >
+      Analytics DataOps Expertise skill (adds the five read-only actions the
+      maturity scorecard uses that AIDevOpsAgentAccessPolicy does not grant:
+      cost-optimization-hub:ListRecommendations, quicksight:ListDashboards,
+      glue:GetJobs, iam:ListPolicies, lakeformation:GetDataLakeSettings).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -154,6 +165,7 @@ Conditions:
   SkillAwsBackupCoverageReview: !Equals [!Ref EnableAwsBackupCoverageReview, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
+  SkillAnalyticsDataopsExpertise: !Equals [!Ref EnableAnalyticsDataopsExpertise, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -473,6 +485,37 @@ Resources:
               - ec2:DescribeSubnets
             Resource: '*'
 
+  # analytics-dataops-expertise: adds the five read-only actions the maturity
+  # scorecard calls that AIDevOpsAgentAccessPolicy does not grant. Verified against
+  # the managed policy: 53 of the 58 IAM actions the skill uses are already allowed;
+  # these five are the delta.
+  #   - cost-optimization-hub:ListRecommendations — no cost-optimization-hub actions in the managed policy
+  #   - quicksight:ListDashboards               — no quicksight actions in the managed policy
+  #   - glue:GetJobs                            — managed policy grants glue:GetJob (singular) + glue:List*, not the plural Get
+  #   - iam:ListPolicies                        — managed policy grants iam:ListRoles/ListUsers/ListEntitiesForPolicy, not ListPolicies
+  #   - lakeformation:GetDataLakeSettings       — managed policy grants lakeformation Describe*/GetLFTag/GetResourceLFTags/List*, not GetDataLakeSettings
+  # Strictly read-only; no write/mutating action is granted. The skill degrades
+  # gracefully (scores the affected question as a floor) if any of these is absent.
+  PolicyAnalyticsDataopsExpertise:
+    Type: AWS::IAM::Policy
+    Condition: SkillAnalyticsDataopsExpertise
+    Properties:
+      PolicyName: DevOpsAgentSkill-AnalyticsDataopsExpertise
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DataopsExpertiseReadDelta
+            Effect: Allow
+            Action:
+              - cost-optimization-hub:ListRecommendations
+              - quicksight:ListDashboards
+              - glue:GetJobs
+              - iam:ListPolicies
+              - lakeformation:GetDataLakeSettings
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -524,6 +567,7 @@ Outputs:
         - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
+        - analytics-dataops-expertise: ${EnableAnalyticsDataopsExpertise} (cost-optimization-hub:ListRecommendations, quicksight:ListDashboards, glue:GetJobs, iam:ListPolicies, lakeformation:GetDataLakeSettings)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
