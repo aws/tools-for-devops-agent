@@ -1,0 +1,239 @@
+[
+  {
+    "id": "ddb-data-health-smoke-test",
+    "prompt": "Read table-context.json. List the table names and their regions. No analysis needed.",
+    "expected_output": "Lists every table from files/table-context.json with the region exactly as defined in the file.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'orders-prod'",
+      "contains 'sessions-prod'",
+      "contains 'audit-log-prod'",
+      "contains 'us-east-1'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-dimensions",
+    "prompt": "According to the skill, which dimensions does a DynamoDB data health inspection evaluate? No table access required.",
+    "expected_output": "Names the four dimensions: hot key detection, item size analysis, TTL effectiveness evaluation, and GSI/LSI utilization assessment.",
+    "files": [],
+    "assertions": [
+      "contains 'partition key' or contains 'hot key'",
+      "contains 'item size'",
+      "contains 'TTL' or contains 'time to live'",
+      "contains 'GSI' or contains 'index'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-sampling-safety",
+    "prompt": "Is this skill safe to run against a production DynamoDB table? Describe what AWS operations it performs, whether it modifies anything, and what limits apply to reading item data. No table access required.",
+    "expected_output": "States the skill is read-only and never mutates a table; explains that data-plane Scan sampling requires explicit operator consent, is bounded (about 1,000 items by default, 10,000 absolute ceiling, at most 4 segments, eventually-consistent reads), never performs a full-table scan, and redacts item values.",
+    "files": [],
+    "assertions": [
+      "contains 'read-only' or contains 'read only'",
+      "contains 'consent' or contains 'approval' or contains 'approve'",
+      "contains '1,000' or contains '1000'",
+      "contains 'unbounded' or contains 'full-table' or contains 'full table' or contains 'whole table'",
+      "contains 'redact' or contains 'never record' or contains 'not recorded'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-ttl-not-deleting",
+    "prompt": "Read table-context.json. TTL is enabled on sessions-prod but storage is not going down. Using the skill's finding logic, explain what the data shows and what the root cause is. Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Identifies that TimeToLiveDeletedItemCount is 0 over 14 days (TTL-01) and that the sample shows 947 of 1000 items store expiresAt at millisecond scale rather than Unix epoch seconds (TTL-04 malformed_scale), so TTL silently never expires them. Recommends correcting the writer to epoch seconds and backfilling.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'epoch' or contains 'seconds'",
+      "contains 'millisecond' or contains 'ms'",
+      "contains '947'",
+      "contains 'expiresAt'",
+      "contains 'TimeToLiveDeletedItemCount' or contains '14 day' or contains '14-day'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-unused-index",
+    "prompt": "Read table-context.json. For orders-prod, which secondary index is costing money without being used, and what evidence supports that? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Identifies orders-by-status: zero consumed read capacity over 30 days with 42.8M consumed write units, 379 GB index size at 0.92x amplification, ALL projection, with 30 days of metric coverage. Notes orders-by-date is in active use and should not be flagged as unused.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'orders-by-status'",
+      "contains '30' or contains 'thirty'",
+      "contains 'ALL' or contains 'projection'",
+      "contains 'write' or contains 'writes'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-hot-key-authority",
+    "prompt": "Read table-context.json. For orders-prod, is there a hot partition key, and what proves it? Separately, does the sampled partition key distribution prove a hot key? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Confirms a hot key from Contributor Insights (top contributor c#8f3a2b91 at 184320 versus 21400 for the next, about 8.6x) correlated with 14622 WriteKeyRangeThroughputThrottleEvents. States that the sampled distribution does NOT prove a hot key because a Scan returns items in partition-layout order, so sampling measures storage distribution rather than traffic distribution, and Contributor Insights is the authoritative source.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'Contributor Insights' or contains 'contributor insights'",
+      "contains 'KeyRange' or contains 'key range' or contains 'key-range'",
+      "contains '14622' or contains '14,622'",
+      "contains 'storage' or contains 'partition-layout' or contains 'partition layout' or contains 'not random'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-accessdenied-not-healthy",
+    "prompt": "Read table-context.json. For audit-log-prod, the hot_keys check returned AccessDenied and the operator declined sampling. According to the skill, how must the report represent the hot key dimension and the overall health rating? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "States the hot key dimension must be marked not assessed (never healthy or a pass) because AccessDenied means the state is unknown, that the Unable to verify template applies, and that the health rating is capped at Medium because of the AccessDenied input and the declined sampling.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'AccessDenied' or contains 'access denied'",
+      "contains 'not assessed' or contains 'Unable to verify' or contains 'unknown'",
+      "contains 'cap' or contains 'Medium' or contains 'capped'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-stale-item-count",
+    "prompt": "Read table-context.json. For freshly-loaded-prod, ItemCount and TableSizeBytes are both 0. According to the skill, should sampling be skipped because the table looks empty? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "States that sampling must NOT be skipped: ItemCount and TableSizeBytes refresh only about every six hours, and ConsumedWriteCapacityUnits of 8884 proves writes occurred, so the metadata is stale rather than the table being empty. Notes the sample should be sized from the >1M tier and the cost estimate derived from measured ConsumedCapacity per page.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'stale' or contains 'six hours' or contains '6 hours'",
+      "contains '8884' or contains '8,884' or contains 'write'",
+      "contains 'not' or contains 'should not' or contains \"n't\"",
+      "contains 'sampl'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-ci-enabled-no-data",
+    "prompt": "Read table-context.json. For freshly-loaded-prod, Contributor Insights is ENABLED with four rules but returned zero contributors. According to the skill, how must the hot key dimension be reported? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "States this is NoData rather than NotConfigured, that HK-06 applies, that the hot key dimension must be marked not determinable / question mark and never healthy or a pass, because an enabled rule with an empty window is not evidence that no hot key exists.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'NoData' or contains 'no data'",
+      "contains 'not determinable' or contains 'undetermined' or contains 'cannot' or contains 'not assessed'",
+      "contains 'never' or contains 'not healthy' or contains 'no conclusion'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-null-amplification",
+    "prompt": "Read table-context.json. For freshly-loaded-prod, the orders-by-status GSI has projection_type ALL but amplification_ratio is null. According to the skill, does the over-broad-projection check pass, fail, or something else? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "States it is neither a pass nor a silent skip: because amplification_ratio is null from stale IndexSizeBytes/TableSizeBytes, IX-04 must still be emitted at Low severity with the ratio replaced by an explanation that it could not be computed and a note to re-run once metadata populates. A threshold that cannot be evaluated is not a passing threshold.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'IX-04' or contains 'projection'",
+      "contains 'null' or contains 'not be computed' or contains 'cannot be computed' or contains 'stale'",
+      "contains 'Low' or contains 'still' or contains 'not a pass' or contains 'not pass'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-hotkey-without-keyrange-metric",
+    "prompt": "Read table-context.json. For legacy-sessions-prod, Contributor Insights shows one partition key at 402100 versus 18400 for the next, throttle events are present, but the key-range throttle metric is NotAvailable. According to the skill, is this a confirmed hot partition or not? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Confirms HK-02 applies via the corroborating evidence path: the key-range metric is not required, because generic throttle events plus sharp Contributor Insights concentration satisfy the trigger. States that partition-level attribution rests on Contributor Insights and recommends alarming on WriteKeyRangeThroughputThrottleEvents for direct confirmation next time.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'HK-02' or contains 'confirmed hot'",
+      "contains 'Contributor Insights' or contains 'contributor insights'",
+      "contains 'corroborat' or contains 'not required' or contains 'either'",
+      "contains 'alarm' or contains 'KeyRange'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-write-amplification",
+    "prompt": "Read table-context.json. For orders-prod, the base table consumed 20100000 write units while its two GSIs consumed 42800000 and 38200000. According to the skill, what finding does this trigger and how should it be explained? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Identifies IX-10 write amplification: combined GSI write capacity is about 4x the base table's, above the 1.5x trigger. Explains that each write touching an index's keys or projected attributes is replicated and billed again, so one logical write costs up to three physical writes with two indexes. Recommends narrowing projections, removing unused indexes, and sparse indexes.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains 'IX-10' or contains 'amplification'",
+      "contains 'projection' or contains 'narrow'",
+      "contains 'replicat' or contains 'each write' or contains 'per write'",
+      "contains 'sparse' or contains 'remov' or contains 'delete'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-no-live-table",
+    "prompt": "A customer pasted this report about a DynamoDB table they no longer have access to: 'Scan returns exactly 59 items then pauses, consistently, across the console and our app. Total payload is about 300KB for those 59 items. Started after we migrated to a new table.' There is no live table to inspect. How should you respond, and should you apply this skill's four dimensions and rule IDs?",
+    "expected_output": "Declines to run the inspection because there is no live table to collect evidence from, and declines to apply the four dimensions or cite rule IDs for unmeasured guesses. Reaches the correct diagnosis instead: normal Scan pagination at the 1 MB per-page limit, resumed via LastEvaluatedKey, with the 300KB/1MB gap explained by the limit applying to data read before FilterExpression or ProjectionExpression trims it. Does not assert a hot partition.",
+    "files": [],
+    "assertions": [
+      "contains 'no table' or contains 'no live' or contains 'unmeasurable' or contains 'cannot' or contains \"can't\" or contains 'nothing to collect'",
+      "contains 'rule ID' or contains 'rule id' or contains 'dimensions' or contains 'thresholds'",
+      "contains '1 MB' or contains '1MB' or contains 'LastEvaluatedKey' or contains 'pagination'",
+      "contains 'ScannedCount' or contains 'LastEvaluatedKey' or contains 'ExclusiveStartKey' or contains 'ProjectionExpression' or contains 'FilterExpression'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-fact-400kb-write-semantics",
+    "prompt": "A DynamoDB write is failing with 'Item size has exceeded the maximum allowed size'. According to the skill's reference facts: is any part of that item written, can an item larger than 400 KB exist in the table, and can reads of a stored item fail because of size? No table access required.",
+    "expected_output": "States the write is rejected in full with nothing partially written, that an item over 400 KB therefore cannot exist in a table, and that reads never fail due to item size because an oversized item could not have been stored.",
+    "files": [],
+    "assertions": [
+      "contains 'reject' or contains 'not written' or contains 'nothing is written'",
+      "contains 'grandfathered' or contains 'been stored' or contains 'within the limit' or contains 'cannot exist'",
+      "contains 'read' ",
+      "contains 'no partial' or contains 'not partial' or contains 'in full' or contains 'entire'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-fact-gsi-propagation",
+    "prompt": "According to the skill's reference facts, is a base-table write propagated to a global secondary index synchronously or asynchronously, and are strongly consistent reads supported on a GSI? Explain how a throttled GSI can still cause base-table writes to fail. No table access required.",
+    "expected_output": "States GSI propagation is asynchronous and eventually consistent, that strongly consistent reads are not supported on a GSI (ValidationException), and that a throttled GSI causes base-table write failures because the index's own write capacity is exhausted, not because propagation is synchronous.",
+    "files": [],
+    "assertions": [
+      "contains 'asynchronous' or contains 'asynchronously' or contains 'eventually consistent'",
+      "contains 'not supported' or contains 'ValidationException' or contains 'strongly consistent'",
+      "contains 'capacity'",
+      "contains 'backpressure' or contains 'base table' or contains 'base-table'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-fact-ttl-capacity",
+    "prompt": "According to the skill's reference facts, do DynamoDB TTL deletions consume your provisioned write capacity, can they be tracked via ConsumedWriteCapacityUnits, and what deletion window does current AWS documentation state? No table access required.",
+    "expected_output": "States TTL deletion consumes no provisioned write capacity in the expiry region and does not appear in ConsumedWriteCapacityUnits (TimeToLiveDeletedItemCount is the metric that reports it), that replicated deletes in Global Table replica regions DO consume capacity, and that the documented window is within a few days - not a 48-hour SLA.",
+    "files": [],
+    "assertions": [
+      "contains 'backend capacity' or contains 'spare capacity' or contains 'not consume' or contains 'without consuming'",
+      "contains 'TimeToLiveDeletedItemCount'",
+      "contains 'few days'",
+      "contains 'replica' or contains 'Global Table' or contains 'global table'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-fact-gsi-backfill",
+    "prompt": "A customer wants a GSI backfill of 230 million items to finish in about an hour and asks whether provisioning 65,000 WCU on the index achieves that. According to the skill's reference facts, can index provisioned throughput be changed during backfilling, and does Application Auto Scaling reduce index creation time? No table access required.",
+    "expected_output": "States that index provisioned throughput CAN be modified during the backfilling phase and does affect the backfill, so provisioning high index WCU then lowering it afterwards is a legitimate documented approach; and that Application Auto Scaling does NOT reduce index creation time.",
+    "files": [],
+    "assertions": [
+      "contains 'can' or contains 'yes'",
+      "contains 'auto scaling' or contains 'autoscaling' or contains 'Auto Scaling'",
+      "contains 'creation time' or contains 'not reduce' or contains 'does not decrease'",
+      "contains 'backfill'"
+    ]
+  },
+  {
+    "id": "ddb-data-health-item-size-limit",
+    "prompt": "Read table-context.json. For orders-prod, are any items close to the DynamoDB item size limit, and which attributes are driving item size? Do not call any AWS APIs; reason only from the file.",
+    "expected_output": "Identifies 2 sampled items above 350 KB with a max of 372900 bytes against the 400 KB hard limit, and names lineItems (61.4 percent of sampled bytes) as the dominant attribute, followed by shippingHistory and customerNotes. Notes the finding is sampled and carries a confidence annotation.",
+    "files": [
+      "files/table-context.json"
+    ],
+    "assertions": [
+      "contains '400' or contains '400 KB'",
+      "contains 'lineItems'",
+      "contains '350' or contains '372'",
+      "contains 'sample' or contains 'sampled'"
+    ]
+  }
+]
