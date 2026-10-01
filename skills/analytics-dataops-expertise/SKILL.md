@@ -2,7 +2,7 @@
 name: analytics-dataops-expertise
 description: "Amazon DataOps maturity assessment. Performs read-only, API-driven scoring of a customer's data platform across five fixed dimensions: Architecture, Security & Governance, Incident Management & Observability, Automation & Testing, and Cost. Activate this skill for requests about DataOps maturity, data-platform assessment, analytics maturity, data architecture review, data governance posture, pipeline/orchestration maturity, real-time/streaming data, or data cost optimization. Given an account ID and region, it scores 26 questions 1-5 from live account signals, rolls them up into those five dimensions, and produces a structured scorecard with prioritized recommendations. All checks use read-only AWS control-plane APIs (glue, kinesis, dms, rds, cloudwatch, kms, s3, iam, config, backup, mwaa, sfn, macie2, resourcegroupstaggingapi, costexplorer, costoptimizationhub) — no data-plane access required."
 metadata:
-  version: "1.1.1"
+  version: "1.1.2"
   author: prasadnu
 ---
 
@@ -30,9 +30,23 @@ structured scorecard with findings and actionable recommendations.
 
 - AWS CLI profile configured with read-only access to the target account
 - **Account ID and region** for the assessment (the scorer is account + region scoped)
-- IAM permissions required (all read-only). Most are covered by a read-only /
-  ViewOnly managed policy; attach the supplemental permissions for any gaps:
-  - `glue:GetDatabases`, `glue:GetJobs`, `glue:GetCrawlers`, `glue:ListRegistries`, `glue:ListSchemas`, `glue:ListDataQualityRulesets`, `glue:ListDataQualityResults`, `glue:ListWorkflows`, `glue:GetJob`
+- IAM permissions required (all read-only). The agent's own managed policy,
+  `AIDevOpsAgentAccessPolicy`, already grants the large majority of them. Only
+  **five** actions the skill uses are not in the managed policy; they are added by
+  an opt-in inline policy in `cloudformation/devops-agent-skill-policies.yaml`
+  (set `EnableAnalyticsDataopsExpertise=true`, the default):
+  - `cost-optimization-hub:ListRecommendations` — no `cost-optimization-hub` actions in the managed policy
+  - `quicksight:ListDashboards` — no `quicksight` actions in the managed policy
+  - `glue:GetJobs` — the managed policy grants `glue:GetJob` (singular) and `glue:List*`, not the plural `GetJobs`
+  - `iam:ListPolicies` — the managed policy grants `iam:ListRoles`/`ListUsers`/`ListEntitiesForPolicy`, not `ListPolicies`
+  - `lakeformation:GetDataLakeSettings` — the managed policy grants Lake Formation `Describe*`/`GetLFTag`/`GetResourceLFTags`/`List*`, not `GetDataLakeSettings`
+
+  If any of the five is absent, the skill degrades gracefully — the affected
+  question is scored as a floor (with a caveat) rather than failing the assessment.
+
+  The full set of read-only actions the skill relies on, by area (IAM action
+  names shown — a few differ from the SDK/API call name):
+  - `glue:GetDatabases`, `glue:GetJobs`, `glue:GetCrawlers`, `glue:ListRegistries`, `glue:ListSchemas`, `glue:ListDataQualityRulesets`, `glue:ListDataQualityResults`, `glue:ListWorkflows`
   - `lakeformation:GetDataLakeSettings`, `lakeformation:ListPermissions`, `lakeformation:ListDataCellsFilter`
   - `kinesis:ListStreams`, `firehose:ListDeliveryStreams`, `kinesisanalytics:ListApplications` (the Kinesis Analytics v2 `ListApplications` API authorizes under the `kinesisanalytics` prefix), `kafka:ListClustersV2`
   - `dms:DescribeReplicationTasks`, `dms:DescribeReplicationInstances`, `dms:DescribeEndpoints`, `dms:DescribeEventSubscriptions`

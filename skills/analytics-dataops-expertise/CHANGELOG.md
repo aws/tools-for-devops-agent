@@ -2,6 +2,19 @@
 
 All notable changes to the `analytics-dataops-expertise` skill are documented here.
 
+## [1.1.2] - 2026-09-30
+### Fixed
+- Reframed the IAM section in `SKILL.md` to match `README.md`: it now names
+  `AIDevOpsAgentAccessPolicy`, lists the five supplemental actions with the reason
+  each is not covered, and points at the `EnableAnalyticsDataopsExpertise` gate in
+  `cloudformation/devops-agent-skill-policies.yaml` (previously only `README.md`
+  carried this framing; `SKILL.md` still had the old ViewOnly wording).
+- Removed a duplicate `glue:GetJob` (singular) from the `SKILL.md` permission list
+  so it agrees with `README.md`.
+- Corrected the action count in the CloudFormation template comment: the canonical
+  list has 58 actions, 53 covered by the managed policy and 5 in the gate (was
+  "52 of the 57").
+
 ## [1.1.1] - 2026-09-29
 ### Added
 - Gated IAM policy `DevOpsAgentSkill-AnalyticsDataopsExpertise` in
