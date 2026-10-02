@@ -6,14 +6,18 @@ description: >-
   EKS cluster, its control plane, or its nodes — even when they don't say
   "dashboard" or name a specific subsystem. It produces a read-only, point-in-time
   health snapshot that grades control-plane signals (etcd, API Priority & Fairness,
-  API-server latency and errors, controller-manager, scheduler) and
-  node/data-plane signals (node conditions, node and pod utilization, EC2 status,
-  ENA network allowances, EBS performance, NAT, CoreDNS, Karpenter, nodegroup
-  registration), reading from whatever observability is connected (CloudWatch Logs
-  Insights and metrics/Container Insights, native EKS control-plane metrics, and
-  Prometheus, Datadog, New Relic, Dynatrace, or Splunk). Reach for it for "is my
-  cluster okay" questions, control-plane or node-health checks, latency/throttling
-  spikes, or a general EKS health review. It only reads state; it does not remediate.
+  API-server latency and errors, scheduler) and node/data-plane signals (node
+  conditions, utilization, EC2/ENA/EBS, NAT, CoreDNS, Karpenter, nodegroup
+  registration), reading from whatever observability is connected
+  (CloudWatch, native EKS metrics, Prometheus, Datadog, New Relic, Dynatrace, or
+  Splunk). Reach for it for "is my cluster okay" questions, control-plane or
+  node-health checks, and latency/throttling spikes; it only reads state and does
+  not remediate. This is a current-state snapshot, not a best-practices audit — for
+  a full Well-Architected / EKS Best Practices operational review use
+  aws-eks-operations-review instead.
+metadata:
+  author: kuntshah
+  version: 1.0.0
 ---
 
 # EKS Health Dashboard — DevOps Agent Skill

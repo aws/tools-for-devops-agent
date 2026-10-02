@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4.0
+## 1.0.0
 
 Close the metric-coverage gaps against the AWS [EKS essential metrics guide](https://aws-observability.github.io/observability-best-practices/guides/containers/oss/eks/best-practices-metrics-collection/),
 adding only customer-accessible metrics (etcd server internals behind the managed `:2379` boundary
