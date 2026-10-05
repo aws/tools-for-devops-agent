@@ -14,7 +14,7 @@ description: Identify and quantify AWS Config cost optimization opportunities.
   of savings.
 metadata:
   author: holmalla
-  version: "1.3.0"
+  version: "1.4.0"
   aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
   aws-devops-agent-skills.aws-services: "AWS Config"
   aws-devops-agent-skills.technical-domains: "Governance, Cost Optimization"
@@ -81,8 +81,13 @@ Work through these steps in order — each depends on the output of the one befo
   `GetDiscoveredResourceCounts` as an approximate fallback) for CI-driver attribution,
   and check S3 delivery-bucket size for storage. The exact signals, preferred order,
   and fallbacks are in [references/data-collection.md](references/data-collection.md).
-  If Cost Explorer is unavailable, still report configuration findings and label
-  dollar impact as "not quantified — enable Cost Explorer for sizing".
+  Attempt the Athena path **only** when its prerequisites are in place (an
+  Athena-managed-results workgroup, and read access to the Config S3 data and Glue
+  catalog — see data-collection.md); it is off by default and fails with AccessDenied
+  on a default DevOps Agent setup, so when those prerequisites are absent, skip Athena
+  and use `GetDiscoveredResourceCounts` without erroring. If Cost Explorer is
+  unavailable, still report configuration findings and label dollar impact as "not
+  quantified — enable Cost Explorer for sizing".
 
 - [ ] **Step 4: Analyze cost optimization opportunities.** Evaluate the setup against
   the eight opportunity checks (§4.1 recording-frequency mismatch, §4.2 over-broad

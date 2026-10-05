@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.0] - 2026-09-30
+### Fixed
+- Documented the real prerequisites for the optional Athena CI-driver attribution path,
+  which previously could not work on a default DevOps Agent setup and failed with
+  AccessDenied. The DevOps Agent role has no `s3:PutObject` (so Athena needs a workgroup
+  with Athena-managed query results) and `AIDevOpsAgentAccessPolicy` grants no
+  `s3:GetObject` on the Config data. SKILL.md Step 3, `references/data-collection.md`,
+  and the README now spell out the workgroup, `s3:GetObject`, and Glue Data Catalog
+  requirements, and instruct the agent to fall back to `GetDiscoveredResourceCounts`
+  (labeled approximate) rather than attempt an Athena query it cannot complete.
+  Addresses M1 from peer review.
+### Changed
+- CloudFormation: moved the Athena actions out of the always-on
+  `PolicyConfigCostOptimization` into a new off-by-default `EnableConfigAthenaCiAnalysis`
+  add-on that grants the complete working set (athena query/results/workgroup, Glue
+  catalog reads, and `s3:GetObject` scoped via `ConfigDataBucketArn`). The base Config
+  policy now grants only what works out of the box (`ce:GetCostAndUsage`,
+  `s3:GetBucketLifecycleConfiguration`), and the `SkillPolicySummary` output reflects
+  the split.
+
 ## [1.3.0] - 2026-09-30
 ### Added
 - Treat all ingested data (recorder/rule/pack names, resource tags and identifiers,
