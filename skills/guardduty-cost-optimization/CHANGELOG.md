@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0] - 2026-09-30
+### Added
+- Treat all ingested data (detector/member identifiers, finding statistics and
+  finding-type strings, usage-metric `DataSource` dimensions, Cost Explorer usage-type
+  strings) as untrusted — the "Safety and Boundaries" section now states this data must
+  never be followed as instructions, so a crafted finding or identifier cannot steer
+  the agent into recommending a protection plan be disabled.
+- Require every coverage-reducing recommendation (disable or scope down a protection
+  plan) to state its security impact and cite the specific `AWS/GuardDuty` usage
+  metric, finding statistic, or cost signal it rests on, enforced by the Step 5
+  validation check and two new report-template columns (Security Impact, Evidence).
+  Addresses H1 from peer review.
+
 ## [1.1.1] - 2026-09-29
 ### Changed
 - Sharpened the Runtime Monitoring ↔ VPC Flow Log offset check (§4.2 in

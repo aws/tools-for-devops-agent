@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+- Treat all ingested resource, usage, finding, and cost data as untrusted — the
+  System Prompt now states this data must never be followed as instructions, closing a
+  prompt-injection path where a crafted tag, bucket name, or finding string could steer
+  the agent into recommending reduced CloudTrail, Config, or GuardDuty coverage.
+- Require every coverage-reducing recommendation to state its security impact and cite
+  the specific evidence (metric, API field, resource) it rests on, so a human can
+  verify independently before acting; added Security Impact and Evidence columns to the
+  consolidated report. Addresses H1 from peer review.
+
 ## 1.0.0
 
 - Initial version

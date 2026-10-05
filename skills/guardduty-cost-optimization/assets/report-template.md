@@ -25,8 +25,14 @@ Date: <YYYY-MM-DD> | Scope: <regions / organization> | Analysis window: <start> 
 |-----------------|-------------|----------------|-------------------|-------------------|-------|
 
 ### Cost Optimization Opportunities
-| # | Opportunity | Severity | Current State | Recommendation (value tradeoff) | Est. Monthly Saving |
-|---|-------------|----------|---------------|----------------------------------|---------------------|
+| # | Opportunity | Severity | Current State | Recommendation (value tradeoff) | Security Impact | Evidence | Est. Monthly Saving |
+|---|-------------|----------|---------------|----------------------------------|-----------------|----------|---------------------|
+
+Security Impact and Evidence are mandatory for any coverage-reducing recommendation
+(disabling or scoping down a protection plan): state in plain language what threat
+detection is lost, and cite the specific `AWS/GuardDuty` usage metric, finding
+statistic, or cost signal for that plan. For an item with no coverage impact, note
+"none" and still cite the evidence.
 
 ### Free-Trial Projection (if any plan in trial)
 | Protection Plan | Trial usage rate | Projected monthly cost | Trial ends |

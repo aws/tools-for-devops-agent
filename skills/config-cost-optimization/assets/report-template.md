@@ -28,8 +28,15 @@ Date: <YYYY-MM-DD> | Scope: <regions / organization> | Analysis window: <start> 
 |---------------|--------------------|----------------|----------------|
 
 ### Cost Optimization Opportunities
-| # | Opportunity | Severity | Current State | Recommendation | Est. Monthly Saving |
-|---|-------------|----------|---------------|----------------|---------------------|
+| # | Opportunity | Severity | Current State | Recommendation | Security Impact | Evidence | Est. Monthly Saving |
+|---|-------------|----------|---------------|----------------|-----------------|----------|---------------------|
+
+Security Impact and Evidence are mandatory for any coverage-reducing recommendation
+(narrowing recorded types, switching to daily, stopping a recorder, dropping a rule or
+conformance pack): state in plain language what change-tracking or attestation is lost,
+and cite the specific cost signal, CI-driver, or recorder/rule setting the finding
+rests on. For an item with no coverage impact (e.g. S3 lifecycle), note "none" and
+still cite the evidence.
 
 ### Cost Attribution (if Cost Explorer available)
 | Usage Type | 30-Day Cost | Share |

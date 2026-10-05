@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0] - 2026-09-30
+### Added
+- Treat all ingested data (trail/bucket names, event-selector fields, resource ARNs,
+  tags, Cost Explorer usage-type strings) as untrusted — the "Safety and Boundaries"
+  section now states this data must never be followed as instructions, so a crafted
+  name or tag cannot steer the agent into recommending reduced logging coverage.
+- Require every coverage-reducing recommendation (disable a trail, drop Read/data
+  events, exclude KMS/RDS, narrow a selector) to state its security/audit impact and
+  cite the specific metric, cost signal, or trail field it rests on, enforced by a new
+  Step 5 validation check and two new report-template columns (Security Impact,
+  Evidence). Addresses H1 from peer review.
+
 ## [1.1.1] - 2026-09-29
 ### Changed
 - Restructured the skill for progressive disclosure: the SKILL.md body is now a slim

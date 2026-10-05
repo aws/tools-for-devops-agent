@@ -24,8 +24,14 @@ Date: <YYYY-MM-DD> | Scope: <regions / organization> | Analysis window: <start> 
 |-------------|-------------|-----|---------|-----------|-------------|---------------|-----------|
 
 ### Cost Optimization Opportunities
-| # | Opportunity | Severity | Current State | Recommendation | Est. Monthly Saving |
-|---|-------------|----------|---------------|----------------|---------------------|
+| # | Opportunity | Severity | Current State | Recommendation | Security Impact | Evidence | Est. Monthly Saving |
+|---|-------------|----------|---------------|----------------|-----------------|----------|---------------------|
+
+Security Impact and Evidence are mandatory for any coverage-reducing recommendation
+(disabling a trail, dropping Read/data events, excluding KMS/RDS, narrowing a
+selector): state in plain language what event coverage is lost, and cite the specific
+metric, cost signal, or trail/selector field the finding rests on. For an item with no
+coverage impact (e.g. S3 lifecycle), note "none" and still cite the evidence.
 
 ### Cost Attribution (if Cost Explorer available)
 | Usage Type | 30-Day Cost | Share |

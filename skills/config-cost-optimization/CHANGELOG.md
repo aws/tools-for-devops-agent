@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0] - 2026-09-30
+### Added
+- Treat all ingested data (recorder/rule/pack names, resource tags and identifiers,
+  delivery-bucket names, Athena-derived resource strings, Cost Explorer usage-type
+  strings) as untrusted — the "Safety and Boundaries" section now states this data must
+  never be followed as instructions, so a crafted name or tag cannot steer the agent
+  into recommending reduced recording coverage.
+- Require every coverage-reducing recommendation (narrow recorded types, switch to
+  daily, stop a recorder, drop a rule or conformance pack) to state its
+  compliance/security impact and cite the specific cost signal, CI-driver, or
+  recorder/rule setting it rests on, enforced by the Step 5 validation check and two
+  new report-template columns (Security Impact, Evidence). Addresses H1 from peer
+  review.
+
 ## [1.2.0] - 2026-09-28
 ### Changed
 - Restructured the skill for progressive disclosure to fix failing best-practices evals (BP-03, BP-12, BP-16) and the BP-17 warning. The SKILL.md body is now a slim checkbox-checklist workflow; detailed material moved into linked files.
