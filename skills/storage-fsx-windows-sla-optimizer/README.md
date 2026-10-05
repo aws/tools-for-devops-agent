@@ -197,6 +197,25 @@ The agent gathers configuration and CloudWatch metrics via its `use_aws` tool un
 the assumed role in the target account, applies the finding logic, and returns a
 Markdown report artifact.
 
+## Try it in a deployable demo
+
+The [FSx for Windows SLA Review demo](https://github.com/aws-samples/sample-aws-genai-ops-demos/tree/main/resilience/fsx-windows-sla-review-devops-agent)
+in the GenAI Ops Demo Library deploys everything this skill needs to show its value, in
+about an hour, with one script: an Agent Space with this skill registered, a Single-AZ
+FSx for Windows file system joined to a self-managed Active Directory, its alarms, and a
+Demo Lab that injects reversible mis-configurations and rolls them back:
+
+- **Active Directory credentials rotated** — the file system goes `MISCONFIGURED`, an
+  alarm starts an investigation, and the report names invalid service-account
+  credentials (not the network) as the cause.
+- **Automatic backups disabled** — the review flags the missing recovery point and ties
+  it to the Single-AZ recovery model.
+- **No CloudWatch alarm on the file system** — the review flags the observability gap
+  and names the `FreeStorageCapacity` alarm to create.
+
+Each scenario records what the agent concludes with and without this skill. The demo
+references the skill at a stated ref of this repository and never copies it.
+
 ## Non-production disclaimer
 
 > ⚠️ This skill is sample code, not intended for production use without additional
