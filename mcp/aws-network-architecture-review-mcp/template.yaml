@@ -1,0 +1,132 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  AWS Network Architecture Review MCP Server for AWS DevOps Agent.
+
+  A single Lambda exposes 13 read-only tools over Streamable HTTP (via Lambda
+  Web Adapter + a Function URL with AWS_IAM / SigV4 auth) that assess Direct
+  Connect, Transit Gateway, Site-to-Site VPN, Virtual Private Gateway, Cloud WAN,
+  and VPC endpoint configuration in the account the stack is deployed in.
+
+  The execution role is limited to the Describe/List/Get/Search actions the
+  tools call. No mutating permission is granted.
+
+Globals:
+  Function:
+    Timeout: 120
+    Runtime: python3.12
+    MemorySize: 1024
+
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+
+Resources:
+  # ============================================================
+  # Lambda function with Lambda Web Adapter (Streamable HTTP)
+  # ============================================================
+  NetworkArchitectureReviewMCPFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub aws-network-architecture-review-mcp-${StageName}
+      Handler: run.sh
+      CodeUri: src/
+      Description: Network Architecture Review MCP Server - Streamable HTTP via Lambda Web Adapter
+      Architectures:
+        - x86_64
+      Layers:
+        # Lambda Web Adapter layer
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+        - !Ref DependenciesLayer
+      Environment:
+        Variables:
+          # Lambda Web Adapter config
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          AWS_LWA_PORT: "8080"
+          AWS_LWA_READINESS_CHECK_PATH: /mcp
+          AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS: 500
+          AWS_LWA_INVOKE_MODE: response_stream
+          AWS_LWA_READINESS_CHECK_PROTOCOL: http
+          AWS_LWA_ASYNC_INIT: "true"
+          # MCP server config
+          PYTHONPATH: /opt/python
+          STAGE_NAME: !Ref StageName
+      Policies:
+        # Read-only: exactly the actions server.py calls. Describe/List/Get/Search
+        # actions in these services do not support resource-level scoping, so the
+        # resource is "*"; the boundary is the action list, not the resource.
+        - Statement:
+            - Sid: DirectConnectRead
+              Effect: Allow
+              Action:
+                - directconnect:DescribeConnections
+                - directconnect:DescribeVirtualInterfaces
+                - directconnect:DescribeDirectConnectGateways
+                - directconnect:DescribeDirectConnectGatewayAssociations
+                - directconnect:DescribeDirectConnectGatewayAttachments
+              Resource: '*'
+            - Sid: Ec2NetworkRead
+              Effect: Allow
+              Action:
+                - ec2:DescribeTransitGateways
+                - ec2:DescribeTransitGatewayAttachments
+                - ec2:DescribeTransitGatewayRouteTables
+                - ec2:GetTransitGatewayRouteTableAssociations
+                - ec2:GetTransitGatewayRouteTablePropagations
+                - ec2:SearchTransitGatewayRoutes
+                - ec2:DescribeVpnConnections
+                - ec2:DescribeVpnGateways
+                - ec2:DescribeVpcs
+                - ec2:DescribeVpcEndpoints
+              Resource: '*'
+            - Sid: CloudWanRead
+              Effect: Allow
+              Action:
+                - networkmanager:DescribeGlobalNetworks
+                - networkmanager:ListCoreNetworks
+                - networkmanager:ListAttachments
+                - networkmanager:ListPeerings
+              Resource: '*'
+            - Sid: CloudWatchRead
+              Effect: Allow
+              Action:
+                - cloudwatch:GetMetricData
+                - cloudwatch:DescribeAlarms
+              Resource: '*'
+      # Function URL with RESPONSE_STREAM for streamable-HTTP / SSE support.
+      # AWS_IAM auth == callers (the DevOps Agent) sign requests with SigV4.
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: RESPONSE_STREAM
+
+  # ============================================================
+  # Dependencies layer (FastMCP + boto3)
+  # ============================================================
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub aws-network-architecture-review-mcp-deps-${StageName}
+      Description: FastMCP and dependencies for the Network Architecture Review MCP server
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes:
+        - python3.12
+      CompatibleArchitectures:
+        - x86_64
+    Metadata:
+      BuildMethod: makefile
+
+Outputs:
+  MCPEndpointUrl:
+    Description: >
+      Function URL. Register this with /mcp appended in DevOps Agent as the MCP
+      server endpoint (SigV4 / AWS_IAM auth).
+    Value: !GetAtt NetworkArchitectureReviewMCPFunctionUrl.FunctionUrl
+
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt NetworkArchitectureReviewMCPFunction.Arn
