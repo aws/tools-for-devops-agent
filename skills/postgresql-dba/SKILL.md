@@ -2,7 +2,7 @@
 name: postgresql-dba
 description: "Provides read-only diagnostic guidance for Amazon RDS for PostgreSQL and Aurora PostgreSQL through the companion PostgreSQL DBA diagnostic server's 10 tools and 55 predefined queries. Use for health checks, on-screen customer-shareable reports, shared_buffers and memory sizing, parameter tuning, vacuum and transaction ID analysis, index review, SQL plans, query fingerprints, replication, connections, and lock investigation. Health-check requests call MCP report_format=markdown and the complete validated report is presented on screen in the AWS DevOps Agent Output panel."
 metadata:
-  version: "1.18"
+  version: "1.18.0"
   author: "viveksingh112"
   aws-devops-agent-skills.technical-domains: rds,aurora,postgresql,database,performance,memory,shared_buffers,cache-sizing,parameter-tuning,vacuum,indexes,replication
 ---
