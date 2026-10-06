@@ -184,11 +184,17 @@ The service rejects a skill zip containing more than **100 files**, counting wha
 `CHANGELOG.md`, `.skilleval.yaml`, `evals/`, `scripts/`, and `.claude/`. Note it does **not**
 exclude other root-level documents.
 
-This package sits at exactly 100 (`SKILL.md` plus 99 references), so **adding any reference file
-breaks upload** until `references/` is consolidated. A stray root-level report previously pushed it
-to 101 and every upload failed with `Zip validation failed: Zip contains 101 files`, while
-`check-consistency.sh` reported a compliant payload because its exclusion list did not match the
-uploader's. That check now mirrors the uploader and prints the remaining headroom.
+This package sits at 74 files (`SKILL.md` plus 73 references) after consolidating the remediation
+shards by size instead of ID count, leaving 26 files of headroom. It previously sat at exactly 100,
+where a stray root-level report pushed it to 101 and every upload failed with
+`Zip validation failed: Zip contains 101 files`, while `check-consistency.sh` reported a compliant
+payload because its exclusion list did not match the uploader's. That check now mirrors the uploader
+and prints the remaining headroom.
+
+Remediation shards are bounded by bytes, not ID count: each `<pillar>-NN.md` must declare at least
+4 IDs and stay at or below 12 KiB (≈3K tokens), because one shard is the unit loaded for a FAIL
+cluster. Both the generator and the consistency check enforce this; when a shard would exceed the
+cap, start a new numbered shard for that pillar.
 
 `SKILL.md` itself must stay within 8–12 KiB, and the active reference set within the 18K-token
 target. Both are enforced by the consistency check.

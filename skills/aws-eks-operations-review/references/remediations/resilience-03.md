@@ -1,45 +1,46 @@
 # Resilience remediations — shard 03
+Canonical IDs: `R19,R20,R21,R22`
 
-Canonical IDs: `R17,RM1,RM2,RM3,RM4,R18`
-
-### R17 — Immutable Secrets/ConfigMaps for static data
-**Why it matters:** By default the kubelet watches every Secret/ConfigMap a pod mounts. At scale that watch traffic pressures the API server and etcd. Marking rarely-changed Secrets/ConfigMaps `immutable: true` stops the watches (a scalability win) and prevents an accidental edit from silently rolling every consumer.
-**Steps:** Set `immutable: true` on Secrets/ConfigMaps that don't change at runtime (config, certs, static credentials). To change one later, delete and recreate it (and roll consumers intentionally).
+### R19 — StorageClass volumeBindingMode = WaitForFirstConsumer
+**Why it matters:** `Immediate` binding provisions the EBS volume (in an arbitrary AZ) before the pod is scheduled; if the scheduler places the pod in a different AZ it can never attach the AZ-bound volume and stays `Pending`.
+**Steps:** Set `volumeBindingMode: WaitForFirstConsumer` on every EBS StorageClass that backs a StatefulSet/Deployment with PVCs (StorageClass is immutable — recreate + migrate).
 **Snippet:**
 ```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata: { name: app-config }
-immutable: true
-data: { ... }
+kind: StorageClass
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
 ```
 **References:**
-- [Kubernetes — Immutable Secrets and ConfigMaps](https://kubernetes.io/docs/concepts/configuration/configmap/#configmap-immutable)
-- [EKS Best Practices — Scalability (control plane load)](https://docs.aws.amazon.com/eks/latest/best-practices/scale-cluster-services.html)
+- [Deploy a stateful workload to EKS](https://docs.aws.amazon.com/eks/latest/userguide/sample-storage-workload.html)
 
-## Resilience — manual / process (RM)
-
-### RM1 — Rollback mechanism
-**Why / fix:** Confirm a tested rollback path exists — `kubectl rollout undo deploy/${APP}` for imperative, or a GitOps revert for Argo/Flux. Link: [Updating applications](https://docs.aws.amazon.com/eks/latest/best-practices/application.html).
-
-### RM2 — Blue-green / canary strategy
-**Why / fix:** Risky changes should use progressive delivery (Argo Rollouts, Flux Flagger, or LBC weighted target groups) rather than a straight rolling update. Confirm the tooling is in place. Link: [Application HA](https://docs.aws.amazon.com/eks/latest/best-practices/application.html).
-
-### RM3 — Chaos engineering
-**Why / fix:** Resilience claims should be validated with fault injection — AWS FIS, Litmus, or Chaos Mesh exercising AZ/node/pod failure. Confirm a practice exists. Link: [AWS FIS](https://docs.aws.amazon.com/fis/latest/userguide/what-is.html).
-
-### RM4 — Auto Mode disruption controls
-**Why / fix:** On Auto Mode, tune NodePool `disruption` budgets so maintenance doesn't disrupt more than the workload tolerates. Review the NodePool. Link: [Auto Mode](https://docs.aws.amazon.com/eks/latest/best-practices/automode.html).
-
-### R18 — preStop hook for LB-fronted workloads
-**Why it matters:** The #1 cause of 502/504 during deployments — the container can get SIGKILL before the ALB/NLB target group and `kube-proxy` stop routing to it, so in-flight requests hit a dead pod.
-**Steps:** Add a `preStop` `sleep` that meets or exceeds the target-group deregistration delay, and set `terminationGracePeriodSeconds` above it.
-**Snippet:**
-```yaml
-lifecycle:
-  preStop:
-    exec: { command: ["/bin/sh","-c","sleep 20"] }   # >= target-group deregistration delay
-```
+### R20 — Snapshot coverage for stateful workloads
+**Why it matters:** A PersistentVolume without snapshots has zero recovery options if the volume is corrupted, accidentally deleted, or the AZ has an issue.
+**Steps:**
+1. Identify stateful workloads: `kubectl get statefulsets -A` + Deployments with PVCs.
+2. Check for VolumeSnapshots: `kubectl get volumesnapshots -A` — verify recent timestamps (< 24h for critical data).
+3. Or verify AWS Backup coverage: `aws backup list-protected-resources` — filter for EBS volume IDs backing the PVCs.
+4. For EFS-backed PVs: verify automatic backups are enabled (`aws efs describe-file-systems`).
+5. Implement a snapshot schedule: VolumeSnapshot with a CronJob, or AWS Backup with a scheduled plan.
 **References:**
-- [EKS Best Practices — Load Balancing (gracefully handle client requests)](https://docs.aws.amazon.com/eks/latest/best-practices/load-balancing.html)
+- [EKS User Guide — EBS snapshots](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html)
+- [AWS Backup — Protecting EKS](https://docs.aws.amazon.com/aws-backup/latest/devguide/whatisbackup.html)
 
+### R21 — Restore testing / RTO-RPO alignment
+**Why it matters:** Untested backups may not restore successfully. Without documented RTO/RPO targets, you can't verify the backup strategy meets business requirements.
+**Steps:**
+1. Confirm RTO/RPO targets are documented for the cluster's stateful workloads.
+2. Verify snapshot/backup frequency ≤ RPO (e.g., 1h RPO requires ≤ 1h snapshot interval).
+3. Request evidence of a recent restore test (within 90 days): restore a snapshot to a test PVC, verify data integrity.
+4. Estimate restore time vs. RTO: volume size, IOPS during restore, application startup time.
+**References:**
+- [AWS Well-Architected — Reliability Pillar: Recovery](https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/plan-for-disaster-recovery-dr.html)
+
+### R22 — External dependency mapping
+**Why it matters:** A cluster can be internally healthy but fail because an external dependency (database, S3, SQS, third-party API) is down. Unmapped dependencies cause cascading failures with unknown blast radius.
+**Steps:**
+1. Inventory external endpoints: check egress NetworkPolicies, ExternalName services, ServiceEntry CRDs, application configuration.
+2. For each critical dependency: verify health-check/canary monitoring exists, and workloads implement timeout + retry + circuit-breaker patterns.
+3. Document the dependency graph (which services depend on which external systems).
+4. For AWS services: consider VPC endpoints to remove internet/NAT dependency.
+**References:**
+- [EKS Best Practices — Reliability](https://docs.aws.amazon.com/eks/latest/best-practices/reliability.html)

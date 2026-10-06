@@ -32,7 +32,7 @@ aws-eks-operations-review/
 └── references/
     ├── runtime/                 # manifests, gates, guards, QA, report contract
     ├── pillars/                 # nine canonical pillar definitions
-    ├── remediations/            # generated FAIL-only index and 4–8-ID shards
+    ├── remediations/            # generated FAIL-only index and size-capped (≤12 KiB) shards
     ├── control-plane-health/    # source detection, four query shards, thresholds/playbooks
     ├── decision-trees/          # signal-triggered diagnostics
     ├── docs/                    # JIT background; consolidated operator-guides.md
@@ -67,12 +67,12 @@ zip -r aws-eks-operations-review.zip aws-eks-operations-review/ \
      '*/README.md' '*/EKS_SKILL_OPTIMIZATION_REPORT.md' '*.DS_Store'
 ```
 
-Upload constraints: root entry `aws-eks-operations-review/SKILL.md`, ZIP ≤6 MB and ≤100 regular files, no `scripts/`, eval files, README, changelog, optimization report, `.DS_Store`, TSV, or runtime sidecars. The intended payload currently contains exactly 100 files. In the Agent Space Operator Web App choose **Skills → Add skill → Upload skill**, select On-demand/Evaluation (or Generic), review validation, and upload. The shared `operations-review-report-format` skill is optional; `references/runtime/report-contract.md` is the complete EKS fallback/adapter.
+Upload constraints: root entry `aws-eks-operations-review/SKILL.md`, ZIP ≤6 MB and ≤100 regular files, no `scripts/`, eval files, README, changelog, optimization report, `.DS_Store`, TSV, or runtime sidecars. The intended payload currently contains 74 files (26 below the limit); `check-consistency.sh` prints the remaining headroom. In the Agent Space Operator Web App choose **Skills → Add skill → Upload skill**, select On-demand/Evaluation (or Generic), review validation, and upload. The shared `operations-review-report-format` skill is optional; `references/runtime/report-contract.md` is the complete EKS fallback/adapter.
 
 ## Contributing a check
 
 1. Add the stable ID row to its canonical definition using one of the validated table schemas; never reuse/renumber IDs or use C-series for Cost.
-2. Add a complete remediation block to a 4–8-ID numbered shard and include the ID in that shard's `Canonical IDs` declaration; the generator writes the direct index route.
+2. Add a complete remediation block to the pillar's numbered shard and include the ID in that shard's `Canonical IDs` declaration; the generator writes the direct index route. A shard must stay ≤12 KiB (and declare ≥4 IDs) — if it would exceed the cap, start a new `<pillar>-NN.md` shard rather than growing it.
 3. Run `python3 evals/generate-runtime-indexes.py --write` to regenerate `references/runtime/check-manifest.md` and `references/remediations/index.md`; do not edit either generated file manually.
 4. If a count changed, update the corresponding QA count and affected runtime crosswalk/count text, then update `CHANGELOG.md`.
 5. Run the local maintainer consistency check and inspect the archive contents. The generated manifest—not a blank worksheet or a human operator guide—owns membership.

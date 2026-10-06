@@ -1,66 +1,40 @@
 # Operations remediations — shard 03
+Canonical IDs: `Op29,Op30,Op31,Op32`
 
-Canonical IDs: `Op17,Op18,Op19,Op20,Op21,Op22,Op23,Op24`
-
-### Op17 — Auto Mode component dedup
-**Why it matters:** On EKS Auto Mode, Karpenter / AWS Load Balancer Controller / EBS CSI are AWS-managed. Running self-managed copies alongside them causes duplicate controllers fighting over the same resources.
-**Steps:** On Auto Mode clusters, remove self-managed Karpenter/LBC/EBS-CSI installs; keep only host-level agents that must be DaemonSets.
+### Op29 — Node AMI age / rotation window *(AWS-API)*
+**Why it matters:** Stale AMIs miss kernel/OS security patches. Op11 (Karpenter pinning) and U15 (AL2 EOL) don't flag a generally *old* self-managed / MNG custom AMI.
+**How to verify / fix:** Resolve each node's AMI ID, then `aws ec2 describe-images --image-ids ${AMI} --query 'Images[0].CreationDate'`; flag > 90 days. Rebuild/rotate custom AMIs on a pipeline (EC2 Image Builder). **N/A** in kubectl-only mode; **N/A** on Auto Mode / Fargate.
 **References:**
-- [EKS Best Practices — Auto Mode](https://docs.aws.amazon.com/eks/latest/best-practices/automode.html)
+- [EKS User Guide — Amazon EKS optimized AMIs](https://docs.aws.amazon.com/eks/latest/userguide/eks-optimized-amis.html)
 
-### Op18 — Single node autoscaler
-**Why it matters:** Running Cluster Autoscaler and Karpenter (or self-managed Karpenter on Auto Mode) simultaneously causes them to fight over the same nodes — thrashing, double-provisioning, stuck scale-down.
-**Steps:** Pick one. For most clusters migrate fully to Karpenter (or use Auto Mode's managed Karpenter and remove self-managed CAS/Karpenter). Verify only one controller is Running.
+### Op30 — CSI driver controller + node health
+**Why it matters:** CSI driver failures silently break PVC binding and volume attach/mount — pods hang in `ContainerCreating` waiting for volumes that never come.
+**Steps:**
+1. Verify controller: `kubectl get deploy -n kube-system ebs-csi-controller` — all replicas Ready.
+2. Verify node driver: `kubectl get ds -n kube-system ebs-csi-node` — all desired pods Ready.
+3. Check CSINode registration: `kubectl get csinodes` — every schedulable node should list the driver.
+4. If pods are failing: `kubectl describe pod -n kube-system <ebs-csi-controller-pod>` for events.
+5. For EFS: repeat for `efs-csi-controller` and `efs-csi-node`.
 **References:**
-- [EKS Best Practices — Karpenter](https://docs.aws.amazon.com/eks/latest/best-practices/karpenter.html)
-- [EKS Best Practices — Cluster Autoscaler](https://docs.aws.amazon.com/eks/latest/best-practices/cas.html)
+- [EKS User Guide — EBS CSI driver](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html)
+- [EKS User Guide — EFS CSI driver](https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html)
 
-### Op19 — metrics-server present
-**Why it matters:** metrics-server is required for HPA, VPA, and `kubectl top`. Without it, HPAs can't scale and you're blind to live resource usage.
-**Steps:** Install metrics-server (managed addon or upstream manifest) and confirm it's Ready; on Auto Mode it's the expected default data-plane pod.
+### Op31 — GitOps reconciliation health
+**Why it matters:** GitOps drift means the deployed state doesn't match the declared desired state — manual changes bypass review, or reconciliation is failing silently.
+**Steps:**
+1. Argo CD: `kubectl get applications -A -o json` — check `.status.sync.status` (should be `Synced`) and `.status.health.status` (should be `Healthy`).
+2. Flux: `kubectl get kustomizations -A` — check `Ready=True` condition. `kubectl get gitrepositories -A` for source health.
+3. Investigate any `OutOfSync`, `Degraded`, or `Stalled` apps. Common causes: manual edits, failed hooks, dependency ordering.
+4. Re-sync or fix the source and let GitOps reconcile.
 **References:**
-- [Kubernetes — Resource metrics pipeline](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/)
-- [EKS User Guide — Install metrics-server](https://docs.aws.amazon.com/eks/latest/userguide/metrics-server.html)
+- [Flux — Core concepts](https://fluxcd.io/flux/concepts/)
+- [Argo CD — Sync status](https://argo-cd.readthedocs.io/en/stable/user-guide/app_sync/)
 
-### Op20 — Karpenter controller placement
-**Why it matters:** Running the Karpenter controller on a node Karpenter itself manages risks self-disruption — Karpenter can consolidate/expire the node it runs on, briefly losing the controller.
-**Steps:** Run the Karpenter controller on a small managed node group or a Fargate profile for the `karpenter` namespace — never on a Karpenter-managed node.
+### Op32 — Deployment rollback readiness
+**Why it matters:** A `revisionHistoryLimit: 0` deletes all previous ReplicaSets, making `kubectl rollout undo` impossible — MTTR increases when you can't quickly roll back a bad deployment.
+**Steps:**
+1. Check: `kubectl get deploy -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}: {.spec.revisionHistoryLimit}{"\n"}{end}'`
+2. Flag any deployment with `revisionHistoryLimit: 0`. Set to at least 2 (default 10 is fine for most cases).
+3. Verify at least one previous ReplicaSet exists: `kubectl get rs -n <ns> -l app=<name>` — should show > 1 RS.
 **References:**
-- [EKS Best Practices — Karpenter](https://docs.aws.amazon.com/eks/latest/best-practices/karpenter.html)
-
-### Op21 — Consolidation requires memory requests = limits
-**Why it matters:** When consolidation is enabled but workloads have memory `requests` < `limits`, Karpenter can misjudge real utilization and consolidate nodes whose pods then get evicted/OOM.
-**Steps:** For consolidation-eligible workloads set memory `requests == limits`; use LimitRanges to default this per namespace.
-**References:**
-- [EKS Best Practices — Karpenter](https://docs.aws.amazon.com/eks/latest/best-practices/karpenter.html)
-
-### Op22 — Spot NodePool instance diversity
-**Why it matters:** A Spot NodePool narrowed to a few instance types has fewer capacity pools to draw from → higher interruption rate and provisioning failures.
-**Steps:** Broaden Spot NodePool `requirements` to many instance families/sizes; exclude only types that genuinely don't fit the workload.
-**Snippet:**
-```yaml
-requirements:
-  - key: karpenter.k8s.aws/instance-category
-    operator: In
-    values: ["c", "m", "r"]
-  - key: karpenter.sh/capacity-type
-    operator: In
-    values: ["spot"]
-```
-**References:**
-- [EKS Best Practices — Karpenter](https://docs.aws.amazon.com/eks/latest/best-practices/karpenter.html)
-
-### Op23 — Auto Mode managed-component expectations
-**Why it matters:** On Auto Mode, Karpenter/LBC/EBS-CSI are AWS-managed and won't appear as in-cluster pods — flagging them "missing" is a false finding. The real check is no leftover self-managed duplicates.
-**Steps:** Treat managed components as present-by-design; only flag leftover self-managed copies (see Op17). Host agents must still be DaemonSets.
-**References:**
-- [EKS Best Practices — Auto Mode](https://docs.aws.amazon.com/eks/latest/best-practices/automode.html)
-
-### Op24 — CAS auto-discovery + version coupling
-**Why it matters:** Without `--node-group-auto-discovery`, CAS needs per-ASG wiring (brittle); and a CAS minor mismatched to the cluster is unsupported.
-**Steps:** Set `--node-group-auto-discovery` (tag-based) on CAS and keep its minor matched to the cluster. For spiky capacity, consider Karpenter instead.
-**References:**
-- [EKS Best Practices — Cluster Autoscaler](https://docs.aws.amazon.com/eks/latest/best-practices/cas.html)
-
-## Operations — manual / AWS-API (OpM)
-
+- [Kubernetes — Deployment revision history](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#revision-history-limit)

@@ -1,5 +1,4 @@
 # Aws Api remediations — shard 01
-
 Canonical IDs: `AX1,AX2,AX3,AX4,AX5,AX6,AX7,AX8`
 
 ### AX1 — EKS Cluster Insights (no failing insights)
@@ -80,4 +79,3 @@ Canonical IDs: `AX1,AX2,AX3,AX4,AX5,AX6,AX7,AX8`
 **References:**
 - [EKS — Worker node troubleshooting](https://docs.aws.amazon.com/eks/latest/userguide/troubleshooting.html)
 - [re:Post — Worker nodes fail to join the cluster](https://repost.aws/knowledge-center/eks-worker-nodes-cluster)
-

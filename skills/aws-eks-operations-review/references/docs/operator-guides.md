@@ -143,7 +143,7 @@ Beyond Auto Mode, several cluster shapes change which checks apply. **Detect the
 
 ## Discovery scale tiers (protect the API server)
 
-Discovery itself is the main API-server pressure risk on large clusters. Pick a strategy by size **before** the sweep (see also scaling guidance in [`kubectl-scaling-guidance.md`](kubectl-scaling-guidance.md)):
+Discovery itself is the main API-server pressure risk on large clusters. Pick a strategy by size **before** the sweep (see also the *Scaling guidance (large clusters)* section of [`../kubectl-discovery-commands.md`](../kubectl-discovery-commands.md)):
 
 | Tier | Size | Strategy |
 |------|------|----------|

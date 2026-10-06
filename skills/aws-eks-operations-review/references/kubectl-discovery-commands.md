@@ -1,6 +1,6 @@
 # kubectl discovery — core areas 1–27
 
-Run every command through the AWS DevOps Agent MCP tool **`use_kubectl`**. Every code span below is one separate tool invocation; never combine commands with shell operators. Allowed operations: `get`, `describe`, `logs`, `version`, `config current-context`, `cluster-info`, `top`, and `get --raw`. Tool results remain transient in conversation and must not be written to Amazon S3 or a file. Record command, scope, timestamp, and resourceVersion where available in the transient ledger. Continue with [`kubectl-discovery-commands-deep-dive.md`](kubectl-discovery-commands-deep-dive.md); fleet/payload detail is in [`docs/kubectl-scaling-guidance.md`](docs/kubectl-scaling-guidance.md).
+Run every command through the AWS DevOps Agent MCP tool **`use_kubectl`**. Every code span below is one separate tool invocation; never combine commands with shell operators. Allowed operations: `get`, `describe`, `logs`, `version`, `config current-context`, `cluster-info`, `top`, and `get --raw`. Tool results remain transient in conversation and must not be written to Amazon S3 or a file. Record command, scope, timestamp, and resourceVersion where available in the transient ledger. Continue with [`kubectl-discovery-commands-deep-dive.md`](kubectl-discovery-commands-deep-dive.md); fleet/payload detail is in the *Scaling guidance (large clusters)* section at the end of this file.
 
 ## Fetch and projection rules
 
@@ -39,3 +39,11 @@ Produce the reusable fetch IDs named by [`runtime/discovery-manifest.md`](runtim
 ## Failure and scale handling
 
 NotFound for an optional CRD is `complete` with feature=false. Permission denial or timeout is `partial|n/a` with exact error; narrow and retry a huge result once. Connectivity/context failure invokes the skill stop rule. Use `<100`, `100–500`, `500–2000`, and `>2000` node tiers from the manifest; the independent 500+ pod guard always overrides broad pod JSON. Numbers here match the authoritative 49-area manifest and [`docs/resource-inventory.md`](docs/resource-inventory.md) is background only.
+
+## Scaling guidance (large clusters)
+- **Do not** fetch `kubectl get pods -A -o json` on clusters with thousands of pods — it can pressure the API server and blow context. Instead:
+  - Use `kubectl get pods -A -o wide` or field-selectors for status counts (`--field-selector=status.phase=Pending`).
+  - Scope per namespace and iterate.
+  - For pod-spec detail (probes, requests, securityContext), sample representative namespaces rather than the whole cluster.
+- Pace calls: run areas sequentially. Confirm with the user before a broad sweep on production.
+- Cap detail: when an area returns hundreds of items, summarize counts and inspect a bounded sample (the original tool capped detailed views at 30–50 items).

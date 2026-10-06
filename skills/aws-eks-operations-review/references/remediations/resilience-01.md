@@ -1,5 +1,4 @@
 # Resilience remediations — shard 01
-
 Canonical IDs: `R1,R2,R3,R4,R5,R6,R7,R8`
 
 ### R1 — Multi-AZ node distribution
@@ -135,4 +134,3 @@ livenessProbe:
 **References:**
 - [EKS Best Practices — Health checks and self-healing](https://docs.aws.amazon.com/eks/latest/best-practices/application.html)
 - [Kubernetes — Configure Liveness, Readiness and Startup Probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
-
