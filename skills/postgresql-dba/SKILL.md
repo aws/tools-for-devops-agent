@@ -1,13 +1,13 @@
 ---
-name: postgresql-dba-mcp
-description: "Provides read-only diagnostic guidance for Amazon RDS for PostgreSQL and Aurora PostgreSQL through the postgresql-dba-mcp server's 10 tools and 55 predefined queries. Use for health checks, on-screen customer-shareable reports, shared_buffers and memory sizing, parameter tuning, vacuum and transaction ID analysis, index review, SQL plans, query fingerprints, replication, connections, and lock investigation. Health-check requests call MCP report_format=markdown and the complete validated report is presented on screen in the AWS DevOps Agent Output panel."
+name: postgresql-dba
+description: "Provides read-only diagnostic guidance for Amazon RDS for PostgreSQL and Aurora PostgreSQL through the companion PostgreSQL DBA diagnostic server's 10 tools and 55 predefined queries. Use for health checks, on-screen customer-shareable reports, shared_buffers and memory sizing, parameter tuning, vacuum and transaction ID analysis, index review, SQL plans, query fingerprints, replication, connections, and lock investigation. Health-check requests call MCP report_format=markdown and the complete validated report is presented on screen in the AWS DevOps Agent Output panel."
 metadata:
   version: "1.18"
   author: "viveksingh112"
   aws-devops-agent-skills.technical-domains: rds,aurora,postgresql,database,performance,memory,shared_buffers,cache-sizing,parameter-tuning,vacuum,indexes,replication
 ---
 
-# PostgreSQL DBA MCP diagnostic guidance
+# PostgreSQL DBA diagnostic guidance
 
 This skill interprets evidence returned by the PostgreSQL DBA MCP server. It is
 not packaged by `template.yaml`; install or register it separately only through
@@ -229,7 +229,7 @@ its trend and business impact instead of applying a universal threshold.
 For vacuum, dead-tuple, transaction-ID, index, SQL-plan, replication, connection,
 lock, or pre-upgrade investigations, retrieve and follow the applicable procedure
 from the reference artifact titled
-`postgresql-dba-mcp: investigation-workflows` (source file
+`postgresql-dba: investigation-workflows` (source file
 `references/investigation-workflows.md`). The safety, evidence, query-preview,
 report-routing, and approval rules in this main file continue to apply.
 
@@ -406,7 +406,7 @@ AWS reference:
 
 For index, SQL-plan, replication, connection/lock, and pre-upgrade procedures,
 retrieve and follow the reference artifact titled
-`postgresql-dba-mcp: investigation-workflows` (source file
+`postgresql-dba: investigation-workflows` (source file
 `references/investigation-workflows.md`). Do not pass a truncated
 `normalized_query_preview` to `explain_query`, claim a fingerprint is reversible,
 broaden database privileges for convenience, drop an index or replication slot
