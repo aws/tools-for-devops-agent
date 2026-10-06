@@ -2,7 +2,7 @@
 
 A skill that gives the AWS DevOps Agent the judgment to account for its own running cost. It shows the agent time each Agent Space consumed, the Support plan credits, and the downstream AWS API cost the agent generated while working, each figure gathered through read-only APIs that add nothing to your bill.
 
-Attach it to an Agent Space and ask in chat, or pair it with the [cost dashboard custom agent](../../custom-agents/devops-agent-cost-dashboard/README.md) for a scheduled, charted report.
+Attach it to an Agent Space and ask in chat, or pair it with the [cost dashboard custom agent](../../custom-agents/devops-agent-cost-dashboard/) for a scheduled, charted report.
 
 > **Figures are estimates, not billing data.** They are reconstructed from CloudWatch metrics, CloudTrail events, and query execution history, priced at published list rates. AWS Billing and AWS Cost Explorer remain the authoritative record of what you were charged. This output must not be used as the basis for invoicing, chargeback, or contractual commitments.
 
@@ -104,7 +104,7 @@ The two Support credit values are optional: omitting them shows direct cost with
 You can run this skill three ways. Pick the entry point that fits how your team already works; the calculation method is identical.
 
 - **Standalone (chat).** Attach the skill to an Agent Space and ask a cost question directly. You supply the reporting window and, optionally, `SUPPORT_PLAN` and `PRIOR_MONTH_SUPPORT_CHARGE` in the request itself (see *Inputs*).
-- **Scheduled (custom agent).** Pair the skill with the included [cost dashboard custom agent](../../custom-agents/devops-agent-cost-dashboard/README.md), which pins one role, fixes a trailing window, runs silently, and produces the same charted dashboard on each run or on a schedule. You supply the inputs once in the agent's Config table instead of per request.
+- **Scheduled (custom agent).** Pair the skill with the included [cost dashboard custom agent](../../custom-agents/devops-agent-cost-dashboard/), which pins one role, fixes a trailing window, runs silently, and produces the same charted dashboard on each run or on a schedule. You supply the inputs once in the agent's Config table instead of per request.
 - **From an agent you already use.** A DevOps agent that supports skills can call this one by name. Install the skill, then reference it from that agent's instructions the way the cost dashboard agent does.
 
 Whichever entry point you pick, the one-time setup below is the same. Work through the numbered steps in order once, then use the skill through your chosen path.
@@ -124,7 +124,7 @@ zip ../devops-agent-cost-insights.zip SKILL.md
 
 **4. Supply your Support plan.** Support credits have no Pricing API entry, so the skill applies the published tier percentages rather than resolving a rate on the run: Unified Operations 100%, Enterprise Support 75%, Business Support+ 30% of the prior month's `AWS Support` charge. Provide `SUPPORT_PLAN` and last month's `AWS Support` charge (`PRIOR_MONTH_SUPPORT_CHARGE`) if you want the credit computed; the skill derives the rate from the plan. Put them in the consuming agent's configuration for scheduled runs, or in the request itself for a one-off. Omitting them is valid, and the report then shows direct cost with no credit offset.
 
-**5. Confirm it works.** Ask a cost question in chat ("What did this Agent Space cost over the last 7 days?") to confirm the skill triggers, or run the [custom agent](../../custom-agents/devops-agent-cost-dashboard/README.md) for a scheduled dashboard.
+**5. Confirm it works.** Ask a cost question in chat ("What did this Agent Space cost over the last 7 days?") to confirm the skill triggers, or run the [custom agent](../../custom-agents/devops-agent-cost-dashboard/) for a scheduled dashboard.
 
 If any of the three Pricing API actions is denied, the skill still runs. It reports measured quantities for each downstream category and marks the dollar figure *not priced: rate unavailable*, whichever of the three actions is missing: a denied `DescribeServices` or `GetAttributeValues` stops price-dimension derivation before a rate is ever requested, and a denied `GetProducts` stops the rate lookup itself. Grant all three if you want priced downstream lines.
 
@@ -162,13 +162,13 @@ Athena history supplies exact bytes, joined to CloudTrail `StartQueryExecution` 
 
 ## Next step
 
-For a scheduled, charted dashboard scoped to one role with a fixed output format, see the [cost dashboard custom agent](../../custom-agents/devops-agent-cost-dashboard/README.md). It uses this skill for every calculation and adds configuration verification and a consistent report layout on top.
+For a scheduled, charted dashboard scoped to one role with a fixed output format, see the [cost dashboard custom agent](../../custom-agents/devops-agent-cost-dashboard/). It uses this skill for every calculation and adds configuration verification and a consistent report layout on top.
 
 ---
 
 ## Setting a guardrail threshold
 
-A budget cap is only as good as the number behind it. The [investigation cost guardrail skill](../investigation-cost-guardrail/README.md) estimates and caps investigation cost before the agent runs, but it needs a threshold to enforce. This skill supplies it: by showing what investigations and downstream calls have actually cost per Agent Space, you set that budget from observed spend and tighten it as usage changes.
+A budget cap is only as good as the number behind it. The [investigation cost guardrail skill](../investigation-cost-guardrail/) estimates and caps investigation cost before the agent runs, but it needs a threshold to enforce. This skill supplies it: by showing what investigations and downstream calls have actually cost per Agent Space, you set that budget from observed spend and tighten it as usage changes.
 
 ## Known Limitations
 

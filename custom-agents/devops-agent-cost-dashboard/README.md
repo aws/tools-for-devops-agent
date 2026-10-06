@@ -1,6 +1,6 @@
 # DevOps Agent Cost Dashboard
 
-This custom agent runs the [`devops-agent-cost-insights` skill](../../skills/devops-agent-cost-insights/README.md) on a schedule, scoped to one IAM role, and emits a fixed dashboard plus a text summary. Where the skill is the method, this agent is the persona that runs it: it pins the configuration, fixes the reporting window, executes silently, and produces the same report layout on each run.
+This custom agent runs the [`devops-agent-cost-insights` skill](../../skills/devops-agent-cost-insights/) on a schedule, scoped to one IAM role, and emits a fixed dashboard plus a text summary. Where the skill is the method, this agent is the persona that runs it: it pins the configuration, fixes the reporting window, executes silently, and produces the same report layout on each run.
 
 Use it when you want a recurring, charted cost report for a single DevOps Agent role rather than an ad-hoc chat answer.
 
@@ -95,7 +95,7 @@ The calculations are identical. The agent adds configuration, a fixed window and
 
 ### 1. Install the skill first
 
-This agent calls the `devops-agent-cost-insights` skill by name, so install the skill before creating the agent. Follow the [skill README](../../skills/devops-agent-cost-insights/README.md#getting-started).
+This agent calls the `devops-agent-cost-insights` skill by name, so install the skill before creating the agent. Follow the [skill README](../../skills/devops-agent-cost-insights/#getting-started).
 
 ### 2. Create the agent
 
