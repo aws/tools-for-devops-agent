@@ -20,6 +20,7 @@ Metadata:
           - EnableSupportCases
           - EnableRdsOperationReview
           - EnableEksOperationReview
+          - EnableEcsOperationReview
           - EnableInvestigationCostGuardrail
           - EnableEnrichWithSecurityAgent
           - EnableCrmInvestigationGuidelines
@@ -27,8 +28,10 @@ Metadata:
           - EnableMskOperations
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
+          - EnableAwsBackupCoverageReview
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
+          - EnableSageMakerAIOpsReview
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -68,6 +71,12 @@ Parameters:
   EnableEksOperationReview:
     Type: String
     Description: EKS Operation Review skill (covered by managed policy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableEcsOperationReview:
+    Type: String
+    Description: ECS Operation Review skill (adds compute-optimizer:GetECSServiceRecommendations for the PERF8 rightsizing check).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -113,6 +122,14 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAwsBackupCoverageReview:
+    Type: String
+    Description: >
+      AWS Backup Coverage Review skill (adds backup:GetSupportedResourceTypes,
+      config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableAgentCoreObservabilitySetup:
     Type: String
     Description: AgentCore Observability Setup skill (adds read-only bedrock-agentcore, X-Ray, log-delivery, and Lambda/ECS/EKS host-config permissions).
@@ -124,18 +141,26 @@ Parameters:
     Description: AgentCore Operational Review skill (adds read-only bedrock-agentcore control-plane List/Get and ec2:DescribeSubnets for the multi-AZ check; observability-only mode needs none of these).
     AllowedValues: ['true', 'false']
     Default: 'true'
+  EnableSageMakerAIOpsReview:
+    Type: String
+    Description: SageMaker AI Operational Review skill (adds savingsplans:DescribeSavingsPlans for the Savings Plan check).
+    Default: 'true'
+    AllowedValues: ['true', 'false']
 
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
   SkillSupportCases: !Equals [!Ref EnableSupportCases, 'true']
   SkillRdsOperationReview: !Equals [!Ref EnableRdsOperationReview, 'true']
+  SkillEcsOperationReview: !Equals [!Ref EnableEcsOperationReview, 'true']
   SkillInvestigationCostGuardrail: !Equals [!Ref EnableInvestigationCostGuardrail, 'true']
   SkillMskOperations: !Equals [!Ref EnableMskOperations, 'true']
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
+  SkillAwsBackupCoverageReview: !Equals [!Ref EnableAwsBackupCoverageReview, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
+  SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -236,6 +261,24 @@ Resources:
               - logs:GetLogEvents
             Resource: '*'
 
+  # ecs-operation-review: adds compute-optimizer:GetECSServiceRecommendations (PERF8 rightsizing);
+  # every other API the skill uses is covered by AIDevOpsAgentAccessPolicy
+  PolicyEcsOperationReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillEcsOperationReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-EcsOperationReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ComputeOptimizerEcsRecommendations
+            Effect: Allow
+            Action:
+              - compute-optimizer:GetECSServiceRecommendations
+            Resource: '*'
+
   # investigation-cost-guardrail: adds pricing:GetProducts
   PolicyInvestigationCostGuardrail:
     Type: AWS::IAM::Policy
@@ -316,6 +359,39 @@ Resources:
             Effect: Allow
             Action:
               - dms:TestConnection
+            Resource: '*'
+
+  # aws-backup-coverage-review: only the read actions NOT already granted by
+  # AIDevOpsAgentAccessPolicy. Verified with iam:SimulatePrincipalPolicy against a
+  # live agent role — 45 of the 52 actions the skill uses are already allowed by
+  # the managed policy, including every backup:List*/Describe* call. Strictly
+  # read-only; no Start*, Put*, Create*, Update*, or Delete* is granted, and the
+  # managed policy already implicitly denies backup:StartBackupJob and
+  # backup:DeleteRecoveryPoint.
+  # sts:GetCallerIdentity is intentionally omitted: it requires no IAM permission.
+  PolicyAwsBackupCoverageReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillAwsBackupCoverageReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-AwsBackupCoverageReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BackupCoverageReviewDelta
+            Effect: Allow
+            Action:
+              # Not covered by backup:List*/backup:Describe* in the managed policy
+              - backup:GetSupportedResourceTypes
+              # Managed policy grants SelectAggregateResourceConfig but not the
+              # single-account variant the skill uses when no aggregator exists
+              - config:SelectResourceConfig
+              # Resource types with no inventory read in the managed policy
+              - dsql:ListClusters
+              - storagegateway:ListFileShares
+              - storagegateway:ListGateways
+              - storagegateway:ListVolumes
             Resource: '*'
 
   # agentcore-observability-setup: adds read-only AgentCore control-plane, X-Ray Transaction Search,
@@ -428,6 +504,29 @@ Resources:
                   - support.amazonaws.com
                   - ce.amazonaws.com
 
+
+  # sagemaker-ai-ops-review: adds savingsplans:DescribeSavingsPlans for the Savings Plan check.
+  # Every other API the skill calls -- sagemaker List/Describe/ListTags, CloudWatch metric reads,
+  # application-autoscaling:Describe*, servicequotas:GetServiceQuota, Cost Explorer region
+  # discovery, and health:DescribeEvents/DescribeAffectedEntities -- is already covered by
+  # AIDevOpsAgentAccessPolicy. Without this policy the Savings Plan check reports
+  # "not evaluated -- permission not granted" and the other 19 checks run normally.
+  PolicySageMakerAIOpsReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillSageMakerAIOpsReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-SageMakerAIOpsReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SageMakerAIOpsReviewSavingsPlansRead
+            Effect: Allow
+            Action:
+              - savingsplans:DescribeSavingsPlans
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -447,13 +546,16 @@ Outputs:
         - aws-health-events: ${EnableAwsHealthEvents} (health:DescribeEventTypes)
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
+        - ecs-operation-review: ${EnableEcsOperationReview} (compute-optimizer:GetECSServiceRecommendations)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
         - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
+        - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
+        - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
-        - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
+        - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
         - skip-scheduled-maintenance

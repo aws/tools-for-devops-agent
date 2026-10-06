@@ -187,6 +187,121 @@ If an issue lands with you, verify the skill against the checklist in it. When i
 
 Test relevant scenarios with and without the custom agent, multiple times. Focus on quality and consistency of the output, compared to asking DevOps Agent the same question using chat. When checking consistency, the output doesn't have to be the same verbatim - focus on the substance
 
+## Redacting AWS Identifiers
+
+**Redact your own AWS identifiers before you commit.** This repository is public, and a commit is permanent: once an account ID, an ARN or an instance ID is on `main` it is in the history for good, and deleting it in a later commit does not remove it. Redacting is yours to do. Two pieces of tooling help — the skill evaluation tool's redaction pass, and the pull request check described in the next section — and neither covers everything.
+
+Replace, in every file you add or change:
+
+| Identifier | Replace with |
+| --- | --- |
+| An AWS account ID | `123456789012` or `111122223333`, the AWS documentation example accounts |
+| An ARN | the whole ARN, not only its account field. An ARN also carries a region, a service and a resource name, so blanking the account leaves most of it standing. Rewrite it with an example account and a generic resource name: `arn:aws:eks:us-east-1:123456789012:cluster/example-cluster` |
+| An EC2 instance ID | `i-0123456789abcdef0` |
+| Any other real resource name | something plainly generic. A cluster name, an S3 bucket name, a database identifier, a stack name and a role name each describe your environment to a reader, and none of them is something automation can tell apart from an example |
+
+Where real identifiers tend to arrive:
+
+1. **A hand-written eval prompt in `evals.json`.** You write the prompt, so no tool ever rewrites it. A prompt naming the cluster you tested against publishes that cluster's ARN.
+2. **Agent output recorded by the skill evaluation tool**, in three files per run: `journal_records.json` holds the DevOps Agent journal, `benchmark.json` holds the scores and the output they were scored on, and each scenario's `functional-tests-results.json` quotes the output again as the evidence for every assertion it judged. All three are where the tool's redaction does most of its work, and where anything it misses ends up. The same identifier usually appears in more than one of them, so check each rather than fixing the journal and assuming the rest followed.
+3. **Anything pasted from the console, the CLI or a support case** into a skill, a reference document, a README or a pull request description.
+4. **Example IAM policies and CloudFormation snippets** in documentation, which carry ARNs by nature.
+
+### Why the tooling is not enough
+
+**The skill evaluation tool's redaction pass rewrites the agent's own output, and only that.** It replaces an account ID with `012345678901` and an instance ID with `i-1234567890abcdef0`, adding `_1`, `_2` and so on to tell two different originals apart. Three things it does not reach:
+
+- A file it did not write. Your hand-written `evals.json` prompt is untouched, and so is the run metadata the harness writes at the root of each functional version directory — `_metadata.json`, whose CloudFormation stack ARNs name the account the evaluation ran in. That file is gitignored for this reason, so a fresh run no longer carries it into the repository.
+- An account that is not the one the run operated in. A third-party account appearing inside a returned API payload has been observed passing through unredacted while the operating account in the same sentence was replaced.
+- Anything outside an eval run.
+
+**The check only reports an account ID when something proves it is one**, which is what keeps it quiet about the twelve-digit numbers that are not accounts. The cost is two gaps, both described in the next section: an account ID written only as prose in a file that is not a journal is proved by nothing and goes unreported, and an ARN using a placeholder syntax the check cannot parse takes the account beside it down with it. An ARN with no account field is not reported at all, deliberately.
+
+So a green check means nothing was proved, not that nothing is there. Read your own diff before you push, and look hardest at what you pasted rather than at what you wrote.
+
+## Scanning for AWS Identifiers
+
+A pull request check ([`.github/workflows/scan-aws-identifiers.yml`](.github/workflows/scan-aws-identifiers.yml)) looks for unredacted AWS identifiers in what your pull request adds. An account ID or instance ID committed here names a real resource in a real account, and once it's on `main` it's in the public history for good. It applies to every file in the repository, not just to skills.
+
+**Twelve digits on their own are not an account ID.** Measured across the open pull requests in this repository, 54% of the twelve-digit runs on their added lines named no account at all, in four shapes: a `YYYYMMDDHHMM` datestamp used as a resource-name suffix, the fractional digits of a decimal, the integer part of a decimal, and a zero-padded counter. A twelve-digit run inside a longer hexadecimal resource ID, such as an ENI ID, is a fifth. So the check only reports an account ID when something proves it is one, and it works in two passes.
+
+**Pass one gathers evidence and reports nothing.** Three places put a value where only an account ID sits:
+
+| Source | What it looks like |
+| --- | --- |
+| The account field of an [ARN](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html) | the fifth colon-separated field, as in `arn:aws:iam::123456789012:role/Example`. A `*` in the partition, service or region field is read the same way, so an IAM policy resource such as `arn:aws:logs:*:123456789012:log-group:/aws/lambda/x:*` still proves its account |
+| An object key inside the `text` field of a `tool_summary` block's tool result, in a `journal_records.json` file | `text` holds JSON as a string, and DevOps Agent keys a per-account AWS API result by account ID, so the key itself is the account: `"text": "{\"123456789012\": {\"DBInstances\": []}}"` |
+| The value of an `aws_account_id` field, in a `journal_records.json` file | `"aws_account_id": "123456789012"`, in a recorded tool input or in agent prose |
+
+The two journal sources read fields of the DevOps Agent journal schema, which is why they're read only in a file named `journal_records.json` — the same names elsewhere mean something else. Other spellings an API response or a person might use, `AccountId` and `accountId` among them, are deliberately not read.
+
+Pass one reads every file your pull request changes, whole, not just the added lines. So an account ID you write bare on an added line is still caught when the ARN that proves it sits in a part of the file you never touched.
+
+**Pass two reports, and only on the lines your pull request adds:**
+
+| Reported | Detail |
+| --- | --- |
+| An ARN whose account field holds a twelve-digit value that isn't allowlisted | the finding is the **whole ARN**, not the account segment — blanking that one field would leave the region, the service and the resource name in place, and a surviving copy of the account ID elsewhere in the file would be enough to rebuild the ARN, so the remedy is to remove the ARN |
+| Any occurrence of an account ID pass one proved | anywhere on an added line, in any file type, which is what catches the same account written bare in prose |
+| An EC2 instance ID | `i-` followed by either eight hexadecimal characters (the old form) or seventeen (the current one), case-insensitive. An instance ID needs no evidence: its prefix and length are the proof |
+
+**An ARN with no account field isn't reported.** `arn:aws:s3:::my-internal-bucket` and `arn:aws:iam::aws:policy/ReadOnlyAccess` name no account, and there's no reliable way to tell a real bucket from an example one — anybody may own `arn:aws:s3:::my-internal-bucket` or `arn:aws:s3:::example-bucket`, so reporting them would be noise. Redacting a real S3 bucket ARN is yours to do, and catching one is a human reviewer's.
+
+**Two gaps, so a passing check isn't mistaken for a guarantee.** An account ID that appears only as prose in a file that isn't a journal — "the cluster in account 123456789012", with no ARN anywhere in that file — is proved by none of the three sources and isn't reported. And an ARN is only read when the check can line its fields up, which it can do for a wildcard (`arn:aws:logs:*:123456789012:log-group:x`) and for a CloudFormation `${...}` expression (`arn:aws:lambda:${AWS::Region}:123456789012:layer:X`), but not for another placeholder syntax in a field before the resource — `{Region}`, `<region>`, `%REGION%` — where the whole ARN fails to parse and an account standing beside one goes unreported. If you know a value is real, redact it whether or not the check flags it.
+
+When you write an example ARN in documentation, use `123456789012` or `111122223333`. Both are allowlisted, so an ARN naming either is never reported.
+
+**Only the lines your pull request adds are reported on.** Removed lines, context lines, and lines you didn't touch are all ignored. That's deliberate: `main` already carries real identifiers in committed eval results and in example ARNs, so reporting on whole files would fail you for content you never wrote, and the only way to go green would be to clean up someone else's lines. Renames are detected too, so moving a file that already contains identifiers adds no lines and reports nothing.
+
+The redaction placeholders the skill evaluation tool writes — `012345678901` for an account ID and `i-1234567890abcdef0` for an instance ID — are allowlisted already, with or without the `_N` suffix the tool adds to tell two different originals apart.
+
+### Resolving a finding
+
+Three routes, and the first one is usually right:
+
+1. **Redact the value.** Replace it with one of the placeholders above, or with an obvious stand-in. For an ARN finding, remove the whole ARN rather than emptying its account field: the rest of the ARN still names a real resource, and the account ID is likely written somewhere else in the same file.
+
+2. **Add it to the allowlist**, if the value is genuinely safe to publish — an AWS documentation example, or an AWS-owned account such as the one that publishes a public Lambda layer. Add it to [`.github/aws-identifier-allowlist.json`](.github/aws-identifier-allowlist.json) with a reason, which is mandatory and is what a reviewer judges the entry on:
+
+   ```json
+   {
+     "account_ids": {
+       "123456789012": "AWS documentation example account ID"
+     },
+     "instance_ids": {
+       "i-0123456789abcdef0": "AWS documentation example instance ID"
+     }
+   }
+   ```
+
+   The file fails closed: invalid JSON, a missing key, or a blank reason grants nothing at all and fails the check, rather than silently waiving an entry. This is also the only route for JSON files, which have no comment syntax. An allowlisted account ID is dropped from the proven set, which silences both the bare occurrences of it and any ARN that names it.
+
+3. **Mark the line**, where the value belongs in place and an allowlist entry would be too broad — a value that only makes sense in the one line it's on. Put an `aws-id-ok: <reason>` comment on it:
+
+   ```yaml
+   AccountId: "123456789012" # aws-id-ok: placeholder in a template parameter default
+   ```
+
+   The marker is honored in `.md`, `.yaml`, `.yml`, `.py`, `.sh`, `.ts`, `.js`, `.html`, `.htm`, and `.xml` files. A bare `aws-id-ok` with no reason still suppresses the line, but the check reports a warning asking for one.
+
+### Running it locally
+
+```bash
+python3 .github/scripts/scan_aws_identifiers.py --base-ref origin/main --head-ref HEAD
+```
+
+Findings are printed as `FOUND <file>:<line> <kind> <value>`, where the kind is `ARN naming an AWS account`, `AWS account ID` or `EC2 instance ID`. In the check's log they also appear as annotations on the pull request diff and as a summary table on the workflow run page. The run also reports how many account IDs pass one proved, which is the quickest way to see why a value was or wasn't picked up.
+
+`--self-check` runs the scanner's own cases over both passes — ARN parsing, the two journal sources, the occurrence search, and the lookalikes that must stay silent — and confirms every allowlist entry is suppressed in both its bare and `_N`-suffixed forms.
+
+The exit code tells the two failure modes apart: `1` means identifiers were found, `2` means the scan couldn't be trusted — a malformed allowlist, or a diff it couldn't read.
+
+### The label
+
+A failing check puts a `needs-id-redact` label on the pull request, which is removed automatically once the check passes. That label is written only by automation and only reflects the last result — it isn't something to add or remove by hand.
+
+NOTE: a red check does not block merging on its own. An admin must add the job's name (`scan-aws-identifiers`) to the required status checks for `main` in branch protection. Until then this check is advisory.
+
 ## Reporting Bugs/Feature Requests
 
 We welcome you to use the GitHub issue tracker to report bugs or suggest features.

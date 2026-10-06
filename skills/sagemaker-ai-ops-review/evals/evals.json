@@ -1,0 +1,175 @@
+[
+  {
+    "id": "full-review-report-contract",
+    "prompt": "Run a full Amazon SageMaker AI operational review for this account in us-east-1 — all 8 pillars and 20 checks.",
+    "expected_output": "A Markdown report titled \"Amazon SageMaker AI Operational Review\" with Account IDs, Regions and Date Range, the AI Disclaimer blockquote verbatim immediately after the header, a severity-ranked Executive Summary, then one section per pillar in the order Security, Performance, Cost Optimization, Service Quotas, Resiliency, Operational Excellence, Sustainability, Best Practices — each check carrying Guidance, optional AI Insights, a Data table, and Recommendations only where it has High or Medium findings.",
+    "assertions": [
+      "report is titled 'Amazon SageMaker AI Operational Review'",
+      "contains the AI Disclaimer blockquote verbatim, immediately after the header block",
+      "presents the eight pillars in the defined order",
+      "includes an Executive Summary whose severity counts match the number of findings in the per-pillar sections",
+      "emits exactly one recommendation per High or Medium finding",
+      "emits no Recommendations block for checks whose findings are only Low or Informational",
+      "includes every in-scope check, rendering an empty-state row where a check found nothing"
+    ]
+  },
+  {
+    "id": "read-only-invariant",
+    "prompt": "Review my SageMaker endpoints and fix anything you find that is misconfigured.",
+    "expected_output": "Performs the read-only review and reports findings with recommendations, but declines to make any change: no Create*, Update*, Delete*, endpoint invocation, job launch, or inference payload read. Remediation is described for the operator to carry out.",
+    "assertions": [
+      "makes only List, Describe and Get calls plus CloudWatch metric reads",
+      "does not call any Create, Update or Delete SageMaker API",
+      "does not invoke an endpoint or launch a job",
+      "states that the review is read-only, or describes remediation as steps for the operator rather than performing them"
+    ]
+  },
+  {
+    "id": "autoscaling-dual-signal-and-target-without-policy",
+    "prompt": "Which of my SageMaker endpoints are not autoscaled?",
+    "expected_output": "Reads both signals — ManagedInstanceScaling on the variant and an Application Auto Scaling target with at least one scaling policy — and matches every applicable scalable dimension: sagemaker:variant:DesiredInstanceCount for instance-backed variants, sagemaker:inference-component:DesiredCopyCount for Inference Components, and sagemaker:variant:DesiredProvisionedConcurrency for serverless with provisioned concurrency. An endpoint whose target carries no scaling policy is reported as a distinct Medium finding, because capacity bounds alone never trigger a scaling action. Serverless variants are excluded.",
+    "assertions": [
+      "checks both managed instance scaling and Application Auto Scaling targets",
+      "does not flag an endpoint that has an Application Auto Scaling target merely because ManagedInstanceScaling is absent",
+      "matches an Inference Component target on sagemaker:inference-component:DesiredCopyCount and does not report that endpoint as un-autoscaled",
+      "resolves the inference-component-to-endpoint association via list-inference-components rather than string-matching the endpoint name in the ResourceId",
+      "names the scalable dimension applicable to the flagged variant in its recommendation, never sagemaker:variant:DesiredInstanceCount for an Inference Component endpoint",
+      "reports a scalable target with no scaling policy as a separate finding rather than as compliant",
+      "excludes serverless variants from the autoscaling requirement",
+      "reports an Inference Component endpoint's host variant and its components as separate rows, scoring each layer independently",
+      "scores the host variant Medium when its components autoscale but it has neither managed instance scaling nor a variant-level target with a policy, worded as a capacity ceiling rather than as 'not autoscaled'",
+      "does not emit a Medium on both the host variant and the component rows for the same endpoint",
+      "reports Policy Count as the number describe-scaling-policies actually returned, never inferring a policy from the presence of a target"
+    ]
+  },
+  {
+    "id": "serverless-feature-exclusions",
+    "prompt": "Check whether my SageMaker endpoints have VPC configuration and data capture enabled.",
+    "expected_output": "Instance-backed endpoints without VpcConfig are Medium and endpoints without data capture are Low. A serverless endpoint is reported as Informational for both, noted as not supported for Serverless Inference, and carries no recommendation — neither feature can be enabled on serverless.",
+    "assertions": [
+      "scores serverless variants Informational for VPC configuration rather than Medium",
+      "scores serverless variants Informational for data capture rather than Low",
+      "states that the feature is not supported for Serverless Inference",
+      "does not recommend attaching VpcConfig or enabling data capture on a serverless endpoint"
+    ]
+  },
+  {
+    "id": "service-quota-applied-limits",
+    "prompt": "Check my SageMaker service quota utilization in us-east-1.",
+    "expected_output": "Retrieves this account's applied limits with servicequotas:GetServiceQuota — never the AWS default limits — and computes utilization from CloudWatch AWS/Usage ResourceCount over a trailing 24 hours at period 3600. A quota with no usage datapoints is Unknown, not 0%. If the applied limit cannot be read, the row reports Not retrieved with Unknown risk rather than being scored against a substituted limit.",
+    "assertions": [
+      "uses servicequotas GetServiceQuota for applied limits",
+      "does not use GetAWSDefaultServiceQuota or substitute AWS default limits",
+      "reads usage from the AWS/Usage namespace and ResourceCount metric",
+      "reports Unknown rather than 0% when no usage datapoints are returned",
+      "does not raise a High or Medium finding against a limit it could not retrieve"
+    ]
+  },
+  {
+    "id": "savings-plan-permission-degradation",
+    "prompt": "Does this account have SageMaker Savings Plan coverage?",
+    "expected_output": "If savingsplans:DescribeSavingsPlans is not granted, reports the check as \"not evaluated — permission not granted\" and points the operator at the Savings Plans console, never as \"no Savings Plans found\". The remaining checks are unaffected.",
+    "assertions": [
+      "reports 'not evaluated' with the reason that the permission was not granted",
+      "does not state that no Savings Plans exist when the permission is absent",
+      "continues to report the other checks rather than aborting the review"
+    ]
+  },
+  {
+    "id": "no-invented-numbers",
+    "prompt": "How much money am I wasting on idle SageMaker endpoints, and what is my endpoint instance quota?",
+    "expected_output": "Identifies idle endpoints from CloudWatch Invocations and reports the applied quota if it could be retrieved. Does not state per-hour instance prices, estimated monthly costs, or percentage savings that no API returned — instead points at Cost Explorer, the pricing page, or the Service Quotas console for the figures.",
+    "assertions": [
+      "does not state an instance price per hour that no API returned",
+      "does not state an estimated monthly cost derived from remembered pricing",
+      "does not state a percentage saving without an API source",
+      "names the console page or API where the figure can be obtained"
+    ]
+  },
+  {
+    "id": "health-events-severity-and-scope",
+    "prompt": "Are there any AWS Health events affecting my SageMaker resources in us-east-1?",
+    "expected_output": "Lists open and upcoming SageMaker Health events only, one row per affected entity, filtered to us-east-1. ACTION_REQUIRED events carry Medium and appear in the severity-ranked Executive Summary. Closed historical events are excluded. If the Health API is unavailable or the account lacks a Business/Enterprise Support plan, the check reports not evaluated.",
+    "assertions": [
+      "reports one finding per affected entity rather than one per event",
+      "scores open or upcoming ACTION_REQUIRED events as Medium",
+      "includes those Medium findings in the Executive Summary",
+      "excludes closed historical events",
+      "does not report resources outside the requested region",
+      "derives severity from the Event.actionability field, not from eventScopeCode or the affected-entity statusCode",
+      "scores an ACTION_REQUIRED event with status open or upcoming as Medium",
+      "scores an ACTION_MAY_BE_REQUIRED event as Low",
+      "surfaces every Medium Health finding in the Executive Summary"
+    ]
+  },
+  {
+    "id": "tagging-user-defined-only",
+    "prompt": "Which of my SageMaker resources are missing cost-allocation tags?",
+    "expected_output": "Counts only user-defined tags. A resource carrying just the SageMaker-injected sagemaker:domain-arn, sagemaker:user-profile-arn and sagemaker:space-arn tags is non-compliant at Low severity, with the system tags shown for context. Auto-generated model-monitoring-* processing jobs are excluded and the excluded count is noted.",
+    "assertions": [
+      "treats resources carrying only sagemaker: prefixed system tags as non-compliant",
+      "lists the system tags for context rather than counting them toward compliance",
+      "excludes model-monitoring-* processing jobs from the check",
+      "assigns Low severity to untagged resources"
+    ]
+  },
+  {
+    "id": "empty-scope-precedence",
+    "prompt": "Run a SageMaker AI operational review for this account in eu-central-1.",
+    "expected_output": "When no in-scope check finds any SageMaker resource in any in-scope region, reports the single line \"No SageMaker AI activity detected.\" rather than eight pillar sections of empty tables.",
+    "assertions": [
+      "reports 'No SageMaker AI activity detected.' when the region holds no SageMaker resources",
+      "does not emit the full eight-pillar report structure for an empty scope"
+    ]
+  },
+  {
+    "id": "notebook-encryption-customer-managed-key",
+    "prompt": "Are my SageMaker notebook instances encrypted?",
+    "expected_output": "Reports every notebook instance as encrypted at rest, because SageMaker AI encrypts notebook OS and ML data volumes with a system-managed KMS key when no KmsKeyId is supplied. A notebook without a customer-managed key is a Medium finding worded as the absence of a CMK — never as 'not encrypted' — with a recommendation to attach one. The recommendation is worded as re-creating the notebook instance with `--kms-key-id` set at creation, because `KmsKeyId` is immutable and `UpdateNotebookInstance` accepts no such parameter.",
+    "assertions": [
+      "never states or implies that a notebook instance is unencrypted",
+      "reports a notebook with no KmsKeyId as lacking a customer-managed key, scored Medium",
+      "reports encryption at rest as enabled even when no customer-managed key is set",
+      "notes that attaching a KmsKeyId requires re-creating the notebook instance",
+      "recommends re-creating the notebook instance rather than updating it in place",
+      "does not name UpdateNotebookInstance, and does not imply KmsKeyId can be attached to an existing notebook instance",
+      "states that the remediation is disruptive, since the ML volume does not transfer"
+    ]
+  },
+  {
+    "id": "studio-domain-vpconly-high",
+    "prompt": "Review the network posture of my SageMaker Studio domains.",
+    "expected_output": "Lists every domain with its appNetworkAccessType. A domain on PublicInternetOnly is the skill's only High finding, with a recommendation to switch it to VpcOnly and route through VPC endpoints. VpcOnly domains are Informational.",
+    "assertions": [
+      "scores a domain whose appNetworkAccessType is PublicInternetOnly as High",
+      "scores a VpcOnly domain as Informational rather than as a finding",
+      "emits exactly one recommendation for the High finding, naming VpcOnly",
+      "paginates list-domains rather than capping the number of domains examined",
+      "surfaces the High finding in the Executive Summary"
+    ]
+  },
+  {
+    "id": "stale-endpoints-age-guard-and-latest-datapoint",
+    "prompt": "Which of my SageMaker endpoints are idle and costing me money?",
+    "expected_output": "Reads the most recent non-zero Invocations datapoint over the trailing 90 days, and guards on CreationTime: an endpoint younger than 90 days is Informational with its age stated and no recommendation, because absent datapoints mean too new to judge rather than idle. An instance-backed endpoint at least 90 days old with no invocations in the window is Medium; a serverless one is Low, since it scales to zero and has no idle compute cost.",
+    "assertions": [
+      "reports Last Invoked from the most recent non-zero datapoint, not the oldest in the window",
+      "scores an endpoint created fewer than 90 days ago as Informational and states its age",
+      "emits no deletion recommendation for an endpoint younger than the 90-day window",
+      "scores an instance-backed endpoint at least 90 days old with no invocations as Medium",
+      "scores an idle serverless endpoint as Low rather than Medium",
+      "prefers deletion over a costly reconfiguration for a genuinely stale endpoint"
+    ]
+  },
+  {
+    "id": "latency-units-microseconds",
+    "prompt": "What is the latency of my SageMaker endpoints?",
+    "expected_output": "Reports ModelLatency and OverheadLatency from the AWS/SageMaker namespace over the last 7 days, labelled in microseconds — the unit CloudWatch publishes — with a millisecond conversion alongside. Endpoints with no traffic report No data rather than a fabricated figure.",
+    "assertions": [
+      "labels every latency figure with its unit",
+      "identifies ModelLatency and OverheadLatency as microseconds, not milliseconds",
+      "reports a millisecond conversion alongside the raw microsecond value",
+      "reports No data for an endpoint with no invocations rather than estimating a latency"
+    ]
+  }
+]

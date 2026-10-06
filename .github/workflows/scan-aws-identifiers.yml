@@ -1,0 +1,175 @@
+name: Scan for AWS identifiers
+
+# Gates pull requests on the lines they add carrying no unredacted AWS account
+# IDs (twelve digits) or EC2 instance IDs (`i-` plus eight or seventeen
+# hexadecimal characters). An identifier committed here names a real resource in
+# a real account, and once it is on `main` it is in the public history for good.
+#
+# Only the lines the pull request *adds* are scanned (see
+# .github/scripts/scan_aws_identifiers.py). `main` already carries real-looking
+# identifiers in committed eval results and in example ARNs, so a whole-file
+# scan would fail pull requests for content their authors never wrote, and the
+# only way to go green would be to clean up someone else's lines.
+#
+# This job is strictly read-only. It checks the pull request out into the
+# runner's throwaway workspace, reads the diff, and reports a status. It runs no
+# `git` write command, pushes nothing, edits no pull request, and writes nothing
+# into the repository tree — only into the artifact directory on the runner,
+# $GITHUB_OUTPUT and $GITHUB_STEP_SUMMARY.
+#
+# Three ways to resolve a finding, all in the author's hands:
+#
+#   1. Redact the value.
+#   2. Add it to .github/aws-identifier-allowlist.json with a reason explaining
+#      why it is safe to publish. This is the route for JSON files, which have
+#      no comment syntax. The allowlist fails closed: a malformed entry fails
+#      the check rather than silently waiving one.
+#   3. Put an `aws-id-ok: <reason>` comment on the line, in a file type that has
+#      a comment syntax.
+#
+# A companion workflow (label-aws-identifiers-result.yml) applies or removes the
+# `needs-id-redact` label based on this job's outcome. It has to be a separate
+# workflow_run job because GITHUB_TOKEN is read-only for pull_request events
+# from forks, which is where most contributions here come from.
+#
+# NOTE: a red check does not block merging on its own. An admin must add the
+# job's name ("scan-aws-identifiers") to the required status checks for `main` in
+# branch protection. Until then this workflow is advisory.
+
+on:
+  pull_request:
+    # `labeled` is included so a maintainer can force a run on an already-open
+    # pull request by adding any label. GitHub cannot filter `labeled` by label
+    # name, so this fires for every label — which is the point: a pull request
+    # opened before this workflow existed reports no status at all and sits
+    # blocked without a log, and one label gets it a run.
+    #
+    # A label applied by GITHUB_TOKEN raises no `labeled` event, so the
+    # companion labeling workflow cannot re-trigger this one.
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    # Deliberately NOT filtered with `paths:`. A required status check that never
+    # runs is reported as pending forever, so a path filter here would
+    # permanently block every pull request that happens to touch nothing the
+    # filter names. Instead the job always runs and the scanner exits 0 when the
+    # pull request adds no lines.
+
+# Read-only: the job inspects the diff and reports a status, so pull requests
+# from forks work without any elevated permissions. Labeling happens in the
+# companion workflow.
+permissions:
+  contents: read
+
+concurrency:
+  group: scan-aws-identifiers-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # The job id and its display name are kept identical, because the display name
+  # is the status check context that branch protection matches on. Contexts are
+  # global across all workflows in the repo, so it is spelled out rather than
+  # left as a generic "scan" another workflow could collide with. Renaming
+  # either one later means updating the required checks list too.
+  scan-aws-identifiers:
+    name: scan-aws-identifiers
+    runs-on: ubuntu-latest
+    # No `if:` guard here on purpose. Skipping this job would report the required
+    # check as "skipped", which branch protection can treat as satisfied — so a
+    # guard keyed on anything a contributor controls, a label most of all, would
+    # let anyone unblock a failing pull request. The job always runs and always
+    # reports a real status; the three suppression routes above are how an author
+    # resolves a finding, and each of them is visible in the diff under review.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the merge base with the base branch can be computed.
+          # The scanner diffs with three dots, which needs it.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scan the added lines for AWS identifiers
+        id: scan
+        # Never fails the step: the outcome is recorded, published for the
+        # labeling workflow, and only then turned into a job failure. Without
+        # this the artifact would not be uploaded on failure — the case that
+        # needs a label.
+        continue-on-error: true
+        # Every value from the event payload is passed through the environment
+        # rather than interpolated into the command, and quoted on use.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          # The scanner's own regression check over every allowlist entry, in
+          # both its bare and its `_N`-suffixed form. It runs here because that
+          # is the one part of the scanner whose breakage is silent: a regression
+          # in the suffix handling makes identifiers stop being detected rather
+          # than start firing falsely, so a passing check would be the only
+          # symptom. Treated as a scan error rather than a finding, below.
+          set +e
+          python3 .github/scripts/scan_aws_identifiers.py --self-check
+          self_check=$?
+
+          # The base branch has to exist locally as a remote-tracking ref before
+          # the merge base can be computed. Its exit code is captured instead of
+          # being left to errexit: a failing fetch would otherwise kill the step
+          # before `code` is written, and the empty value read downstream is
+          # indistinguishable from a real finding — which is how an unreachable
+          # remote ends up labeled as an unredacted identifier.
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          fetched=$?
+
+          if [ "$self_check" -ne 0 ] || [ "$fetched" -ne 0 ]; then
+            echo "::error::The AWS identifier scan could not run (self-check exit ${self_check}, base branch fetch exit ${fetched}). This is not a finding about the pull request."
+            code=2
+          else
+            python3 .github/scripts/scan_aws_identifiers.py \
+              --base-ref "origin/${BASE_REF}" \
+              --head-ref HEAD
+            code=$?
+          fi
+          set -e
+
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          exit "${code}"
+
+      - name: Publish outcome for the labeling workflow
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Three outcomes, not two. The scanner separates "found identifiers"
+          # (exit 1) from "could not complete" (exit 2, and an empty value when
+          # the step died outright), and that separation has to survive to the
+          # labeling workflow: `needs-id-redact` is a claim about the pull
+          # request's content, so a configuration error or an unreachable remote
+          # must not apply it. The job fails either way; only the label differs.
+          OUTCOME: ${{ steps.scan.outputs.code == '0' && 'pass' || steps.scan.outputs.code == '1' && 'fail' || 'error' }}
+        run: |
+          mkdir -p aws-id-check-result
+          printf '%s\n' "$PR_NUMBER" > aws-id-check-result/pr-number
+          printf '%s\n' "$OUTCOME" > aws-id-check-result/outcome
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aws-id-check-result
+          path: aws-id-check-result/
+          retention-days: 1
+
+      - name: Fail the job when identifiers were found
+        if: steps.scan.outputs.code == '1'
+        run: |
+          echo "::error::Unredacted AWS identifiers were found in the lines this pull request adds. The annotations above name each one, and the job summary lists them with the three ways to resolve a finding."
+          exit 1
+
+      # Fails the job too, so a broken scan can never be mistaken for a clean
+      # one, but says plainly that the pull request is not the problem. Catches
+      # the empty output value as well, which is what a step killed mid-run
+      # leaves behind.
+      - name: Fail the job when the scan could not complete
+        if: steps.scan.outputs.code != '0' && steps.scan.outputs.code != '1'
+        env:
+          CODE: ${{ steps.scan.outputs.code }}
+        run: |
+          echo "::error::The AWS identifier scan did not complete (exit code '${CODE}'). Nothing was reported about this pull request's content — see the log above for the scan or configuration error."
+          exit 1
