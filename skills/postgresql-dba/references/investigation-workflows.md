@@ -3,7 +3,7 @@
 These workflows supplement the safety and report-routing guidance in `SKILL.md`.
 Keep investigations read-only and treat findings as evidence requiring workload
 context and owner review. AWS DevOps Agent registers this file as the reference
-artifact titled `postgresql-dba-mcp: investigation-workflows`.
+artifact titled `postgresql-dba: investigation-workflows`.
 
 When a user asks for current targeted evidence after a health report, run the
 relevant predefined diagnostic again. Do not answer solely from bounded rows or

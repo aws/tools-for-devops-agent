@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the PostgreSQL DBA MCP skill are documented here.
+All notable changes to the PostgreSQL DBA skill are documented here.
 
 ## [1.18.0] - 2026-09-16
 
