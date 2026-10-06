@@ -9,7 +9,7 @@ The current v1.18 report contract preserves all 26 canonical sections, renders r
 ## Prerequisites
 
 - An AWS DevOps Agent Space authorized for non-production validation
-- The companion [`../../mcp/postgresql-dba-mcp/`](../../mcp/postgresql-dba-mcp/) server deployed and registered with exactly its 10 read-only tools
+- The companion [PostgreSQL DBA MCP](https://github.com/aws/tools-for-devops-agent/blob/main/mcp/postgresql-dba-mcp/README.md) server deployed and registered with exactly its 10 read-only tools
 - An allowlisted RDS for PostgreSQL or Aurora PostgreSQL target, database, and endpoint
 - A dedicated least-privilege PostgreSQL monitoring login configured by the MCP deployment
 - Agent Space access to the intended Chat and investigation experiences
@@ -49,7 +49,7 @@ A health-check prompt produces the complete on-screen Markdown report. The five-
 
 Detailed procedures are in:
 
-- [`references/investigation-workflows.md`](references/investigation-workflows.md)
+- [Targeted PostgreSQL investigation workflows](https://github.com/aws/tools-for-devops-agent/blob/main/skills/postgresql-dba/references/investigation-workflows.md)
 
 ## Testing
 
