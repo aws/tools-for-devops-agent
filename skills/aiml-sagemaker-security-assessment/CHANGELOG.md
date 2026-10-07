@@ -3,6 +3,20 @@
 All notable changes to the `aiml-sagemaker-security-assessment` skill are
 documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-07
+
+### Changed
+- Reworked the `## Workflow` into an explicit `- [ ]` checkbox checklist and added
+  a **Step 5 — Self-check before presenting** validation gate (verifiability vs.
+  status consistency, schema conformance, per-region coverage, and summary/table
+  reconciliation) so the agent reviews its own report before returning it.
+- Converted all `references/` citations to markdown links with explicit
+  when-to-load guidance, and added a `## Reference files` section for progressive
+  disclosure.
+- Migrated `evals/evals.json` to the DevOps Agent `skill-eval` schema (`skill_name`
+  + `evals[]` with `task_type`/`should_trigger`), folding the negative trigger
+  cases in and converting assertions to the `regex`/`llm` evaluator form.
+
 ## [1.0.0] - 2026-09-17
 
 ### Added

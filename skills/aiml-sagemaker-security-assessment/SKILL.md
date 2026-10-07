@@ -3,7 +3,7 @@ name: aiml-sagemaker-security-assessment
 description: "Run a read-only Amazon SageMaker AI security posture assessment across an AWS account, regions, and associated accounts. Use when asked to assess, audit, or review the security of Amazon SageMaker AI workloads: notebook and domain direct-internet exposure and VPC-only deployment, notebook instance privileged-access settings, KMS encryption at rest (notebooks, models, Feature Store offline store, processing/transform/hyperparameter-tuning/compilation/AutoML volumes and output), model network isolation, container-repository (ECR) access mode, endpoint high-availability, Model Monitor and drift detection, GuardDuty coverage, and MLOps governance (Model Registry versioning, approval workflow, lineage). Produces structured findings (Check_ID, severity, status, verifiability, remediation) and a consolidated report. Strictly read-only (describe/list/get only); never mutates or remediates. Proactive posture audit only — for a specific access denial use aiml-access-diagnostics."
 metadata:
   author: apparaka
-  version: "1.0.0"
+  version: "1.1.0"
   aws-devops-agent-skills.agent-types: "Chat tasks, Prevention"
   aws-devops-agent-skills.aws-services: "Amazon SageMaker AI"
   aws-devops-agent-skills.technical-domains: "Machine Learning, Security"
@@ -23,6 +23,20 @@ Amazon Bedrock AgentCore are separate skills, not phases of this one.
 Guidance is aligned with the AWS Well-Architected Machine Learning Lens and the
 Amazon SageMaker security documentation; several checks cross-reference an AWS
 Security Hub control (SageMaker.1–5) for convenience.
+
+## Reference files
+
+Load these companion files as you work through the workflow — do not rely on
+memory for check logic or report shape:
+
+- Load [references/sagemaker-checks.md](references/sagemaker-checks.md) in Step 3,
+  before running any check: it is the authoritative catalog of all 25 checks
+  (`SM-01`..`SM-25`), each with the read-only API call(s), pass/fail/N-A logic,
+  severity, verifiability, resolution text, and a documentation link.
+- Load
+  [references/finding-schema-and-report.md](references/finding-schema-and-report.md)
+  in Steps 2, 4, and 5: it defines region and account resolution, the exact
+  finding schema, and the consolidated report format.
 
 ## Scope: what this skill owns vs. defers
 
@@ -65,8 +79,9 @@ unless separately authorized.
 ## Verify vs. prescribe (determinism contract)
 
 Not every best practice is provable from the control plane. Every check in
-`references/sagemaker-checks.md` carries a **Verifiability** classification, and
-you MUST honor it so the report never marks an unread control as `Passed`:
+[references/sagemaker-checks.md](references/sagemaker-checks.md) carries a
+**Verifiability** classification, and you MUST honor it so the report never marks
+an unread control as `Passed`:
 
 - **Verifiable** — a read-only `Describe`/`List` returns the exact configuration.
   Emit `Passed`/`Failed`/`N/A` strictly from the returned data.
@@ -92,43 +107,58 @@ When read access is denied for any check, the status is `N/A` (reason:
 
 ## Workflow
 
-Follow these steps in order.
+Work through these steps in order. Treat each box as a gate — do not move on
+until it is satisfied:
 
-### Step 1 — Confirm intent and scope
-
-1. Confirm the user wants a **read-only** Amazon SageMaker security assessment.
-   State the read-only guarantee above.
-2. This skill runs the SageMaker family (`SM-01`..`SM-25`) only. If the user asks
-   for Bedrock or AgentCore, tell them those are separate skills.
-3. Determine which **accounts** are in scope (default primary; or named IDs / "all
-   accounts").
-4. Record the account ID(s) (`sts:GetCallerIdentity` per account) for the header.
-
-### Step 2 — Resolve target regions
-
-See `references/finding-schema-and-report.md` → "Region resolution": default is
-the current region; an explicit list uses those; "all regions" uses the union of
-regions where `sagemaker` is available.
-
-### Step 3 — Run the SageMaker checks per region
-
-Open `references/sagemaker-checks.md` and execute every check. Each entry gives
-the read-only API call(s), the pass/fail/N-A logic, severity, **verifiability**,
-resolution text, and an `https` documentation reference. All SageMaker checks are
-**regional** — emit each per scanned region; when SageMaker has no matching
-resources in a region, emit the check as `N/A` for that region.
-
-Produce one finding per check per applicable region, conforming exactly to the
-schema in `references/finding-schema-and-report.md`, including the `Verifiability`
-field.
-
-### Step 4 — Assemble and present the report
-
-Consolidate all findings and produce the report described in
-`references/finding-schema-and-report.md`: an executive summary (counts by
-severity, by region, by verifiability), a priority list of High-severity `Failed`
-findings, the full findings table, and a machine-readable JSON block. Do not omit
-`Passed` or `N/A` findings from the machine-readable output.
+- [ ] **Step 1 — Confirm intent and scope.**
+  - Confirm the user wants a **read-only** Amazon SageMaker security assessment,
+    and state the read-only guarantee above.
+  - This skill runs the SageMaker family (`SM-01`..`SM-25`) only. If the user
+    asks for Bedrock or AgentCore, tell them those are separate skills.
+  - Determine which **accounts** are in scope (default primary; or named IDs /
+    "all accounts").
+  - Record the account ID(s) (`sts:GetCallerIdentity` per account) for the report
+    header.
+- [ ] **Step 2 — Resolve target regions.**
+  - Using
+    [references/finding-schema-and-report.md](references/finding-schema-and-report.md)
+    → "Region resolution": default is the current region; an explicit list uses
+    those; "all regions" uses the union of regions where `sagemaker` is available.
+- [ ] **Step 3 — Run the SageMaker checks per region.**
+  - Open [references/sagemaker-checks.md](references/sagemaker-checks.md) and
+    execute every check. Each entry gives the read-only API call(s), the
+    pass/fail/N-A logic, severity, **verifiability**, resolution text, and an
+    `https` documentation reference.
+  - All SageMaker checks are **regional** — emit each per scanned region; when
+    SageMaker has no matching resources in a region, emit the check as `N/A` for
+    that region.
+  - Produce one finding per check per applicable region, conforming exactly to
+    the schema in
+    [references/finding-schema-and-report.md](references/finding-schema-and-report.md),
+    including the `Verifiability` field.
+- [ ] **Step 4 — Assemble the report.**
+  - Consolidate all findings into the report described in
+    [references/finding-schema-and-report.md](references/finding-schema-and-report.md):
+    an executive summary (counts by severity, by region, by verifiability), a
+    priority list of High-severity `Failed` findings, the full findings table,
+    and a machine-readable JSON block. Do not omit `Passed` or `N/A` findings
+    from the machine-readable output.
+- [ ] **Step 5 — Self-check before presenting.**
+  - Re-read the assembled report against this list and fix any violation before
+    showing it to the user:
+    - No `Prescribe-only` aspect is marked `Passed` or `Failed`, and no check
+      whose read was denied is marked `Passed` (it must be `N/A` with the reason).
+    - Every `Heuristic` finding cites concrete evidence (resource id / field
+      value) in `Finding_Details`.
+    - Every check `SM-01`..`SM-25` appears for every scanned region, with none
+      skipped.
+    - Every finding conforms to the schema: all required fields present,
+      `Check_ID` matches `^SM-\d{2}$`, and `Status` is one of
+      `Passed`/`Failed`/`N/A`.
+    - The severity, region, and verifiability counts in the summary reconcile
+      with the findings table.
+  - If any check could not be completed, say so explicitly rather than presenting
+    an incomplete report as complete.
 
 ## Multi-region execution
 
@@ -141,7 +171,8 @@ check as `N/A` for that region rather than skipping it.
 Cross-account access comes from the **Agent Space associations**, not from this
 skill. The DevOps Agent service assumes the read-only monitoring role in each
 associated account directly — **do not attempt `sts:AssumeRole` yourself**. See
-`references/finding-schema-and-report.md` → "Account resolution". For each
+[references/finding-schema-and-report.md](references/finding-schema-and-report.md)
+→ "Account resolution". For each
 in-scope account, scope every read-only call to that account and set the
 `Account` field on every finding.
 
