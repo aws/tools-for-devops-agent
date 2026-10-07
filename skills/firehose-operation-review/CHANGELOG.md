@@ -1,8 +1,9 @@
 # Changelog
 
-## [1.4.1] - 2026-09-24
+## [1.4.1] - 2026-09-29
 ### Changed
 - **HTTP endpoint check corrected to INFO (was HIGH).** Firehose only accepts `https://` endpoint URLs — the `HttpEndpointConfiguration.Url` API pattern is `https://.*` and the restriction is enforced at delivery-stream configuration time — so a non-HTTPS HTTP endpoint is not a reachable state. The `best-practices-checklist.md` item no longer flags "non-HTTPS → HIGH" (an unreachable finding); it now confirms HTTPS as a fact at INFO and refocuses on secure access-key storage and a VPC/PrivateLink path for private/cross-account endpoints.
+- (2026-10-07) Added the `firehose-review-http-endpoint-severity` functional eval that pins the INFO reclassification above (recall-style, like `firehose-review-severity-definitions`), and regenerated the functional eval results against the updated eval set. Added the missing `firehose-operation-review` entry to the repository `llms.txt`.
 
 ### Notes (review responses, no code change)
 - **Metric-table / Iceberg-throughput duplication:** already single-sourced as of 1.4.0 — `references/metrics-thresholds.md` is the sole home for the CloudWatch metric tables and the Iceberg-table throughput detail; `SKILL.md` (Step 3, Region-Restricted Checks) and `references/best-practices-checklist.md` only point to it.
