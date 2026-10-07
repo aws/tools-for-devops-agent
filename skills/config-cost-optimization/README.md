@@ -33,7 +33,7 @@ Read-only Config, CloudWatch, S3, Organizations, and (recommended) Cost Explorer
 - `ce:GetCostAndUsage` (recommended — the most direct dollar signal for sizing opportunities)
 - `athena:StartQueryExecution`, `athena:GetQueryExecution`, `athena:GetQueryResults`, `athena:GetWorkGroup`, `glue:GetDatabase`, `glue:GetTable`, `glue:GetPartitions`, `s3:GetObject` on the Config delivery bucket (optional Athena CI-driver path — see note below)
 
-Most read APIs are covered by the AWS managed `AIDevOpsAgentAccessPolicy`. `ce:GetCostAndUsage` and the S3 lifecycle read may need to be added — see [`cloudformation/devops-agent-skill-policies.yaml`](../../cloudformation/devops-agent-skill-policies.yaml) (`EnableConfigCostOptimization`).
+Most read APIs are covered by the AWS managed `AIDevOpsAgentAccessPolicy`. `ce:GetCostAndUsage` and the S3 lifecycle read may need to be added — see [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml) (`EnableConfigCostOptimization`).
 
 #### Optional: the Athena CI-driver attribution path
 
@@ -43,7 +43,7 @@ The most accurate CI-driver attribution runs an Athena query over the Config S3 
 - **`s3:GetObject` on the Config delivery bucket** so the query engine can read the Config objects. `AIDevOpsAgentAccessPolicy` grants only `s3:ListBucket` on `AWSLogs/` prefixes — no `s3:GetObject` — so without this grant the query fails with **AccessDenied**.
 - **Glue Data Catalog reads** (`glue:GetDatabase`, `glue:GetTable`, `glue:GetPartitions`) and `athena:GetWorkGroup`.
 
-Enable all of these by setting `EnableConfigAthenaCiAnalysis=true` (and scoping `ConfigDataBucketArn` to the Config delivery bucket) in [`cloudformation/devops-agent-skill-policies.yaml`](../../cloudformation/devops-agent-skill-policies.yaml). When the add-on is not enabled, the skill automatically falls back to `GetDiscoveredResourceCounts` and labels CI-driver estimates as approximate — it does not attempt Athena.
+Enable all of these by setting `EnableConfigAthenaCiAnalysis=true` (and scoping `ConfigDataBucketArn` to the Config delivery bucket) in [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml). When the add-on is not enabled, the skill automatically falls back to `GetDiscoveredResourceCounts` and labels CI-driver estimates as approximate — it does not attempt Athena.
 
 The skill operates entirely in **read-only** mode — it never calls `PutConfigurationRecorder`, `StopConfigurationRecorder`, `PutConfigRule`, `DeleteConfigRule`, or any conformance-pack/delivery-channel mutation.
 

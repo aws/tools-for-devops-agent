@@ -31,7 +31,7 @@ Read-only GuardDuty, CloudWatch, Organizations, and (recommended) Cost Explorer 
 - `organizations:DescribeOrganization`, `organizations:ListAccounts` (organization scope)
 - `ce:GetCostAndUsage` (recommended — the most direct dollar signal for sizing opportunities)
 
-Most read APIs are covered by the AWS managed `AIDevOpsAgentAccessPolicy`. `ce:GetCostAndUsage` may need to be added — see [`cloudformation/devops-agent-skill-policies.yaml`](../../cloudformation/devops-agent-skill-policies.yaml) (`EnableGuardDutyCostOptimization`).
+Most read APIs are covered by the AWS managed `AIDevOpsAgentAccessPolicy`. `ce:GetCostAndUsage` may need to be added — see [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml) (`EnableGuardDutyCostOptimization`).
 
 The skill operates entirely in **read-only** mode — it never calls `CreateDetector`, `UpdateDetector`, `DeleteDetector`, or any protection-plan mutation.
 

@@ -32,7 +32,7 @@ Read-only CloudTrail, CloudWatch, S3, Organizations, and (recommended) Cost Expl
 - `organizations:DescribeOrganization`, `organizations:ListAccounts` (organization scope)
 - `ce:GetCostAndUsage` (recommended — the most direct dollar signal for sizing opportunities)
 
-Most of these are covered by the AWS managed `AIDevOpsAgentAccessPolicy`. `ce:GetCostAndUsage` and the S3 lifecycle read may need to be added — see [`cloudformation/devops-agent-skill-policies.yaml`](../../cloudformation/devops-agent-skill-policies.yaml) (`EnableCloudTrailCostOptimization`).
+Most of these are covered by the AWS managed `AIDevOpsAgentAccessPolicy`. `ce:GetCostAndUsage` and the S3 lifecycle read may need to be added — see [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml) (`EnableCloudTrailCostOptimization`).
 
 The skill operates entirely in **read-only** mode — it never calls `CreateTrail`, `UpdateTrail`, `DeleteTrail`, `PutEventSelectors`, `StopLogging`, or any Lake mutation.
 

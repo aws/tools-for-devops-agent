@@ -51,7 +51,7 @@ active rules and conformance packs, and the delivery bucket.
     `s3:ListBucket` on `AWSLogs/` prefixes, no `s3:GetObject`) nor by the base
     config-cost-optimization policy. They are granted only when the
     `EnableConfigAthenaCiAnalysis` add-on is enabled in
-    [`cloudformation/devops-agent-skill-policies.yaml`](../../../cloudformation/devops-agent-skill-policies.yaml).
+    [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml).
     Without them the query returns **AccessDenied**.
 
   When Athena is not available, use `GetDiscoveredResourceCounts` plus known
