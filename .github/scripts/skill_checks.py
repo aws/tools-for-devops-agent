@@ -12,6 +12,7 @@ See the "Skill Publishing Rules" section of CONTRIBUTING.md.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from dataclasses import dataclass, field
@@ -478,3 +479,64 @@ def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report
                     else f"approved values are listed in {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}"
                 )
                 report.warning(f'"{part}" is not an approved {dimension} value; {hint}', line=line)
+
+
+# --- Conformance cases ------------------------------------------------------------
+
+
+def load_cases(path: Path) -> list[dict]:
+    """The cases in conformance-cases.json. Raises ValueError when the file is malformed."""
+    document = _read_json(path)
+    cases = document.get("cases") if isinstance(document, dict) else None
+    if not isinstance(cases, list) or not cases:
+        raise ValueError(f"{path.name}: expected an object with a non-empty cases list")
+    seen: set[str] = set()
+    for case in cases:
+        problem = _case_problem(case)
+        if problem is None and case["id"] in seen:
+            problem = "duplicate id"
+        if problem:
+            raise ValueError(f"{path.name}: case {case.get('id', '?') if isinstance(case, dict) else '?'}: {problem}")
+        seen.add(case["id"])
+    return cases
+
+
+def _case_problem(case) -> str | None:
+    if not isinstance(case, dict):
+        return "a case must be an object"
+    for key in ("id", "name", "expect"):
+        if not isinstance(case.get(key), str):
+            return f'"{key}" must be a string'
+    if case["expect"] not in ("pass", "fail"):
+        return '"expect" must be "pass" or "fail"'
+    if case["expect"] == "fail" and not isinstance(case.get("error"), str):
+        return 'a "fail" case needs an "error" string'
+    if not isinstance(case.get("files"), dict):
+        return '"files" must be an object'
+    for path, spec in case["files"].items():
+        if not isinstance(spec, dict) or len({"text", "base64"} & set(spec)) != 1:
+            return f'file "{path}" needs exactly one of "text" or "base64"'
+    return None
+
+
+def tree_from_files(name: str, files: dict) -> SkillTree:
+    """A SkillTree from a case's "files" object: {path: {"text"|"base64": ..., "mode"?: ...}}."""
+    entries = {}
+    for path, spec in files.items():
+        data = spec["text"].encode("utf-8") if "text" in spec else base64.b64decode(spec["base64"])
+        entries[path] = Entry(path, spec.get("mode", "100644"), data)
+    return SkillTree(name, entries)
+
+
+def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
+    """Problems with the rules' results on the cases; an empty list means every case gives its expected result."""
+    problems = []
+    for case in cases:
+        findings, _ = check_skill(tree_from_files(case["name"], case["files"]), rules)
+        errors = [f.message for f in findings if f.severity == "error"]
+        if case["expect"] == "pass" and errors:
+            problems.append(f"case {case['id']}: expected pass, got: {'; '.join(errors)}")
+        elif case["expect"] == "fail" and not any(case["error"] in message for message in errors):
+            got = "; ".join(errors) if errors else "no errors"
+            problems.append(f"case {case['id']}: expected an error containing {case['error']!r}, got: {got}")
+    return problems

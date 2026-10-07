@@ -311,5 +311,40 @@ class LoadRulesTests(unittest.TestCase):
             self.assertTrue(any(target in values for values in rules.vocabulary.values()), target)
 
 
+class ConformanceTests(unittest.TestCase):
+    def write_cases(self, cases) -> Path:
+        import tempfile
+
+        handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
+        self.addCleanup(Path(handle.name).unlink)
+        with handle:
+            handle.write(__import__("json").dumps({"cases": cases}))
+        return Path(handle.name)
+
+    def test_repository_cases_give_their_expected_results(self):
+        rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules")
+        cases = sc.load_cases(ROOT / ".github" / "scripts" / "skill-rules" / "conformance-cases.json")
+        self.assertEqual(sc.run_conformance(cases, rules), [])
+
+    def test_malformed_case_files_are_rejected(self):
+        files = {"SKILL.md": {"text": "x"}}
+        bad = {
+            "duplicate id": [{"id": "a", "name": "d", "expect": "pass", "files": files}] * 2,
+            'needs an "error"': [{"id": "a", "name": "d", "expect": "fail", "files": files}],
+            'exactly one of "text" or "base64"': [{"id": "a", "name": "d", "expect": "pass", "files": {"x": {}}}],
+            '"expect" must be': [{"id": "a", "name": "d", "expect": "maybe", "files": files}],
+        }
+        for fragment, cases in bad.items():
+            with self.subTest(fragment=fragment):
+                with self.assertRaisesRegex(ValueError, fragment.replace("(", r"\(")):
+                    sc.load_cases(self.write_cases(cases))
+
+    def test_wrong_expectation_is_reported(self):
+        case = {"id": "a", "name": "demo-skill", "expect": "fail", "error": "nope", "files": {"SKILL.md": {"text": skill_md().decode()}}}
+        problems = sc.run_conformance([case], RULES)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("expected an error containing 'nope', got: no errors", problems[0])
+
+
 if __name__ == "__main__":
     unittest.main()
