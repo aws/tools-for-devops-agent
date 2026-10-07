@@ -1,0 +1,44 @@
+name: Validate skill publishing on main
+
+# Runs the skill publishing check again after each push to `main`, with the
+# previous head of `main` as the base. The pull request check is exact only for
+# the base that it ran on, so two pull requests that each passed on an older
+# base can break the rules together when both merge. This run reports that at
+# once, so the next pull request can fix it. It only reads the repository.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-skill-publishing-main:
+    name: validate-skill-publishing-main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: python3 -m pip install pyyaml==6.0.3
+
+      - name: Check publishing rules of every skill
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Without a usable previous head (the push created the branch, or a
+          # force push removed it), compare with the parent commit instead.
+          if [ -z "${BEFORE//0/}" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            BEFORE="$(git rev-parse --verify --quiet HEAD^ || git hash-object -t tree /dev/null)"
+          fi
+
+          python3 .github/scripts/validate_skill_publishing.py \
+            --base-ref "${BEFORE}" \
+            --head-ref HEAD

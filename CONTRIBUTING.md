@@ -43,6 +43,45 @@ Follow these guidelines for each tool:
 
 Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
 
+#### Publishing Rules
+
+Skills on `main` are published as one set: when one skill breaks a rule below, no skill is published. The `validate-skill-publishing` check therefore applies these rules to every skill in `skills/` on each pull request, not only to the skills that the pull request changes.
+
+`SKILL.md` and its frontmatter:
+
+- `SKILL.md` is valid UTF-8 and starts with a `---` line, the YAML frontmatter, and a closing `---` line.
+- `name` is 1 to 64 characters, matches `^[a-z0-9]+(-[a-z0-9]+)*$` (lowercase letters, digits, and single hyphens), and equals the folder name.
+- `description` is 1 to 1024 characters. A block scalar (`>` or `|`) ends with a newline, and the newline counts.
+- `metadata.version` is a quoted `MAJOR.MINOR.PATCH` string, for example `version: "1.2.0"`. An unquoted `version: 2.6` is a number, not a string, and fails.
+- `metadata.deprecated`, if present, is `true` or `false` without quotes.
+- The frontmatter uses plain YAML only. These are not allowed: duplicate keys, anchors (`&`), aliases (`*`), tags (`!` or `!!`), directives (`%`), document markers (`---` or `...` inside the frontmatter), map keys that are not plain values, tabs in indentation, a `#` comment without a space before it, a block scalar indicator (`|` or `>`) on its own line, the keep indicator (`|+` or `>+`), and line breaks other than LF or CRLF.
+
+Versions:
+
+- A published version is immutable. Bump `metadata.version` on every change to a published file, also a change to `README.md`. Do not change the version when no published file changes. The version must never go down.
+- Do not remove a skill folder. To retire a skill, set `metadata.deprecated: true` and bump `metadata.version`.
+
+Files and sizes:
+
+- These files are not published, so a change to them alone needs no version bump: the `evals/` folder, and `.skilleval.yaml` and `CHANGELOG.md` at the skill root. Every other file in the skill folder is published, binary files too.
+- A skill has at most 100 published files. Each path, relative to the skill folder, is at most 512 characters and matches `^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`. Symlinks are not allowed.
+- The published files of a skill are at most 64 MiB in total, and their zip is at most 983,040 bytes. That is 1 MiB with a safety margin, because zip sizes vary by tool.
+- The archive of the whole repository is at most 128 MiB, and at most 32 MiB when compressed.
+
+The check is exact only for the base commit that it ran on. Two pull requests that each pass on an older base can break the rules together, for example when both bump a skill to the same version. Maintainers should turn on "Require branches to be up to date before merging" in branch protection, or use a merge queue. The `validate-skill-publishing-main` workflow runs the check again after each push to `main` and reports such a break at once.
+
+Run the check locally before you push (it needs `pip install pyyaml==6.0.3`). Use the `main` branch of this repository as the base. In a clone of a fork, add this repository as the `upstream` remote, fetch it, and use `upstream/main`:
+
+```bash
+git remote add upstream https://github.com/aws/tools-for-devops-agent.git
+git fetch upstream main
+python3 .github/scripts/validate_skill_publishing.py --base-ref upstream/main
+```
+
+In a clone of this repository, use `--base-ref origin/main`.
+
+The script checks itself before it checks any skill: the skill content hash of a golden fixture, the digest of `.github/scripts/conformance/cases.json`, and every case in that file (see `.github/scripts/conformance/README.md`). When the self-check fails, the script exits with code 2. Run `python3 .github/scripts/validate_skill_publishing.py --self-check-only` to check only that, for example after you change the script or the corpus.
+
 #### Test Your Skill
 
 1. Test relevant scenarios with DevOps Agent, with and without skill, to understand what good looks like. Iterate several times and make changes as necessary. Make sure you test relevant functionalities. For example, if your skill is intended for DevOps Agent investigations related to RDS PostgreSQL, then set up relevant AWS resources, simulate issues, and then start DevOps Agent investigations and evaluate the root cause with and without skill. Another example is, if your skill is intended to generate a report using DevOps Agent chat (such as EKS operations review), then set up relevant AWS resources, simulate scenarios that you expect your report to highlight, and then start DevOps Agent chat and evaluate its response with and without skill. Some tips for what you should check when evaluating your skill: for investigation, evaluate the different investigation root cause parts in the "Root cause" investigation tab (root cause, key findings, gaps, evidence) for correctness and quality across multiple iterations with and without skill. For chat, evaluate the chat's final response for actionability, correctness and completeness, with and without skill. Compare with and without skill runs and iterate to see if there are improvements. In both chat and investigation, evaluate multiple iterations for output consistency (investigation root cause or chat final response).

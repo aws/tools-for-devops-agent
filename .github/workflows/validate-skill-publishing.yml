@@ -1,0 +1,66 @@
+name: Validate skill publishing
+
+# Checks that every skill in the repository can be published. Skills on `main`
+# are published as one set, and one skill that breaks a rule stops the
+# publishing of all skills, so the check validates the whole skills/ tree on
+# every pull request. See .github/scripts/validate_skill_publishing.py for the
+# rules, and validate-skill-publishing-main.yml for the same check after a merge.
+#
+# NOTE: a red check does not block merging on its own. An admin must add the job's
+# name ("validate-skill-publishing") to the required status checks for `main` in
+# branch protection. Until then this workflow is advisory.
+#
+# The result is exact only for the base commit that the check ran on. Two pull
+# requests that each pass on an older base can break the rules together, for
+# example when both bump a skill to the same version. Turn on "Require branches
+# to be up to date before merging" in branch protection, or use a merge queue,
+# so that every merge is checked against the current `main`.
+
+on:
+  pull_request:
+    # `edited` re-runs the check when the base branch of the pull request changes.
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+    # Deliberately NOT filtered with `paths: skills/**`. A required status check
+    # that never runs is reported as pending forever, so a path filter would block
+    # every PR that does not touch skills/.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-skill-publishing-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # The job id and its display name are the same, because the display name is the
+  # status check context that branch protection matches on.
+  validate-skill-publishing:
+    name: validate-skill-publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history, so the script can find the merge base and read every
+          # skill at it.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: python3 -m pip install pyyaml==6.0.3
+
+      - name: Check publishing rules of every skill
+        # Event values are passed through the environment and quoted on use, not
+        # interpolated into the command.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+          python3 .github/scripts/validate_skill_publishing.py \
+            --base-ref "origin/${BASE_REF}" \
+            --head-ref HEAD

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.1] - 2026-10-07
+
+### Changed
+- `metadata.version` in `SKILL.md` uses the full `MAJOR.MINOR.PATCH` form (`1.0` is now `1.0.1`).
+
 ## [1.0.0] - 2026-07-16
 
 ### Added
