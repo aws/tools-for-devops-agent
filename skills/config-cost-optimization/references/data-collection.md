@@ -44,13 +44,14 @@ active rules and conformance packs, and the delivery bucket.
     output bucket; managed results let Athena own the result location and return rows
     via `GetQueryResults`.
   - **Read access to the Config S3 data** (`s3:GetObject` on the Config delivery
-    bucket) and the **Glue Data Catalog** (`glue:GetDatabase`, `glue:GetTable`,
-    `glue:GetPartitions`) for the table that maps the Config data, plus
-    `athena:GetWorkGroup`.
-  - These are **not** granted by `AIDevOpsAgentAccessPolicy` (which carries only
-    `s3:ListBucket` on `AWSLogs/` prefixes, no `s3:GetObject`) nor by the base
-    config-cost-optimization policy. They are granted only when the
-    `EnableConfigAthenaCiAnalysis` add-on is enabled in
+    bucket) plus the Athena query actions `athena:StartQueryExecution`,
+    `athena:GetQueryExecution`, `athena:GetQueryResults`. The Glue Data Catalog reads
+    (`glue:GetDatabase`, `glue:GetTable`, `glue:GetPartitions`) and `athena:GetWorkGroup`
+    that the query also uses are already in `AIDevOpsAgentAccessPolicy`.
+  - `s3:GetObject` and the three Athena query actions are **not** granted by
+    `AIDevOpsAgentAccessPolicy` (it carries `s3:ListBucket` only on `AWSLogs/` prefixes,
+    not `s3:GetObject` on bucket contents) nor by any always-on policy. They are granted
+    only when the `EnableConfigAthenaCiAnalysis` add-on is enabled in
     [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml).
     Without them the query returns **AccessDenied**.
 

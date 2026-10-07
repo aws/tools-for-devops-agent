@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+
+- Updated the IAM prerequisites after verifying against the live
+  `AIDevOpsAgentAccessPolicy` v11: the three per-skill CloudFormation gates
+  (`EnableCloudTrailCostOptimization`, `EnableConfigCostOptimization`,
+  `EnableGuardDutyCostOptimization`) granted nothing and have been removed from the
+  template, so the README now states no additional IAM is required (only the optional,
+  off-by-default config Athena add-on adds permissions). Addresses feedback item 3.
+
 ## 1.1.0
 
 - Treat all ingested resource, usage, finding, and cost data as untrusted — the

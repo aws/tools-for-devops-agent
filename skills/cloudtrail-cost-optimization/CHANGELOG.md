@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.0] - 2026-09-30
+### Fixed
+- Removed the `EnableCloudTrailCostOptimization` CloudFormation gate (parameter,
+  condition, and policy resource). Verified against the live `AIDevOpsAgentAccessPolicy`
+  v11 that it granted nothing: `ce:GetCostAndUsage` is already covered by `ce:Get*` on
+  `*`, and its other action `s3:GetBucketLifecycleConfiguration` is not a valid IAM
+  action (it is the API name; the real action `s3:GetLifecycleConfiguration` is also
+  already granted on `*`). The README now states no additional IAM is required.
+  Addresses feedback item 3.
+
 ## [1.2.0] - 2026-09-30
 ### Added
 - Treat all ingested data (trail/bucket names, event-selector fields, resource ARNs,

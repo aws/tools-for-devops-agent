@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0] - 2026-09-30
+### Fixed
+- Removed the `EnableGuardDutyCostOptimization` CloudFormation gate (parameter,
+  condition, and policy resource). Verified against the live `AIDevOpsAgentAccessPolicy`
+  v11 that its only action, `ce:GetCostAndUsage`, is already covered by `ce:Get*` on `*`,
+  so the gate granted nothing. The README now states no additional IAM is required.
+  Addresses feedback item 3.
+
 ## [1.2.0] - 2026-09-30
 ### Added
 - Treat all ingested data (detector/member identifiers, finding statistics and

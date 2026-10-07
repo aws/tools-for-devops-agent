@@ -23,16 +23,16 @@ CloudTrail spend grows quietly: duplicate trails re-deliver the same management 
 
 ### 2. IAM permissions for the DevOps Agent's primary cloud-source role
 
-Read-only CloudTrail, CloudWatch, S3, Organizations, and (recommended) Cost Explorer access:
+**No additional IAM permissions are required.** Every call this skill makes is read-only and covered by the AWS managed [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html):
 
 - `cloudtrail:DescribeTrails`, `cloudtrail:GetTrail`, `cloudtrail:GetTrailStatus`, `cloudtrail:ListTrails`, `cloudtrail:GetEventSelectors`
 - `cloudtrail:ListEventDataStores`, `cloudtrail:GetEventDataStore`
 - `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics`, `cloudwatch:ListMetrics`
-- `s3:ListBucket`, `s3:GetBucketLifecycleConfiguration` (destination bucket hygiene)
+- `s3:ListBucket`, `s3:GetLifecycleConfiguration` (destination bucket hygiene)
 - `organizations:DescribeOrganization`, `organizations:ListAccounts` (organization scope)
-- `ce:GetCostAndUsage` (recommended — the most direct dollar signal for sizing opportunities)
+- `ce:GetCostAndUsage` (dollar signal for sizing opportunities), granted via `ce:Get*`
 
-Most of these are covered by the AWS managed `AIDevOpsAgentAccessPolicy`. `ce:GetCostAndUsage` and the S3 lifecycle read may need to be added — see [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml) (`EnableCloudTrailCostOptimization`).
+There is no CloudFormation template to deploy for this skill.
 
 The skill operates entirely in **read-only** mode — it never calls `CreateTrail`, `UpdateTrail`, `DeleteTrail`, `PutEventSelectors`, `StopLogging`, or any Lake mutation.
 

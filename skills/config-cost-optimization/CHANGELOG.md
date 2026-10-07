@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.0] - 2026-09-30
+### Fixed
+- Removed the `EnableConfigCostOptimization` CloudFormation gate (parameter, condition,
+  and policy resource). Verified against the live `AIDevOpsAgentAccessPolicy` v11 that it
+  granted nothing: `ce:GetCostAndUsage` is already covered by `ce:Get*` on `*`, and its
+  other action `s3:GetBucketLifecycleConfiguration` is not a valid IAM action (it is the
+  API name; the real action `s3:GetLifecycleConfiguration` is also already granted on
+  `*`). This also clears the two cfn-lint W3037 warnings this branch introduced. The
+  `EnableConfigAthenaCiAnalysis` add-on is unchanged and still required for the Athena
+  path; its condition was rewired to no longer reference the removed parameter, and its
+  description/README now note that the Glue reads and `athena:GetWorkGroup` it uses are
+  already in the managed policy, so it adds only `s3:GetObject` and the three Athena
+  query actions. The README now states no additional IAM is required for the core skill.
+  Addresses feedback item 3.
+
 ## [1.4.0] - 2026-09-30
 ### Fixed
 - Documented the real prerequisites for the optional Athena CI-driver attribution path,

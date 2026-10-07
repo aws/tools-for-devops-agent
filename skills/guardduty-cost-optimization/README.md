@@ -23,15 +23,15 @@ GuardDuty is pay-as-you-go per protection plan, priced on the volume of data eac
 
 ### 2. IAM permissions for the DevOps Agent's primary cloud-source role
 
-Read-only GuardDuty, CloudWatch, Organizations, and (recommended) Cost Explorer access:
+**No additional IAM permissions are required.** Every call this skill makes is read-only and covered by the AWS managed [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html):
 
 - `guardduty:ListDetectors`, `guardduty:GetDetector`, `guardduty:ListMembers`, `guardduty:GetMemberDetectors`
 - `guardduty:GetMasterAccount`, `guardduty:ListOrganizationAdminAccounts`, `guardduty:GetFindingsStatistics`
 - `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics`, `cloudwatch:ListMetrics`
 - `organizations:DescribeOrganization`, `organizations:ListAccounts` (organization scope)
-- `ce:GetCostAndUsage` (recommended — the most direct dollar signal for sizing opportunities)
+- `ce:GetCostAndUsage` (dollar signal for sizing opportunities), granted via `ce:Get*`
 
-Most read APIs are covered by the AWS managed `AIDevOpsAgentAccessPolicy`. `ce:GetCostAndUsage` may need to be added — see [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml) (`EnableGuardDutyCostOptimization`).
+There is no CloudFormation template to deploy for this skill.
 
 The skill operates entirely in **read-only** mode — it never calls `CreateDetector`, `UpdateDetector`, `DeleteDetector`, or any protection-plan mutation.
 
