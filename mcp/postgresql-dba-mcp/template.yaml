@@ -1,0 +1,285 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Read-only PostgreSQL DBA MCP server for AWS DevOps Agent. Uses Lambda Web
+  Adapter for Streamable HTTP and requires explicit instance, database, and
+  endpoint allowlists.
+
+Globals:
+  Function:
+    Timeout: 180
+    Runtime: python3.12
+    MemorySize: 1024
+
+Parameters:
+  StageName:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  SecretArn:
+    Type: String
+    AllowedPattern: '^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$'
+    ConstraintDescription: Must be a commercial-partition Secrets Manager secret ARN.
+    Description: >
+      ARN of the same-Region secret containing exactly non-empty string
+      username and password keys.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC containing the Lambda function, database, and endpoints.
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: >
+      Comma-separated subnet IDs used by the Lambda function for database
+      connectivity.
+
+  EndpointSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: >
+      One approved non-production subnet for the four private AWS API
+      interface endpoints. Using one subnet minimizes recurring endpoint cost.
+
+  ExplainQueryEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Deployment gate for the free-form explain_query surface. Keep false for
+      the non-production demo unless a separate security review approves it.
+
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: >
+      Lambda security group permitted to reach the database on its PostgreSQL
+      port and HTTPS AWS API endpoints.
+
+  AllowedInstances:
+    Type: CommaDelimitedList
+    Description: Explicit RDS DB instance identifiers available to MCP tools.
+
+  AllowedDatabases:
+    Type: CommaDelimitedList
+    Description: Explicit PostgreSQL database names available to MCP tools.
+
+  AllowedEndpoints:
+    Type: CommaDelimitedList
+    Description: >
+      Explicit lowercase RDS or Aurora endpoint hostnames available to
+      data-plane tools. Wildcards are not accepted.
+
+Resources:
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow PostgreSQL DBA MCP Lambda access to AWS API endpoints
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref SecurityGroupId
+      Tags:
+        - Key: Name
+          Value: !Sub postgresql-dba-mcp-${StageName}-endpoints
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref EndpointSubnetId
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref SecretArn
+      Tags:
+        - Key: Name
+          Value: !Sub postgresql-dba-mcp-${StageName}-secretsmanager
+
+  RDSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.rds
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref EndpointSubnetId
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - rds:DescribeDBClusters
+              - rds:DescribeDBEngineVersions
+              - rds:DescribeDBInstances
+              - rds:DescribeDBLogFiles
+              - rds:DescribeDBParameters
+              - rds:DescribeOrderableDBInstanceOptions
+              - rds:DescribePendingMaintenanceActions
+            Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub postgresql-dba-mcp-${StageName}-rds
+
+  EC2Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref EndpointSubnetId
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: ec2:DescribeInstanceTypes
+            Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub postgresql-dba-mcp-${StageName}-ec2
+
+  CloudWatchEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.monitoring
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref EndpointSubnetId
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: cloudwatch:GetMetricStatistics
+            Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub postgresql-dba-mcp-${StageName}-monitoring
+
+  PostgreSQLMCPFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub postgresql-dba-mcp-${StageName}
+      Handler: run.sh
+      CodeUri: src/
+      Description: PostgreSQL DBA MCP Server - Streamable HTTP via Lambda Web Adapter
+      Architectures:
+        - x86_64
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+        - !Ref DependenciesLayer
+      VpcConfig:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          AWS_LWA_PORT: '8000'
+          AWS_LWA_READINESS_CHECK_PATH: /mcp
+          AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS: '500'
+          AWS_LWA_INVOKE_MODE: response_stream
+          AWS_LWA_READINESS_CHECK_PROTOCOL: http
+          AWS_LWA_ASYNC_INIT: 'true'
+          PYTHONPATH: /opt/python
+          SECRET_ARN: !Ref SecretArn
+          RDS_CA_BUNDLE: /opt/python/rds-global-bundle.pem
+          ALLOWED_INSTANCES: !Join [',', !Ref AllowedInstances]
+          ALLOWED_DATABASES: !Join [',', !Ref AllowedDatabases]
+          ALLOWED_ENDPOINTS: !Join [',', !Ref AllowedEndpoints]
+          STAGE_NAME: !Ref StageName
+          EXPLAIN_QUERY_ENABLED: !Ref ExplainQueryEnabled
+      Policies:
+        - Statement:
+            - Sid: ReadConfiguredDatabaseSecret
+              Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref SecretArn
+        - Statement:
+            - Sid: ReadRDSMetadata
+              Effect: Allow
+              Action:
+                - rds:DescribeDBClusters
+                - rds:DescribeDBEngineVersions
+                - rds:DescribeDBInstances
+                - rds:DescribeDBLogFiles
+                - rds:DescribeDBParameters
+                - rds:DescribeOrderableDBInstanceOptions
+                - rds:DescribePendingMaintenanceActions
+              Resource: '*'
+        - Statement:
+            - Sid: ReadEC2InstanceTypeMetadata
+              Effect: Allow
+              Action:
+                - ec2:DescribeInstanceTypes
+              Resource: '*'
+        - Statement:
+            - Sid: ReadCloudWatchMetrics
+              Effect: Allow
+              Action:
+                - cloudwatch:GetMetricStatistics
+              Resource: '*'
+        - Statement:
+            - Sid: ManageLambdaVpcInterfaces
+              Effect: Allow
+              Action:
+                - ec2:AssignPrivateIpAddresses
+                - ec2:CreateNetworkInterface
+                - ec2:DeleteNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:UnassignPrivateIpAddresses
+              Resource: '*'
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: RESPONSE_STREAM
+
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub postgresql-mcp-deps-${StageName}
+      Description: Pinned FastMCP, pg8000, boto3, and transitive dependencies
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes:
+        - python3.12
+      CompatibleArchitectures:
+        - x86_64
+    Metadata:
+      BuildMethod: makefile
+
+Outputs:
+  MCPEndpointUrl:
+    Description: Streamable HTTP MCP endpoint ending in /mcp.
+    Value: !Join ['', [!GetAtt PostgreSQLMCPFunctionUrl.FunctionUrl, 'mcp']]
+
+  FunctionArn:
+    Description: Lambda function ARN.
+    Value: !GetAtt PostgreSQLMCPFunction.Arn
+
+  FunctionUrl:
+    Description: Lambda Function URL root.
+    Value: !GetAtt PostgreSQLMCPFunctionUrl.FunctionUrl
