@@ -1,5 +1,4 @@
 # Security Network Nodes remediations — shard 01
-
 Canonical IDs: `S16,S17,S18,S19,S20,S21,S22,S23`
 
 ### S16 — No webhook catch-all rules
@@ -83,4 +82,3 @@ spec:
 **References:**
 - [EKS Best Practices — Pod Security (Policy as Code)](https://docs.aws.amazon.com/eks/latest/best-practices/pod-security.html)
 - [Kyverno](https://kyverno.io/docs/) · [Gatekeeper](https://open-policy-agent.github.io/gatekeeper/website/docs/)
-

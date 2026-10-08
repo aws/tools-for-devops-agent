@@ -1,5 +1,4 @@
 # Aws Api remediations — shard 02
-
 Canonical IDs: `AX9,AX10,AX11,AX12,AX13,AX14`
 
 ### AX9 — Controller IAM permissions (LBC + others)

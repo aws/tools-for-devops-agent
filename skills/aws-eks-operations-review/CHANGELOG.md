@@ -1,4 +1,29 @@
 # Changelog
+## [1.9.4] - 2026-09-30
+Packaging: consolidate remediation shards to restore upload headroom.
+- Upload payload was exactly 100 files, the service limit, so any added reference broke upload.
+  Merged adjacent remediation shards within each pillar while keeping every merged file ≤12 KiB:
+  51 shards → 26 (`operations` 6→3, `cost-architecture` 5→2, `networking` 5→2,
+  `upgrade-readiness` 5→2, `observability` 4→2, `scalability` 4→2, `performance` 3→1,
+  `windows` 3→1, `resilience` 4→3, `security-network-nodes` 4→3, `security-pods-rbac` 2→1,
+  `aiml` 2→1, `hybrid` 2→1; `aws-api` unchanged at 2 because the pair exceeds the cap).
+  Every `###` remediation block is unchanged; only file boundaries and `Canonical IDs`
+  declarations moved. `references/remediations/index.md` regenerated.
+- Shard rule changed from "4–8 IDs" to "≥4 IDs and ≤12 KiB" in both
+  `evals/generate-runtime-indexes.py` and `evals/check-consistency.sh`. The byte cap expresses
+  the real constraint (context cost of one FAIL load); the ID count was a proxy for it.
+  Static "failed unit with largest shard" active set rises from ≈11.5K to ≈12.2K tokens,
+  within the 18K target.
+- Folded `references/docs/kubectl-scaling-guidance.md` (728 bytes, two inbound links) into a
+  *Scaling guidance (large clusters)* section at the end of `references/kubectl-discovery-commands.md`;
+  updated both links.
+- Trimmed five sentences from `SKILL.md` that restated rules already present in the file
+  (288-row/manifest repeat in the runtime contract, filler in Execution scope, duplicated
+  checklist intro, "never reconstruct verdicts from memory", "load audit alone is invalid").
+  12513 → 12243 bytes, back inside the 8–12 KiB bound the consistency check enforces; the
+  check had been failing on size since 1.9.3. No step, rule, or required phrase was removed.
+- Payload is now 74 files (26 below the limit). README and `evals/TESTING.md` updated; no
+  runtime step, check ID, or routing behavior changed.
 
 ## [1.9.3] - 2026-09-28
 

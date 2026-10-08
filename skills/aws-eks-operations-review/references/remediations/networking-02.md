@@ -1,61 +1,104 @@
 # Networking remediations — shard 02
+Canonical IDs: `N17,N18,N19,N20,N21,N22,N23,N24,NM1,NM2,NM3,NM4,NM5,NM6,NM7,N25,N26`
 
-Canonical IDs: `N9,N10,N11,N12,N13,N14,N15,N16`
-
-### N9 — kube-proxy mode
-**Why it matters:** iptables mode rebuilds large rule sets as services change — at thousands of services this adds latency; IPVS uses hash tables that scale better.
-**Steps:** Keep iptables for typical clusters; evaluate IPVS mode beyond ~1000 services.
+### N17 — No NodePort services for ingress
+**Why it matters:** NodePort as the ingress path is hard to secure (wide port range), hard to manage, and bypasses L7 features.
+**Steps:** Use LoadBalancer Services / Ingress (via LBC) instead of NodePort for external traffic.
 **References:**
-- [EKS Best Practices — IPVS](https://docs.aws.amazon.com/eks/latest/best-practices/ipvs.html)
+- [EKS Best Practices — Load Balancing](https://docs.aws.amazon.com/eks/latest/best-practices/load-balancing.html)
 
-### N10 — CoreDNS reachability/config
-**Why it matters:** DNS is on the hot path for most workloads — unhealthy or misconfigured CoreDNS causes broad, intermittent failures.
-**Steps:** Confirm CoreDNS pods healthy and the Corefile has sane forward/cache; scale and cache per Sc6/Sc7.
+### N18 — NodeLocal DNSCache
+**Why it matters:** Cuts DNS latency, CoreDNS load, and conntrack races on larger clusters. (Same as Sc7.)
+**Steps:** Deploy NodeLocal DNSCache as a DaemonSet.
+**References:**
+- [Kubernetes — NodeLocal DNSCache](https://kubernetes.io/docs/tasks/administer-cluster/nodelocaldns/)
+
+### N19 — CoreDNS scaling
+**Why it matters:** Under-scaled CoreDNS throttles cluster-wide DNS. (Same as Sc6.)
+**Steps:** Scale replicas with cluster size + autoscaling (CPA/HPA).
 **References:**
 - [EKS Best Practices — Scale Cluster Services](https://docs.aws.amazon.com/eks/latest/best-practices/scale-cluster-services.html)
 
-### N11 — Security Groups for Pods (SGP)
-**Why it matters:** Where pod-level network isolation to AWS resources is required (e.g. RDS SG rules), SGP attaches EC2 security groups directly to pods.
-**Steps:** Enable `ENABLE_POD_ENI=true`, deploy SecurityGroupPolicy resources, and understand `POD_SECURITY_GROUP_ENFORCING_MODE`.
+### N20 — ndots tuning for external-heavy DNS
+**Why it matters:** High `ndots` multiplies failed search-domain lookups for external names. (Same as Sc12.)
+**Steps:** Lower `ndots` via pod `dnsConfig` for external-heavy workloads.
 **References:**
-- [EKS Best Practices — Security Groups for Pods](https://docs.aws.amazon.com/eks/latest/best-practices/sgpp.html)
+- [EKS Best Practices — Scale Cluster Services](https://docs.aws.amazon.com/eks/latest/best-practices/scale-cluster-services.html)
 
-### N12 — External SNAT setting
-**Why it matters:** A mismatched `AWS_VPC_K8S_CNI_EXTERNALSNAT` breaks pod egress or double-NATs traffic when pods reach the internet via NAT/Transit Gateway.
-**Steps:** Set external SNAT only when pods egress via NAT/TGW; align with the VPC routing design.
+## Networking — manual / AWS-API (NM)
+
+### N21 — VPC DNS PPS / ENA allowance headroom
+**Why it matters:** Each instance has a **1024 packets-per-second limit to the VPC DNS resolver**. When exceeded, the ENA driver silently drops packets (`linklocal_allowance_exceeded`) — pods get intermittent `UnknownHostException`/resolution timeouts while CoreDNS itself reports perfectly healthy. This is one of the most common and hardest-to-diagnose EKS DNS outages. `conntrack_allowance_exceeded` (full connection-tracking table) and `pps_allowance_exceeded` (general PPS cap) cause similar silent drops.
+**Steps:**
+1. Confirm telemetry: `linklocal_allowance_exceeded` in CloudWatch (needs ethtool metrics — see O20). On-node check: `ethtool -S eth0 | grep allowance`.
+2. If breaches exist, deploy **NodeLocal DNSCache** (N18) so most lookups are served on-node and never hit the VPC resolver — the primary fix for `linklocal` drops.
+3. Tune `ndots` (N20) to cut lookup amplification; for conntrack/pps pressure, use larger instances / more ENIs or reduce per-node connection churn.
+**N/A** if ENA metrics aren't collected — but flag the observability gap (O20).
 **References:**
-- [EKS Best Practices — VPC CNI](https://docs.aws.amazon.com/eks/latest/best-practices/vpc-cni.html)
+- [EKS Best Practices — Monitoring network performance](https://docs.aws.amazon.com/eks/latest/best-practices/monitoring_eks_workloads_for_network_performance_issues.html)
+- [NodeLocal DNSCache on EKS](https://kubernetes.io/docs/tasks/administer-cluster/nodelocaldns/)
 
-### N13 — AWS Load Balancer Controller present
-**Why it matters:** The LBC is the recommended provisioner for ALB/NLB and enables IP target-type, readiness gates, and rich annotations the legacy in-tree controller can't.
-**Steps:** Install the AWS Load Balancer Controller (Helm/addon); migrate Services/Ingress off the in-tree controller.
+### N22 — NAT Gateway health & redundancy
+**Why it matters:** `ErrorPortAllocation` means the NAT gateway has run out of SNAT ports — new outbound connections fail cluster-wide (image pulls, API calls, external deps). A single-AZ NAT is also an egress SPOF. Sustained `PacketsDropCount` indicates NAT overload.
+**Steps:**
+1. Check `AWS/NATGateway` `ErrorPortAllocation` (>0 → act) and `PacketsDropCount`; confirm a NAT gateway per AZ.
+2. For SNAT port exhaustion: distribute egress (NAT-per-AZ so each AZ uses its local NAT), reduce long-lived idle connections, and cut NAT volume with VPC endpoints (NM5 / cost AM1) for AWS-service traffic.
+**N/A** when egress is via Transit Gateway (no NAT) — see NM1.
 **References:**
-- [EKS Best Practices — Load Balancing](https://docs.aws.amazon.com/eks/latest/best-practices/load-balancing.html)
-- [AWS Load Balancer Controller documentation](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/)
+- [VPC — NAT gateway CloudWatch metrics](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway-cloudwatch.html)
+- [Troubleshooting — NAT gateway ErrorPortAllocation](https://repost.aws/knowledge-center/vpc-resolve-port-allocation-errors)
 
-### N14 — Load balancer target-type = IP
-**Why it matters:** `instance` target-type routes through a NodePort and an extra hop (kube-proxy) → higher latency and uneven load. `ip` target-type registers pods directly.
-**Steps:** Install the AWS Load Balancer Controller and set the target-type annotation to `ip` on Services/Ingress.
-**Snippet (Service):**
+### N23 — Load balancer health checks configured
+**Why it matters:** A target group with a loose health check (plain TCP, or HTTP `/` returning 200 while the app is unhealthy) keeps broken pods receiving traffic — failures the LB should have removed from rotation.
+**Steps:**
+1. For each LB-fronted Service/Ingress, check the target-group health check (`alb.describeTargetGroups`) — path, port, success codes, interval.
+2. Align it to a real readiness path (the same endpoint the pod's readiness probe uses), not `/` or TCP-only.
+**Snippet:**
 ```yaml
-metadata:
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
-    service.beta.kubernetes.io/aws-load-balancer-type: external
+# Ingress annotations (AWS LB Controller)
+alb.ingress.kubernetes.io/healthcheck-path: /healthz
+alb.ingress.kubernetes.io/success-codes: "200"
 ```
+**N/A** in kubectl-only mode (target-group config is AWS-API) — infer from annotations.
 **References:**
-- [EKS Best Practices — Load Balancing](https://docs.aws.amazon.com/eks/latest/best-practices/load-balancing.html)
-- [AWS Load Balancer Controller documentation](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/)
+- [AWS Load Balancer Controller — health checks](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/#health-check)
 
-### N15 — Correct LB type per workload
-**Why it matters:** Using the wrong layer (ALB for raw TCP, or NLB for HTTP routing) means missing features (L7 routing/WAF) or unnecessary cost/complexity.
-**Steps:** HTTP(S) → ALB/Ingress; TCP/UDP or static-IP/source-IP-preservation → NLB.
+### N24 — Cross-zone load balancing
+**Why it matters:** NLB cross-zone load balancing is **off by default** — if AZs have uneven pod counts, traffic distributes unevenly (some pods hot, others idle). ALB is always cross-zone, so this applies to NLB. Enabling it evens distribution at the cost of cross-AZ data transfer.
+**Steps:** For NLBs fronting multi-AZ workloads where even distribution matters, enable cross-zone (`load_balancing.cross_zone.enabled=true`); check via `alb.describeLoadBalancerAttributes`. Weigh against cross-AZ transfer cost (cost A19).
+**N/A** in kubectl-only mode (LB attribute is AWS-API).
 **References:**
-- [EKS Best Practices — Load Balancing](https://docs.aws.amazon.com/eks/latest/best-practices/load-balancing.html)
+- [ELB — Cross-zone load balancing](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html#cross-zone-load-balancing)
 
-### N16 — Pod readiness gates for LB
-**Why it matters:** Without LBC readiness gates, traffic can hit pods before they're registered healthy in the target group → 5xx during rollouts/scale-up.
-**Steps:** Label namespaces for LBC pod readiness gate injection so rollouts wait for target-group registration.
+### NM1 — Multi-AZ subnets + NAT per AZ
+**Why / fix:** Cluster subnets should span ≥2 AZs, with a NAT gateway per AZ for resilient (and cheaper cross-AZ-free) egress. Verify in VPC config. Link: [Subnets/VPC](https://docs.aws.amazon.com/eks/latest/best-practices/subnets.html).
+
+### NM2 — Nodes in private subnets
+**Why / fix:** Worker subnets should have `MapPublicIpOnLaunch=false`; nodes egress via NAT, not public IPs. Verify in subnet config. Link: [Subnets/VPC](https://docs.aws.amazon.com/eks/latest/best-practices/subnets.html).
+
+### NM3 — Cluster endpoint exposure
+**Why / fix:** Review public/private endpoint config; `publicAccessCidrs` should not be `0.0.0.0/0`. `aws eks describe-cluster --query cluster.resourcesVpcConfig`. Link: [Cluster Access Management](https://docs.aws.amazon.com/eks/latest/best-practices/cluster-access-management.html).
+
+### NM4 — Subnet IP headroom / sizing
+**Why / fix:** Cluster + pod subnets must be sized for growth; add secondary CIDRs if tight. Check subnet CIDR utilization. Link: [IP Optimization](https://docs.aws.amazon.com/eks/latest/best-practices/ip-opt.html).
+
+### NM5 — VPC endpoints for AWS services
+**Why / fix:** ECR/S3/STS/EC2/logs interface+gateway endpoints keep traffic off NAT (cost + security). Verify endpoints exist. Link: [cost-opt networking](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-networking.html).
+
+### NM6 — ENA network performance allowances
+**Why / fix:** Watch `*_allowance_exceeded` (conntrack, pps, bandwidth, linklocal/DNS) on instances under load. Node-level metrics. Link: [Network performance monitoring](https://docs.aws.amazon.com/eks/latest/best-practices/monitoring_eks_workloads_for_network_performance_issues.html).
+
+### NM7 — Subnet reservations for prefix mode
+**Why / fix:** Reserve contiguous `/28` blocks to avoid fragmentation when using prefix delegation. Configure subnet CIDR reservations. Link: [Prefix Mode (Linux)](https://docs.aws.amazon.com/eks/latest/best-practices/prefix-mode-linux.html).
+
+### N25 — hostNetwork port-conflict risk
+**Why it matters:** `hostNetwork` pods bind directly to the node's network namespace — two wanting the same port can't co-schedule and one fails to bind (silent bind errors / CrashLoop) where the port is taken; they also bypass NetworkPolicy and SG-for-pods.
+**Steps:** Limit `hostNetwork` to genuine host agents; give them unique host ports + node anti-affinity. Cross-ref S2 (host namespaces).
 **References:**
-- [AWS Load Balancer Controller — Pod readiness gate](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/deploy/pod_readiness_gate/)
+- [Kubernetes — Pod networking (hostNetwork)](https://kubernetes.io/docs/concepts/workloads/pods/)
 
+### N26 — Gateway API resource health
+**Why it matters:** The AWS Gateway API Controller (VPC Lattice) or Istio/Envoy gateways provision real infrastructure from these CRDs. A `GatewayClass` not `Accepted`, or routes not `Attached`, means traffic isn't served even though the objects exist.
+**Steps:** Check `status.conditions`: `GatewayClass` `Accepted=True`, `Gateway` listeners `Programmed`, `HTTPRoute`s `Accepted`+`ResolvedRefs`; fix the referenced controller / backend refs. **N/A** if Gateway API CRDs aren't installed.
+**References:**
+- [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/)

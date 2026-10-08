@@ -1,58 +1,53 @@
 # Cost Architecture remediations — shard 02
+Canonical IDs: `AM2,AM3,AM4,AM5,AM6,AM7,A24,A25,A26`
 
-Canonical IDs: `A9,A10,A11,A12,A13,A14,A15,A16`
+### AM2 — ECR pull-through cache
+**Why / fix:** A pull-through cache reduces NAT charges for public image pulls. Configure in ECR. Link: [Cost Optimization: Networking](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-networking.html).
 
-### A9 — No NodePort services
-**Why it matters:** NodePort is hard to manage/secure and doesn't consolidate behind shared LBs. (Cost + ops angle of N17.)
-**Steps:** Use LB/Ingress via the LBC; consolidate behind shared ALBs.
+### AM3 — Node utilization / idle spend
+**Why / fix:** Use `kubectl top nodes`; persistently low-utilization nodes → enable consolidation / right-size. Link: [Cost Optimization: Compute](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-compute.html).
+
+### AM4 — Savings Plans / RI / EDP coverage
+**Why / fix:** A steady On-Demand baseline should be covered by Compute Savings Plans/RIs. Review Cost Explorer recommendations. Link: [Cost Optimization: Compute](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-compute.html).
+
+### AM5 — Cost allocation / showback
+**Why / fix:** CUR + Split Cost Allocation Data for EKS (or Kubecost/OpenCost) attributing spend to teams/namespaces. Confirm it's set up. Link: [Cost Optimization: Awareness](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-awareness.html).
+
+### AM6 — NAT Gateway data-processing spend
+**Why / fix:** High NAT processing → add VPC endpoints / pull-through cache (AM1/AM2). Review NAT cost in Cost Explorer. Link: [Cost Optimization: Networking](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-networking.html).
+
+### AM7 — Scheduled / off-hours scaling
+**Why / fix:** Scale non-prod down off-hours (scheduled scaling / `kube-downscaler`). Confirm a schedule exists. Link: [Cost Optimization: Compute](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-compute.html).
+
+### A24 — Cost allocation tooling presence
+**Why it matters:** Without workload-level cost attribution, teams can't identify which namespaces/workloads drive spend. Cost optimization requires visibility first.
+**Steps:**
+1. Deploy OpenCost or Kubecost: `helm install opencost opencost/opencost` (or Kubecost).
+2. Or enable AWS Split Cost Allocation Data (SCAD) for EKS in the CUR settings.
+3. Verify the tool is producing allocation data: check the OpenCost/Kubecost UI or CUR for EKS pod-level costs.
+4. Integrate with team/namespace labels (Op5) for per-team showback.
 **References:**
-- [EKS Best Practices — Cost Optimization: Networking](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-networking.html)
+- [EKS Best Practices — Cost Awareness](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-awareness.html)
+- [OpenCost](https://www.opencost.io/)
+- [AWS Split Cost Allocation Data for EKS](https://docs.aws.amazon.com/cur/latest/userguide/split-cost-allocation-data.html)
 
-### A10 — Ingress consolidation
-**Why it matters:** One ALB/NLB per service multiplies hourly + LCU charges; sharing one ALB across many services via Ingress cuts LB cost sharply.
-**Steps:** Use a shared ALB with IngressGroup annotations so many Ingresses share one load balancer.
-**Snippet:**
-```yaml
-metadata:
-  annotations:
-    alb.ingress.kubernetes.io/group.name: shared-prod
-```
+### A25 — Log ingestion cost awareness
+**Why it matters:** Control-plane audit logs on busy clusters generate 10–100+ GB/day at $0.50/GB ingest — this can be the #1 EKS cost line item without the team realizing it.
+**Steps:**
+1. Check CW Logs ingestion: `aws cloudwatch get-metric-data` for `IncomingBytes` on `/aws/eks/{cluster}/cluster`.
+2. If > 50 GB/day: review which log types are enabled (api, audit, authenticator, controllerManager, scheduler) — disable non-essential types in non-prod.
+3. For high-volume logs: use a Firehose delivery stream to S3 (cheaper long-term storage) with a CW Logs subscription filter.
+4. Set log retention (default is infinite): `aws logs put-retention-policy` — 30 days for audit, 7 days for controller/scheduler in non-prod.
 **References:**
-- [EKS Best Practices — Cost Optimization: Networking](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-networking.html)
+- [EKS Best Practices — Cost Optimization Observability](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-observability.html)
+- [CloudWatch Logs pricing](https://aws.amazon.com/cloudwatch/pricing/)
 
-### A11 — Topology-aware routing
-**Why it matters:** Cross-AZ traffic is billed each way; topology-aware routing keeps traffic AZ-local where possible, cutting data-transfer cost and latency.
-**Steps:** Enable topology-aware routing (`service.kubernetes.io/topology-mode: Auto`) on high-traffic services with replicas in each AZ.
+### A26 — Non-production operating schedule
+**Why it matters:** Running dev/staging clusters 24/7 wastes ~65% of compute cost (nights + weekends). Scheduling scale-down is the simplest cost win.
+**Steps:**
+1. Identify non-prod clusters: check `Environment` tag or namespace labels.
+2. Implement scheduled scaling: CronJob that scales replicas to 0 at 7PM, back up at 7AM; or Karpenter with aggressive `consolidateAfter` + `expireAfter` so nodes drain after idle.
+3. For entire clusters: consider `eksctl` or Terraform with scheduled lifecycle rules, or simply scale nodegroups to 0 off-hours.
+4. Verify no production workloads run on the non-prod cluster (check for external traffic, cron dependencies).
 **References:**
-- [EKS Best Practices — Cost Optimization: Networking](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-networking.html)
-
-### A12 — EFS vs EBS appropriateness
-**Why it matters:** EFS costs more per GB than EBS — using it for single-writer workloads that only need EBS is overspend.
-**Steps:** Use EFS only for genuine ReadWriteMany; use EBS (gp3) for single-writer volumes.
-**References:**
-- [EKS Best Practices — Cost Optimization: Storage](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-storage.html)
-
-### A13 — HPA + VPA coverage for right-sizing
-**Why it matters:** HPA (replicas) + VPA (requests) are the core right-sizing loop; missing either leaves capacity over- or under-provisioned.
-**Steps:** HPA on stateless workloads (P5) + VPA recommendations (P6) feeding request tuning.
-**References:**
-- [EKS Best Practices — Cost Optimization: Compute](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-compute.html)
-
-### A14 — PDBs don't block scale-down
-**Why it matters:** Blocking PDBs (`minAvailable:100%`/`maxUnavailable:0`) stop Karpenter/CAS reclaiming idle nodes — a silent cost leak, not just an update risk. (Cost angle of R7.)
-**Steps:** Fix blocking PDBs (see R7) so consolidation can reclaim nodes.
-**References:**
-- [EKS Best Practices — Cost Optimization: Compute](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-compute.html)
-
-### A15 — Instance-store for ephemeral scratch
-**Why it matters:** Heavy-scratch/cache workloads on large EBS root volumes pay for EBS they don't need durably; instance-store (NVMe) is included in the instance price.
-**Steps:** For ephemeral scratch, use instance-store-backed instance types and mount the local NVMe rather than oversizing EBS.
-**References:**
-- [EKS Best Practices — Cost Optimization: Storage](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-storage.html)
-
-### A16 — EFS lifecycle / IA storage class
-**Why it matters:** Cold data on EFS Standard costs far more than necessary; lifecycle management moves it to IA/Archive automatically.
-**Steps:** Enable an EFS lifecycle policy to transition infrequently-accessed files to EFS-IA/Archive.
-**References:**
-- [EKS Best Practices — Cost Optimization: Storage](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-storage.html)
-
+- [EKS Best Practices — Cost Optimization Compute](https://docs.aws.amazon.com/eks/latest/best-practices/cost-opt-compute.html)
