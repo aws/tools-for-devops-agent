@@ -106,13 +106,15 @@ The resulting `cloudfront-operational-review.zip` contains:
 ```
 cloudfront-operational-review/
 ├── SKILL.md          # frontmatter + skill instructions (required)
-└── references/
-    ├── metrics-thresholds.md
-    └── findings-severity-catalog.md
+├── references/
+│   ├── metrics-thresholds.md
+│   └── findings-severity-catalog.md
+└── assets/
+    └── report-template.md
 ```
 
 `evals/` is excluded from the upload to keep the zip small (it's only used for offline
-evaluation).
+evaluation); `references/` and `assets/` are included because `SKILL.md` loads them at runtime.
 
 Constraints (enforced at upload time):
 
@@ -153,15 +155,16 @@ cloudfront-operational-review/
 ├── SKILL.md                            # main skill instructions (with frontmatter)
 ├── README.md                           # this file
 ├── CHANGELOG.md                        # version history
-├── .skilleval.yaml                     # eval config (ignores README.md in audit)
+├── .skilleval.yaml                     # audit config for the open-source skill-eval tool
 ├── references/
 │   ├── metrics-thresholds.md           # CloudWatch metric thresholds & severity rules
 │   └── findings-severity-catalog.md    # findings catalog mapped to Well-Architected pillars
+├── assets/
+│   └── report-template.md              # per-distribution report template (loaded in Step 10)
 └── evals/                              # evaluation data (not included in upload zip)
-    ├── evals.json
-    ├── eval_queries.json
-    └── files/
-        └── distribution-context.json
+    ├── evals.json                      # skill-eval functional cases (new-schema)
+    ├── additional-permissions.json     # read-only grants for the functional eval's agent space
+    └── manual-test-results.md          # recorded skill-eval + manual validation results
 ```
 
 ## Best-Practices Sections Covered
