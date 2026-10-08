@@ -32,6 +32,7 @@ Metadata:
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
+          - EnableAwsFsxnOperationsReview
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -151,6 +152,16 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableAwsFsxnOperationsReview:
+    Type: String
+    Description: >
+      Amazon FSx for NetApp ONTAP Operational Review skill (read-only: adds
+      fsx:Describe*/ListTagsForResource, cloudwatch metric/alarm reads,
+      backup:ListProtectedResources/ListRecoveryPointsByResource, and
+      ec2:DescribeSecurityGroups/Subnets/RouteTables).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -189,6 +200,7 @@ Conditions:
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
+  SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -600,6 +612,44 @@ Resources:
               - savingsplans:DescribeSavingsPlans
             Resource: '*'
 
+  # aws-fsxn-operations-review: strictly read-only FSx for NetApp ONTAP review.
+  # Grants the skill's full read set (fsx control-plane Describe*/ListTagsForResource,
+  # CloudWatch metric/alarm reads, backup protected-resource/recovery-point lists, and
+  # ec2 network describes for the security/networking checks). No Start*, Put*, Create*,
+  # Update*, or Delete* is granted. sts:GetCallerIdentity is intentionally omitted — it
+  # requires no IAM permission. These actions were NOT delta-trimmed against
+  # AIDevOpsAgentAccessPolicy with iam:SimulatePrincipalPolicy; a maintainer may remove
+  # any already covered by the managed policy (e.g. backup:List*, cloudwatch reads).
+  PolicyAwsFsxnOperationsReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillAwsFsxnOperationsReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-AwsFsxnOperationsReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: FsxnOperationsReviewReadOnly
+            Effect: Allow
+            Action:
+              - fsx:DescribeFileSystems
+              - fsx:DescribeVolumes
+              - fsx:DescribeStorageVirtualMachines
+              - fsx:DescribeSnapshots
+              - fsx:DescribeBackups
+              - fsx:ListTagsForResource
+              - cloudwatch:DescribeAlarms
+              - cloudwatch:GetMetricData
+              - cloudwatch:GetMetricStatistics
+              - cloudwatch:ListMetrics
+              - backup:ListProtectedResources
+              - backup:ListRecoveryPointsByResource
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeRouteTables
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -629,6 +679,7 @@ Outputs:
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
+        - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/Subnets/RouteTables)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
