@@ -58,6 +58,7 @@ class SkillResult:
     path: str  # repository-relative, such as skills/my-skill
     findings: list[sc.Finding]
     is_skill: bool = True
+    always_visible: bool = False
 
 
 def _repo_root() -> Path:
@@ -163,15 +164,55 @@ def read_gitignore(repo_root: Path, rev: str) -> str:
     return _git(repo_root, "show", f"{rev}:{SKILLS_DIR}/.gitignore").decode("utf-8")
 
 
+def is_shallow(repo_root: Path) -> bool:
+    return _git(repo_root, "rev-parse", "--is-shallow-repository").decode("ascii").strip() == "true"
+
+
+def retired_skills(repo_root: Path, base: str, present: set[str]) -> frozenset[str]:
+    """Skill folder names that `base`'s first-parent history deleted and that `base` doesn't have.
+
+    First-parent only, so a path that existed only inside a pull request's
+    branch, renamed before it merged, never counts as retired.
+    """
+    out = _git(
+        repo_root, "log", "--first-parent", "--format=", "--name-only", "--diff-filter=D", "-z", base, "--", f"{SKILLS_DIR}/"
+    )
+    names = set()
+    for raw in out.split(b"\0"):
+        parts = _decode_path(raw).strip().split("/")
+        if len(parts) >= 3 and parts[0] == SKILLS_DIR:
+            names.add(parts[1])
+    return frozenset(names - present)
+
+
 def check_repository(
     repo_root: Path, rules: sc.Rules, base: str | None, head_ref: str
 ) -> tuple[list[SkillResult], set[str] | None]:
-    """Results for every skill at `head_ref`, and the skills touched since `base` (None without a base)."""
+    """Results for every skill at `head_ref`, and the skills touched since `base` (None without a base).
+
+    With a base, each skill is also compared with its merge-base copy: a folder
+    can't be removed or reuse a retired path, and the version must go up when
+    the published files change.
+    """
     head_trees, results = read_skills(repo_root, head_ref)
-    touched = touched_skills(repo_root, base, head_ref) if base is not None else None
+    touched = None
+    history: dict[str, list[sc.Finding]] = {}
+    if base is not None:
+        touched = touched_skills(repo_root, base, head_ref)
+        base_trees, _ = read_skills(repo_root, base)
+        retired: frozenset[str] = frozenset()
+        if is_shallow(repo_root):
+            message = "the clone is shallow, so skill paths retired earlier in history were not checked; use fetch-depth: 0"
+            results.append(SkillResult(SKILLS_DIR, [sc.Finding("warning", message)], is_skill=False, always_visible=True))
+        else:
+            retired = retired_skills(repo_root, base, set(base_trees))
+        for name in sorted(set(base_trees) | set(head_trees)):
+            history[name] = sc.check_history(name, base_trees.get(name), head_trees.get(name), rules, retired)
+        for name in sorted(set(base_trees) - set(head_trees)):
+            results.append(SkillResult(f"{SKILLS_DIR}/{name}", history[name], is_skill=False))
     for name in sorted(head_trees):
         findings, _ = sc.check_skill(head_trees[name], rules)
-        results.append(SkillResult(f"{SKILLS_DIR}/{name}", findings))
+        results.append(SkillResult(f"{SKILLS_DIR}/{name}", findings + history.get(name, [])))
     return results, touched
 
 
@@ -202,7 +243,7 @@ def _location(result: SkillResult, finding: sc.Finding) -> str:
 def _visible(result: SkillResult, touched: set[str] | None) -> list[sc.Finding]:
     """Errors always; warnings only for touched skills (or every skill when there is no base)."""
     name = result.path.split("/", 1)[-1]
-    show_warnings = touched is None or name in touched
+    show_warnings = result.always_visible or touched is None or name in touched
     return [f for f in result.findings if f.severity == "error" or show_warnings]
 
 
@@ -263,9 +304,14 @@ def _write_summary(results: list[SkillResult], touched: set[str] | None, failed:
 def self_check(rules_dir: Path, rules: sc.Rules) -> list[str]:
     try:
         cases = sc.load_cases(rules_dir / CONFORMANCE_FILE)
+        golden_files, golden_hash = sc.load_golden_hash(rules_dir / CONFORMANCE_FILE)
     except ValueError as exc:
         return [str(exc)]
-    return sc.run_conformance(cases, rules)
+    problems = sc.run_conformance(cases, rules)
+    actual = sc.content_hash(golden_files)
+    if actual != golden_hash:
+        problems.append(f"the content hash of the golden fixture is {actual}, not {golden_hash}")
+    return problems
 
 
 def _could_not_run(exc: GitError) -> int:

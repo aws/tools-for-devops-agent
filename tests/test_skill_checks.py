@@ -479,6 +479,95 @@ class ContentSafetyTests(CheckSkillTestCase):
         self.assertEqual(self.warnings(with_files("references/a.md", data=data)), [])
 
 
+
+def versioned(version: str = "1.0.0", **files: bytes) -> sc.SkillTree:
+    fm = VALID_FRONTMATTER.replace('version: "1.0.0"', f'version: "{version}"')
+    return tree(skill_md(fm), **files)
+
+
+class ContentHashTests(unittest.TestCase):
+    def test_hash_is_sha256_over_sorted_path_and_file_digest_records(self):
+        import hashlib
+
+        files = {"b.md": b"bee\n", "a/c.md": b"sea\n"}
+        expected = hashlib.sha256(
+            b"a/c.md\0" + hashlib.sha256(b"sea\n").hexdigest().encode() + b"\n"
+            + b"b.md\0" + hashlib.sha256(b"bee\n").hexdigest().encode() + b"\n"
+        ).hexdigest()
+        self.assertEqual(sc.content_hash(files), expected)
+
+    def test_any_byte_or_path_change_changes_the_hash(self):
+        base = sc.content_hash({"a.md": b"x"})
+        self.assertNotEqual(base, sc.content_hash({"a.md": b"x "}))
+        self.assertNotEqual(base, sc.content_hash({"b.md": b"x"}))
+
+
+class HistoryTests(unittest.TestCase):
+    def history(self, base, head, retired=frozenset()) -> list[sc.Finding]:
+        return sc.check_history("demo-skill", base, head, RULES, retired)
+
+    def errors(self, base, head, retired=frozenset()) -> list[str]:
+        return [f.message for f in self.history(base, head, retired) if f.severity == "error"]
+
+    def test_unchanged_skill_passes(self):
+        self.assertEqual(self.history(versioned(), versioned()), [])
+
+    def test_removed_folder_is_an_error(self):
+        (message,) = self.errors(versioned(), None)
+        self.assertIn('set metadata.deprecated: "true"', message)
+
+    def test_new_skill_passes_unless_its_path_was_retired(self):
+        self.assertEqual(self.history(None, versioned()), [])
+        (message,) = self.errors(None, versioned(), retired=frozenset({"demo-skill"}))
+        self.assertIn("was used by a skill that was removed", message)
+
+    def test_content_change_needs_a_higher_version(self):
+        base = versioned("1.0.0", **{"references/a.md": b"one\n"})
+        head = versioned("1.0.0", **{"references/a.md": b"two\n"})
+        (message,) = self.errors(base, head)
+        self.assertIn("metadata.version must go up from 1.0.0", message)
+        finding = next(f for f in self.history(base, head) if f.severity == "error")
+        self.assertEqual((finding.path, finding.line), ("SKILL.md", 6))
+
+    def test_readme_is_published_so_it_needs_a_bump(self):
+        base = versioned("1.0.0", **{"README.md": b"# Demo\n"})
+        head = versioned("1.0.0", **{"README.md": b"# Demo, fixed\n"})
+        self.assertEqual(len(self.errors(base, head)), 1)
+
+    def test_unpublished_changes_need_no_bump(self):
+        base = versioned("1.0.0", **{"CHANGELOG.md": b"a\n", "evals/evals.json": b"{}\n"})
+        head = versioned("1.0.0", **{"CHANGELOG.md": b"b\n", "evals/evals.json": b"[]\n", ".skilleval.yaml": b"x\n"})
+        self.assertEqual(self.history(base, head), [])
+
+    def test_version_must_never_go_down(self):
+        (message,) = self.errors(versioned("1.2.0"), versioned("1.1.9"))
+        self.assertIn("went down from 1.2.0 to 1.1.9", message)
+
+    def test_bump_with_changelog_passes(self):
+        base = versioned("1.0.0", **{"CHANGELOG.md": b"## 1.0.0\n"})
+        head = versioned("1.1.0", **{"CHANGELOG.md": b"## 1.1.0\n## 1.0.0\n"})
+        self.assertEqual(self.history(base, head), [])
+
+    def test_bump_without_changelog_change_warns(self):
+        base = versioned("1.0.0", **{"CHANGELOG.md": b"## 1.0.0\n"})
+        head = versioned("1.0.1", **{"CHANGELOG.md": b"## 1.0.0\n"})
+        (finding,) = self.history(base, head)
+        self.assertEqual(finding.severity, "warning")
+        self.assertIn("CHANGELOG.md", finding.message)
+
+    def test_two_part_base_version_is_compared_as_patch_zero(self):
+        self.assertEqual(self.errors(versioned("2.6"), versioned("2.6.1", **{"CHANGELOG.md": b"x\n"})), [])
+        self.assertEqual(len(self.errors(versioned("2.6"), versioned("2.6.0"))), 1)
+
+    def test_unreadable_base_version_skips_the_version_rules_with_a_warning(self):
+        (finding,) = self.history(versioned("latest"), versioned("1.0.0"))
+        self.assertEqual(finding.severity, "warning")
+        self.assertIn("were not checked", finding.message)
+
+    def test_invalid_head_version_is_left_to_check_skill(self):
+        self.assertEqual(self.history(versioned("1.0.0"), versioned("1.0")), [])
+
+
 class ParseVersionTests(unittest.TestCase):
     def test_strict_and_lenient(self):
         self.assertEqual(sc.parse_version("1.2.3"), (1, 2, 3))

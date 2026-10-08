@@ -79,6 +79,16 @@ Anywhere in the skill folder, `evals/` included:
 
 In published text files, invisible characters (zero-width characters, bidirectional controls, a byte order mark, Unicode tag characters) are errors, because they can hide instructions from a reviewer while the model still reads them. In published Markdown, raw HTML elements such as `<script>` or `<iframe>`, `javascript:` links and `http://` links are warnings.
 
+Identity and versions, compared with the base branch:
+
+- A skill folder is never removed or renamed, because installed copies point at its path. To retire a skill, set `metadata.deprecated: "true"` and bump its version. To rename one, deprecate the old folder and add a new one.
+- A path that belonged to a skill removed earlier can't be reused.
+- A published version is immutable. A change to any published file, `README.md` included, needs a higher `metadata.version`. Changes only to `evals/`, `.skilleval.yaml`, `.skilleval.yml` or `CHANGELOG.md` need no bump.
+- The version never goes down.
+- When the version goes up, add a `CHANGELOG.md` entry for it. A bump without one is a warning.
+
+The check is exact only for the base commit it ran on. Two pull requests that each pass on an older base can break the rules together, for example by both bumping a skill to the same version, so a later push to `main` can still fail.
+
 Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
 
 ```bash
