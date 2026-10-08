@@ -830,7 +830,11 @@ def _format_version(version: tuple[int, int, int]) -> str:
 
 
 def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
-    """The merge-base copy's version, reading a two-part version such as 2.6 as 2.6.0. None if unreadable."""
+    """The merge-base copy's version, reading a two-part version such as 2.6 as 2.6.0. None if unreadable.
+
+    Fixing a two-part version changes SKILL.md, so the fix itself needs a
+    version above the old one: 2.6 -> 2.6.1, not 2.6.0.
+    """
     entry = tree.entries.get("SKILL.md")
     try:
         match = FRONTMATTER_PATTERN.match(entry.data.decode("utf-8")) if entry else None

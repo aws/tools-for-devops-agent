@@ -172,10 +172,11 @@ def retired_skills(repo_root: Path, base: str, present: set[str]) -> frozenset[s
     """Skill folder names that `base`'s first-parent history deleted and that `base` doesn't have.
 
     First-parent only, so a path that existed only inside a pull request's
-    branch, renamed before it merged, never counts as retired.
+    branch, renamed before it merged, never counts as retired. Renames are
+    turned off, so a folder renamed away on `main` shows as deleted.
     """
     out = _git(
-        repo_root, "log", "--first-parent", "--format=", "--name-only", "--diff-filter=D", "-z", base, "--", f"{SKILLS_DIR}/"
+        repo_root, "log", "--first-parent", "--no-renames", "--format=", "--name-only", "--diff-filter=D", "-z", base, "--", f"{SKILLS_DIR}/"
     )
     names = set()
     for raw in out.split(b"\0"):

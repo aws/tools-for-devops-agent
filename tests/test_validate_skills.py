@@ -267,6 +267,24 @@ class HistoryIntegrationTests(RepoTestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("skills/old was used by a skill that was removed earlier", out)
 
+    def test_a_path_renamed_away_on_main_is_retired(self):
+        # A long body keeps every file similar enough that Git reports the
+        # move as a rename (R), not a delete (D) plus an add.
+        body = "".join(f"Step {i}: check the thing.\n" for i in range(200))
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/old/SKILL.md", skill_md("old") + body)
+        self.write("skills/old/references/guide.md", body)
+        self.commit("first")
+        self.git("mv", "skills/old", "skills/new")
+        self.write("skills/new/SKILL.md", skill_md("new") + body)
+        base = self.commit("rename old to new on main")
+        self.assertIn("R", self.git("log", "-1", "--name-status", "--format="))
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("bring old back")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("skills/old was used by a skill that was removed earlier", out)
+
     def test_a_path_that_only_existed_on_a_merged_branch_is_not_retired(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
         self.commit("base")
