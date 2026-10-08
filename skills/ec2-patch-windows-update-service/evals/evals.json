@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-windows-update-service",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "wuauserv-disabled-not-stopped",
+      "description": "wuauserv StartType Disabled blocks patch baseline; skill must re-enable (Set-Service Automatic) not just start, and note a GPO may re-disable it.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a Windows Server 2019 EC2 instance, AWS-RunPatchBaseline fails with 0x80070422 'The service cannot be started' and Get-Service wuauserv shows StartType: Disabled. Why can't SSM just start it, and how do I fix it?",
+      "expected_output": "Explains that SSM / the patch baseline can start a Stopped or Manual service but cannot start a Disabled one, which is why it fails with 0x80070422. The fix is to re-enable it with Set-Service -Name wuauserv -StartupType Automatic, then Start-Service, and also check BITS isn't Disabled. Notes that if a GPO set it Disabled it will revert on the next policy refresh (~90 min), so the GPO must be fixed for a durable solution, and to get approval if it was disabled intentionally.",
+      "assertions": [
+        "matches regex /(?i)Disabled/",
+        "matches regex /(?i)Set-Service|StartupType/",
+        "Explains that a Disabled service cannot be started by SSM until its StartType is changed (unlike Stopped/Manual)",
+        "Recommends Set-Service -StartupType Automatic then starting the service",
+        "Notes a GPO may re-disable the service on the next refresh"
+      ]
+    },
+    {
+      "id": "wua-hang-datastore-reset",
+      "description": "WUA scan hangs with svchost pegged; skill should reset services and, for a corrupt scan DB, rebuild SoftwareDistribution/DataStore.edb.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Windows Server 2016 EC2 instance never returns from a patch scan. wuauserv is stuck 'Stopping', TiWorker and svchost are pegged at ~100% CPU for over an hour, and DataStore.edb is over 1GB. How do I get the scan working again?",
+      "expected_output": "Explains this is a hung WUA with a likely-corrupt scan database. The fix is to stop wuauserv and BITS, kill the hung TiWorker/wuauclt processes, and reset the update state — rename/clear SoftwareDistribution (which rebuilds DataStore.edb on the next scan), optionally re-register the WUA DLLs, then restart the services and confirm a search succeeds. Notes that if it doesn't hold, an outdated SSU / CBS store corruption may be the underlying cause.",
+      "assertions": [
+        "matches regex /(?i)SoftwareDistribution|DataStore\\.edb/",
+        "matches regex /(?i)wuauserv|BITS|TiWorker/",
+        "Recommends stopping the services and resetting SoftwareDistribution / rebuilding DataStore.edb for the corrupt scan database",
+        "Recommends killing the hung TiWorker/wuauclt processes",
+        "Notes a stale SSU or CBS store corruption as a possible underlying cause if the reset doesn't hold"
+      ]
+    },
+    {
+      "id": "awssdk-gac-breaks-patchbaseline",
+      "description": "AWS-RunPatchBaseline throws a type-load error for AWSSDK.Core; skill must recognize a GAC-missing assembly and re-register with gacutil.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a Windows Server 2019 EC2 instance, AWS-RunPatchBaseline fails immediately with \"Invoke-PatchBaselineOperation : Could not load type 'Amazon.Runtime.Internal.InvokeOptions' from assembly 'AWSSDK.Core'\". The OS itself patches fine manually. What is wrong and how do I fix it?",
+      "expected_output": "Identifies that the AWSSDK.Core .NET assembly is missing or corrupt in the Global Assembly Cache (GAC), so AWS-RunPatchBaseline (which loads AWS SDK types) cannot run — even though the OS patches fine manually. The fix is to locate AWSSDK.Core.dll (under the AWS SDK for .NET install) and re-register it into the GAC with gacutil /i (after taking an EBS snapshot), then verify the assembly loads and the InvokeOptions type resolves, and re-run the baseline scan. Notes excluding the SDK path from AV to prevent recurrence.",
+      "assertions": [
+        "matches regex /(?i)GAC|gacutil/",
+        "matches regex /(?i)AWSSDK\\.Core/",
+        "Identifies AWSSDK.Core missing/corrupt in the GAC as the cause of the AWS-RunPatchBaseline type-load error",
+        "Recommends re-registering AWSSDK.Core.dll into the GAC with gacutil /i",
+        "Distinguishes this AWS-RunPatchBaseline runtime failure from a normal Windows Update problem"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What is the difference between a security group and a network ACL?"
+    }
+  ]
+}

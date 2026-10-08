@@ -1,0 +1,57 @@
+{
+  "skill_name": "ec2-patch-linux-repo-access",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "rhui-cert-region-specific",
+      "description": "RHEL PAYG instance from an AMI copied to another region; RHUI patching fails. Skill must recognize expired/region-mismatched RHUI client cert and reinstall rhui-client from the instance's OWN region S3 bucket.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A RHEL 9 pay-as-you-go EC2 instance in us-west-2 fails patching with 'Failed to download metadata for repo rhel-9-appstream-rhui-rpms' and 'SSL peer certificate was not OK'. The instance was launched from an AMI we copied from us-east-1. The RHUI cert in /etc/pki/rhui shows an enddate in the past. How do I fix repo access?",
+      "expected_output": "Identifies this as an expired/region-mismatched RHUI client certificate. Because RHUI certs are region-specific, the fix is to reinstall the rhui-client package from the instance's OWN region (us-west-2) — either dnf reinstall of the existing rhui-client, or install the current rhui-client RPM from the us-west-2 amazon-rhui3-client-config S3 bucket — then dnf clean all and makecache. Notes a cert from the origin region (us-east-1) will not authenticate, and warns against disabling sslverify.",
+      "assertions": [
+        "matches regex /(?i)RHUI/",
+        "matches regex /(?i)region/",
+        "Identifies the RHUI client certificate (region-specific) as the root cause rather than a generic SSL or GPG problem",
+        "Recommends reinstalling the rhui-client from the instance's own region (us-west-2), not the origin region",
+        "Does not recommend permanently disabling sslverify or gpgcheck to force patching"
+      ]
+    },
+    {
+      "id": "gpg-fail-is-really-rhui-cert",
+      "description": "RHUI repo reports GPG check FAILED; skill should check the RHUI client cert first rather than chasing signing keys.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a RHEL 8 pay-as-you-go EC2 instance, dnf fails with 'GPG check FAILED' on the rhel-8-baseos-rhui-rpms repo. I tried importing GPG keys from /etc/pki/rpm-gpg but it still fails. What else should I check?",
+      "expected_output": "Explains that a 'GPG check FAILED' on RHUI repos is frequently caused by an expired RHUI client certificate (mutual-TLS auth), not a missing signing key, so the next step is to check the RHUI client cert enddate in /etc/pki/rhui and, if expired, reinstall the region-correct rhui-client package, then clean and makecache. Notes to verify the system clock too, since a wrong time also surfaces as cert/GPG failures.",
+      "assertions": [
+        "matches regex /(?i)RHUI/",
+        "matches regex /(?i)certificate|cert/",
+        "Explains that a GPG check failure on RHUI repos is often an expired RHUI client certificate rather than a missing GPG key",
+        "Recommends checking the RHUI client certificate expiry in /etc/pki/rhui",
+        "Mentions checking the system clock / time skew as a related cause of cert/GPG errors"
+      ]
+    },
+    {
+      "id": "clock-skew-fake-expired-cert",
+      "description": "SSL 'certificate has expired' caused by a wrong system clock; skill must check/fix time before concluding the cert is expired.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "An Amazon Linux 2 EC2 instance that was stopped for several months now fails patching with 'SSL certificate problem: certificate has expired' on every repo, but the repo server certificates are actually valid. What is going on and how do I fix it?",
+      "expected_output": "Identifies that the instance's system clock is likely wrong (it was stopped for months), and a clock far in the past or future makes valid server certificates appear expired during TLS validation. The fix is to correct the time (enable NTP, chronyc makestep / restart chronyd or systemd-timesyncd) and then retry the repo refresh; also update the CA trust bundle if needed. Notes not to disable sslverify.",
+      "assertions": [
+        "matches regex /(?i)clock|time|NTP|chrony/",
+        "Identifies a wrong system clock as the cause of the apparent certificate-expired error",
+        "Recommends correcting the system time (NTP/chrony/timesyncd) before concluding the certificate is expired",
+        "Does not recommend disabling sslverify to work around it"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "How many Availability Zones are in the us-east-1 region?"
+    }
+  ]
+}

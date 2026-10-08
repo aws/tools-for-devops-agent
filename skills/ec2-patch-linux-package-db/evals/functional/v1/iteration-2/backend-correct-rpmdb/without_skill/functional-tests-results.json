@@ -1,0 +1,86 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "backend-correct-rpmdb",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly distinguishes the two RPM backend types (BDB vs SQLite), maps them to the correct error signatures and OS versions (BDB for RHEL6/7, AL2; SQLite for RHEL8+/AL2023 - roughly matching expected OS mappings), and provides distinct recovery procedures for each: for BDB it removes __db.* lock files and runs rpm --rebuilddb; for SQLite it moves the corrupt rpmdb.sqlite aside before rebuilding. It explicitly backs up /var/lib/rpm before rebuilding, clears stale locks, and explicitly states the need to detect the backend per-host rather than assuming one fix works everywhere (mirroring the expected 'A BerkeleyDB-only fix does not recover a corrupt sqlite DB and vice versa' point). It also mentions verifying via integrity_check and notes reconstruction considerations. All core expected elements are present: backend-dependent diagnosis, detection method, lock clearing, backup, and backend-specific rebuild steps, plus the caveat about mismatched fixes not working across backends.",
+      "evidence": "\"Since you have a mix of both error signatures, you likely have a mix of BDB and SQLite backend hosts (older vs. newer OS versions) \u2014 detect the backend per-host before choosing step 4's command rather than assuming one fix works everywhere.\" and \"For BDB-backend hosts... rpm --rebuilddb\" vs \"For SQLite-backend hosts... mv /var/lib/rpm/rpmdb.sqlite ... rpm --rebuilddb\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)rpmdb\\.sqlite/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains 'mv /var/lib/rpm/rpmdb.sqlite /var/lib/rpm/rpmdb.sqlite.corrupt' and 'sqlite3 /var/lib/rpm/rpmdb.sqlite \"pragma integrity_check;\"'",
+          "reasoning": "The regex (?i)rpmdb\\.sqlite matches text present in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)__db|berkeley|BDB/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains 'rm -f /var/lib/rpm/__db.*' and references to 'BDB0113' and 'Berkeley DB (BDB) backend'",
+          "reasoning": "The regex matches __db, Berkeley, and BDB all present in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes the SQLite backend recovery from the BerkeleyDB backend recovery",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly splits step 4 into 'For BDB-backend hosts (BDB0113 error...)' with command 'rpm --rebuilddb' and 'For SQLite-backend hosts (database disk image is malformed...)' with commands to move rpmdb.sqlite then rebuilddb, plus guidance on verifying with sqlite3 integrity_check.",
+          "reasoning": "Clear distinct subsections with different commands for each backend demonstrate differentiation.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends detecting which backend is in use before choosing the recovery",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Fleet-wide rollout notes state: 'detect the backend per-host before choosing step 4's command rather than assuming one fix works everywhere.'",
+          "reasoning": "This explicitly recommends detecting the backend before applying a fix.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends backing up /var/lib/rpm and clearing stale locks before rebuilding",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 2: 'Back up the current (corrupt) database before touching anything: cp -a /var/lib/rpm /var/lib/rpm.bak-$(date +%Y%m%d)' and Step 3: 'Remove stale BDB lock/env files (safe to delete, these are regenerated): rm -f /var/lib/rpm/__db.*' both occur before the rebuild step 4.",
+          "reasoning": "The output explicitly backs up and clears stale locks prior to rebuilding, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not prescribe a single backend-agnostic command for all hosts",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output gives two separate commands depending on backend type and explicitly warns: 'you likely have a mix of BDB and SQLite backend hosts... detect the backend per-host before choosing step 4's command rather than assuming one fix works everywhere.'",
+          "reasoning": "The agent does not prescribe one single command for all hosts; it differentiates and explicitly cautions against a one-size-fits-all approach.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

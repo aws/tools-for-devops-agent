@@ -1,0 +1,74 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "clock-skew-fake-expired-cert",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-linux-repo-access' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identifies the root cause (system clock frozen from stop period, causing TLS validation to see valid certs as expired due to wrong system time) and provides the correct fix: check with date/timedatectl, force resync with chronyc makestep, clear yum cache and retry. This matches the core expectation. The response does not explicitly mention updating the CA trust bundle or explicitly say 'don't disable sslverify', but these are secondary/optional notes in the expected output. The primary diagnosis and fix (clock correction via NTP/chronyc makestep, then retry repo refresh) are fully and correctly covered, which is the substantive core of the expected output. The CA bundle update is a minor additional point that wasn't needed here since the actual issue was clock drift, not CA bundle; the agent's omission of it is a minor gap but doesn't invalidate the core correct diagnosis and remediation. Not mentioning sslverify is also a minor omission but doesn't contradict the expected output - agent didn't suggest disabling sslverify, which is the actual anti-pattern expected to be avoided.",
+      "evidence": "\"The instance's RTC/system clock froze at whatever time it was stopped... TLS validation checks the repo server cert's notBefore/notAfter against that wrong clock... Force an immediate resync... sudo chronyc makestep... Clear the cached metadata and retry\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)clock|time|NTP|chrony/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains numerous instances of 'clock', 'time', and 'chrony' e.g. 'The instance's RTC/system clock froze...' and 'chronyd syncs opportunistically...' and 'Force an immediate resync... sudo chronyc makestep'.",
+          "reasoning": "The regex /(?i)clock|time|NTP|chrony/ matches many words in the output such as 'clock', 'time', 'chronyd', 'chronyc', satisfying the pattern requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies a wrong system clock as the cause of the apparent certificate-expired error",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'The instance's RTC/system clock froze at whatever time it was stopped, and on restart it boots with that stale clock before chronyd has synced it... So when the patch job kicks off: The system still thinks it's months in the past... TLS validation checks the repo server cert's notBefore/notAfter against that wrong clock... Every repo fails identically with \"certificate has expired\" ... pointing at the client's clock, not the server's cert.'",
+          "reasoning": "The agent explicitly and clearly identifies the wrong system clock (frozen RTC after months of being stopped) as the root cause of the apparent certificate-expired error, explaining the mechanism in detail.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends correcting the system time (NTP/chrony/timesyncd) before concluding the certificate is expired",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The fix section recommends: 'Confirm the drift: date; timedatectl...' followed by 'Force an immediate resync... timedatectl set-ntp true; sudo chronyc makestep; date # confirm it's now correct' before step 3 (clearing yum cache) and step 4 (verify). The agent never concludes the certificate itself is actually expired.",
+          "reasoning": "The agent's recommended remediation order explicitly corrects the system time via timedatectl/chronyc before any further troubleshooting steps, and the agent's conclusion throughout is that the certificate is NOT actually expired, consistent with the assertion that time correction should happen before concluding the cert is expired.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not recommend disabling sslverify to work around it",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'sslverify', '--nogpgcheck', 'insecure', or any instruction to disable SSL/TLS verification appears anywhere in the output. The agent's only recommendations are to confirm drift, force clock resync, clear yum cache, and verify repo access.",
+          "reasoning": "The agent never suggests disabling sslverify or any SSL certificate validation bypass as a workaround; the entire fix is centered on correcting the underlying clock issue, which satisfies the assertion that this workaround was not recommended.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "15s",
+    "cost": "$0.13",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

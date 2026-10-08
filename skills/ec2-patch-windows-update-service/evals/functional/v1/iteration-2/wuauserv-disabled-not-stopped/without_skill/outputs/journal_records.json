@@ -1,0 +1,42 @@
+[
+  {
+    "agentSpaceId": "344a2ec0-0c75-4fd1-9ae3-065a8f781713",
+    "executionId": "11455146-fa8f-4ab0-9d43-5b8a963ec331",
+    "recordId": "1d48d98c-8023-409c-8f9b-351fe43f5630",
+    "content": "{\"id\": \"1d48d98c-8023-409c-8f9b-351fe43f5630\", \"role\": \"user\", \"content\": [{\"text\": \"On a Windows Server 2019 EC2 instance, AWS-RunPatchBaseline fails with 0x80070422 'The service cannot be started' and Get-Service wuauserv shows StartType: Disabled. Why can't SSM just start it, and how do I fix it?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-05T16:31:04.040000-04:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "344a2ec0-0c75-4fd1-9ae3-065a8f781713",
+    "executionId": "11455146-fa8f-4ab0-9d43-5b8a963ec331",
+    "recordId": "098b8ba8-1b65-4499-833a-76760824e9ce",
+    "content": "{\"id\": \"2fc66d26-75fa-4d19-8075-f13d4fb51069\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"Windows Update service disabled SSM patch failures\"}]}",
+    "createdAt": "2026-10-05T16:31:05.090000-04:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "344a2ec0-0c75-4fd1-9ae3-065a8f781713",
+    "executionId": "11455146-fa8f-4ab0-9d43-5b8a963ec331",
+    "recordId": "88f70845-f0b8-438d-aaff-254fbbabb889",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 3.6, \"compaction_count\": 0}}}",
+    "createdAt": "2026-10-05T16:31:18.076000-04:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "344a2ec0-0c75-4fd1-9ae3-065a8f781713",
+    "executionId": "11455146-fa8f-4ab0-9d43-5b8a963ec331",
+    "recordId": "85e594b2-a4ea-4948-a3d8-a5c7fd6cf759",
+    "content": "{\"id\": \"85e594b2-a4ea-4948-a3d8-a5c7fd6cf759\", \"role\": \"assistant\", \"content\": [{\"text\": \"Quick answer on the \\\"why\\\": AWS-RunPatchBaseline (and Windows Update generally) relies on the Windows Update Agent calling into the **wuauserv** service via the Windows Update COM/service APIs. SSM's patch document doesn't manage service start-type as part of its own permissions model \\u2014 it just invokes the OS-level patching workflow, which expects wuauserv to be startable. If wuauserv's `Start` registry value is set to `4` (Disabled), the service control manager refuses to start it no matter who's asking \\u2014 SSM Agent included \\u2014 because that's an OS-level configuration decision, not something the patch document has rights or intent to override. SSM Agent runs as `LocalSystem`, which can start a Disabled service via `sc start`/`Start-Service` just fine *if* it's not Disabled \\u2014 but it won't flip the StartType for you, since silently re-enabling a service an admin deliberately disabled (often via GPO) would be surprising behavior.\\n\\n0x80070422 is literally the Win32 error `ERROR_SERVICE_DISABLED` surfacing through the Windows Update stack, which lines up exactly with what you're seeing.\\n\\n**Fix:**\\n\\n1. Re-enable the service start type (Manual is what Windows normally uses for wuauserv \\u2014 don't set Automatic, as it's not required and can mask the real issue if something keeps disabling it):\\n   ```powershell\\n   Set-Service -Name wuauserv -StartupType Manual\\n   Start-Service -Name wuauserv\\n   Get-Service wuauserv\\n   ```\\n2. Check whether it's being re-disabled by Group Policy. This is the most common root cause in enterprise AMIs/golden images:\\n   ```powershell\\n   gpresult /h gpresult.html\\n   ```\\n   Look for policies touching `Computer Configuration > Administrative Templates > System > Windows Components > Windows Update` or any custom GPO/SSM association that sets `HKLM:\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\wuauserv\\\\Start`. If GPO is reapplying Disabled, you need to fix it at the policy level, not just locally \\u2014 otherwise it'll flip back on the next `gpupdate`.\\n3. If it's not GPO, check for a baked-in AMI setting or a prior hardening script (CIS/STIG benchmarks sometimes disable wuauserv to force WSUS-only or SCCM-only patching paths) \\u2014 in which case AWS-RunPatchBaseline may be fundamentally incompatible with that hardening posture until you carve out an exception.\\n4. Re-run `AWS-RunPatchBaseline` once the service is confirmed Manual/Running.\\n\\nWant me to check this specific instance's service state and recent SSM command history to confirm it's really a StartType issue and not something re-disabling it on a schedule?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-05T16:31:18.151000-04:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "344a2ec0-0c75-4fd1-9ae3-065a8f781713",
+    "executionId": "11455146-fa8f-4ab0-9d43-5b8a963ec331",
+    "recordId": "a8ff97e6-d704-42d1-91e7-a207bd0070fe",
+    "content": "{\"id\": \"7c42da58-c022-4d3c-845e-c178f3193607\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Quick answer on the \\\"why\\\": AWS-RunPatchBaseline (and Windows Update generally) relies on the Windows Update Agent calling into the **wuauserv** service via the Windows Update COM/service APIs. SSM's patch document doesn't manage service start-type as part of its own permissions model \\u2014 it just invokes the OS-level patching workflow, which expects wuauserv to be startable. If wuauserv's `Start` registry value is set to `4` (Disabled), the service control manager refuses to start it no matter who's asking \\u2014 SSM Agent included \\u2014 because that's an OS-level configuration decision, not something the patch document has rights or intent to override. SSM Agent runs as `LocalSystem`, which can start a Disabled service via `sc start`/`Start-Service` just fine *if* it's not Disabled \\u2014 but it won't flip the StartType for you, since silently re-enabling a service an admin deliberately disabled (often via GPO) would be surprising behavior.\\n\\n0x80070422 is literally the Win32 error `ERROR_SERVICE_DISABLED` surfacing through the Windows Update stack, which lines up exactly with what you're seeing.\\n\\n**Fix:**\\n\\n1. Re-enable the service start type (Manual is what Windows normally uses for wuauserv \\u2014 don't set Automatic, as it's not required and can mask the real issue if something keeps disabling it):\\n   ```powershell\\n   Set-Service -Name wuauserv -StartupType Manual\\n   Start-Service -Name wuauserv\\n   Get-Service wuauserv\\n   ```\\n2. Check whether it's being re-disabled by Group Policy. This is the most common root cause in enterprise AMIs/golden images:\\n   ```powershell\\n   gpresult /h gpresult.html\\n   ```\\n   Look for policies touching `Computer Configuration > Administrative Templates > System > Windows Components > Windows Update` or any custom GPO/SSM association that sets `HKLM:\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\wuauserv\\\\Start`. If GPO is reapplying Disabled, you need to fix it at the policy level, not just locally \\u2014 otherwise it'll flip back on the next `gpupdate`.\\n3. If it's not GPO, check for a baked-in AMI setting or a prior hardening script (CIS/STIG benchmarks sometimes disable wuauserv to force WSUS-only or SCCM-only patching paths) \\u2014 in which case AWS-RunPatchBaseline may be fundamentally incompatible with that hardening posture until you carve out an exception.\\n4. Re-run `AWS-RunPatchBaseline` once the service is confirmed Manual/Running.\\n\\nWant me to check this specific instance's service state and recent SSM command history to confirm it's really a StartType issue and not something re-disabling it on a schedule?\"}]}",
+    "createdAt": "2026-10-05T16:31:18.242000-04:00",
+    "recordType": "final_response"
+  }
+]

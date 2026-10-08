@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "nss-segfault-rpm-force",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-linux-host-preconditions' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly identifies the root cause as corruption of libfreeblpriv3.so (part of nss-softokn-freebl), explains that this breaks NSS-dependent tools including yum/curl/dnf, explicitly notes yum cannot fix itself and must be bypassed with rpm directly, provides the exact fix of using 'rpm -ivh --force' with nss-softokn and nss-softokn-freebl RPMs obtained via S3/SSM (since curl/aws cli routes differently around NSS), and finishes with 'yum clean all' and 'yum repolist' verification steps. All key elements of the expected output are present and accurate.",
+      "evidence": "\"libfreeblpriv3.so (part of nss-softokn-freebl) is corrupted... yum, dnf, and curl all segfault... The key problem is yum can't fix itself here \u2014 you have to bypass it with rpm directly... rpm -ivh --force nss-softokn-freebl-<version>.rpm nss-softokn-<version>.rpm ... yum clean all / yum repolist 2>&1 | tail ... It should no longer segfault.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)libfreeblpriv3|nss-softokn|NSS/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'libfreeblpriv3.so' (part of `nss-softokn-freebl`)' and 'nss-softokn-freebl' repeated, also 'NSS crypto library corruption'",
+          "reasoning": "Output explicitly contains libfreeblpriv3, nss-softokn, and NSS terms matching the regex.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)rpm -ivh --force|rpm .*force/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "`rpm -ivh --force nss-softokn-freebl-<version>.rpm nss-softokn-<version>.rpm`",
+          "reasoning": "Exact phrase 'rpm -ivh --force' appears, matching the regex.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that yum cannot self-repair because it depends on the corrupt NSS library",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The key problem is **yum can't fix itself** here \u2014 you have to bypass it with `rpm` directly.' and earlier 'since NSS handles TLS/signature verification, it breaks *everything* that touches it: yum, dnf, and curl all segfault because they can't even get past the crypto init.'",
+          "reasoning": "The agent explicitly explains yum cannot self-repair because the corrupt NSS library breaks its crypto init, directly addressing the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends reinstalling the NSS RPM(s) directly with rpm -ivh --force from a local package",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 2 instructs to 'Get clean replacement RPMs' from a healthy host via yumdownloader, then transfer via S3/SSM, and Step 3 says 'Force-install, bypassing yum' with the rpm -ivh --force command using local RPM files.",
+          "reasoning": "The agent recommends reinstalling NSS RPMs directly with rpm -ivh --force using locally obtained package files, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not recommend yum reinstall as the fix",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent never suggests 'yum reinstall nss-softokn' as a fix for the corruption; instead it explicitly bypasses yum with rpm, and only uses yum afterward to verify ('yum clean all', 'yum repolist') once the library is already fixed via rpm.",
+          "reasoning": "No instance of 'yum reinstall' or similar yum-based repair appears as the fix; the fix is entirely rpm-based, with yum commands used only to confirm resolution after the fact.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "15s",
+    "cost": "$0.13",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

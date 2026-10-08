@@ -1,0 +1,73 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "gpg-fail-is-really-rhui-cert",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output centers on a very specific, correct root cause: RHUI uses mutual-TLS client certificates (located in /etc/pki/rhui) for repo authentication, and an expired client cert is a very common cause of 'GPG check FAILED'-style errors on RHUI repos (the error message is often misleading). The expected fix is to check the cert enddate (e.g., via openssl x509 -enddate -in /etc/pki/rhui/...), reinstall the region-correct rhui-client package if expired, then dnf clean all && dnf makecache, plus checking system clock since clock skew causes cert validation failures too.\n\nThe agent's response never mentions /etc/pki/rhui, TLS client certificates, or certificate expiration at all. It focuses entirely on GPG signing keys and the rh-amazon-rhui-client package being 'out of sync' or needing reinstall for key-matching reasons, not for an expired mutual-TLS cert. It does include a clock-skew check, which partially overlaps with the expected answer, but the central and most important diagnostic step (checking cert enddate in /etc/pki/rhui) is completely absent. The agent explicitly says none of its sources hit the exact scenario and gives a GPG-key-centric checklist instead of the cert-based explanation that is correct and expected here.\n\nSince the core expected diagnostic (RHUI client certificate expiration under /etc/pki/rhui) is missing, and the agent's primary recommended fix is framed around GPG key/package mismatch rather than cert expiration, this response does not meet the expected output.",
+      "evidence": "\"the thing that's out of sync... importing keys from /etc/pki/rpm-gpg doesn't help if the client package itself is the thing that's out of sync\" / no mention of /etc/pki/rhui or certificate enddate anywhere in the response.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)RHUI/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains multiple instances of 'RHUI', e.g. 'rhel-8-baseos-rhui-rpms repo' and 'rh-amazon-rhui-client'.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)certificate|cert/",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "A search of the output shows no occurrence of 'certificate' or 'cert' as a standalone word; the closest matches are substrings in words like 'client' - the word 'cert' does not appear as a distinct token referring to certificates anywhere in the response. The agent discusses GPG keys and the rh-amazon-rhui-client package, but never mentions certificates.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that a GPG check failure on RHUI repos is often an expired RHUI client certificate rather than a missing GPG key",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent attributes the issue to 'a stale/broken rh-amazon-rhui-client package rather than a missing key file' and recommends reinstalling that package. It never mentions an expired RHUI client certificate or anything about /etc/pki/rhui certificates; the explanation is entirely about the RPM package being out of sync, not an expired certificate.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends checking the RHUI client certificate expiry in /etc/pki/rhui",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "There is no mention of /etc/pki/rhui or certificate expiry anywhere in the output. The agent instead references /etc/pki/rpm-gpg (for GPG keys) and recommends reinstalling the rh-amazon-rhui-client package, not checking certificate expiry.",
+          "confidence": "high"
+        },
+        {
+          "text": "Mentions checking the system clock / time skew as a related cause of cert/GPG errors",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 4 explicitly states: 'Check for clock skew. GPG signature validation is time-sensitive. If the instance clock has drifted, you can get signature failures that look like key problems' and provides commands 'timedatectl status' and 'sudo chronyc tracking'.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.4
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "31s",
+    "cost": "$0.26",
+    "context_window": {
+      "utilization": "4.6%",
+      "compaction_count": 0
+    }
+  }
+}

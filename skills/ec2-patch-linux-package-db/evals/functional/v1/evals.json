@@ -1,0 +1,61 @@
+{
+  "skill_name": "ec2-patch-linux-package-db",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "al2023-sqlite-total-loss",
+      "description": "AL2023 rpmdb.sqlite is totally corrupt; skill must recognize that rpm --rebuilddb leaves an empty DB and the inventory must be rebuilt from repos (initdb + dnf reinstall), not rebuilddb.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On an Amazon Linux 2023 EC2 instance, dnf patching fails with 'error: rpmdb open failed' and 'cannot open Packages index using sqlite: file is not a database'. I ran `rpm --rebuilddb` and it completed, but now `rpm -qa` returns 0 packages. How do I recover this so patching works?",
+      "expected_output": "Explains that on AL2023 (sqlite backend) rpm --rebuilddb rebuilds the index from the on-disk package headers, so when rpmdb.sqlite is totally corrupt ('file is not a database') there are no headers to rebuild from and the DB ends up empty. The correct recovery is to reconstruct the inventory from the repositories: rpm --initdb, then dnf reinstall the packages (e.g. system-release first, then '*' with --skip-broken) and dnf distro-sync, after backing up /var/lib/rpm. Notes rpm --rebuilddb cannot recover this total-loss case.",
+      "assertions": [
+        "matches regex /(?i)rebuilddb/",
+        "matches regex /(?i)initdb|reinstall|distro-sync/",
+        "Explains that rpm --rebuilddb leaves an empty database because there are no on-disk headers to rebuild from when the sqlite file is totally corrupt",
+        "Recommends reconstructing the package inventory from the repositories (initdb + dnf reinstall) rather than rpm --rebuilddb",
+        "Recommends backing up /var/lib/rpm before mutating it",
+        "Does not recommend simply re-running rpm --rebuilddb as the fix"
+      ]
+    },
+    {
+      "id": "backend-correct-rpmdb",
+      "description": "Corrupt RPM DB; skill must detect backend (sqlite vs BerkeleyDB) and apply the correct recovery rather than a blind rebuilddb.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Linux fleet has patch failures with 'rpmdb: BDB0113 Thread/process failed' on some hosts and 'database disk image is malformed' on others. What is the correct way to recover the RPM database across these hosts?",
+      "expected_output": "Explains the recovery depends on the RPM backend: BerkeleyDB hosts (AL2, RHEL7/8, CentOS7, OL7, SLES12) have Packages + __db.* — drop the cached __db.* environment files then rpm --rebuilddb; SQLite hosts (AL2023, RHEL9, OL9, SLES15) have rpmdb.sqlite — move the corrupt sqlite aside and rebuild, and if totally corrupt reconstruct from repos. Detect the backend first (check for rpmdb.sqlite vs Packages/__db.*), clear stale locks, and back up /var/lib/rpm before rebuilding. A BerkeleyDB-only fix does not recover a corrupt sqlite DB and vice versa.",
+      "assertions": [
+        "matches regex /(?i)rpmdb\\.sqlite/",
+        "matches regex /(?i)__db|berkeley|BDB/",
+        "Distinguishes the SQLite backend recovery from the BerkeleyDB backend recovery",
+        "Recommends detecting which backend is in use before choosing the recovery",
+        "Recommends backing up /var/lib/rpm and clearing stale locks before rebuilding",
+        "Does not prescribe a single backend-agnostic command for all hosts"
+      ]
+    },
+    {
+      "id": "dpkg-status-vs-journal",
+      "description": "dpkg status parse error; skill must restore from status-old (distinct from clearing the updates/ journal).",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On an Ubuntu 22.04 EC2 instance, apt/patching fails with: dpkg: parsing file '/var/lib/dpkg/status' near line 14477 package 'zstd': end of file during value of field 'Homepage' (missing final newline), and 'dpkg was interrupted, you must manually run dpkg --configure -a'. How do I fix this?",
+      "expected_output": "Identifies that /var/lib/dpkg/status is corrupt (truncated stanza / missing final newline), which is different from corrupt journal files in /var/lib/dpkg/updates/. The fix is to back up the current status, restore /var/lib/dpkg/status from /var/lib/dpkg/status-old (the known-good copy dpkg writes on each successful update), then run dpkg --configure -a and apt-get install -f. Notes that if status-old is missing/empty this must be escalated (possible snapshot restore).",
+      "assertions": [
+        "matches regex /status-old/",
+        "matches regex /(?i)dpkg --configure -a/",
+        "Recommends restoring /var/lib/dpkg/status from status-old for a corrupt status file",
+        "Distinguishes a corrupt dpkg status file from corrupt journal files in /var/lib/dpkg/updates/",
+        "Recommends backing up the current status file before restoring",
+        "Notes escalation if status-old is missing or empty"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What is the default VPC CIDR block for a new Amazon VPC?"
+    }
+  ]
+}

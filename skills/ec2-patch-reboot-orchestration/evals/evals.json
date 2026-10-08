@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-reboot-orchestration",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "pending-reboot-not-a-failure",
+      "description": "Pending-reboot non-compliance; skill must recognize it's not a patch failure and needs a controlled reboot, gated on RebootIfNeeded/approval.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "An instance is NON_COMPLIANT with InstalledPendingRebootCount=3, but FailedCount=0 and MissingCount=0, and the Security Hub SSM.2 finding is open. The patch run used RebootOption=NoReboot. Do I need to re-run patching to fix this?",
+      "expected_output": "Explains this is not a patch failure — the patches installed successfully but the run used RebootOption=NoReboot, so reboot-requiring patches sit in InstalledPendingReboot and the instance reports non-compliant until it reboots. The fix is a single controlled reboot in an approved change window, not a re-patch. Cautions that because the run used NoReboot (a deliberate deferred-reboot policy), a reboot is a disruptive change requiring approval and application-owner sign-off, and cluster members must be rebooted one at a time. After the reboot, PendingReboot goes to 0 and Security Hub SSM.2 auto-resolves on its next evaluation.",
+      "assertions": [
+        "matches regex /(?i)not a (patch )?failure|pending reboot/",
+        "matches regex /(?i)controlled reboot|change window|approv/",
+        "States this is a pending-reboot state, not a patch failure, and does not require re-patching",
+        "Recommends a controlled reboot in an approved change window",
+        "Notes the NoReboot policy means a reboot needs approval (and cluster members one at a time)"
+      ]
+    },
+    {
+      "id": "reboot-race-bounded-wait",
+      "description": "Shutdown-in-progress race; skill must recognize a timing race, use a bounded wait, and not loop-retry into a rebooting host.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Windows patch run failed immediately with 'Invoke-PatchBaselineOperation : A system shutdown is in progress.' and exit status 0xffffffff, before any patch was installed. This happened right after the previous patch cycle rebooted the instance. Should I just keep retrying the patch until it works?",
+      "expected_output": "Explains this is a reboot-timing/orchestration race, not a patch-content or connectivity failure — the patch started while the OS was still rebooting from the prior cycle, and Windows rejects new operations during shutdown. It is transient. The correct handling is a BOUNDED wait (poll PingStatus at most ~10 times / ~10 minutes) for the agent to come back Online, then confirm RebootPending=False and a fresh uptime before allowing a single retry (or letting the next scheduled cycle run). Warns explicitly against an indefinite retry loop and against retrying into a still-rebooting instance, and says if it never returns Online it is impaired — route to SSM connectivity triage rather than retrying.",
+      "assertions": [
+        "matches regex /(?i)race|timing|transient/",
+        "matches regex /(?i)bounded|poll|wait/",
+        "Identifies a reboot-timing race rather than a patch or connectivity failure",
+        "Recommends a bounded wait for boot then a single retry, not an indefinite retry loop",
+        "Warns against retrying into a still-rebooting host and routes a never-Online instance to connectivity triage"
+      ]
+    },
+    {
+      "id": "reboot-gating-rebootoption",
+      "description": "User wants to reboot to clear compliance; skill must gate on RebootIfNeeded vs NoReboot and approval before rebooting.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Compliance shows pending reboot on a production instance and I want to just reboot it now to make the dashboard green. Anything I should check first?",
+      "expected_output": "Advises confirming it is purely reboot-pending first (FailedCount=0, MissingCount=0, InstalledPendingRebootCount>0) and that a reboot is actually pending in-guest. Critically, only reboot if the failed patch execution used RebootOption=RebootIfNeeded; if it used NoReboot, that reflects a deliberate deferred-reboot policy and rebooting is a disruptive change that needs an approved change window and application-owner confirmation — don't just reboot to green a dashboard. For clustered instances, reboot members one at a time to avoid quorum loss. After the approved reboot, compliance clears and Security Hub SSM.2 auto-resolves.",
+      "assertions": [
+        "matches regex /(?i)RebootIfNeeded|RebootOption|NoReboot/",
+        "matches regex /(?i)approv|change window/",
+        "Says to verify it is purely reboot-pending before rebooting",
+        "Gates the reboot on RebootIfNeeded vs a deliberate NoReboot policy and on approval",
+        "Warns not to reboot a production instance just to green a dashboard without approval"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What IAM permission does a Lambda function need to write logs to Amazon CloudWatch Logs?"
+    }
+  ]
+}

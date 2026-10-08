@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-windows-component-failures",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "wu-driver-breaks-ec2",
+      "description": "WU driver update broke ENA; skill must exclude drivers from WU rather than reinstall generic, and know AWS drivers are special.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "After a Windows patch cycle that included driver updates, a Windows Server 2019 EC2 instance lost network connectivity and Device Manager shows a yellow exclamation on the ENA adapter. Other instances that skipped driver updates are fine. How do I fix this and stop it recurring?",
+      "expected_output": "Explains that Windows Update pushed a generic in-box driver that overrode the AWS-specific ENA (Elastic Network Adapter) driver, breaking connectivity. The recurring fix is to keep Windows Update away from drivers: set ExcludeWUDriversInQualityUpdate=1 and hide the offending driver updates, and install/restore the AWS ENA driver from the official EC2 Windows driver downloads (not from Windows Update). For the currently broken instance, recover via EC2 Serial Console or by attaching the root volume to a rescue instance and rolling back the driver from the DriverStore. Does not recommend letting WU reinstall a generic driver.",
+      "assertions": [
+        "matches regex /(?i)ENA|ExcludeWUDrivers/",
+        "matches regex /(?i)Serial Console|rescue|DriverStore/",
+        "Identifies a generic WU driver overriding the AWS ENA driver as the cause",
+        "Recommends excluding drivers from Windows Update (and using the AWS driver source) to prevent recurrence",
+        "Recommends Serial Console / rescue-instance recovery rather than reinstalling a generic driver via WU"
+      ]
+    },
+    {
+      "id": "dotnet-is-os-component",
+      "description": ".NET update fails on 2019; skill must repair via DISM (OS component) rather than standalone reinstall first.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a Windows Server 2019 EC2 instance, every patch cycle succeeds except the .NET Framework update, which fails with 0x80070643. Should I just download and reinstall .NET from Microsoft?",
+      "expected_output": "Explains that on Server 2016+ the .NET Framework 4.x is an operating-system component, so the first move is to repair it in place — DISM /Online /Cleanup-Image /RestoreHealth — plus resync the NGen native-image cache (ngen update /force) and clear the stale SoftwareDistribution download, rather than a standalone reinstall. A standalone reinstall/Repair Tool is a later fallback. Notes 0x80070643 is a .NET install failure often tied to NGen/component-store state.",
+      "assertions": [
+        "matches regex /(?i)DISM/",
+        "matches regex /(?i)component|NGen|RestoreHealth/",
+        "Explains that .NET 4.x is an OS component on Server 2016+ and should be repaired in place via DISM",
+        "Recommends DISM RestoreHealth / NGen resync before a standalone reinstall",
+        "Does not recommend a standalone .NET reinstall as the first step"
+      ]
+    },
+    {
+      "id": "cluster-drain-before-reboot",
+      "description": "Cluster node can't reboot for patch; skill must drain + suspend before reboot and not reboot last node.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Windows Server 2019 EC2 instance that is an active node in a Windows failover cluster (SQL AlwaysOn) has a patch that needs a reboot, but the reboot keeps getting blocked and I see 0x80070426. How do I patch it safely?",
+      "expected_output": "Explains that the node owns clustered resources and rebooting it as an active owner risks losing quorum / locking CSV. The safe sequence is to drain the roles to other nodes (Move-ClusterGroup) and suspend the node for maintenance (Suspend-ClusterNode -Drain) so it is Paused with zero owned groups BEFORE the reboot, then Resume-ClusterNode afterward. Warns not to reboot the last online node (quorum loss), to confirm SQL AlwaysOn secondaries are synchronized before failover, and to prefer Cluster-Aware Updating (CAU) over ad-hoc SSM reboots.",
+      "assertions": [
+        "matches regex /(?i)drain|Suspend-ClusterNode/",
+        "matches regex /(?i)quorum/",
+        "Says to drain and suspend the node before rebooting, not reboot it as an active owner",
+        "Warns against rebooting the last online node / losing quorum",
+        "Mentions Cluster-Aware Updating (CAU) or confirming AlwaysOn secondaries before failover"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What is the difference between an Amazon S3 gateway endpoint and an interface endpoint?"
+    }
+  ]
+}

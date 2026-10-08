@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-linux-host-preconditions",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "inode-not-bytes",
+      "description": "'No space left on device' while df -h shows free space; skill must recognize inode exhaustion (df -i) and free small files, not bytes.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On an Amazon Linux 2 EC2 instance, patching fails with 'No space left on device' when extracting packages, but df -h shows the root filesystem is only 55% used with plenty of GB free. What is actually wrong and how do I fix it?",
+      "expected_output": "Explains this is almost certainly inode exhaustion, not byte-space: df -h can show free space while df -i is at ~100% because millions of small files (PHP sessions, mail queue, tmp, log fragments) have consumed all inodes. The fix is to confirm with df -i, find the directories with the most files, and delete the small-file accumulators (old /tmp files, php sessions, postfix maildrop, old logs, package cache) — freeing inodes, not bytes. Notes checking df -i specifically.",
+      "assertions": [
+        "matches regex /(?i)inode/",
+        "matches regex /(?i)df -i/",
+        "Identifies inode exhaustion (not byte-level disk full) as the cause given df -h shows free space",
+        "Recommends checking df -i and freeing large numbers of small files",
+        "Distinguishes freeing inodes from freeing disk bytes"
+      ]
+    },
+    {
+      "id": "readonly-fs-check-io-first",
+      "description": "Root FS remounted read-only with EBS I/O errors in dmesg; skill must NOT just remount rw, but treat as a volume problem.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A RHEL 8 EC2 instance fails patching with 'Read-only file system' writing to /var/lib/rpm. dmesg shows 'EXT4-fs error ... remounting filesystem read-only' and several 'blk_update_request: I/O error' entries on the root device. Should I just remount it read-write and retry?",
+      "expected_output": "Advises NOT to simply remount read-write: the filesystem was remounted read-only by the kernel to protect against I/O errors / corruption, and the dmesg I/O errors indicate an underlying EBS volume problem. Force-remounting a failing volume can worsen corruption. The correct path is to treat it as a volume issue — check EBS volume status (describe-volume-status), and if impaired, snapshot and replace the volume, or detach and fsck/xfs_repair on an unmounted device from a rescue instance. A plain remount,rw is only safe when there are no I/O errors.",
+      "assertions": [
+        "matches regex /(?i)I/O error|impaired|volume/",
+        "matches regex /(?i)remount|snapshot|fsck|xfs_repair/",
+        "Advises against simply remounting read-write when dmesg shows I/O errors",
+        "Explains the read-only remount is a protective response to volume/filesystem errors",
+        "Recommends treating it as an EBS volume problem (status check, snapshot/replace, or offline fsck)"
+      ]
+    },
+    {
+      "id": "nss-segfault-rpm-force",
+      "description": "yum segfaults on libfreeblpriv3.so; skill must recognize NSS corruption and repair with rpm -ivh --force since yum can't self-heal.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On an Amazon Linux 2 EC2 instance, every yum command exits immediately with 'Segmentation fault' and /var/log/messages shows 'error 4 in libfreeblpriv3.so'. curl also segfaults. How do I recover so patching works?",
+      "expected_output": "Identifies corruption of the NSS crypto library libfreeblpriv3.so (part of nss-softokn-freebl), which segfaults everything using NSS for TLS/signatures — including yum itself, so yum cannot repair it. The fix is to reinstall the nss-softokn and nss-softokn-freebl RPMs directly with rpm -ivh --force from a local package file (from cache, or copied via S3 since aws cli / rpm don't rely on the corrupt NSS path the same way), then yum clean all and verify yum repolist no longer segfaults. Notes yum reinstall won't work because yum itself crashes.",
+      "assertions": [
+        "matches regex /(?i)libfreeblpriv3|nss-softokn|NSS/",
+        "matches regex /(?i)rpm -ivh --force|rpm .*force/",
+        "Explains that yum cannot self-repair because it depends on the corrupt NSS library",
+        "Recommends reinstalling the NSS RPM(s) directly with rpm -ivh --force from a local package",
+        "Does not recommend yum reinstall as the fix"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What is the maximum number of tags I can attach to an EC2 instance?"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "cluster-drain-before-reboot",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response covers much of the core expected content: it correctly identifies that rebooting an active node that owns cluster resources is unsafe, and provides the correct safe sequence (Move-ClusterGroup to fail over, Suspend-ClusterNode -Drain, confirm Paused state, patch/reboot, Resume-ClusterNode). It also correctly ties the 0x80070426 error to cluster service/resource dependency conflicts.\n\nHowever, several specific elements explicitly called out in the expected output are missing:\n1. No explicit warning about not rebooting the last online node (risk of quorum loss) - the response mentions failing over but never specifically warns against patching the last/only remaining online node in the cluster.\n2. No mention of confirming SQL AlwaysOn secondaries are synchronized (not just synchronizing/async) before failover - the response mentions doing a manual AG failover but doesn't instruct to verify synchronization state of secondaries first, which is a critical safety check to avoid data loss during failover.\n3. No mention of CSV (Cluster Shared Volume) locking risk specifically - though this may be less relevant for SQL AlwaysOn (which typically doesn't use CSV) versus a traditional WSFC with shared storage, so this may be a minor gap.\n4. Most importantly, there is no mention of Cluster-Aware Updating (CAU) as a preferred alternative to ad-hoc SSM reboots - this is a specific recommendation in the expected output that is completely absent from the agent's response.\n\nWhile the agent nails the mechanical procedure (drain/suspend/resume), it misses several of the explicit safety warnings and strategic recommendations (quorum loss warning, sync verification, CAU recommendation) that the expected output specifically calls for. These are not minor omissions - they represent additional risk-mitigation guidance that a thorough answer should include.",
+      "evidence": "The response includes 'Move-ClusterGroup', 'Suspend-ClusterNode -Name \"<this-node>\" -Drain', and 'Resume-ClusterNode' but does not mention Cluster-Aware Updating (CAU), does not warn about rebooting the last online node causing quorum loss, and does not instruct to verify AG secondary synchronization status before failover.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)drain|Suspend-ClusterNode/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains 'Suspend-ClusterNode -Name \"<this-node>\" -Drain' and text 'Pause/drain the node so the cluster stops trying to use it'",
+          "reasoning": "The regex matches 'drain' and 'Suspend-ClusterNode' which both appear verbatim in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)quorum/",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No occurrence of the word 'quorum' anywhere in the output.",
+          "reasoning": "A full-text search of the response shows no instance of 'quorum' in any form, so the regex would not match.",
+          "confidence": "high"
+        },
+        {
+          "text": "Says to drain and suspend the node before rebooting, not reboot it as an active owner",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Move the node out of the way first \u2014 never patch an Active node in place' and 'Suspend-ClusterNode -Name \"<this-node>\" -Drain' followed by 'Install the patch and reboot normally'",
+          "reasoning": "The agent explicitly instructs failing over and draining/suspending the node before installing the patch and rebooting, matching the assertion's substance.",
+          "confidence": "high"
+        },
+        {
+          "text": "Warns against rebooting the last online node / losing quorum",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output discusses failover, draining, and resuming the node, but never mentions quorum or the risk of rebooting the last online node.",
+          "reasoning": "There is no mention of quorum loss or warning about rebooting the last remaining online node in the cluster, so this specific risk is not addressed.",
+          "confidence": "high"
+        },
+        {
+          "text": "Mentions Cluster-Aware Updating (CAU) or confirming AlwaysOn secondaries before failover",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'Cluster-Aware Updating' or 'CAU' anywhere; the output does mention checking AG ownership and failing over, e.g. 'Check which node currently owns the Availability Group / FCI' and 'do a manual failover of the Availability Group', but never references CAU or explicitly confirming secondary replica health before failover.",
+          "reasoning": "While the agent does mention checking AG ownership and performing failover, it never mentions Cluster-Aware Updating (CAU) at all, and does not explicitly instruct confirming the health/sync state of AlwaysOn secondaries before failing over - it only checks which node owns the AG. This is a partial overlap but the specific terms/concepts required (CAU or confirming secondaries health) are not substantively present.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.4
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

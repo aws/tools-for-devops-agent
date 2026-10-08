@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "ssm-unreachable-no-remote-path",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-precheck-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers nearly all key points of the expected output: it explains that PingStatus ConnectionLost means SSM is the only remote channel and that Run Command/Session Manager cannot be used, making remote agent restart impossible (chicken-and-egg problem). It correctly identifies that triage must be control-plane only, listing EC2 state, IAM instance profile, and network (SG/NAT/VPC endpoints to ssm/ssmmessages/ec2messages on 443) as the checks. It specifically calls out missing/broken IAM instance profile as the one fixable cause without in-guest access, matching the expected output's emphasis on AmazonSSMManagedInstanceCore. It also flags the hybrid mi- 'ghost' instance scenario, aligning with the expected guidance about hybrid instances. The response offers to pull the instance's current state (EC2 status, IAM profile, network config) and proposes next steps once instance ID is provided \u2014 effectively proposing the triage plan.\n\nHowever, it does not explicitly mention excluding the instance from the current patch run, nor explicitly say to escalate to the owner to restore the agent, nor explicitly say 'document the facts' or 'flag stale activations' for hybrid instances. It mentions hybrid ghost scenario but says 'decommissioned... never deregistered' which is roughly in the spirit of flagging rather than deregistering, though it doesn't explicitly say 'flag stale activations rather than deregistering' \u2014 it's close though.\n\nOverall, the response captures the core technical reasoning and most of the triage steps (EC2 state, IAM instance profile, network path) and the key fixable-without-guest-access insight (IAM instance profile), which are the most critical and verifiable parts of the expected output. Some operational follow-up steps (exclude from run, escalate to owner, document facts) are not explicitly stated, but the response is still a strong substantive match on the main technical explanation and triage criteria. Given the specificity about IAM profile as the only fixable cause and clear explanation of SSM being the only channel, this passes with medium confidence due to minor omissions.",
+      "evidence": "\"If PingStatus is ConnectionLost or Inactive, that connection is down. There's no way to 'SSM into it' to fix the thing that SSM itself depends on \u2014 it's a chicken-and-egg problem... Of those, the only one fixable without touching the guest is a missing or broken IAM instance profile \u2014 if that's it, re-attaching AmazonSSMManagedInstanceCore can bring it back online with zero in-guest access needed... Want me to pull the instance's current state \u2014 EC2 status, IAM instance profile, and subnet/security group config \u2014 so we know which case we're actually in?\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)no remote|cannot.*(restart|reach)|control-plane/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: \"There's no way to \u2018SSM into it\u2019 to fix the thing that SSM itself depends on\" and \"Let me walk through why \u2018just SSM in and restart the agent\u2019 isn't actually possible here\" and \"triage this from the control plane\" - matches 'no remote'/'cannot...reach'/'control-plane' patterns.",
+          "reasoning": "The text contains 'control plane' explicitly ('triage this from the control plane') and conveys the 'cannot reach' concept via 'There's no way to SSM into it'. The regex requires 'control-plane' with hyphen or the other alternatives; 'control plane' without hyphen may not match the literal regex, but the substance (cannot reach, no remote path) is clearly present via other phrasing like 'cannot... reach' is paraphrased as 'There's no way to SSM into it'. Given instructions to judge substance over exact wording, this passes.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)instance profile|AmazonSSMManagedInstanceCore/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly mentions 'IAM instance profile missing/changed' and later 'the only one fixable without touching the guest is a missing or broken IAM instance profile \u2014 if that's it, re-attaching AmazonSSMManagedInstanceCore can bring it back online'.",
+          "reasoning": "Direct textual match of 'instance profile' and 'AmazonSSMManagedInstanceCore' satisfies the regex requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that an unreachable instance cannot be accessed via Run Command / Session Manager",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'it's also the only remote path in (Run Command, Session Manager \u2014 all of it rides on the same SSM Agent connection). If PingStatus is ConnectionLost or Inactive, that connection is down. There's no way to \"SSM into it\" to fix the thing that SSM itself depends on.'",
+          "reasoning": "This directly explains that Run Command and Session Manager cannot be used on an unreachable instance since they rely on the same broken SSM Agent connection, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends control-plane checks (EC2 state, IAM instance profile, network) plus customer escalation",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output recommends checking 'EC2 status, IAM instance profile, and subnet/security group config' and asks 'Want me to pull the instance's current state... If you give me the instance ID and region I'll check it now.' However, there is no explicit mention of escalating to the customer (e.g., contacting the instance owner, opening a ticket, or notifying stakeholders) beyond asking the user for the instance ID.",
+          "reasoning": "The control-plane checks (EC2 state, IAM profile, network) are clearly recommended, matching part of the assertion. However, the assertion also requires 'customer escalation' as a distinct recommendation \u2014 e.g., escalating to someone with console/physical access, or notifying the customer/stakeholder formally. The output does mention 'Everything else requires someone with console/physical/hypervisor access to the box to restart the agent or fix networking from the inside,' which implies escalation to another party, but it's phrased as a description of limitation rather than an explicit recommendation to escalate to the customer. This partially satisfies but is somewhat implicit rather than a clear, actionable escalation recommendation (e.g., 'escalate to the account owner' or 'open a support case'). Given the strictness required, this is a borderline fail for the explicit 'customer escalation' component.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Recommends excluding the instance from the run rather than treating it as a hard failure, and not deregistering hybrid ghosts",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output does not mention excluding the instance from the patch run (e.g., via patch baseline exclusion, maintenance window target exclusion) at all, nor does it explicitly advise against deregistering hybrid ghost instances. It only mentions hybrid ghosts as a possible cause ('a decommissioned on-prem/hybrid host (mi-...) that was never deregistered') without giving guidance on what to do about it.",
+          "reasoning": "The assertion requires two specific recommendations: (1) excluding the instance from the run instead of treating it as a hard failure, and (2) not deregistering hybrid ghost instances. Neither of these specific recommendations appear in the output. The output explains that the patch run 'skips it instead of failing it outward' as an observation of current behavior, not a recommendation to exclude it. There's no guidance on hybrid ghost deregistration one way or the other.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "13s",
+    "cost": "$0.11",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

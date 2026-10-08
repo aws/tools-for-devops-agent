@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-linux-dependencies",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "modular-filtering-not-forceable",
+      "description": "RHEL 8 security update for a modular package is 'filtered out by modular filtering'; skill must recognize this is a deliberate module-stream exclusion needing dnf module reset/switch-to, not a forceable dependency.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a RHEL 8 EC2 instance, a security update for nodejs won't install during patching. dnf says 'package nodejs-16... is filtered out by modular filtering'. The nodejs:14 module stream is enabled. How do I get the security update to apply?",
+      "expected_output": "Explains that modular filtering is a deliberate exclusion — the enabled nodejs:14 stream hides the nodejs:16 packages, so it cannot be force-installed. The fix is to reset/switch the module stream: dnf module reset nodejs (or dnf module switch-to nodejs:16), then dnf distro-sync, and confirm the update is no longer filtered. Notes that forcing past modular filtering (e.g. --nodeps) desyncs the module and is not the fix.",
+      "assertions": [
+        "matches regex /(?i)module/",
+        "matches regex /(?i)reset|switch-to/",
+        "Explains that modular filtering is a deliberate module-stream exclusion, not a normal dependency conflict",
+        "Recommends dnf module reset or switch-to to change the stream rather than forcing the install",
+        "Does not recommend --nodeps or forcing the package past modular filtering"
+      ]
+    },
+    {
+      "id": "multilib-sync-the-pair",
+      "description": "Protected multilib version error; skill must sync the i686/x86_64 pair to one version (or remove the unneeded i686 after checking), not upgrade one arch.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Patching an Amazon Linux 2 EC2 instance fails with 'Error: Protected multilib versions: glibc-2.26-64.x86_64 != glibc-2.26-32.i686'. How do I resolve this so the security update applies?",
+      "expected_output": "Identifies a multilib version mismatch: the i686 and x86_64 copies of glibc are at different versions and the resolver protects against that. The fix is to synchronize the pair to one version with dnf/yum distro-sync (which realigns both arches), or — if the 32-bit copy is not needed — remove the i686 package after confirming nothing requires it (rpm -q --whatrequires). Notes upgrading only one architecture recreates the conflict.",
+      "assertions": [
+        "matches regex /(?i)multilib/",
+        "matches regex /(?i)distro-sync/",
+        "Recommends synchronizing the i686 and x86_64 pair to the same version rather than upgrading one architecture",
+        "Mentions checking whether the i686 package is needed (whatrequires) before removing it",
+        "Explains that upgrading only one architecture recreates the protected-multilib conflict"
+      ]
+    },
+    {
+      "id": "apt-kept-back-is-a-hold",
+      "description": "APT 'kept back' security packages; skill must recognize a hold/pin rather than a genuine conflict.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On Ubuntu 22.04, apt upgrade reports 'The following packages have been kept back' for several security updates, and they never install even though there is no obvious dependency error. What is happening and how do I fix it?",
+      "expected_output": "Explains that 'kept back' security packages are usually held (apt-mark hold) or pinned (/etc/apt/preferences.d/) rather than a true dependency conflict. The fix is to check apt-mark showhold and the preferences.d pins, unhold/adjust the relevant entries, then apt-get install -f and re-run the upgrade. If there is a genuine unmet dependency, use apt-get install -f / dist-upgrade after simulating. Notes checking holds/pins before deeper surgery.",
+      "assertions": [
+        "matches regex /(?i)hold|pin/",
+        "matches regex /(?i)apt-mark|preferences/",
+        "Identifies that 'kept back' packages are usually held or pinned rather than a genuine dependency conflict",
+        "Recommends checking apt-mark showhold and /etc/apt/preferences.d before other fixes",
+        "Recommends unholding/adjusting pins then re-running the upgrade"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What is the difference between an Amazon S3 bucket and an EBS volume?"
+    }
+  ]
+}

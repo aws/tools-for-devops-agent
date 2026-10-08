@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "pending-transaction-ordering",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-windows-servicing-store' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response fully matches the expected output. It explicitly states this is a halted servicing transaction that must be cleared before any SSU install or DISM RestoreHealth (\"Don't jump to DISM /RestoreHealth first \u2014 if you run it before clearing the transaction, it'll loop\"). It uses DISM /Online /Cleanup-Image /RevertPendingActions, clears SessionsPending registry key, and explicitly advises only renaming pending.xml if it is stale (>24h old), warning that a recent one may be a legitimate in-flight operation. It also instructs a reboot afterward so TrustedInstaller/transactions can finalize (\"some transactions only finalize during boot\"). All elements of the expected output are present and correctly explained.",
+      "evidence": "\"If pending.xml is less than ~24 hours old, don't rename it yet \u2014 it could be a legitimate in-flight operation... If it's stale (>24h), it's safe to move aside.\" / \"DISM /Online /Cleanup-Image /RevertPendingActions\" / \"Remove-Item 'HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Component Based Servicing\\\\SessionsPending'\" / \"Reboot \u2014 some transactions only finalize during boot\" / \"Don't jump to DISM /RestoreHealth first \u2014 if you run it before clearing the transaction, it'll loop without converging\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)RevertPendingActions/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains 'DISM /Online /Cleanup-Image /RevertPendingActions' appearing twice (step 2 and in the boot-loop troubleshooting section).",
+          "reasoning": "Direct text match for 'RevertPendingActions' with case-insensitive matching.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)pending\\.xml/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains multiple instances of 'pending.xml', e.g. 'There is a pending.xml in the servicing Packages folder' (quoted from prompt context) and '(Get-Item \"$env:SystemRoot\\servicing\\Packages\\pending.xml\").LastWriteTime' and 'Rename pending.xml only if stale'.",
+          "reasoning": "Direct text match for 'pending.xml' case-insensitive, appears many times throughout the response.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends clearing or reverting the pending servicing transaction before running SSU or RestoreHealth",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'The order matters here: a halted transaction will poison a servicing-stack update or RestoreHealth if you run those first, so clear this before anything else.' and later 'Don't jump to DISM /RestoreHealth first \u2014 if you run it before clearing the transaction, it'll loop without converging since the real blocker isn't store corruption.'",
+          "reasoning": "The output explicitly and repeatedly instructs to clear/revert the pending transaction before running SSU updates or RestoreHealth, matching the assertion directly.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes that a recent pending.xml may be valid and should not be removed without checking its age",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent writes: 'If pending.xml is less than ~24 hours old, don't rename it yet \u2014 it could be a legitimate in-flight operation (e.g., mid-reboot from a prior patch). If it's stale (>24h), it's safe to move aside.' and reinforces this in the PowerShell conditional check (TotalHours -gt 24) before renaming.",
+          "reasoning": "This directly matches the assertion that a recent pending.xml may be valid and should not be removed without checking its age.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends a reboot to let TrustedInstaller finalize valid pending operations",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 5 states: 'Reboot \u2014 some transactions only finalize during boot, so don't skip this even if the commands above reported success.' and step 4 restarts TrustedInstaller service before the reboot step.",
+          "reasoning": "The output explicitly recommends a reboot to let pending servicing transactions finalize, which aligns with the role of TrustedInstaller finalizing valid pending operations during boot, even though TrustedInstaller is not explicitly named in the reboot step itself, the context (stopping/starting TrustedInstaller service, then rebooting) satisfies the substance of the assertion.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "19s",
+    "cost": "$0.16",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

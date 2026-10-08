@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "wuauserv-disabled-not-stopped",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly explains the core mechanism: SSM/RunPatchBaseline relies on the native wuauserv service, and because its StartType is Disabled, the Windows SCM rejects any start request regardless of caller (SYSTEM included), which is exactly the 0x80070422 cause. It provides the fix: Set-Service -Name wuauserv -StartupType Manual (expected says Automatic, but Manual is a reasonable and functionally equivalent fix\u2014both unblock SCM's Disabled block; this is a minor deviation, not a substantive failure) followed by Start-Service. It also addresses the GPO angle: checking for GPO/registry policy overrides, noting that if it's policy-managed the fix will revert on next GPO refresh, and that if WSUS/SCCM is intentionally used instead of SSM Patch Manager, that's a design decision to resolve \u2014 implicitly covering the 'get approval if disabled intentionally' point. \n\nThe one explicit miss is the BITS service check, which is not mentioned at all. The StartupType value (Manual vs Automatic) is also a slight deviation from expected but is still a valid fix for the Disabled state issue. Given the response covers the main explanation (why SSM can't start a Disabled service), the fix script, GPO revert warning, and the intentional-disable consideration, it substantively satisfies the expected output despite missing the BITS check and using Manual instead of Automatic.",
+      "evidence": "\"Windows Service Control Manager enforces StartType at the OS level \u2014 if a service's StartType is Disabled, SCM will reject any start request regardless of who's asking, SYSTEM included.\" ... \"Set-Service -Name wuauserv -StartupType Manual / Start-Service -Name wuauserv\" ... \"Check for a GPO/registry override that's re-disabling it \u2014 if it's policy-managed, your PowerShell fix will get reverted on the next GPO refresh.\" ... \"If this instance is meant to use WSUS/SCCM instead of SSM Patch Manager, that's a design decision to resolve (pick one patching source), not just a service flag to flip.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)Disabled/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains multiple instances of 'Disabled', e.g. 'if a service's StartType is Disabled, SCM will reject any start request' and 'GPO or local policy sets wuauserv Start to 4 (Disabled)'",
+          "reasoning": "Regex match for 'Disabled' is clearly present in the text.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)Set-Service|StartupType/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The code block contains 'Set-Service -Name wuauserv -StartupType Manual'",
+          "reasoning": "Both 'Set-Service' and 'StartupType' appear literally in the output, satisfying the regex.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that a Disabled service cannot be started by SSM until its StartType is changed (unlike Stopped/Manual)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'Windows Service Control Manager enforces StartType at the OS level \u2014 if a service's StartType is Disabled, SCM will reject any start request regardless of who's asking, SYSTEM included. SSM would have to explicitly re-enable the service first...'",
+          "reasoning": "This directly explains that a Disabled service cannot be started until StartType is changed, and implicitly contrasts with Stopped/Manual services (which would be startable) by noting SCM enforces StartType and that the fix is to set it to Manual.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends Set-Service -StartupType Automatic then starting the service",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent's fix code block uses 'Set-Service -Name wuauserv -StartupType Manual' not 'Automatic'. The text explicitly says 'Manual is the standard/expected StartType for wuauserv'.",
+          "reasoning": "The assertion specifically calls for StartupType Automatic, but the agent recommended Manual, explicitly stating it as the standard/expected setting. This is a direct mismatch \u2014 the assertion is not satisfied since the agent did not recommend Automatic at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes a GPO may re-disable the service on the next refresh",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'if it's policy-managed, your PowerShell fix will get reverted on the next GPO refresh' and 'Check for a GPO/registry override that's re-disabling it'",
+          "reasoning": "This directly notes that a GPO may re-disable the service on the next refresh, matching the assertion.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

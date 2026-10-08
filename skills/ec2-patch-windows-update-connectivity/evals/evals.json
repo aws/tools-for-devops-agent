@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-windows-update-connectivity",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "wsus-unreachable-is-infra",
+      "description": "UseWUServer=1 and WSUS unreachable; skill must recognize this is an infrastructure escalation, not an OS fix, and not loop-retry.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Windows Server 2019 EC2 instance fails patching with 0x8024401C and PatchDiag says 'Windows Update is not reachable'. The registry shows UseWUServer=1 pointing at http://wsus.corp.local:8530, and Test-NetConnection to that host:port fails. Compliance keeps flapping COMPLIANT to NON_COMPLIANT. How should I handle this?",
+      "expected_output": "Explains that the instance is GPO-configured to use an internal WSUS server (UseWUServer=1) and that WSUS or the network path to it is unreachable — this is an infrastructure/configuration problem, not an OS package fix. The right action is to escalate to the WSUS server owner and network team (with the WUServer value, Test-NetConnection result, subnet/SG/route info), NOT to keep re-running the patch, which will fail identically. A temporary UseWUServer=0 fallback to Microsoft Update requires customer approval and reverts on the next GPO refresh.",
+      "assertions": [
+        "matches regex /(?i)WSUS/",
+        "matches regex /(?i)UseWUServer/",
+        "Identifies a WSUS/network infrastructure problem rather than an OS-level fix",
+        "Recommends escalating to the WSUS/network owner rather than repeatedly retrying the patch",
+        "Notes that a UseWUServer=0 fallback is temporary, requires approval, and reverts on GPO refresh"
+      ]
+    },
+    {
+      "id": "proxy-407-system-context",
+      "description": "Proxy 407 under SSM patching though interactive users work; skill must recognize SYSTEM has no proxy creds and set WinHTTP proxy + WU bypass.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a Windows Server 2019 EC2 instance behind a corporate proxy, AWS-RunPatchBaseline fails the scan with 0x80244017 (HTTP 407 Proxy Authentication Required), but a logged-in admin can run Windows Update fine interactively. Why does it fail only under SSM and how do I fix it?",
+      "expected_output": "Explains that SSM / AWS-RunPatchBaseline runs as the SYSTEM (LocalSystem) account, which has no cached proxy credentials and cannot perform NTLM/Kerberos proxy authentication — which is why interactive users succeed but the SYSTEM-context scan gets HTTP 407. The fix is to configure the WinHTTP (system) proxy with a Windows Update bypass list (netsh winhttp set proxy ... bypass-list=*.windowsupdate.microsoft.com;*.update.microsoft.com;...), or have the proxy allow the WU URLs unauthenticated, then restart wuauserv. Notes WUA uses WinHTTP, not per-user IE settings.",
+      "assertions": [
+        "matches regex /(?i)SYSTEM|LocalSystem/",
+        "matches regex /(?i)winhttp|bypass/",
+        "Explains that SSM patching runs as SYSTEM which has no proxy credentials, unlike interactive users",
+        "Recommends configuring the WinHTTP system proxy with a Windows Update bypass (or allowing WU URLs unauthenticated)",
+        "Distinguishes the WinHTTP system proxy from per-user IE/WinINET settings"
+      ]
+    },
+    {
+      "id": "clock-vs-cert-0x80072F8F",
+      "description": "0x80072F8F on a long-stopped instance; skill must check clock first before concluding a cert/root problem.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Windows Server 2016 EC2 instance that was stopped for two months now fails the Windows Update scan with 0x80072F8F 'A security error occurred'. The Windows Update endpoints are reachable. Is this a certificate problem?",
+      "expected_output": "Explains that 0x80072F8F on a long-stopped instance is most often a system clock that is far off, which makes valid server certificates appear expired/not-yet-valid during TLS validation — so check and correct the clock first (w32tm resync) before touching the certificate store. If the clock is correct and the error persists (or it's 0x800B0109/0x800B010A untrusted-chain), then refresh the root certificate store and ensure TLS 1.2 is enabled. Notes not to disable certificate validation.",
+      "assertions": [
+        "matches regex /(?i)clock|time|w32tm|NTP/",
+        "matches regex /0x80072F8F/",
+        "Identifies a wrong system clock as the most likely cause of 0x80072F8F on a long-stopped instance",
+        "Recommends correcting the clock before concluding a certificate/root-store problem",
+        "Does not recommend disabling certificate validation"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What is the maximum message size for an Amazon SQS message?"
+    }
+  ]
+}

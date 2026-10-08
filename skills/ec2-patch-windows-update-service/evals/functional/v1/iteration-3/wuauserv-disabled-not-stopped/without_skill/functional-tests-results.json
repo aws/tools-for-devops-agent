@@ -1,0 +1,77 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "wuauserv-disabled-not-stopped",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers the core expected points: it explains that SSM Agent can only call the normal service-start API and cannot override a Disabled StartType, which is why SCM rejects it with 0x80070422 before the document can act. It provides the fix (Set-Service with a StartupType and Start-Service, though it recommends 'Manual' instead of 'Automatic' as the expected output specifies\u2014this is a minor deviation but functionally still resolves the issue since Manual also allows starting). It notes GPO as a common root cause and explicitly warns that if GPO is forcing the setting, 'gpupdate will flip it back to Disabled on the next policy refresh' and that the fix must be made at the GPO/policy source for a durable solution. It also mentions checking at the registry level. The response misses two minor details: it does not mention checking BITS service, and does not explicitly call out the ~90 min GPO refresh interval or getting approval if disabled intentionally. However the substantive technical explanation (why SSM fails, the fix, and the GPO revert warning) is present and correct, meeting the core intent of the expected output despite these omissions.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)Disabled/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains multiple instances of 'Disabled', e.g., 'Get-Service wuauserv shows StartType: Disabled' context and 'A GPO or local security policy locking it down' / 'A value of 4 = Disabled.'",
+          "reasoning": "Regex /(?i)Disabled/ matches text present in the output such as 'Disabled' appearing in several places.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)Set-Service|StartupType/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains 'Set-Service -Name wuauserv -StartupType Manual' and 'StartupType' appears explicitly.",
+          "reasoning": "Both 'Set-Service' and 'StartupType' are present, satisfying the regex.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that a Disabled service cannot be started by SSM until its StartType is changed (unlike Stopped/Manual)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'If wuauserv's StartType is Disabled, the SCM rejects the start request with 0x80070422 before SSM Agent even gets a chance to do anything else... patch baseline documents don't include a \"fix the service config\" step \u2014 they assume wuauserv is at least set to Manual (its default), so a disabled state is treated as an environment problem, not something the document remediates.'",
+          "reasoning": "The agent explicitly explains that SSM cannot start a Disabled service without changing StartType, contrasting with the Manual/Stopped default state that SSM can handle.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends Set-Service -StartupType Automatic then starting the service",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output recommends 'Set-Service -Name wuauserv -StartupType Manual' and explicitly says '(Use Manual, not Automatic \u2014 that's the Windows default and what Patch Manager expects. Don't set it to Disabled again afterward.)'",
+          "reasoning": "The assertion claims the agent recommends setting StartupType to Automatic, but the agent explicitly recommends Manual and explicitly advises against Automatic, directly contradicting the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes a GPO may re-disable the service on the next refresh",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'If this is being reset by Group Policy, look at... You'll need to fix it at the GPO/policy source, or exclude these instances, otherwise gpupdate will flip it back to Disabled on the next policy refresh.'",
+          "reasoning": "The agent explicitly notes that GPO may re-disable the service on the next policy refresh, matching the assertion.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "awssdk-gac-breaks-patchbaseline",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-windows-update-service' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response precisely matches the expected output: it identifies the root cause as the AWSSDK.Core .NET assembly being missing/corrupted in the GAC, explains why AWS-RunPatchBaseline (which relies on the AWS SDK for .NET) fails while manual OS patching works fine (manual patching uses the native Windows Update Agent, unrelated to the SDK/GAC). It recommends taking an EBS snapshot before remediation, locating AWSSDK.Core.dll under the AWS SDK for .NET install path, re-registering it into the GAC using gacutil /i, verifying the assembly loads and that the InvokeOptions type resolves, and re-running AWS-RunPatchBaseline in Scan mode. It also notes excluding the AWS SDK for .NET path from AV scanning to prevent recurrence. All key elements of the expected output are present and correct.",
+      "evidence": "\"the `AWSSDK.Core` .NET assembly has been removed or corrupted in the Global Assembly Cache (GAC)\" ... \"snapshot the root volume first\" ... \"Re-register it into the GAC with `gacutil`\" ... \"Verify the fix: ... if($a -and $a.GetType(\\\"Amazon.Runtime.Internal.InvokeOptions\\\"))\" ... \"Re-run `AWS-RunPatchBaseline` in **Scan** mode to confirm it completes.\" ... \"exclude `C:\\Program Files (x86)\\AWS SDK for .NET` from AV quarantine scanning\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)GAC|gacutil/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains multiple instances of 'GAC' and 'gacutil', e.g. 'the AWSSDK.Core .NET assembly has been removed or corrupted in the Global Assembly Cache (GAC)' and 'Re-register it into the GAC with gacutil'.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)AWSSDK\\.Core/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output repeatedly references 'AWSSDK.Core', e.g. 'the AWSSDK.Core .NET assembly has been removed or corrupted in the Global Assembly Cache (GAC)'.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies AWSSDK.Core missing/corrupt in the GAC as the cause of the AWS-RunPatchBaseline type-load error",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'Your symptoms line up exactly with a specific, well-known fault: the AWSSDK.Core .NET assembly has been removed or corrupted in the Global Assembly Cache (GAC).' and explains this causes the type-load exception seen in AWS-RunPatchBaseline.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends re-registering AWSSDK.Core.dll into the GAC with gacutil /i",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 2 explicitly shows: '& $gac.FullName /i $dll.FullName' which is gacutil /i to re-register AWSSDK.Core.dll into the GAC.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes this AWS-RunPatchBaseline runtime failure from a normal Windows Update problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent explains: 'manual patching uses the native Windows Update Agent, which has nothing to do with the AWS SDK or the GAC. The failure is specific to the SSM patch baseline plugin's runtime dependency, not the OS patch mechanism itself.'",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "18s",
+    "cost": "$0.15",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

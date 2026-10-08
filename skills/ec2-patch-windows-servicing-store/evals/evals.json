@@ -1,0 +1,61 @@
+{
+  "skill_name": "ec2-patch-windows-servicing-store",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "servicing-order-looping-restorehealth",
+      "description": "User reports RestoreHealth looping on 0x80073712; skill should explain the real cause is usually a stale SSU or pending transaction and give the correct ordered fix.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a Windows Server 2016 EC2 instance, the monthly cumulative update keeps failing at the Installing phase with 0x80073712 and DISM ScanHealth reports the component store is corrupted. I already ran DISM /Online /Cleanup-Image /RestoreHealth twice and it keeps looping without fixing it. What is the correct way to fix this?",
+      "expected_output": "Explains that repeatedly running RestoreHealth loops because the underlying cause is usually NOT raw store corruption, and prescribes the correct ordered recovery: clear any pending servicing transactions, bring the Servicing Stack Update (SSU) current before the LCU, and only then run RestoreHealth followed by SFC and a reboot. Notes that an outdated SSU or a halted pending transaction surfaces AS store corruption.",
+      "assertions": [
+        "matches regex /(?i)servicing stack|\\bSSU\\b/",
+        "matches regex /(?i)RestoreHealth/",
+        "Recommends installing the Servicing Stack Update (SSU) before the Latest Cumulative Update (LCU)",
+        "Recommends clearing or reverting pending servicing transactions before repairing the component store",
+        "Explains that repeatedly running DISM /RestoreHealth does not converge when the real cause is a stale SSU or a pending transaction",
+        "Does not recommend simply re-running DISM /RestoreHealth as the fix"
+      ]
+    },
+    {
+      "id": "servicing-root-cause-from-evidence",
+      "description": "Given inline CBS.log and servicing-state evidence in the prompt, identify a stale SSU (not genuine store corruption) as the root cause and explain why RestoreHealth exits 0 yet the LCU keeps failing.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Windows Server 2016 patch run is failing. Here is the collected evidence; diagnose the root cause from it.\n\nCBS.log excerpt:\n  Loaded Servicing Stack v10.0.14393.5210\n  Failed to load the manifest for component. The servicing stack version does not support this package format. [HRESULT = 0x800f0831 - CBS_E_STORE_CORRUPTION]\n  Servicing stack must be updated before this package can be installed. Required SSU: KB5062561 (10.0.14393.6xxx), present SSU: 10.0.14393.5210.\n  WU client called DISM /Online /Cleanup-Image /RestoreHealth\n  RestoreHealth: no corrupt payload detected in component store; store scan returned clean. Operation completed. [HRESULT = 0x0 - S_OK]\n  Appl: Re-evaluating package Package_for_KB5062560, 0x800f0831 recurs.\n  No pending.xml present; SessionsPending empty; DataStore.edb size 42 MB (nominal).\n\nServicing state: OS build 10.0.14393.6252; installed SSU 10.0.14393.5210; required SSU KB5062561 pending and NOT installed; no pending transactions; DataStore.edb nominal; no Windows.old.\n\nExplain specifically why DISM /Online /Cleanup-Image /RestoreHealth completes with exit code 0 yet the cumulative update keeps failing with the same 0x800F0831 error, and what the correct fix is.",
+      "expected_output": "Identifies from the evidence that the installed servicing stack (10.0.14393.5210) is older than the SSU required by the pending cumulative update, so the servicing stack cannot parse the newer LCU manifest \u2014 which surfaces as 0x800F0831 (CBS_E_STORE_CORRUPTION). Explains RestoreHealth exits 0 because there is no genuine payload corruption to repair (evidence shows no pending.xml, empty SessionsPending, nominal DataStore.edb), so it cannot fix the manifest-processing failure. Concludes the fix is to install the pending SSU (KB5062561) first, then the LCU.",
+      "assertions": [
+        "matches regex /(?i)servicing stack|\\bSSU\\b/",
+        "matches regex /0x800[fF]0831/",
+        "Identifies the outdated servicing stack (SSU) as the true root cause rather than genuine component-store corruption",
+        "Explains that RestoreHealth exits 0 because there is no real payload corruption to repair, so it cannot fix the manifest-processing failure",
+        "Rules out pending transactions and datastore corruption using the provided evidence (no pending.xml, empty SessionsPending, nominal DataStore.edb)",
+        "Concludes the SSU must be installed before the cumulative update (LCU)",
+        "Does not conclude that the component store payload is genuinely corrupt"
+      ]
+    },
+    {
+      "id": "pending-transaction-ordering",
+      "description": "A pending servicing transaction is present; skill should require clearing it before SSU/RestoreHealth and check pending.xml age before removing it.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a Windows Server 2019 EC2 instance, patch installs fail with 0x800F0922 and DISM reports packages are pending servicing. There is a pending.xml in the servicing Packages folder. How should I recover this so patching can proceed?",
+      "expected_output": "Explains that a halted pending servicing transaction must be cleared before any SSU install or DISM RestoreHealth, using DISM /Online /Cleanup-Image /RevertPendingActions and clearing SessionsPending; and that pending.xml should only be renamed if it is stale (older than ~24h) because a recent one may be a valid in-flight operation, followed by a reboot so TrustedInstaller can finalize valid operations.",
+      "assertions": [
+        "matches regex /(?i)RevertPendingActions/",
+        "matches regex /(?i)pending\\.xml/",
+        "Recommends clearing or reverting the pending servicing transaction before running SSU or RestoreHealth",
+        "Notes that a recent pending.xml may be valid and should not be removed without checking its age",
+        "Recommends a reboot to let TrustedInstaller finalize valid pending operations"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What is the maximum size of an Amazon EBS gp3 volume?"
+    }
+  ]
+}

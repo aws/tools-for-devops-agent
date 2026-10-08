@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "proxy-407-system-context",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-windows-update-connectivity' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly explains: (1) AWS-RunPatchBaseline runs as SYSTEM/LocalSystem, which has no cached proxy credentials and cannot complete NTLM/Kerberos proxy auth, while interactive admin users have cached credentials/user-context proxy settings that authenticate silently - this is the root cause for why interactive works but SSM fails with 407 (0x80244017). (2) It correctly notes WUA uses WinHTTP (system-wide) proxy config, not per-user IE/WinINET settings. (3) The fix provided uses 'netsh winhttp set proxy' with a bypass-list including *.windowsupdate.microsoft.com;*.update.microsoft.com;*.download.windowsupdate.com;*.download.microsoft.com and other relevant domains, matching the expected fix almost exactly. (4) It includes restarting wuauserv service. (5) It also notes the caveat about NTLM/Kerberos-authenticated proxies requiring the proxy to allow WU URLs unauthenticated, which matches the expected output's alternative fix suggestion. All key elements of the expected output are present and accurate.",
+      "evidence": "\"AWS-RunPatchBaseline runs as SYSTEM (LocalSystem), not as your logged-in admin user... SYSTEM has no cached proxy credentials and generally can't complete NTLM/Kerberos auth to a proxy... Windows Update Agent uses the WinHTTP (system-wide) proxy configuration, not the per-user Internet Options/IE proxy settings... netsh winhttp set proxy proxy-server=\\\"$proxy\\\" bypass-list=\\\"$bypass\\\"... Restart-Service wuauserv -Force... Get the proxy admins to allow the Windows Update / Microsoft Update URLs unauthenticated\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)SYSTEM|LocalSystem/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'AWS-RunPatchBaseline runs as SYSTEM (LocalSystem), not as your logged-in admin user.'",
+          "reasoning": "Output contains 'SYSTEM' and 'LocalSystem' explicitly.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)winhttp|bypass/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Windows Update Agent uses the WinHTTP (system-wide) proxy configuration' and 'bypass-list=\"$bypass\"'",
+          "reasoning": "Both 'winhttp' and 'bypass' appear in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that SSM patching runs as SYSTEM which has no proxy credentials, unlike interactive users",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'SYSTEM has no cached proxy credentials and generally can't complete NTLM/Kerberos auth to a proxy... your cached domain credentials authenticate silently.'",
+          "reasoning": "The output explicitly explains SSM patching runs as SYSTEM with no cached proxy credentials, contrasting with interactive users whose cached domain credentials authenticate silently.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends configuring the WinHTTP system proxy with a Windows Update bypass (or allowing WU URLs unauthenticated)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Set the WinHTTP (system) proxy with a Windows Update bypass list \u2014 this is the actual fix' with netsh winhttp set proxy ... bypass-list, and 'Get the proxy admins to allow the Windows Update / Microsoft Update URLs unauthenticated'",
+          "reasoning": "The output recommends both configuring WinHTTP proxy with a WU bypass list and alternatively allowing WU URLs unauthenticated.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes the WinHTTP system proxy from per-user IE/WinINET settings",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Windows Update Agent uses the WinHTTP (system-wide) proxy configuration, not the per-user Internet Options/IE proxy settings.' and diagnostic commands comparing 'netsh winhttp show proxy' vs 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'",
+          "reasoning": "The output clearly distinguishes WinHTTP system proxy from per-user IE/WinINET settings both in explanation and diagnostic steps.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "19s",
+    "cost": "$0.16",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

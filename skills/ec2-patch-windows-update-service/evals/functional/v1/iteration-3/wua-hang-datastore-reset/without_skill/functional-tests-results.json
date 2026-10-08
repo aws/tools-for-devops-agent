@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "wua-hang-datastore-reset",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly diagnoses the issue as a hung Windows Update Agent with a corrupted/bloated scan database (DataStore.edb). It provides the correct fix procedure: stop wuauserv, BITS, cryptsvc, msiserver; force-kill TiWorker if stuck; rename SoftwareDistribution (and catroot2) to force a rebuild of DataStore.edb on next scan; restart services; and trigger a fresh scan with wuauclt/usoclient, then verify CPU settles (confirming scan succeeds). This matches nearly all elements of the expected output: stop wuauserv/BITS, kill hung processes, rename SoftwareDistribution to rebuild DataStore.edb, restart services, confirm scan works.\n\nMinor gaps: it doesn't explicitly mention re-registering WUA DLLs (regsvr32 steps), and doesn't explicitly call out SSU/CBS store corruption as an underlying cause if the issue recurs \u2014 though it does address recurrence from a different angle (WSUS approval set, disk space, cleanup). These are relatively minor omissions compared to the core fix which is fully and correctly covered. The response is thorough, technically accurate, and actionable, satisfying the substance of the expected output even though it doesn't mention every single optional item (DLL re-registration, SSU/CBS note).",
+      "evidence": "\"rename the SoftwareDistribution folder (this is what holds DataStore.edb)... net stop wuauserv / net stop bits ... taskkill /f /im TiWorker.exe ... net start wuauserv ... wuauclt /resetauthorization /detectnow ... Verify CPU settles down.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)SoftwareDistribution|DataStore\\.edb/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains both terms: 'C:\\Windows\\SoftwareDistribution' and 'DataStore.edb is over 1GB' as well as 'DataStore.edb' mentioned multiple times.",
+          "reasoning": "Regex matches directly on multiple occurrences of 'SoftwareDistribution' and 'DataStore.edb'.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)wuauserv|BITS|TiWorker/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains 'wuauserv', 'bits', and 'TiWorker.exe' multiple times, e.g., 'net stop wuauserv', 'net stop bits', 'taskkill /f /im TiWorker.exe'.",
+          "reasoning": "All three terms appear in the output, satisfying the regex.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends stopping the services and resetting SoftwareDistribution / rebuilding DataStore.edb for the corrupt scan database",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 1 says 'Force-stop the stuck services' with net stop commands for wuauserv, bits, cryptsvc, msiserver; Step 2 says 'Rename the SoftwareDistribution folder (this is what holds DataStore.edb)' with 'ren C:\\Windows\\SoftwareDistribution SoftwareDistribution.old', then Step 4 restarts services to rebuild a fresh datastore.",
+          "reasoning": "The agent explicitly recommends stopping services and renaming/resetting the SoftwareDistribution folder, which forces a rebuild of DataStore.edb, directly addressing the corrupt scan database.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends killing the hung TiWorker/wuauclt processes",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'If wuauserv won't stop within a minute or two, kill it directly: taskkill /f /im TiWorker.exe ... sc query wuauserv ... taskkill /f /pid <PID from above>'",
+          "reasoning": "This explicitly recommends killing the hung TiWorker process (and implicitly the wuauserv process by PID), satisfying the assertion about killing hung processes. Note: wuauclt is only used for triggering a new scan ('wuauclt /resetauthorization /detectnow'), not killed, but TiWorker killing is explicitly covered.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes a stale SSU or CBS store corruption as a possible underlying cause if the reset doesn't hold",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The 'If it recurs' section only mentions 'WSUS/SSM Patch Baseline with a very large approval set', 'Disk space on the volume holding C:\\Windows\\SoftwareDistribution', and 'Whether Windows Update cleanup... has ever run'. There is no mention of a stale SSU (Servicing Stack Update) or CBS (Component Based Servicing) store corruption anywhere in the output.",
+          "reasoning": "The output does not mention SSU or CBS store corruption at all as a potential underlying cause if the reset doesn't hold; it instead focuses on WSUS approval sets, disk space, and update cleanup history.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

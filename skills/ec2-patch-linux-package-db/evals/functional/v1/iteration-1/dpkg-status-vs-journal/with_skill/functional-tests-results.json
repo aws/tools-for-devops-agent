@@ -1,0 +1,90 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "dpkg-status-vs-journal",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-linux-package-db' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identifies the issue as corruption of /var/lib/dpkg/status (truncated stanza / missing final newline), explicitly distinguishing it from journal corruption in /var/lib/dpkg/updates/ ('status file corruption, not journal corruption'). It provides the exact fix sequence requested: back up the current status file, restore from status-old (dpkg's known-good copy), run dpkg --configure -a, then apt-get install -f (and apt-get check). It also explicitly notes that if status-old is missing/empty, this must be escalated rather than hand-edited, mentioning snapshot restore as an option. All key elements of the expected output are present and accurate.",
+      "evidence": "\"this matches Case B exactly: a parse error in /var/lib/dpkg/status ... is status file corruption, not journal corruption.\" ... \"Restore from status-old, which dpkg writes on every successful update\" ... \"If you see STATUS_OLD_MISSING, stop here \u2014 don't improvise edits ... Let me know and I'll walk you through the escalation path instead.\" ... \"apt-get install -f -y / apt-get check\" ... \"it may need a snapshot restore.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /status-old/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"**2. Restore from `status-old`**, which dpkg writes on every successful update and is almost always present\" and the command \"test -s /var/lib/dpkg/status-old && cp /var/lib/dpkg/status-old /var/lib/dpkg/status\"",
+          "reasoning": "The literal string 'status-old' appears multiple times in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)dpkg --configure -a/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"3. Let dpkg finish the interrupted configure step\\n```bash\\ndpkg --configure -a --force-confdef\\n```\"",
+          "reasoning": "The exact phrase 'dpkg --configure -a' appears in the output, satisfying the case-insensitive regex.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends restoring /var/lib/dpkg/status from status-old for a corrupt status file",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Restore from `status-old`... cp /var/lib/dpkg/status-old /var/lib/dpkg/status\"",
+          "reasoning": "The agent explicitly recommends copying status-old over the corrupt status file to fix the parse error.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes a corrupt dpkg status file from corrupt journal files in /var/lib/dpkg/updates/",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output only mentions 'this is status file corruption, not journal corruption' as a label ('Case B') but never discusses /var/lib/dpkg/updates/ or explains what journal files are or how they differ structurally.",
+          "reasoning": "While the agent labels the issue as status corruption vs 'journal corruption', it never actually references or explains /var/lib/dpkg/updates/ (the journal directory) or draws a substantive distinction beyond naming the dichotomy inherited from some external case classification (Case A/B) not shown in this output. There's no explanation of what journal corruption looks like, how it would present differently, or any mention of the updates/ directory, so the distinction is asserted by label only, not demonstrated.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Recommends backing up the current status file before restoring",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"**1. Back up the broken file first (don't skip this)**\\n```bash\\ncp /var/lib/dpkg/status /var/lib/dpkg/status.bak\\n```\"",
+          "reasoning": "The agent explicitly instructs backing up the current status file as step 1, before the restore step.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes escalation if status-old is missing or empty",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"If you see `STATUS_OLD_MISSING`, stop here \u2014 don't improvise edits to the status file by hand. Let me know and I'll walk you through the escalation path instead.\"",
+          "reasoning": "The agent explicitly notes what to do and escalates if status-old is missing or empty (the test -s check handles both missing and empty cases).",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.8333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "14s",
+    "cost": "$0.12",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

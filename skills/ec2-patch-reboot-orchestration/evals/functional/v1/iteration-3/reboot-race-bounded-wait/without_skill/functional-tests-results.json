@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "reboot-race-bounded-wait",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent correctly identifies the root cause as a reboot-timing race condition, correctly interprets the exit code as transient, and warns against blind/immediate retries. This matches part of the expected output well.\n\nHowever, the response is missing several specific, important elements from the expected output:\n1. No bounded wait specification - the expected output calls for a specific bounded poll (at most ~10 times / ~10 minutes) of PingStatus. The agent only vaguely says \"a few minutes\" without giving bounds or a concrete polling approach.\n2. No mention of checking RebootPending=False as a specific condition to verify before retry.\n3. No mention of checking 'fresh uptime' as a verification step.\n4. Critically missing: no guidance on what to do if the instance never returns Online - the expected output explicitly states this should be routed to SSM connectivity triage as an impaired instance scenario. The agent's response doesn't address this failure/escalation path at all.\n5. The agent's warning against \"just keep retrying\" is present but doesn't explicitly frame it as warning against an \"indefinite retry loop\" with the specific bounded alternative that's expected.\n\nWhile the agent's general diagnosis and approach direction align with the expected output's spirit, it lacks the specific actionable bounds (10 polls/10 min), the RebootPending/uptime verification criteria, and the critical escalation path for instances that never come back online. These are substantive gaps, not just stylistic differences.",
+      "evidence": "\"Add a delay before retry \u2014 give the instance time to fully complete the reboot and have SSM Agent re-register (usually a few minutes is enough, but can vary by instance type/size).\" \u2014 this lacks the specific bounded wait criteria, RebootPending/uptime checks, and no mention of escalating to SSM connectivity triage if the instance never returns Online.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)race|timing|transient/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'This is a known SSM Patch Manager / Run Command race condition, not something retries alone reliably fix.' and 'It doesn't address the underlying timing issue'",
+          "reasoning": "Output explicitly uses 'race condition' and discusses timing issues.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)bounded|poll|wait/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Add a delay before retry \u2014 give the instance time to fully complete the reboot' and 'Then retry the patch operation once the instance is confirmed stable.'",
+          "reasoning": "Output mentions waiting before retry, matching 'wait'.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies a reboot-timing race rather than a patch or connectivity failure",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Root cause: The previous patch cycle issued a reboot. If the next patch run (or a retry) kicks off while Windows is still mid-shutdown/reboot... the call fails immediately because the OS is actively rejecting new operations during shutdown. Exit code 0xffffffff (-1) here just means \"the command couldn't even start,\" not a patch failure.'",
+          "reasoning": "Agent explicitly identifies the root cause as a reboot-timing race condition, not a patch content failure or network connectivity issue.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends a bounded wait for boot then a single retry, not an indefinite retry loop",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'1. Add a delay before retry... 2. Check instance/SSM Agent health first... 4. Then retry the patch operation once the instance is confirmed stable.' This is a bounded wait + single retry, explicitly contrasted against 'just keep retrying.'",
+          "reasoning": "The agent recommends adding a delay before retry, checking instance health, and then retrying once stable, rather than suggesting repeated/indefinite retries.",
+          "confidence": "high"
+        },
+        {
+          "text": "Warns against retrying into a still-rebooting host and routes a never-Online instance to connectivity triage",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output says 'confirm the instance is Online in SSM and not still cycling, before re-triggering' but never discusses the case where the instance never becomes Online, nor does it mention connectivity troubleshooting steps (e.g., checking SSM Agent logs, security groups, VPC endpoints, IAM role) for a persistently offline instance.",
+          "reasoning": "The agent warns against retrying into a still-rebooting host (satisfying the first half), but does not address what to do if the instance never comes back Online \u2014 there is no explicit routing to connectivity/network triage for a stuck/never-Online instance. It only offers to check current SSM status, not a specific escalation path for a persistently offline instance.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

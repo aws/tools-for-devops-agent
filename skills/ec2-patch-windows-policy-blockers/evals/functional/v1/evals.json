@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-windows-policy-blockers",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "gpo-block-reverts",
+      "description": "GPO disabling WU; skill must recognize a registry clear is temporary and the GPO is the durable fix.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A domain-joined Windows Server 2019 EC2 instance fails patching with 0x8024002E and Windows Update says 'Some settings are managed by your organization'. The registry shows NoAutoUpdate=1 under HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU. Can I just set it to 0?",
+      "expected_output": "Explains that 0x8024002E means Windows Update is disabled by Group Policy (NoAutoUpdate=1). You can clear the registry value to patch this cycle, but because it is a domain GPO it will be reverted on the next group policy refresh (~90 minutes or at reboot) — so the durable fix is to change the GPO for the patching OU (or move the instance to a patching-friendly OU), which requires the AD/GPO team. Recommends escalating for the permanent fix rather than relying on the local edit.",
+      "assertions": [
+        "matches regex /(?i)group policy|GPO/",
+        "matches regex /(?i)revert|refresh|90/",
+        "Explains that clearing the registry value is temporary and a domain GPO reverts it on refresh",
+        "Recommends fixing the GPO / escalating to the AD team as the durable fix",
+        "Identifies NoAutoUpdate / WU-disabled-by-policy as the cause of 0x8024002E"
+      ]
+    },
+    {
+      "id": "av-qualitycompat-gate",
+      "description": "2016 instance with AV; scan returns 0 updates. Skill must recognize the QualityCompat AV-compat key gate.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Windows Server 2016 EC2 instance with a third-party antivirus installed returns 0 applicable updates on every scan and occasionally fails installs with 0x80070005 access denied on WinSxS files. Why is Microsoft not offering any updates and how do I unblock it?",
+      "expected_output": "Explains two AV-related causes: (1) Microsoft gates updates behind the Spectre/Meltdown AV-compatibility registry key (QualityCompat value cadca5fe-87d3-4b96-b7fb-a231484277cc = 0) — without it Microsoft won't offer updates, so set that key first; and (2) AV real-time scanning locks WinSxS/SoftwareDistribution files that TrustedInstaller must replace, causing 0x80070005 — add WU-path exclusions. Notes that third-party AV exclusions are configured in the vendor console (not locally) and to re-enable protection after the window.",
+      "assertions": [
+        "matches regex /(?i)QualityCompat|cadca5fe/",
+        "matches regex /(?i)exclusion|real-time|WinSxS/",
+        "Identifies the missing AV-compatibility (QualityCompat) registry key as why updates aren't offered",
+        "Explains AV file locking of WinSxS/SoftwareDistribution as the access-denied cause",
+        "Notes third-party AV exclusions are set in the vendor console, not locally"
+      ]
+    },
+    {
+      "id": "bitlocker-suspend-first",
+      "description": "BitLocker + firmware update; skill must say suspend BEFORE reboot and confirm recovery key.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Windows Server 2022 EC2 instance has BitLocker enabled on C: and a pending UEFI/firmware update. Last time we patched, the instance rebooted into BitLocker recovery and we couldn't get in. How do we patch it safely this time?",
+      "expected_output": "Explains that boot-critical/firmware updates change the TPM PCR measurements, so BitLocker must be SUSPENDED before the patch reboot or the reboot demands the 48-digit recovery key. Recommends confirming the recovery key is available first (AD/Azure AD/KMS, enterable via EC2 Serial Console), then Suspend-BitLocker -MountPoint C: -RebootCount 1 (which auto-resumes after one reboot) BEFORE installing/rebooting. Flags this as high-risk and never rebooting a protected boot-critical patch blind.",
+      "assertions": [
+        "matches regex /(?i)suspend/",
+        "matches regex /(?i)recovery key|RebootCount|PCR/",
+        "Says to suspend BitLocker BEFORE the patch reboot, not after",
+        "Recommends confirming the recovery key is available before proceeding",
+        "Mentions Suspend-BitLocker with RebootCount 1 (single-reboot auto-resume)"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "How do I resize an Amazon EBS gp3 volume's IOPS with the AWS CLI?"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "backend-correct-rpmdb",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-linux-package-db' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response comprehensively matches the expected output. It correctly identifies that recovery depends on the RPM backend: BerkeleyDB (AL2, RHEL7/8, CentOS7, OL7, SLES12) identified by Packages + __db.* files, with the fix being to drop __db.* then run rpm --rebuilddb. It identifies SQLite backend (AL2023, RHEL9, OL9, SLES15) identified by rpmdb.sqlite, with fix being to move the corrupt sqlite file aside and rebuild, with escalation to repo-based reconstruction if totally corrupt. It explicitly instructs to detect backend first via ls checks on rpmdb.sqlite vs Packages/__db.*, clear stale locks (.rpm.lock, .dbenv.lock), and back up /var/lib/rpm before rebuilding. It explicitly states the key warning that a BerkeleyDB-only fix does not work universally and running the wrong one on SQLite can silently produce an empty database - matching the 'BerkeleyDB-only fix does not recover sqlite DB and vice versa' requirement. All elements of the expected output are present and correctly explained.",
+      "evidence": "\"your two symptoms map to two different RPM backends, so the fix is not the same command on every host\" / \"BDB0113 Thread/process failed is a BerkeleyDB signature... database disk image is malformed is a SQLite signature\" / \"Always back up before touching anything... and clear stale locks\" / \"running rpm --rebuilddb blindly on the SQLite hosts assuming it's a universal fix... silently produces an empty database\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)rpmdb\\.sqlite/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains multiple instances of 'rpmdb.sqlite', e.g. 'ls -la /var/lib/rpm/rpmdb.sqlite' and 'cp -a /var/lib/rpm/rpmdb.sqlite /var/lib/rpm/rpmdb.sqlite.corrupt.$(date +%s)'",
+          "reasoning": "Regex match for 'rpmdb.sqlite' case-insensitive is clearly satisfied.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)__db|berkeley|BDB/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains '__db.*' and 'BerkeleyDB' and 'BDB0113', e.g. 'ls -la /var/lib/rpm/Packages /var/lib/rpm/__db.*    # present \u2192 BerkeleyDB backend' and 'rm -f /var/lib/rpm/__db.*     # drop the cached env'",
+          "reasoning": "Regex match for __db|berkeley|BDB is satisfied by multiple occurrences.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes the SQLite backend recovery from the BerkeleyDB backend recovery",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output has distinct sections '## Hosts with BDB0113 (BerkeleyDB backend)' with rpm --rebuilddb after removing __db.* files, and '## Hosts with \"database disk image is malformed\" (SQLite backend)' with separate steps involving rpmdb.sqlite file removal and backup, plus a 'Total loss' sub-case with reinstall/distro-sync steps.",
+          "reasoning": "The two backends are clearly given separate, non-identical recovery procedures with different commands and caveats.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends detecting which backend is in use before choosing the recovery",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output opens with '## Diagnose first on every host' instructing to check for 'rpmdb.sqlite' vs 'Packages' and '__db.*' files to determine which backend is in use before proceeding to the backend-specific fix sections.",
+          "reasoning": "Explicit diagnostic step before choosing recovery path is present.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends backing up /var/lib/rpm and clearing stale locks before rebuilding",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: '**Always back up before touching anything:** `cp -a /var/lib/rpm /var/lib/rpm.backup.$(date +%s)`, and clear stale locks (`rm -f /var/lib/rpm/.rpm.lock /var/lib/rpm/.dbenv.lock`).' This appears before the backend-specific rebuild steps.",
+          "reasoning": "Explicit backup and lock-clearing instructions are present prior to rebuilding.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not prescribe a single backend-agnostic command for all hosts",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent explicitly warns against this: 'The big trap to avoid: running `rpm --rebuilddb` blindly on the SQLite hosts assuming it's a universal fix' and separates commands by backend type rather than giving one single command for all hosts.",
+          "reasoning": "The output explicitly avoids and warns against a one-size-fits-all command, instead providing backend-specific procedures.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "21s",
+    "cost": "$0.18",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

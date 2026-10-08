@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-linux-kernel-boot",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "boot-full-prune-keep-running",
+      "description": "/boot full blocks kernel install; skill must prune OLD kernels while preserving the running kernel + one previous and set installonly_limit, recognizing /boot is a separate small partition.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On a RHEL 8 EC2 instance, kernel patching fails with 'cpio: write failed - No space left on device' while unpacking the kernel RPM. Overall disk usage looks fine but df /boot shows 100%. How do I fix this so the kernel update installs?",
+      "expected_output": "Explains that /boot is a separate small partition (often 200-500MB) that fills after a few kernels, which is why overall disk looks fine but /boot is 100%. The fix is to prune OLD kernels while keeping the currently running kernel (uname -r) plus one previous — e.g. dnf remove --oldinstallonly --setopt installonly_limit=2 -y or package-cleanup --oldkernels --count=2 — clear orphaned initramfs/vmlinuz files, set installonly_limit=2 to prevent recurrence, and confirm /boot has headroom. Warns never to remove the running kernel.",
+      "assertions": [
+        "matches regex /(?i)installonly_limit|oldkernels|old kernel/",
+        "matches regex /(?i)/boot/",
+        "Explains that /boot is a separate small partition, distinct from overall disk usage",
+        "Recommends removing OLD kernels while preserving the running kernel plus one previous",
+        "Does not recommend removing the currently running kernel"
+      ]
+    },
+    {
+      "id": "uek-rhck-dual-repo-conflict",
+      "description": "Oracle Linux kernel transaction unsolvable because both UEK and RHCK repos are enabled; skill must disable the unused stream matching uname -r.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On an Oracle Linux 8 EC2 instance, patching fails with 'Error: Package kernel-uek conflicts with kernel' and 'cannot install both kernel-uek and kernel'. The running kernel is a UEK kernel. How do I get kernel patching to work?",
+      "expected_output": "Identifies that both the UEK and RHCK kernel repos are enabled, so the transaction tries to update both kernel streams and cannot solve. Since the instance runs UEK, the fix is to disable the unused RHCK repos (dnf config-manager --set-disabled 'ol*_RHCK'), keep the UEK repos, disable ksplice during the patch window if it interferes, then clean/makecache and retry. Notes matching the enabled stream to the running kernel (uname -r).",
+      "assertions": [
+        "matches regex /(?i)UEK/",
+        "matches regex /(?i)RHCK|config-manager|set-disabled/",
+        "Identifies both UEK and RHCK repos being enabled as the cause of the unsolvable kernel transaction",
+        "Recommends disabling the unused kernel repo (RHCK) while keeping the one matching the running kernel (UEK)",
+        "Does not recommend forcing both kernel streams to install"
+      ]
+    },
+    {
+      "id": "dkms-needs-matching-headers",
+      "description": "Third-party DKMS module fails to build after kernel update; skill must install headers matching the running kernel then dkms autoinstall.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "After a kernel update on an Ubuntu 22.04 EC2 instance, the NVIDIA DKMS module fails to build with 'Unable to find kernel headers for the running kernel' and 'Cannot open /lib/modules/6.5.0-1018-aws/build'. How do I fix the module build?",
+      "expected_output": "Explains that DKMS needs the kernel headers matching the RUNNING kernel version, which are missing. The fix is to install linux-headers-$(uname -r) (the exact running version, here 6.5.0-1018-aws), then run dkms autoinstall -k $(uname -r), and verify /lib/modules/$(uname -r)/build exists and dkms status shows the module installed. Notes that generic headers or a different version won't satisfy the build.",
+      "assertions": [
+        "matches regex /(?i)linux-headers|kernel-devel|headers/",
+        "matches regex /(?i)dkms/",
+        "Explains the headers must match the running kernel version specifically",
+        "Recommends installing the matching-version headers then running dkms autoinstall",
+        "Recommends verifying /lib/modules/<running-kernel>/build exists afterward"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What IAM permission is required to launch an EC2 instance?"
+    }
+  ]
+}

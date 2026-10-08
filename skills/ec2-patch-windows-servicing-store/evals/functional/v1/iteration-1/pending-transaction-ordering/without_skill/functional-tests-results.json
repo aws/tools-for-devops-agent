@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "pending-transaction-ordering",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires specific technical details: (1) running 'DISM /Online /Cleanup-Image /RevertPendingActions' and clearing SessionsPending BEFORE attempting RestoreHealth or SSU install, (2) only renaming pending.xml if it is stale (older than ~24h, since a recent one could be a valid in-flight operation), and (3) rebooting afterward so TrustedInstaller can finalize valid operations.\n\nThe agent's response does not mention RevertPendingActions at all, nor does it mention SessionsPending. Instead, it recommends running DISM /Online /Cleanup-Image /RestoreHealth first (which the expected answer implies should come after clearing the pending transaction, not before). The agent also suggests renaming pending.xml unconditionally if other steps fail, without the critical caveat about checking the file's age/timestamp to determine if it's stale vs. a valid in-flight operation - this is a significant omission since the expected answer specifically warns against this risk. The reboot-after-rename guidance is present, but the core technical remediation command (RevertPendingActions) and the stale-check caveat for pending.xml are both missing, which are the specific, higher-risk technical details the expected output is testing for.",
+      "evidence": "Agent says: 'Try the standard CBS repair first (non-destructive): Dism /Online /Cleanup-Image /RestoreHealth' and later 'Back up and rename C:\\Windows\\servicing\\Packages\\pending.xml pending.xml.bak' without checking file age/staleness, and never mentions /RevertPendingActions or SessionsPending anywhere in the response.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)RevertPendingActions/",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output never contains the string 'RevertPendingActions' anywhere in the recovery procedure.",
+          "reasoning": "A regex search for 'RevertPendingActions' (case-insensitive) finds no match in the agent's response.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)pending\\.xml/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains multiple instances of 'pending.xml', e.g. 'stray pending.xml in C:\\Windows\\servicing\\Packages' and 'rename C:\\Windows\\servicing\\Packages\\pending.xml pending.xml.bak'.",
+          "reasoning": "The regex /(?i)pending\\.xml/ matches text explicitly present in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends clearing or reverting the pending servicing transaction before running SSU or RestoreHealth",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent recommends running RestoreHealth first ('Try the standard CBS repair first (non-destructive): Dism /Online /Cleanup-Image /RestoreHealth') and only later, as a last resort, suggests renaming pending.xml. It does not instruct clearing/reverting the pending transaction before running RestoreHealth.",
+          "reasoning": "The assertion requires the pending transaction be cleared/reverted BEFORE RestoreHealth, but the agent's ordering is the opposite: RestoreHealth is tried first, and manual intervention on pending.xml comes only in step 4 if steps 2-3 fail. There is also no mention of SSU (Servicing Stack Update) at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes that a recent pending.xml may be valid and should not be removed without checking its age",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent says to 'Back up and rename pending.xml (don't delete outright until you've confirmed the box recovers)' but does not mention checking the file's age/timestamp to determine if it's a valid, recent, in-progress operation versus stale corruption.",
+          "reasoning": "While the agent does caution against outright deletion, it never discusses checking the age of pending.xml or that a recent one might indicate a valid in-progress operation that should not be touched.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends a reboot to let TrustedInstaller finalize valid pending operations",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 3 explicitly states: 'Reboot first \u2014 a surprising number of \"pending.xml present\" cases are actually a reboot that never got applied: shutdown /r /t 0' and later 'Reboot, then run RestoreHealth again'.",
+          "reasoning": "The agent recommends rebooting as a step to potentially resolve pending servicing operations, which aligns with letting TrustedInstaller finalize pending operations, even though it doesn't explicitly name TrustedInstaller in that reboot context (it does mention TrustedInstaller service elsewhere in stopping it).",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.4
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

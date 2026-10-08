@@ -1,0 +1,77 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "rhui-cert-region-specific",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-linux-repo-access' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly identifies the root cause as a region-mismatched RHUI client certificate (baked in us-east-1, invalid for us-west-2 due to mTLS region-specific certs). It provides the fix: reinstall the rhui-client package via dnf reinstall, or install the current RPM from the us-west-2 amazon-rhui3-client-config S3 bucket (using IMDS to confirm region), followed by dnf clean all and dnf makecache - matching the expected steps exactly. It explicitly warns against disabling sslverify ('Don't set sslverify=false... that's a trap that masks the real problem'). All key elements of the expected output are present and accurate.",
+      "evidence": "\"the AMI was baked in us-east-1, so it shipped a RHUI client cert bound to us-east-1's RHUI infrastructure... RHUI uses mutual TLS and certs are region-specific\" / \"dnf install -y https://s3.${REGION}.amazonaws.com/amazon-rhui3-client-config/rhel/rhui-client-*.rpm\" / \"dnf clean all / dnf makecache\" / \"Don't set sslverify=false on the RHUI repo configs to force it through \u2014 that's a trap that masks the real problem\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)RHUI/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The word 'RHUI' appears numerous times, e.g. 'the AMI was baked in us-east-1, so it shipped a RHUI client cert bound to us-east-1's RHUI infrastructure.'",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)region/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The word 'region' appears multiple times, e.g. 'RHUI uses mutual TLS and certs are region-specific' and 'install directly from the instance's OWN region bucket'.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies the RHUI client certificate (region-specific) as the root cause rather than a generic SSL or GPG problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'the AMI was baked in us-east-1, so it shipped a RHUI client cert bound to us-east-1's RHUI infrastructure... that cert is simply the wrong region's... so it reads as expired/invalid against us-west-2's CDS endpoints' \u2014 explicitly identifying the region-specific RHUI cert mismatch as root cause, not a generic SSL/GPG issue.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends reinstalling the rhui-client from the instance's own region (us-west-2), not the origin region",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent instructs: 'install directly from the instance's OWN region bucket (confirm via IMDS, don't assume)' and provides commands to fetch REGION via IMDS and run 'dnf install -y https://s3.${REGION}.amazonaws.com/amazon-rhui3-client-config/rhel/rhui-client-*.rpm' \u2014 explicitly using the instance's own region (us-west-2), not us-east-1.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not recommend permanently disabling sslverify or gpgcheck to force patching",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent explicitly warns: 'Don't set sslverify=false on the RHUI repo configs to force it through \u2014 that's a trap that masks the real problem and leaves the mTLS check permanently disabled.' No mention of disabling gpgcheck either.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "15s",
+    "cost": "$0.13",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

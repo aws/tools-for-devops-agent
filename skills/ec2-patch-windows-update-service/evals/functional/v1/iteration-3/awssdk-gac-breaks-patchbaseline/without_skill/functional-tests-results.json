@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "awssdk-gac-breaks-patchbaseline",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a specific root-cause identification (AWSSDK.Core.dll missing/corrupt in the GAC) and a specific remediation: locate AWSSDK.Core.dll under the AWS SDK for .NET install, take an EBS snapshot first, re-register it into the GAC using gacutil /i, verify the InvokeOptions type resolves, re-run the baseline scan, and add an AV exclusion for the SDK path to prevent recurrence.\n\nThe agent's response identifies the general category correctly (a .NET assembly version mismatch involving AWSSDK.Core.dll, possibly in the GAC) and suggests checking GAC and SSM Agent reinstall. However, it diverges significantly from the expected fix:\n- It never recommends taking an EBS snapshot before remediation.\n- It never recommends using gacutil /i to re-register the DLL into the GAC \u2014 the core fix of the expected answer.\n- It does not mention locating AWSSDK.Core.dll under the AWS SDK for .NET install path specifically.\n- It does not mention excluding the SDK path from antivirus to prevent recurrence.\n- Its primary recommended fix is reinstalling/repairing the SSM Agent, which is a different remediation path than the expected gacutil re-registration approach.\n- It explicitly states uncertainty and that this isn't a documented AWS troubleshooting scenario, and offers to open a support case instead of confidently fixing the issue as expected.\n\nWhile the agent correctly diagnoses the general symptom (assembly version/load issue with AWSSDK.Core), it misses the specific expected remediation steps (gacutil, EBS snapshot, AV exclusion), which are central to the expected output. This constitutes a substantive gap from the expected answer.",
+      "evidence": "\"Check for a conflicting AWSSDK.Core.dll in the GAC... If this resolves to a path outside the SSM Agent's own folders... uninstall/update that separate module.\" vs expected: \"re-register it into the GAC with gacutil /i (after taking an EBS snapshot)... Notes excluding the SDK path from AV to prevent recurrence.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)GAC|gacutil/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains the phrase 'Check for a conflicting AWSSDK.Core.dll in the GAC' and 'the Global Assembly Cache (GAC)' - matches regex for GAC (gacutil not present but GAC is).",
+          "reasoning": "Regex requires either GAC or gacutil, case-insensitive. 'GAC' appears multiple times in the text, e.g. 'A stale AWS Tools for PowerShell / AWSSDK.Core.dll in the Global Assembly Cache (GAC) or a module path'.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)AWSSDK\\.Core/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'AWSSDK.Core' appears multiple times, e.g. 'depends on `AWSSDK.Core.dll`' and 'Check for a conflicting AWSSDK.Core.dll in the GAC'.",
+          "reasoning": "Direct string match found repeatedly in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies AWSSDK.Core missing/corrupt in the GAC as the cause of the AWS-RunPatchBaseline type-load error",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent says the cause is 'a stale or conflicting AWSSDK.Core.dll where the .NET assembly resolver finds it before the correct one' and lists possibilities including GAC, SSM Agent corruption, or a manually installed AWS Tools module. It frames GAC as only one of several possible root causes, not confirmed, and explicitly states 'I don't have confirmed AWS documentation' and does not assert AWSSDK.Core is 'missing' from the GAC - rather it hypothesizes a version mismatch or wrong DLL being loaded, possibly from GAC among other locations.",
+          "reasoning": "The assertion requires the agent to identify AWSSDK.Core missing/corrupt in the GAC specifically as THE cause. The agent instead presents GAC as one of three possible common root causes, and frames the issue as a version mismatch/wrong DLL loading rather than specifically 'missing or corrupt in the GAC'. It does not commit to GAC as the identified cause - it says 'Common root causes' listing GAC stale dll, corrupted SSM install, or manually installed AWS Tools module. This is a weaker, more hedged attribution than the assertion requires.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Recommends re-registering AWSSDK.Core.dll into the GAC with gacutil /i",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output never mentions 'gacutil /i' or any registration command. It only suggests checking for a conflicting DLL via PowerShell reflection: '[System.Reflection.Assembly]::LoadWithPartialName(\"AWSSDK.Core\").Location' and recommends uninstalling/updating the conflicting module, and reinstalling the SSM Agent MSI.",
+          "reasoning": "No gacutil command or GAC re-registration step is recommended anywhere in the response. The fix recommendations are: update/reinstall SSM Agent, check GAC for conflicts and uninstall/update the conflicting module - not re-register via gacutil /i.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes this AWS-RunPatchBaseline runtime failure from a normal Windows Update problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent explicitly states: 'This happens, not because Windows itself is broken (which is why manual OS patching works fine \u2014 that path never touches these assemblies), but because something on disk put a stale or conflicting AWSSDK.Core.dll...'",
+          "reasoning": "The output clearly distinguishes the AWS-RunPatchBaseline/.NET assembly issue from the OS-level Windows Update patching process, explaining why one fails and the other succeeds.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "25s",
+    "cost": "$0.21",
+    "context_window": {
+      "utilization": "4.9%",
+      "compaction_count": 0
+    }
+  }
+}

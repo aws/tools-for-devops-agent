@@ -1,0 +1,77 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "wuauserv-disabled-not-stopped",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly explains the core root cause: wuauserv's Start registry value set to Disabled (4) causes SCM to refuse start requests regardless of caller, which maps to ERROR_SERVICE_DISABLED (0x80070422). This matches the expected explanation that SSM can start a Stopped/Manual service but not a Disabled one. The fix provided (Set-Service -Name wuauserv -StartupType ... ; Start-Service -Name wuauserv) matches the expected remediation steps, though the agent recommends Manual instead of Automatic - a reasonable technical judgment but a minor deviation from the expected answer. The agent also correctly identifies GPO as the most common root cause and explains that if GPO re-disables it, the fix must happen at the policy level or it will revert on next gpupdate - this matches the expected GPO revert warning, though it doesn't give the specific ~90 min timeframe. The agent also notes to check for intentional hardening (CIS/STIG) which addresses the \"get approval if disabled intentionally\" point reasonably well.\n\nThe main gap is the agent does not mention checking BITS (Background Intelligent Transfer Service) status, which the expected output specifically calls out as a thing to verify. This is a specific omission from the expected output criteria.\n\nDespite the BITS omission and the Manual vs Automatic difference, the response substantively covers the key diagnostic explanation (Disabled vs Stopped/Manual distinction, 0x80070422 mapping), the fix steps, and the GPO revert warning with policy-level fix requirement and intentional-disable consideration. The core substance aligns well with the expected output, satisfying most of the required components.</reasoning>\n<parameter name=\"confidence\">medium",
+      "evidence": "\"If wuauserv's Start registry value is set to 4 (Disabled), the service control manager refuses to start it no matter who's asking... 0x80070422 is literally the Win32 error ERROR_SERVICE_DISABLED... Set-Service -Name wuauserv -StartupType Manual; Start-Service -Name wuauserv... Check whether it's being re-disabled by Group Policy... If GPO is reapplying Disabled, you need to fix it at the policy level, not just locally \u2014 otherwise it'll flip back on the next gpupdate.\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)Disabled/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Get-Service wuauserv shows StartType: Disabled' and multiple other mentions of 'Disabled' throughout the response, e.g. 'If wuauserv's Start registry value is set to 4 (Disabled)'",
+          "reasoning": "The word 'Disabled' appears multiple times in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)Set-Service|StartupType/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Set-Service -Name wuauserv -StartupType Manual' and 'StartupType' appear explicitly in the fix section.",
+          "reasoning": "Both terms are present verbatim in the code block.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that a Disabled service cannot be started by SSM until its StartType is changed (unlike Stopped/Manual)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'If wuauserv's Start registry value is set to 4 (Disabled), the service control manager refuses to start it no matter who's asking \u2014 SSM Agent included... SSM Agent runs as LocalSystem, which can start a Disabled service via sc start/Start-Service just fine *if* it's not Disabled \u2014 but it won't flip the StartType for you'",
+          "reasoning": "The agent explicitly explains that a Disabled service cannot be started until StartType is changed, contrasting with the case where it would work if not Disabled (implying Manual/Stopped would be startable).",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends Set-Service -StartupType Automatic then starting the service",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent recommends 'Set-Service -Name wuauserv -StartupType Manual' not Automatic, explicitly stating 'Manual is what Windows normally uses for wuauserv \u2014 don't set Automatic, as it's not required and can mask the real issue'",
+          "reasoning": "The assertion claims the agent recommends StartupType Automatic, but the agent explicitly recommends Manual and advises against Automatic. This is a direct contradiction, so the assertion fails.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes a GPO may re-disable the service on the next refresh",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Check whether it's being re-disabled by Group Policy. This is the most common root cause in enterprise AMIs/golden images... If GPO is reapplying Disabled, you need to fix it at the policy level, not just locally \u2014 otherwise it'll flip back on the next gpupdate.'",
+          "reasoning": "The agent explicitly notes that GPO may re-disable the service on the next refresh (gpupdate), matching the assertion.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

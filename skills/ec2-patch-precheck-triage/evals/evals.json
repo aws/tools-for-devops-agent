@@ -1,0 +1,58 @@
+{
+  "skill_name": "ec2-patch-precheck-triage",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "precheck-fix-connectivity-first",
+      "description": "Multiple prechecks failed; skill must fix connectivity/repo health first because dependent checks are skipped/auto-resolve.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "CheckPatchingPrerequisites failed on a RHEL EC2 instance with several unhealthy fields at once: UpdateServiceConfigurationStatus=Not Healthy, PackageManagerDryRunResult=Failed, and S3EndpointConnectivity=Connection Failed. Which do I fix first?",
+      "expected_output": "Explains the checks are dependent, so fix them in order: connectivity first (the S3 endpoint / IMDS / credentials), then repository health (UpdateServiceConfigurationStatus) — because the PackageManagerDryRunResult check is skipped while UpdateServiceConfigurationStatus is unhealthy, and several dependent checks auto-resolve once connectivity and repos are fixed. Chasing the dry-run failure in isolation is wasted effort. Then re-run the prechecks to confirm the dependent fields clear.",
+      "assertions": [
+        "matches regex /(?i)connectivity|S3|UpdateServiceConfiguration/",
+        "matches regex /(?i)skipped|dependent|first/",
+        "Recommends fixing connectivity and repository health before the dry-run check",
+        "Explains the dry-run / dependent checks are skipped or auto-resolve once repo/connectivity is healthy",
+        "Recommends re-running prechecks to confirm dependent fields clear"
+      ]
+    },
+    {
+      "id": "transient-close-gate",
+      "description": "Bare exit status 1 but instance compliant; skill must gate on FailedCount/MissingCount before auto-closing and not close a genuine failure.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A PatchInstallFailure OpsItem was raised for an instance and AWS-RunPatchBaseline just says 'failed to run commands: exit status 1' with no other detail. The instance already shows the patches installed. Can I just auto-close the OpsItem as a false alarm?",
+      "expected_output": "Explains this looks like a transient post-scan cosmetic failure but must be proven with a mandatory gate before closing: run describe-instance-patch-states and confirm FailedCount=0 AND MissingCount=0, and describe-instance-patches with State=Failed returns empty. Only then auto-close (update-ops-item to Resolved) with a resolution note citing that evidence. If FailedCount>0 or MissingCount>0 (or any patch is in Failed state) it is a GENUINE failure — do NOT close; route to the matching root-cause SOP. If only InstalledPendingRebootCount>0, it's a pending-reboot case, not a failure.",
+      "assertions": [
+        "matches regex /(?i)FailedCount|MissingCount/",
+        "matches regex /(?i)describe-instance-patch|gate|evidence/",
+        "Requires proving FailedCount=0 and MissingCount=0 before auto-closing",
+        "States a genuine failure (FailedCount/MissingCount > 0) must not be closed and should route to a root-cause SOP",
+        "Recommends recording the compliance evidence in the resolution note"
+      ]
+    },
+    {
+      "id": "ssm-unreachable-no-remote-path",
+      "description": "Instance ConnectionLost; skill must recognize there is no remote path and triage is control-plane + escalation only.",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "One of my instances shows PingStatus ConnectionLost in SSM and the patch run keeps skipping it. Can you just SSM into it and restart the SSM agent so it gets patched?",
+      "expected_output": "Explains that if PingStatus is not Online there is no remote path into the instance — SSM is the only channel, so Run Command and Session Manager are both unavailable and the agent cannot be restarted remotely. Triage is control-plane only: check EC2 state, the IAM instance profile (a missing profile / missing AmazonSSMManagedInstanceCore is the one cause fixable without in-guest access), and network (VPC endpoints/SG/NAT for ssm/ssmmessages/ec2messages 443). Document the facts, fix the instance profile if that's the cause, exclude the instance from the current run (so it isn't a hard failure), and escalate to the owner to restore the agent. For hybrid mi- instances, flag stale activations rather than deregistering.",
+      "assertions": [
+        "matches regex /(?i)no remote|cannot.*(restart|reach)|control-plane/",
+        "matches regex /(?i)instance profile|AmazonSSMManagedInstanceCore/",
+        "Explains that an unreachable instance cannot be accessed via Run Command / Session Manager",
+        "Recommends control-plane checks (EC2 state, IAM instance profile, network) plus customer escalation",
+        "Recommends excluding the instance from the run rather than treating it as a hard failure, and not deregistering hybrid ghosts"
+      ]
+    },
+    {
+      "id": "unrelated-question",
+      "description": "Negative control: an unrelated question the skill must NOT trigger on.",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "How do I create a lifecycle rule to expire objects in an Amazon S3 bucket after 30 days?"
+    }
+  ]
+}

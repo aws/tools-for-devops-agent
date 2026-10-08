@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "transient-close-gate",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-precheck-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response closely matches the expected output. It: (1) frames the issue as a likely transient/cosmetic post-scan failure, (2) explicitly states this must be proven with a mandatory evidence gate before closing rather than assuming, (3) provides the correct commands - describe-instance-patch-states checking FailedCount=0 and MissingCount=0, and describe-instance-patches with Filter State=Failed expecting empty results, (4) specifies that only when this evidence is clean should the OpsItem be auto-closed with the evidence cited in the resolution note, (5) correctly states that if FailedCount>0 or MissingCount>0 or any patch is in Failed state, it is a genuine failure and should NOT be closed but instead routed to root-cause triage, and (6) correctly identifies that InstalledPendingRebootCount>0 (with otherwise clean counts) is a pending-reboot case, not a failure, and should be closed as such rather than as false-alarm. The only minor gap is it doesn't explicitly mention the 'update-ops-item to Resolved' API call by name, but it does mention attaching evidence in the resolution note and offers to '[close] with evidence' which conveys the same action. This is a very close match to all key criteria in the expected output.",
+      "evidence": "\"**`FailedCount=0` and `MissingCount=0`, and the Failed-state patch query is empty** \u2192 genuinely cosmetic. Safe to auto-close, but attach that evidence in the resolution note... **`InstalledPendingRebootCount>0`** (otherwise clean) \u2192 not a failure at all, just a reboot pending \u2014 close as pending-reboot rather than false-alarm... **`FailedCount>0` or `MissingCount>0` or any patch in Failed state** \u2192 genuine failure. Stop \u2014 don't close, this needs root-cause triage instead.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)FailedCount|MissingCount/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"--query \\\"InstancePatchStates[0].{Failed:FailedCount,Missing:MissingCount,PendingReboot:InstalledPendingRebootCount}\\\"\" and later \"FailedCount=0 and MissingCount=0\"",
+          "reasoning": "The output contains both terms as part of the describe-instance-patch-states query output fields.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)describe-instance-patch|gate|evidence/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"aws ssm describe-instance-patch-states\", \"Run this gate first\", \"attach that evidence in the resolution note\"",
+          "reasoning": "The output contains 'describe-instance-patch-states', 'gate', and 'evidence' explicitly.",
+          "confidence": "high"
+        },
+        {
+          "text": "Requires proving FailedCount=0 and MissingCount=0 before auto-closing",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"FailedCount=0 and MissingCount=0, and the Failed-state patch query is empty \u2192 genuinely cosmetic. Safe to auto-close, but attach that evidence in the resolution note\"",
+          "reasoning": "The agent explicitly requires FailedCount=0 and MissingCount=0 (and empty failed-state patch query) before considering it safe to auto-close.",
+          "confidence": "high"
+        },
+        {
+          "text": "States a genuine failure (FailedCount/MissingCount > 0) must not be closed and should route to a root-cause SOP",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"FailedCount>0 or MissingCount>0 or any patch in Failed state \u2192 genuine failure. Stop \u2014 don't close, this needs root-cause triage instead.\" - this mentions root-cause triage but not a specific SOP",
+          "reasoning": "The agent states a genuine failure must not be closed, but does not explicitly route it to a 'root-cause SOP' - it says 'this needs root-cause triage instead' without referencing a specific SOP or structured process document.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Recommends recording the compliance evidence in the resolution note",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Safe to auto-close, but attach that evidence in the resolution note (not just \\\"looks fine\\\").\"",
+          "reasoning": "The agent explicitly recommends attaching the compliance evidence in the resolution note rather than closing without it.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "12s",
+    "cost": "$0.11",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

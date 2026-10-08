@@ -1,0 +1,42 @@
+[
+  {
+    "agentSpaceId": "1e3c311b-a906-4a41-9003-27e72995d6db",
+    "executionId": "0d0764dc-91ed-441c-82dd-b12eaac9b203",
+    "recordId": "2db62db7-0b8b-4e16-a7a5-99217c3cb2f8",
+    "content": "{\"id\": \"2db62db7-0b8b-4e16-a7a5-99217c3cb2f8\", \"role\": \"user\", \"content\": [{\"text\": \"On an Amazon Linux 2 EC2 instance, patching fails with 'No space left on device' when extracting packages, but df -h shows the root filesystem is only 55% used with plenty of GB free. What is actually wrong and how do I fix it?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-05T15:53:39.119000-04:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "1e3c311b-a906-4a41-9003-27e72995d6db",
+    "executionId": "0d0764dc-91ed-441c-82dd-b12eaac9b203",
+    "recordId": "afdb9c7e-acf7-4049-b522-72b9177f048a",
+    "content": "{\"id\": \"7bb42896-3063-478e-b363-410dee9483ad\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"EC2 disk full error despite available space\"}]}",
+    "createdAt": "2026-10-05T15:53:40.345000-04:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "1e3c311b-a906-4a41-9003-27e72995d6db",
+    "executionId": "0d0764dc-91ed-441c-82dd-b12eaac9b203",
+    "recordId": "02ff921b-59a2-416c-a7c8-5d64d5586ad4",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 3.6, \"compaction_count\": 0}}}",
+    "createdAt": "2026-10-05T15:53:54.077000-04:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "1e3c311b-a906-4a41-9003-27e72995d6db",
+    "executionId": "0d0764dc-91ed-441c-82dd-b12eaac9b203",
+    "recordId": "8de0b8e3-1004-41f7-90fc-28e2a9603381",
+    "content": "{\"id\": \"8de0b8e3-1004-41f7-90fc-28e2a9603381\", \"role\": \"assistant\", \"content\": [{\"text\": \"This is a classic Linux filesystem symptom that trips people up because `df -h` only tells half the story. Here's what's actually going on.\\n\\n**The real cause: you've run out of inodes, not disk space (or vice versa \\u2014 it's one of these two)**\\n\\n\\\"No space left on device\\\" (`ENOSPC`) is thrown by the kernel in two completely different situations:\\n\\n1. **Inode exhaustion** \\u2014 Every file and directory consumes an inode, regardless of its size. If a filesystem was formatted with a small inode allocation (common on default AL2 EC2 images, especially smaller EBS volumes), you can hit 100% inode usage while block usage (what `df -h` shows) is nowhere close to full. Patching/yum operations create *tons* of small temporary files during package extraction, which is exactly the workload that exhausts inodes.\\n\\n2. **A different, smaller filesystem is actually full** \\u2014 `df -h` on `/` shows the root volume, but patching tools often extract/stage packages in `/var/cache/yum`, `/var/tmp`, or `/tmp`. If any of those is a **separate mount** (its own EBS volume or a tmpfs with a small size cap), it can be 100% full while `/` looks fine. This is very common on hardened AMIs where `/tmp` or `/var` is split out with strict size limits for security compliance.\\n\\n**How to confirm which one it is**\\n\\nCheck inode usage:\\n```bash\\ndf -i\\n```\\nIf `IUse%` is at 100% on `/` (or whatever filesystem backs the yum cache/tmp directories), that's your culprit.\\n\\nCheck if separate mounts exist and their usage:\\n```bash\\ndf -h\\nmount | grep -E '/(tmp|var)'\\n```\\nLook specifically at `/tmp`, `/var/tmp`, `/var/cache/yum` (or `/var/cache/dnf`) \\u2014 if any of these are on a separate mount, check their usage individually.\\n\\n**Fixes**\\n\\n- **If it's inode exhaustion on `/`:**\\n  - Clean up small files eating inodes: `yum clean all`, clear old kernels, check `/var/log` for excessive rotated logs, check `/var/spool/mail` or cron artifacts.\\n  - Find directories with huge file counts: `for d in /*; do echo \\\"$d: $(find \\\"$d\\\" -xdev | wc -l)\\\"; done` (run as root, adjust per top-level dir).\\n  - Longer-term: inode count is set at `mkfs` time and can't be changed in place \\u2014 you'd need to reformat/resize or migrate to a new volume with more inodes if this keeps recurring.\\n\\n- **If a separate `/tmp` or `/var` mount is full:**\\n  - Clear it: `yum clean all`, remove stale files in `/var/tmp` and `/tmp`.\\n  - If it's a tmpfs with a fixed size, consider growing it in `/etc/fstab` (e.g., bump the `size=` option) or resizing the underlying EBS volume + filesystem (`growpart` + `xfs_growfs`/`resize2fs`).\\n\\nIf you want, I can pull the actual filesystem/inode usage and mount layout from the instance to pinpoint which case you're hitting instead of guessing \\u2014 just share the instance ID and region.\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-05T15:53:54.160000-04:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "1e3c311b-a906-4a41-9003-27e72995d6db",
+    "executionId": "0d0764dc-91ed-441c-82dd-b12eaac9b203",
+    "recordId": "050954fa-9450-4c82-9f33-de512f37d3c4",
+    "content": "{\"id\": \"9dd0882f-b9b1-4632-b3c8-3605d06fd4d6\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"This is a classic Linux filesystem symptom that trips people up because `df -h` only tells half the story. Here's what's actually going on.\\n\\n**The real cause: you've run out of inodes, not disk space (or vice versa \\u2014 it's one of these two)**\\n\\n\\\"No space left on device\\\" (`ENOSPC`) is thrown by the kernel in two completely different situations:\\n\\n1. **Inode exhaustion** \\u2014 Every file and directory consumes an inode, regardless of its size. If a filesystem was formatted with a small inode allocation (common on default AL2 EC2 images, especially smaller EBS volumes), you can hit 100% inode usage while block usage (what `df -h` shows) is nowhere close to full. Patching/yum operations create *tons* of small temporary files during package extraction, which is exactly the workload that exhausts inodes.\\n\\n2. **A different, smaller filesystem is actually full** \\u2014 `df -h` on `/` shows the root volume, but patching tools often extract/stage packages in `/var/cache/yum`, `/var/tmp`, or `/tmp`. If any of those is a **separate mount** (its own EBS volume or a tmpfs with a small size cap), it can be 100% full while `/` looks fine. This is very common on hardened AMIs where `/tmp` or `/var` is split out with strict size limits for security compliance.\\n\\n**How to confirm which one it is**\\n\\nCheck inode usage:\\n```bash\\ndf -i\\n```\\nIf `IUse%` is at 100% on `/` (or whatever filesystem backs the yum cache/tmp directories), that's your culprit.\\n\\nCheck if separate mounts exist and their usage:\\n```bash\\ndf -h\\nmount | grep -E '/(tmp|var)'\\n```\\nLook specifically at `/tmp`, `/var/tmp`, `/var/cache/yum` (or `/var/cache/dnf`) \\u2014 if any of these are on a separate mount, check their usage individually.\\n\\n**Fixes**\\n\\n- **If it's inode exhaustion on `/`:**\\n  - Clean up small files eating inodes: `yum clean all`, clear old kernels, check `/var/log` for excessive rotated logs, check `/var/spool/mail` or cron artifacts.\\n  - Find directories with huge file counts: `for d in /*; do echo \\\"$d: $(find \\\"$d\\\" -xdev | wc -l)\\\"; done` (run as root, adjust per top-level dir).\\n  - Longer-term: inode count is set at `mkfs` time and can't be changed in place \\u2014 you'd need to reformat/resize or migrate to a new volume with more inodes if this keeps recurring.\\n\\n- **If a separate `/tmp` or `/var` mount is full:**\\n  - Clear it: `yum clean all`, remove stale files in `/var/tmp` and `/tmp`.\\n  - If it's a tmpfs with a fixed size, consider growing it in `/etc/fstab` (e.g., bump the `size=` option) or resizing the underlying EBS volume + filesystem (`growpart` + `xfs_growfs`/`resize2fs`).\\n\\nIf you want, I can pull the actual filesystem/inode usage and mount layout from the instance to pinpoint which case you're hitting instead of guessing \\u2014 just share the instance ID and region.\"}]}",
+    "createdAt": "2026-10-05T15:53:54.235000-04:00",
+    "recordType": "final_response"
+  }
+]

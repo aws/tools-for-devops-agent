@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "cluster-drain-before-reboot",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-windows-component-failures' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all required elements: explains that 0x80070426 occurs because the node owns clustered resources (SQL AlwaysOn group) and rebooting risks losing quorum; provides the correct safe sequence using Move-ClusterGroup to drain roles and Suspend-ClusterNode -Drain to pause the node with zero owned groups before reboot, then Resume-ClusterNode afterward; explicitly warns never to drain/reboot the last online node due to quorum loss; advises confirming SQL AlwaysOn secondary replicas are synchronized before draining; and recommends using Cluster-Aware Updating (CAU) instead of ad-hoc reboots if configured. All key criteria from the expected output are substantively addressed.",
+      "evidence": "\"Drain owned groups off this node, then suspend it... Suspend-ClusterNode -Name $me -Drain... never drain/reboot the last online node, that's an instant quorum loss... confirm the secondary replica(s) are synchronized... If Cluster-Aware Updating (CAU) is already configured for this cluster, use that instead of an ad-hoc reboot via SSM\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)drain|Suspend-ClusterNode/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains 'Suspend-ClusterNode -Name $me -Drain' and the phrase 'Drain owned groups off this node, then suspend it'",
+          "reasoning": "Both 'drain' and 'Suspend-ClusterNode' appear literally in the text, satisfying the regex.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)quorum/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'never drain/reboot the last online node \u2014 that's an instant quorum loss' and 'so quorum math still works'",
+          "reasoning": "The word 'quorum' appears multiple times in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Says to drain and suspend the node before rebooting, not reboot it as an active owner",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 3: 'Drain owned groups off this node, then suspend it:' followed by Move-ClusterGroup and Suspend-ClusterNode commands, and step 4: 'Verify it's actually safe to reboot: node shows State = Paused and it owns 0 online groups. Only then apply the patch and reboot.'",
+          "reasoning": "The agent explicitly instructs draining and suspending before rebooting, and explicitly warns not to reboot while the node is an active owner of resources.",
+          "confidence": "high"
+        },
+        {
+          "text": "Warns against rebooting the last online node / losing quorum",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Confirm this node isn't the only one online \u2014 never drain/reboot the last online node, that's an instant quorum loss.' and 'If this is a 2-node cluster, patch nodes sequentially and get explicit go-ahead before draining the second one \u2014 you have zero redundancy once one is down.'",
+          "reasoning": "The output explicitly warns against rebooting/draining the last online node and losing quorum, directly matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Mentions Cluster-Aware Updating (CAU) or confirming AlwaysOn secondaries before failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'If Cluster-Aware Updating (CAU) is already configured for this cluster, use that instead of an ad-hoc reboot via SSM' and 'before draining, confirm the secondary replica(s) are synchronized (not just \"synchronizing\"). If the secondary is behind, draining now means a non-synchronized failover.'",
+          "reasoning": "The output mentions both CAU and confirming AlwaysOn secondary synchronization before failover, satisfying either/both parts of the assertion.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "14s",
+    "cost": "$0.12",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

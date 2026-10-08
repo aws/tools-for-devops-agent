@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "wua-hang-datastore-reset",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-windows-update-service' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response comprehensively addresses all elements of the expected output: it identifies this as a hung WUA with likely-corrupt scan database (stated explicitly), provides the fix sequence of stopping wuauserv/BITS, killing hung TiWorker/wuauclt processes, renaming SoftwareDistribution to rebuild DataStore.edb, re-registering WUA DLLs, restarting services, and verifying the search succeeds. It also notes that if the issue recurs, outdated SSU or CBS/component-store corruption may be the underlying cause - matching the expected output's final point almost verbatim in substance.",
+      "evidence": "\"this is the corrupt scan database case\" / \"Since DataStore.edb is >1GB, reset the whole SoftwareDistribution folder... This forces a fresh DataStore.edb to be rebuilt on next scan\" / \"Re-register the WUA DLLs\" / \"Verify the scan actually completes now\" / \"it's often a sign of a stale SSU or component-store corruption underneath the WUA layer\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)SoftwareDistribution|DataStore\\.edb/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output explicitly mentions 'SoftwareDistribution' (e.g., 'Rename-Item \"$env:SystemRoot\\SoftwareDistribution\"') and 'DataStore.edb' (e.g., 'This forces a fresh DataStore.edb to be rebuilt on next scan.')",
+          "reasoning": "Both terms appear verbatim multiple times in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)wuauserv|BITS|TiWorker/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains 'wuauserv' (e.g., 'Stop-Service wuauserv,bits,cryptSvc,msiserver'), 'BITS'/'bits' (same line), and 'TiWorker' (e.g., 'Get-Process TiWorker,wuauclt...')",
+          "reasoning": "All three terms are present in the commands and prose.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends stopping the services and resetting SoftwareDistribution / rebuilding DataStore.edb for the corrupt scan database",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Stop-Service wuauserv,bits,cryptSvc,msiserver -Force -EA SilentlyContinue' followed by 'Since DataStore.edb is >1GB, reset the whole SoftwareDistribution folder rather than just clearing Download \u2014 a database that size is the corrupt-scan-DB case' and 'Rename-Item \"$env:SystemRoot\\SoftwareDistribution\" \"$env:SystemRoot\\SoftwareDistribution.old\" -Force' then 'This forces a fresh DataStore.edb to be rebuilt on next scan.'",
+          "reasoning": "The agent explicitly stops the relevant services and renames/resets the SoftwareDistribution folder, framing it as fixing the corrupt scan database, which forces DataStore.edb to rebuild.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends killing the hung TiWorker/wuauclt processes",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Get-Process TiWorker,wuauclt -EA SilentlyContinue | ? {((Get-Date)-$_.StartTime).TotalMinutes -gt 30} | Stop-Process -Force'",
+          "reasoning": "The agent explicitly recommends killing hung TiWorker and wuauclt processes that have been running over 30 minutes.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes a stale SSU or CBS store corruption as a possible underlying cause if the reset doesn't hold",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'If this recurs on this instance repeatedly, it's often a sign of a stale SSU or component-store corruption underneath the WUA layer, not just an update-service hang.' and 'Killing TiWorker mid-transaction can leave a pending servicing transaction behind... that's the likely cause \u2014 it'd need a CBS/servicing-store check'",
+          "reasoning": "The agent explicitly notes stale SSU and CBS/component-store corruption as possible underlying causes if the reset doesn't hold or recurs.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "18s",
+    "cost": "$0.16",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

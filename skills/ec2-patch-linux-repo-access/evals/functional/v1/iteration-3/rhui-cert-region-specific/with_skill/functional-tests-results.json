@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "rhui-cert-region-specific",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-linux-repo-access' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identifies the root cause as a region-mismatched (and consequently expired) RHUI client certificate carried over from us-east-1 to us-west-2. It explains RHUI certs are region-pinned, provides the fix of reinstalling the rhui-client package via dnf reinstall, and if that fails, installing the current rhui-client RPM from the instance's own region's (us-west-2) amazon-rhui3-client-config S3 bucket, dynamically determined via instance metadata. It includes dnf clean all and dnf makecache steps, verification steps, and explicitly warns against disabling sslverify permanently as a workaround. All key elements of the expected output are present and accurate.",
+      "evidence": "\"your AMI carried over a RHUI client cert minted for us-east-1, but the instance now runs in us-west-2. RHUI certs are region-pinned... dnf install -y https://s3.${REGION}.amazonaws.com/amazon-rhui3-client-config/rhel/rhui-client-*.rpm; dnf clean all; dnf makecache... Don't set sslverify=false permanently on the repo configs to force it through \u2014 that's a workaround, not a fix\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)RHUI/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains numerous instances of 'RHUI', e.g. 'your AMI carried over a RHUI client cert minted for us-east-1' and 'RHUI certs are region-pinned'.",
+          "reasoning": "Regex match for 'RHUI' case-insensitive is clearly satisfied.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)region/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'but the instance now runs in us-west-2' and 'REGION=$(curl -s -H ... http://169.254.169.254/latest/meta-data/placement/region)' and 'should print us-west-2'.",
+          "reasoning": "The word 'region' appears many times throughout the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies the RHUI client certificate (region-specific) as the root cause rather than a generic SSL or GPG problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'the real problem is it was never valid for this region's CDS endpoints in the first place \u2014 expiry is just confirming it's stale/wrong.' and 'your AMI carried over a RHUI client cert minted for us-east-1, but the instance now runs in us-west-2.'",
+          "reasoning": "The agent explicitly identifies the region-specific RHUI client certificate mismatch as the root cause, not generic SSL/GPG issue, and explains the SSL error as a symptom rather than the true cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends reinstalling the rhui-client from the instance's own region (us-west-2), not the origin region",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'pull the client fresh from the instance's own region bucket \u2014 this is the critical step people get wrong after a cross-region AMI copy' followed by 'dnf install -y https://s3.${REGION}.amazonaws.com/amazon-rhui3-client-config/rhel/rhui-client-*.rpm' where REGION is dynamically fetched from instance metadata (us-west-2), not us-east-1.",
+          "reasoning": "The agent explicitly instructs reinstalling from the instance's own region (us-west-2) using dynamic metadata lookup, not the origin region us-east-1.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not recommend permanently disabling sslverify or gpgcheck to force patching",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Don't set sslverify=false permanently on the repo configs to force it through \u2014 that's a workaround, not a fix, and leaves you exposed.\"",
+          "reasoning": "The agent explicitly warns against disabling sslverify permanently, and does not mention gpgcheck at all, so no recommendation to disable it either.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "16s",
+    "cost": "$0.13",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

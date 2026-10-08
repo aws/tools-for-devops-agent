@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "cluster-drain-before-reboot",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers nearly all the key elements expected: it explains the risk of rebooting an active node holding cluster resources (framed via the cluster blocking reboot to avoid unsafe drain), gives the correct safe sequence (fail over AG first, Suspend-ClusterNode -Drain, verify Paused state, apply patch/reboot, Resume-ClusterNode), warns about verifying synchronous-commit secondary before failover (addressing the AlwaysOn sync concern), and mentions Cluster-Aware Updating (CAU) as a preferred approach over ad-hoc SSM/EC2 maintenance window reboots. \n\nMinor gaps: it doesn't explicitly use Move-ClusterGroup command or explicitly warn about rebooting the 'last online node' causing quorum loss, though it does mention quorum/draining safety implicitly (\"cluster deliberately blocks/delays a node reboot if it can't confirm the node can be drained safely\") and references quorum-related failure. It does not explicitly say 'don't reboot the last online node' but the overall safe sequence, drain-before-reboot logic, AG sync check, and CAU preference are all present and substantively align with the expected output. This covers the core substance even though not every specific phrase (quorum loss on last node, Move-ClusterGroup cmdlet name) is used verbatim.",
+      "evidence": "\"Suspend-ClusterNode -Name <NodeName> -Drain ... This drains cluster-aware roles off the node cleanly\" and \"Switch-AGPrimaryReplica or ALTER AVAILABILITY GROUP ... FAILOVER (on the target secondary)\" and \"check whether the CAU self-updating mode is mid-run\" and \"make sure that isn't fighting the manual drain\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)drain|Suspend-ClusterNode/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains both terms: 'drains cluster-aware roles off the node cleanly' and 'Suspend-ClusterNode -Name <NodeName> -Drain'",
+          "reasoning": "Regex /(?i)drain|Suspend-ClusterNode/ matches multiple occurrences of 'drain', 'Drain', and 'Suspend-ClusterNode' in the text.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)quorum/",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "A search of the full output shows no occurrence of the word 'quorum' anywhere in the text.",
+          "reasoning": "The regex /(?i)quorum/ requires the word 'quorum' to appear somewhere in the output. It does not appear anywhere in the response.",
+          "confidence": "high"
+        },
+        {
+          "text": "Says to drain and suspend the node before rebooting, not reboot it as an active owner",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 2 explicitly states: 'Pause the cluster node (don't just reboot): Suspend-ClusterNode -Name <NodeName> -Drain ... This drains cluster-aware roles off the node cleanly.' followed by step 4 'Apply the patch and reboot now that nothing is relying on this node.'",
+          "reasoning": "The agent clearly instructs draining/suspending the node before applying the patch and rebooting, rather than rebooting it while it is still an active owner of cluster roles.",
+          "confidence": "high"
+        },
+        {
+          "text": "Warns against rebooting the last online node / losing quorum",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "There is no mention of 'last online node', 'losing quorum', or any warning about quorum loss when rebooting. The closest related content is about failing over the AG and draining the node, but no quorum-specific warning is given.",
+          "reasoning": "The output never addresses the risk of rebooting the last online node in a cluster or losing quorum; it only discusses AG failover and node draining for SQL AlwaysOn, not the underlying Windows Failover Cluster quorum mechanics.",
+          "confidence": "high"
+        },
+        {
+          "text": "Mentions Cluster-Aware Updating (CAU) or confirming AlwaysOn secondaries before failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output says: 'If you're using Cluster-Aware Updating (CAU), check whether the CAU self-updating mode is mid-run and conflicting \u2014 Get-CauRun to see if an orchestration is stuck.' and also 'manually fail the Availability Group over to a synchronous-commit secondary before touching the node'.",
+          "reasoning": "The response explicitly mentions CAU by name and acronym, and also discusses confirming/using a synchronous-commit secondary (an AlwaysOn secondary) before failing over, satisfying the assertion's either/or condition.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

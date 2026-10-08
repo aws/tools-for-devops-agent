@@ -1,0 +1,90 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "servicing-order-looping-restorehealth",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-windows-servicing-store' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response matches the expected output closely. It explains that repeated RestoreHealth loops without fixing the issue because the root cause often isn't raw store corruption but rather an outdated SSU or halted pending transaction that 'surfaces as' store corruption (explicitly stated: 'that failure surfaces as \"component store corrupted,\" even though the store itself may be fine' and 'an outdated SSU or a halted pending transaction can poison... and surfaces as corruption'). It prescribes the correct ordered recovery: (1) clear pending servicing transactions via RevertPendingActions and reboot, (2) check/update the SSU before the LCU, (3) only then re-run RestoreHealth followed by sfc /scannow, (4) optionally reset WU components, (5) reboot and validate with CheckHealth. This matches the expected ordered sequence precisely, including the key insight about SSU/pending transactions masquerading as store corruption.",
+      "evidence": "\"two completely different root causes produce it, and DISM /RestoreHealth only fixes one of them... Running /RestoreHealth against that doesn't touch the actual cause, so it loops.\" followed by the 5-step ordered process: pending transactions \u2192 SSU currency \u2192 RestoreHealth + sfc /scannow \u2192 WU reset \u2192 reboot/validate.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)servicing stack|\\bSSU\\b/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains 'Servicing Stack Update' and 'SSU' multiple times, e.g., 'Check whether the Servicing Stack Update is current'",
+          "reasoning": "Regex matches both 'servicing stack' and 'SSU' literally present in text.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)RestoreHealth/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'DISM /RestoreHealth only fixes one of them' and multiple other mentions of RestoreHealth",
+          "reasoning": "Regex matches 'RestoreHealth' which appears many times in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends installing the Servicing Stack Update (SSU) before the Latest Cumulative Update (LCU)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'If an SSU shows up as not-installed, install that alone first (via WU/WSUS or the Update Catalog), confirm it completes, then retry the LCU.'",
+          "reasoning": "The agent explicitly recommends installing the SSU before retrying the LCU, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends clearing or reverting pending servicing transactions before repairing the component store",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Rule out a halted pending transaction first... If pending packages or a stale (>24h) pending.xml show up: DISM /Online /Cleanup-Image /RevertPendingActions'",
+          "reasoning": "The agent recommends reverting pending actions before proceeding to component store repair, which is step 1 before step 3 (store repair).",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that repeatedly running DISM /RestoreHealth does not converge when the real cause is a stale SSU or a pending transaction",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'two completely different root causes produce it, and DISM /RestoreHealth only fixes one of them. That's almost certainly why you're looping.' and 'If the servicing stack is outdated, it literally can't parse the new LCU's manifest \u2014 and that failure surfaces as \"component store corrupted,\" even though the store itself may be fine. Running /RestoreHealth against that doesn't touch the actual cause, so it loops.'",
+          "reasoning": "The agent explicitly explains why repeated RestoreHealth runs don't converge, attributing it to stale SSU; it also addresses pending transactions as a poisoning factor though less directly tied to the looping explanation specifically, but the core explanation about SSU is clearly present.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not recommend simply re-running DISM /RestoreHealth as the fix",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent only recommends re-running RestoreHealth as step 3 'Only now re-run the store repair, if corruption is still indicated' after addressing pending transactions and SSU, not as a standalone fix.",
+          "reasoning": "The agent does not suggest simply re-running RestoreHealth alone as the fix; it embeds it within a broader multi-step remediation that addresses the root causes first.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "26s",
+    "cost": "$0.22",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

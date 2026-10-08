@@ -1,0 +1,73 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "cluster-drain-before-reboot",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response correctly covers the core safe sequence: Move-ClusterGroup to fail over the AG/role, Suspend-ClusterNode -Drain to pause the node with zero owned groups before reboot, patching, and Resume-ClusterNode afterward. It also mentions checking AG health/sync before failover. This matches a good portion of the expected output.\n\nHowever, several explicitly required elements from the expected output are missing or not addressed: (1) no explicit warning about not rebooting the last online node to avoid quorum loss, (2) no mention of confirming CSV (Cluster Shared Volumes) locking risk tied to being an active owner of clustered resources in the context of quorum, (3) no mention of preferring Cluster-Aware Updating (CAU) over ad-hoc SSM reboots, which is a key recommendation in the expected output especially given the AWS Systems Manager Patch Manager context. The response focuses on manual PowerShell steps without recommending CAU as the preferred/safer alternative method for patching clustered nodes, and omits the quorum-loss warning entirely. These are substantive omissions relative to the expected criteria, so the response only partially satisfies the expectation and misses specific required warnings/recommendations.",
+      "evidence": "The response includes 'Move-ClusterGroup', 'Suspend-ClusterNode -Name <NodeName> -Drain', 'Resume-ClusterNode -Name <NodeName>', and checking AG sync health, but contains no mention of 'quorum', 'last online node', or 'Cluster-Aware Updating (CAU)'.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)drain|Suspend-ClusterNode/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains both terms: '-Drain moves any remaining cluster roles off cleanly' and the command 'Suspend-ClusterNode -Name <NodeName> -Drain'.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)quorum/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'How do I patch it safely... risking the AG or quorum' in the phrase 'Here's the safe sequence to patch this node without risking the AG or quorum:'",
+          "confidence": "high"
+        },
+        {
+          "text": "Says to drain and suspend the node before rebooting, not reboot it as an active owner",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent explicitly instructs: '1. Move the role off this node first... 2. Pause the node in the cluster... Suspend-ClusterNode -Name <NodeName> -Drain... 4. Install the patch, then reboot. With the node drained/paused, install the update and reboot normally.' This clearly sequences draining/suspending before rebooting, not rebooting as active owner.",
+          "confidence": "high"
+        },
+        {
+          "text": "Warns against rebooting the last online node / losing quorum",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output never mentions the risk of rebooting the last online node or explicitly warns about losing quorum due to node count/majority. It only mentions 'quorum' once in passing ('without risking the AG or quorum') but does not warn about the specific scenario of this being the last online node or explain quorum loss mechanics (e.g., witness, majority of votes).",
+          "confidence": "high"
+        },
+        {
+          "text": "Mentions Cluster-Aware Updating (CAU) or confirming AlwaysOn secondaries before failover",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output does not mention Cluster-Aware Updating (CAU) anywhere. It does mention checking AG health via 'Get-ClusterResource' or 'SELECT * FROM sys.dm_hadr_availability_replica_states' to confirm AG health, which is somewhat related to confirming secondaries, but CAU is never referenced, and the assertion requires either CAU or confirming secondaries before failover - the step 1 'Move the role off this node first' does implicitly rely on failover, but there's no explicit instruction to confirm secondary health status before failing over (only after, in step 3). This is a partial match but the CAU omission and lack of explicit pre-failover secondary confirmation make this a fail for the compound requirement focusing on CAU specifically, though the secondary check is weakly present but out of order.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.6%",
+      "compaction_count": 0
+    }
+  }
+}

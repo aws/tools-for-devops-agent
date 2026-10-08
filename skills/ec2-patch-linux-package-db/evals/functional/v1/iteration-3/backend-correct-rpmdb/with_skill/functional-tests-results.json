@@ -1,0 +1,83 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "backend-correct-rpmdb",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-linux-package-db' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly identifies the two distinct RPM backends (BerkeleyDB for AL2/RHEL7-8/CentOS7/SLES12 with Packages+__db.* files, and SQLite for AL2023/RHEL9/OL9/SLES15 with rpmdb.sqlite), explicitly warns that a BerkeleyDB-only fix (blind rpm --rebuilddb) does not properly recover a corrupt SQLite DB (risk of silent empty database), and provides backend-specific recovery steps: removing __db.* files then rebuilddb for BDB hosts, and moving rpmdb.sqlite aside, removing WAL/SHM files, and rebuilding for SQLite hosts, with escalation to repo reconstruction (dnf reinstall/distro-sync) if totally corrupt. It also includes backing up /var/lib/rpm and clearing stale locks (.rpm.lock, .dbenv.lock) before rebuilding, and recommends detecting which backend each host uses before applying fixes. This covers all the key elements described in the expected output: backend detection, backend-specific files/causes, lock clearing, backup, rebuild steps, repo reconstruction fallback, and the explicit warning that one fix doesn't work for the other backend.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)rpmdb\\.sqlite/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains multiple instances of 'rpmdb.sqlite', e.g. 'cp -a /var/lib/rpm/rpmdb.sqlite /var/lib/rpm/rpmdb.sqlite.corrupt.$(date +%s)' and 'The DB file is `rpmdb.sqlite`.'",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)__db|berkeley|BDB/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains '__db.*' (e.g. 'rm -f /var/lib/rpm/__db.*'), 'BerkeleyDB' ('classic **BerkeleyDB** signature'), and 'BDB0113' ('On the BDB hosts (`BDB0113` error):').",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes the SQLite backend recovery from the BerkeleyDB backend recovery",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly separates recovery into 'On the BDB hosts (`BDB0113` error):' with __db.* removal and rebuilddb, versus 'On the SQLite hosts (`disk image malformed`):' with rpmdb.sqlite backup/removal and a fallback repo-reconstruction path, clearly distinguishing the two.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends detecting which backend is in use before choosing the recovery",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output maps each error string to a backend: '`rpmdb: BDB0113 Thread/process failed` \u2192 classic **BerkeleyDB** signature... `database disk image is malformed` \u2192 **SQLite** signature' and offers to run 'diagnosis commands against specific instances to confirm which backend each host is actually on before you commit to a recovery plan', indicating detection should precede recovery choice.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends backing up /var/lib/rpm and clearing stale locks before rebuilding",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Under 'On every host, first:' the agent instructs: 'cp -a /var/lib/rpm /var/lib/rpm.backup.$(date +%s)' followed by 'rm -f /var/lib/rpm/.rpm.lock /var/lib/rpm/.dbenv.lock' before any rebuild commands.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not prescribe a single backend-agnostic command for all hosts",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent explicitly warns: 'Running `rpm --rebuilddb` blindly across the whole fleet is the trap here' and splits recovery into separate BDB and SQLite host procedures rather than one universal command for all hosts.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "18s",
+    "cost": "$0.15",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

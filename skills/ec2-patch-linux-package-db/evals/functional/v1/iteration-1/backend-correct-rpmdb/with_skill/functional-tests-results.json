@@ -1,0 +1,84 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "backend-correct-rpmdb",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ec2-patch-linux-package-db' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response comprehensively covers all key elements of the expected output: it correctly identifies that BDB0113 errors correspond to BerkeleyDB backend (AL2, RHEL7/8, CentOS7, OL7, SLES12) and 'database disk image is malformed' corresponds to SQLite backend (AL2023, RHEL9, OL9, SLES15). It provides a diagnostic step to detect the backend (checking for rpmdb.sqlite vs Packages/__db.* files), instructs clearing stale locks (.rpm.lock, .dbenv.lock), and backs up /var/lib/rpm before rebuilding. For BDB hosts, it drops __db.* files and runs rpm --rebuilddb. For SQLite hosts, it moves the corrupt sqlite file aside and rebuilds, with a fallback to reconstruct from repos if totally corrupt (0 packages). It explicitly states 'Running a BDB fix on a SQLite host (or vice versa) won't fix it,' matching the expected output's point that a BerkeleyDB-only fix doesn't recover SQLite corruption and vice versa. All core requirements are met with accurate technical detail.",
+      "evidence": "\"These two error strings actually correspond to different RPM backends... Running a BDB fix on a SQLite host (or vice versa) won't fix it.\" Plus the backend detection commands, lock clearing, backup step, and the two separate remediation paths (BDB: drop __db.* then rebuilddb; SQLite: move sqlite aside, rebuild, or reconstruct from repos if empty).",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)rpmdb\\.sqlite/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains multiple instances of 'rpmdb.sqlite', e.g. 'cp -a /var/lib/rpm/rpmdb.sqlite /var/lib/rpm/rpmdb.sqlite.corrupt.$(date +%s)'",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)__db|berkeley|BDB/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains 'rm -f /var/lib/rpm/__db.*      # drop the cached env (locks/mempool) \u2014 safe' and references 'BerkeleyDB' and 'BDB0113' throughout, e.g. 'rpmdb: BDB0113 Thread/process failed | **BerkeleyDB**'",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes the SQLite backend recovery from the BerkeleyDB backend recovery",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output has distinct sections 'Step 2a \u2014 BDB0113 hosts (BerkeleyDB backend)' and 'Step 2b \u2014 \"database disk image is malformed\" hosts (SQLite backend)' with different commands for each (rm __db.* + rebuilddb vs rm rpmdb.sqlite* + rebuilddb/initdb+reinstall).",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends detecting which backend is in use before choosing the recovery",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states 'these two error strings actually correspond to different RPM backends, so the fleet needs to be split and handled with two different procedures' and provides a table distinguishing signatures by backend, implying diagnosis before recovery; Step 1 also includes 'ls -la /var/lib/rpm/rpmdb.sqlite /var/lib/rpm/Packages /var/lib/rpm/__db.*' as a diagnostic step to identify which files exist (backend).",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends backing up /var/lib/rpm and clearing stale locks before rebuilding",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 1 explicitly instructs: 'cp -a /var/lib/rpm /var/lib/rpm.backup.$(date +%s)' and 'rm -f /var/lib/rpm/.rpm.lock /var/lib/rpm/.dbenv.lock' before any rebuild commands in Step 2a/2b.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not prescribe a single backend-agnostic command for all hosts",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly states 'the fleet needs to be split and handled with two different procedures \u2014 not one blanket fix' and provides separate command blocks (Step 2a and Step 2b) rather than a single universal command.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "18s",
+    "cost": "$0.16",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

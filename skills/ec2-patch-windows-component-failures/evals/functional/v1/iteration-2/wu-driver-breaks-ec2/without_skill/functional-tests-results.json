@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "wu-driver-breaks-ec2",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly explains the root cause: Windows Update pushing a generic/incorrect NIC driver over the AWS-qualified ENA driver, causing an MMIO register read timeout and loss of connectivity, consistent with why non-updated instances were unaffected. For recovery of the broken instance, it offers both expected paths: EC2 Serial Console access to fix the driver locally, and the offline volume repair method (detach root volume, attach to rescue instance, inspect/service driver store with DISM) \u2014 matching the expected 'attach root volume to rescue instance and roll back driver from DriverStore' option. It explicitly instructs installing the driver from the official AWS ENA driver package rather than Windows Update, matching 'not from Windows Update.' For recurrence prevention, it recommends excluding the ENA/NIC driver from Windows Update servicing via Group Policy, pinning a known-good driver version, baking it into a golden AMI, and declining driver update classifications in WSUS/SCCM \u2014 this covers the spirit of 'ExcludeWUDriversInQualityUpdate=1 and hide the offending driver updates' even though it doesn't name the exact registry key, it describes the equivalent GPO setting. The response does not recommend letting WU reinstall a generic driver \u2014 in fact it explicitly warns against this. Overall the response substantively matches the expected output's key points, though it doesn't mention the specific exact registry value name (ExcludeWUDriversInQualityUpdate) by name, which is a minor gap but conceptually equivalent (it cites the GPO path that controls that behavior).",
+      "evidence": "\"A Windows Update driver-update cycle can pull in a generic/incorrect NIC driver...over the AWS-qualified one, which triggers exactly this failure\"; \"Enable serial console access...Uninstall the broken ENA device...reinstall the correct AWS ENA driver package (not through Windows Update)\"; \"Stop the instance, detach the root EBS volume. Attach it as a secondary (data) volume to a healthy Windows instance. Use dism...to inspect, then service the driver store offline\"; \"Exclude the ENA adapter from Windows Update driver servicing...Do not include drivers with Windows Updates\"; \"install the ENA driver from the official AWS driver package, not whatever Windows Update supplied\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "matches regex /(?i)ENA|ExcludeWUDrivers/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains 'ENA' many times, e.g. 'The ENA Windows driver shows a yellow exclamation specifically when it hits an MMIO register read timeout during initialization'.",
+          "reasoning": "Regex matches 'ENA' present extensively throughout the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "matches regex /(?i)Serial Console|rescue|DriverStore/",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Output contains 'EC2 Serial Console (faster, no volume detach needed)' and 'dism /image:<mounted-drive> /Get-Drivers'.",
+          "reasoning": "Both 'Serial Console' and 'DriverStore'-like reference ('driver store') appear; regex matches 'Serial Console' explicitly.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies a generic WU driver overriding the AWS ENA driver as the cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'A Windows Update driver-update cycle can pull in a generic/incorrect NIC driver (or an incompatible ENA driver version) over the AWS-qualified one, which triggers exactly this failure on boot.'",
+          "reasoning": "This directly identifies a generic/incompatible WU-supplied driver overriding the AWS ENA driver as the root cause, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends excluding drivers from Windows Update (and using the AWS driver source) to prevent recurrence",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent recommends: 'Exclude the ENA adapter from Windows Update driver servicing... Do not include drivers with Windows Updates' and 'install the ENA driver from the official AWS driver package, not whatever Windows Update supplied'.",
+          "reasoning": "The output explicitly recommends excluding driver updates via Windows Update policy and sourcing the driver from AWS instead, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends Serial Console / rescue-instance recovery rather than reinstalling a generic driver via WU",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent presents 'Option A \u2014 EC2 Serial Console (faster, no volume detach needed)' as the primary fast path, explicitly instructing to reinstall 'the correct AWS ENA driver package (not through Windows Update)' rather than reinstalling a generic driver via WU.",
+          "reasoning": "The agent clearly favors Serial Console/offline volume repair recovery methods over simply reinstalling a generic driver through Windows Update, and explicitly warns against using WU for the fix.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "19s",
+    "cost": "$0.16",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}
