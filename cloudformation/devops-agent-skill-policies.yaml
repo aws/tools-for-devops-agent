@@ -21,15 +21,26 @@ Metadata:
           - EnableRdsOperationReview
           - EnableEksOperationReview
           - EnableCloudFrontOperationalReview
+          - EnableEcsOperationReview
           - EnableInvestigationCostGuardrail
           - EnableEnrichWithSecurityAgent
           - EnableCrmInvestigationGuidelines
           - EnableSkipScheduledMaintenance
+          - EnableMskOperations
           - EnableServiceQuotaCheck
+          - EnableDmsOperationReview
+          - EnableAwsBackupCoverageReview
+          - EnableAgentCoreObservabilitySetup
+          - EnableAgentCoreOpsReview
+          - EnableSageMakerAIOpsReview
       - Label:
           default: Optional Resource Scoping
         Parameters:
           - AllowedRegions
+      - Label:
+          default: Optional Add-On Permissions
+        Parameters:
+          - EnableConfigAthenaCiAnalysis
 
 Parameters:
   ExistingRoleName:
@@ -74,6 +85,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableEcsOperationReview:
+    Type: String
+    Description: ECS Operation Review skill (adds compute-optimizer:GetECSServiceRecommendations for the PERF8 rightsizing check).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableInvestigationCostGuardrail:
     Type: String
     Description: Investigation Cost Guardrail skill.
@@ -98,11 +115,72 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableMskOperations:
+    Type: String
+    Description: MSK Operations skill (adds kafka:GetBootstrapBrokers).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableServiceQuotaCheck:
     Type: String
     Description: Service Quota Check skill (Service Quotas + CloudWatch).
     AllowedValues: ['true', 'false']
     Default: 'true'
+
+  EnableDmsOperationReview:
+    Type: String
+    Description: DMS Operational Review skill (adds dms:TestConnection).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableAwsBackupCoverageReview:
+    Type: String
+    Description: >
+      AWS Backup Coverage Review skill (adds backup:GetSupportedResourceTypes,
+      config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableAgentCoreObservabilitySetup:
+    Type: String
+    Description: AgentCore Observability Setup skill (adds read-only bedrock-agentcore, X-Ray, log-delivery, and Lambda/ECS/EKS host-config permissions).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableAgentCoreOpsReview:
+    Type: String
+    Description: AgentCore Operational Review skill (adds read-only bedrock-agentcore control-plane List/Get and ec2:DescribeSubnets for the multi-AZ check; observability-only mode needs none of these).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  EnableSageMakerAIOpsReview:
+    Type: String
+    Description: SageMaker AI Operational Review skill (adds savingsplans:DescribeSavingsPlans for the Savings Plan check).
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+
+  EnableConfigAthenaCiAnalysis:
+    Type: String
+    Description: >
+      Optional add-on for the config-cost-optimization skill: grants the extra permissions
+      the Athena CI-driver attribution path needs (athena query execution + results, Glue
+      Data Catalog reads, and s3:GetObject on the Config delivery data). OFF by default and
+      least-privilege. Also requires an Athena
+      workgroup configured with Athena-managed query results, because the DevOps Agent role
+      has no s3:PutObject to write results to a customer bucket. Without this add-on the
+      skill falls back to GetDiscoveredResourceCounts (labeled approximate) and the Athena
+      path returns AccessDenied. Set ConfigDataBucketArn to scope the s3:GetObject grant to
+      the Config delivery bucket; leave it at '*' only for testing.
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+
+  ConfigDataBucketArn:
+    Type: String
+    Description: >
+      Bucket ARN holding the AWS Config delivery data that Athena queries (e.g.
+      arn:aws:s3:::my-config-bucket). Used only when EnableConfigAthenaCiAnalysis=true to
+      scope s3:GetObject to that bucket. Leave empty to grant s3:GetObject on all buckets
+      (testing only — not recommended).
+    Default: ''
 
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
@@ -110,8 +188,17 @@ Conditions:
   SkillSupportCases: !Equals [!Ref EnableSupportCases, 'true']
   SkillRdsOperationReview: !Equals [!Ref EnableRdsOperationReview, 'true']
   SkillCloudFrontOperationalReview: !Equals [!Ref EnableCloudFrontOperationalReview, 'true']
+  SkillEcsOperationReview: !Equals [!Ref EnableEcsOperationReview, 'true']
   SkillInvestigationCostGuardrail: !Equals [!Ref EnableInvestigationCostGuardrail, 'true']
+  SkillMskOperations: !Equals [!Ref EnableMskOperations, 'true']
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
+  SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
+  SkillAwsBackupCoverageReview: !Equals [!Ref EnableAwsBackupCoverageReview, 'true']
+  SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
+  SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
+  SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
+  ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
+  HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -256,6 +343,24 @@ Resources:
               - logs:GetLogEvents
             Resource: '*'
 
+  # ecs-operation-review: adds compute-optimizer:GetECSServiceRecommendations (PERF8 rightsizing);
+  # every other API the skill uses is covered by AIDevOpsAgentAccessPolicy
+  PolicyEcsOperationReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillEcsOperationReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-EcsOperationReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ComputeOptimizerEcsRecommendations
+            Effect: Allow
+            Action:
+              - compute-optimizer:GetECSServiceRecommendations
+            Resource: '*'
+
   # investigation-cost-guardrail: adds pricing:GetProducts
   PolicyInvestigationCostGuardrail:
     Type: AWS::IAM::Policy
@@ -271,6 +376,23 @@ Resources:
             Effect: Allow
             Action:
               - pricing:GetProducts
+            Resource: '*'
+
+  # msk-operations: adds kafka:GetBootstrapBrokers
+  PolicyMskOperations:
+    Type: AWS::IAM::Policy
+    Condition: SkillMskOperations
+    Properties:
+      PolicyName: DevOpsAgentSkill-MskOperations
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MskBootstrapBrokers
+            Effect: Allow
+            Action:
+              - kafka:GetBootstrapBrokers
             Resource: '*'
 
   # service-quota-check: adds servicequotas:* and cloudwatch:GetMetricData/GetMetricStatistics
@@ -304,6 +426,185 @@ Resources:
               - cloudwatch:GetMetricStatistics
             Resource: '*'
 
+  # database-migration-service-expertise: adds dms:TestConnection
+  PolicyDmsOperationReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillDmsOperationReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-DmsOperationReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DmsTestConnection
+            Effect: Allow
+            Action:
+              - dms:TestConnection
+            Resource: '*'
+
+  # aws-backup-coverage-review: only the read actions NOT already granted by
+  # AIDevOpsAgentAccessPolicy. Verified with iam:SimulatePrincipalPolicy against a
+  # live agent role — 45 of the 52 actions the skill uses are already allowed by
+  # the managed policy, including every backup:List*/Describe* call. Strictly
+  # read-only; no Start*, Put*, Create*, Update*, or Delete* is granted, and the
+  # managed policy already implicitly denies backup:StartBackupJob and
+  # backup:DeleteRecoveryPoint.
+  # sts:GetCallerIdentity is intentionally omitted: it requires no IAM permission.
+  PolicyAwsBackupCoverageReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillAwsBackupCoverageReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-AwsBackupCoverageReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BackupCoverageReviewDelta
+            Effect: Allow
+            Action:
+              # Not covered by backup:List*/backup:Describe* in the managed policy
+              - backup:GetSupportedResourceTypes
+              # Managed policy grants SelectAggregateResourceConfig but not the
+              # single-account variant the skill uses when no aggregator exists
+              - config:SelectResourceConfig
+              # Resource types with no inventory read in the managed policy
+              - dsql:ListClusters
+              - storagegateway:ListFileShares
+              - storagegateway:ListGateways
+              - storagegateway:ListVolumes
+            Resource: '*'
+
+  # agentcore-observability-setup: adds read-only AgentCore control-plane, X-Ray Transaction Search,
+  # log-delivery/resource-policy describes, and Lambda/ECS/EKS host-config reads (Tier 2 + Tier 3).
+  # Tier 1 (CloudWatch Logs/Metrics telemetry-arrival reads) is covered by AIDevOpsAgentAccessPolicy.
+  PolicyAgentCoreObservabilitySetup:
+    Type: AWS::IAM::Policy
+    Condition: SkillAgentCoreObservabilitySetup
+    Properties:
+      PolicyName: DevOpsAgentSkill-AgentCoreObservabilitySetup
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AgentCoreRuntimeConfigRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListAgentRuntimes
+            Resource: '*'
+          - Sid: XRayTransactionSearchAndDeliveries
+            Effect: Allow
+            Action:
+              - xray:GetTraceSegmentDestination
+              - logs:DescribeDeliveries
+              - logs:DescribeDeliverySources
+              - logs:DescribeDeliveryDestinations
+              - logs:DescribeResourcePolicies
+            Resource: '*'
+          - Sid: NonRuntimeHostConfigRead
+            Effect: Allow
+            Action:
+              - lambda:GetFunctionConfiguration
+              - ecs:DescribeTaskDefinition
+              - ecs:DescribeServices
+              - ecs:ListTasks
+              - eks:DescribeCluster
+            Resource: '*'
+  
+  # agentcore-ops-review: adds read-only bedrock-agentcore control-plane (runtime,
+  # memory, gateway, browser, code-interpreter, workload-identity inventory) plus
+  # ec2:DescribeSubnets for the single-AZ runtime check (AC-RUN-2). CloudWatch metric,
+  # Cost Explorer, and Health reads used by the skill are covered by AIDevOpsAgentAccessPolicy.
+  # Observability-only mode requires none of these — it runs on the base policy alone.
+  PolicyAgentCoreOpsReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillAgentCoreOpsReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-AgentCoreOpsReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AgentCoreOpsReviewControlPlaneRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListAgentRuntimeEndpoints
+              - bedrock-agentcore:ListAgentRuntimeVersions
+              - bedrock-agentcore:ListMemories
+              - bedrock-agentcore:GetMemory
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:GetGateway
+              - bedrock-agentcore:ListGatewayTargets
+              - bedrock-agentcore:GetGatewayTarget
+              - bedrock-agentcore:ListBrowsers
+              - bedrock-agentcore:ListCodeInterpreters
+              - bedrock-agentcore:ListWorkloadIdentities
+            Resource: '*'
+          # Data-plane: used ONLY to count long-term memory records (AC-MEM-2).
+          # The response can include PII-bearing memory `content`; the skill reads
+          # only the count and never parses/stores/reproduces `content`. Omit this
+          # statement for zero data-plane access — AC-MEM-2 degrades to a visibility
+          # limit and all other memory checks (CloudWatch metrics) still work.
+          - Sid: AgentCoreOpsReviewMemoryRecordCount
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListMemoryRecords
+            Resource: '*'
+          - Sid: AgentCoreOpsReviewSubnetAZResolution
+            Effect: Allow
+            Action:
+              - ec2:DescribeSubnets
+            Resource: '*'
+
+  # Optional add-on for config-cost-optimization: the Athena CI-driver attribution path.
+  # OFF by default (EnableConfigAthenaCiAnalysis=false). Athena alone (StartQueryExecution/
+  # GetQueryResults) is not enough to query the Config S3 data: the query engine must read
+  # the Config objects (s3:GetObject), resolve the table via the Glue Data Catalog
+  # (glue:GetTable/GetDatabase/GetPartitions), and read workgroup config (athena:GetWorkGroup).
+  # It ALSO requires an Athena workgroup configured with Athena-managed query results, because
+  # the DevOps Agent role has no s3:PutObject to write results to a customer bucket. Without
+  # all of this the path returns AccessDenied and the skill falls back to
+  # GetDiscoveredResourceCounts. Scope ConfigDataBucketArn to the Config delivery bucket.
+  PolicyConfigAthenaCiAnalysis:
+    Type: AWS::IAM::Policy
+    Condition: ConfigAthenaCiAnalysis
+    Properties:
+      PolicyName: DevOpsAgentSkill-ConfigAthenaCiAnalysis
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AthenaQueryExecution
+            Effect: Allow
+            Action:
+              - athena:StartQueryExecution
+              - athena:GetQueryExecution
+              - athena:GetQueryResults
+              - athena:GetWorkGroup
+            Resource: '*'
+          - Sid: GlueCatalogRead
+            Effect: Allow
+            Action:
+              - glue:GetDatabase
+              - glue:GetTable
+              - glue:GetPartitions
+            Resource: '*'
+          - Sid: ConfigDataRead
+            Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource: !If
+              - HasConfigDataBucketArn
+              - !Sub '${ConfigDataBucketArn}/*'
+              - '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -328,6 +629,29 @@ Resources:
                   - support.amazonaws.com
                   - ce.amazonaws.com
 
+
+  # sagemaker-ai-ops-review: adds savingsplans:DescribeSavingsPlans for the Savings Plan check.
+  # Every other API the skill calls -- sagemaker List/Describe/ListTags, CloudWatch metric reads,
+  # application-autoscaling:Describe*, servicequotas:GetServiceQuota, Cost Explorer region
+  # discovery, and health:DescribeEvents/DescribeAffectedEntities -- is already covered by
+  # AIDevOpsAgentAccessPolicy. Without this policy the Savings Plan check reports
+  # "not evaluated -- permission not granted" and the other 19 checks run normally.
+  PolicySageMakerAIOpsReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillSageMakerAIOpsReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-SageMakerAIOpsReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SageMakerAIOpsReviewSavingsPlansRead
+            Effect: Allow
+            Action:
+              - savingsplans:DescribeSavingsPlans
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -348,9 +672,18 @@ Outputs:
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
         - cloudfront-operational-review: ${EnableCloudFrontOperationalReview} (cloudfront:List*/Get* read, wafv2:GetWebACLForResource, acm:DescribeCertificate, logs:GetLogEvents)
+        - ecs-operation-review: ${EnableEcsOperationReview} (compute-optimizer:GetECSServiceRecommendations)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
+        - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
+        - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
+        - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
+        - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
+        - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
+        - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
+        - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
-        - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
+        - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
+        - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
       No IAM required:
         - skip-scheduled-maintenance
