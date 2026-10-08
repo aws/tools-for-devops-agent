@@ -193,6 +193,46 @@ class ValidateSkillsTests(RepoTestCase):
         self.assertIn("| `skills/alpha/SKILL.md:6` |", summary.read_text(encoding="utf-8"))
 
 
+class PackageIntegrationTests(RepoTestCase):
+    def test_executable_bit_from_git_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/alpha/references/run.md", "steps\n")
+        base = self.commit("base")
+        (self.repo / "skills/alpha/references/run.md").chmod(0o755)
+        self.git("update-index", "--chmod=+x", "skills/alpha/references/run.md")
+        self.git("commit", "-q", "-m", "make it executable")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn('"references/run.md" is executable', out)
+
+    def test_symlink_from_git_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        (self.repo / "skills/alpha/link.md").symlink_to("SKILL.md")
+        self.commit("add a link")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn('"link.md" is a symbolic link', out)
+
+    def test_a_pull_request_cannot_widen_the_extension_allowlist(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        self.write("skills/.gitignore", "*\n!*/\n!*.md\n!*.sh\n")
+        self.write("skills/alpha/references/run.sh", "echo hi\n")
+        self.commit("allow and add a shell file")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn('extension ".sh"', out)
+
+    def test_extension_allowlist_comes_from_head_without_a_base(self):
+        self.write("skills/.gitignore", "*\n!*/\n!*.md\n!*.txt\n")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/alpha/notes.txt", "notes\n")
+        self.commit("base")
+        code, out = self.run_check()
+        self.assertEqual(code, 0, out)
+
+
 class SelfCheckTests(RepoTestCase):
     def rules_copy(self) -> Path:
         target = Path(tempfile.mkdtemp())

@@ -159,15 +159,16 @@ def uncommitted_skill_changes(repo_root: Path) -> bool:
         return False
 
 
+def read_gitignore(repo_root: Path, rev: str) -> str:
+    return _git(repo_root, "show", f"{rev}:{SKILLS_DIR}/.gitignore").decode("utf-8")
+
+
 def check_repository(
-    repo_root: Path, rules: sc.Rules, base_ref: str | None, head_ref: str
+    repo_root: Path, rules: sc.Rules, base: str | None, head_ref: str
 ) -> tuple[list[SkillResult], set[str] | None]:
-    """Results for every skill at `head_ref`, and the skills touched since the merge base (None without a base)."""
+    """Results for every skill at `head_ref`, and the skills touched since `base` (None without a base)."""
     head_trees, results = read_skills(repo_root, head_ref)
-    touched = None
-    if base_ref is not None:
-        base = merge_base(repo_root, base_ref, head_ref)
-        touched = touched_skills(repo_root, base, head_ref)
+    touched = touched_skills(repo_root, base, head_ref) if base is not None else None
     for name in sorted(head_trees):
         findings, _ = sc.check_skill(head_trees[name], rules)
         results.append(SkillResult(f"{SKILLS_DIR}/{name}", findings))
@@ -267,6 +268,12 @@ def self_check(rules_dir: Path, rules: sc.Rules) -> list[str]:
     return sc.run_conformance(cases, rules)
 
 
+def _could_not_run(exc: GitError) -> int:
+    print(f"::error title=Skill publishing rules could not run::{_escape_data(str(exc))}")
+    print("The check could not read the repository. This is not a finding about the pull request.")
+    return 2
+
+
 def main(argv: list[str] | None = None, repo_root: Path | None = None, rules_dir: Path = RULES_DIR) -> int:
     try:
         return _run(argv, repo_root, rules_dir)
@@ -284,8 +291,23 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
     args = parser.parse_args(argv)
     repo_root = repo_root or _repo_root()
 
+    base = None
     try:
-        rules = sc.load_rules(rules_dir)
+        if args.self_check_only:
+            # The cases test the rules, not the repository, so no Git is needed.
+            gitignore = (repo_root / SKILLS_DIR / ".gitignore").read_text(encoding="utf-8")
+        else:
+            # The extension allowlist is read from the merge base when there is
+            # one, so a pull request can't widen it for its own files.
+            base = merge_base(repo_root, args.base_ref, args.head_ref) if args.base_ref else None
+            gitignore = read_gitignore(repo_root, base or args.head_ref)
+    except OSError as exc:
+        print(f"::error title=Skill publishing rules::cannot read {SKILLS_DIR}/.gitignore: {_escape_data(str(exc))}")
+        return 2
+    except GitError as exc:
+        return _could_not_run(exc)
+    try:
+        rules = sc.load_rules(rules_dir, gitignore)
     except ValueError as exc:
         print(f"::error title=Skill publishing rules::{_escape_data(str(exc))}")
         return 2
@@ -302,11 +324,9 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
     try:
         if args.head_ref == "HEAD" and uncommitted_skill_changes(repo_root):
             print(f"note: uncommitted changes under {SKILLS_DIR}/ are not checked; commit them first.\n")
-        results, touched = check_repository(repo_root, rules, args.base_ref, args.head_ref)
+        results, touched = check_repository(repo_root, rules, base, args.head_ref)
     except GitError as exc:
-        print(f"::error title=Skill publishing rules could not run::{_escape_data(str(exc))}")
-        print("The check could not read the repository. This is not a finding about the pull request.")
-        return 2
+        return _could_not_run(exc)
     return report(results, touched)
 
 
