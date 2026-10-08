@@ -2,7 +2,7 @@
 name: analytics-opensearch-expertise
 description: "Amazon OpenSearch Service domain health assessment. Performs read-only, API-driven checks against a customer's OpenSearch domain(s) covering cluster health, node/shard configuration, performance metrics, security posture, and cost optimization signals. Activate this skill for requests about OpenSearch or Elasticsearch domain health, cluster review, domain assessment, performance, security posture, or cost optimization. Given a domain ARN (or name + region), it produces a structured findings report with prioritized recommendations. All checks use read-only AWS control-plane APIs (es:Describe*, es:GetCompatibleVersions, es:DescribeReservedInstances, cloudwatch:GetMetricData) — no data-plane access required."
 metadata:
-  version: "2.6"
+  version: "2.6.1"
   author: genealpe
 ---
 
