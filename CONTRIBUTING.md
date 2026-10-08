@@ -67,7 +67,7 @@ The frontmatter must be plain YAML that every parser reads the same way. Anchors
 Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml`, `.skilleval.yml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). For the published files:
 
 - At most 100 files, and their zip at most 983,040 bytes (1 MiB less a margin, because zip sizes vary by tool). The check warns past 90%.
-- Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a pull request can't widen it for its own files.
+- Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a new extension takes effect only after the `skills/.gitignore` change that adds it has merged.
 - Paths use only letters, digits, `.`, `_` and `-`, are at most 512 characters, have no hidden parts (such as `.DS_Store`), no Windows-reserved names (such as `CON`) and no part ending in a period, and don't differ from another path only in case.
 - No file starts with `#!`.
 

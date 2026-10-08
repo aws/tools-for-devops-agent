@@ -60,7 +60,7 @@ MAX_PUBLISHED_FILES = 100
 ZIP_LIMIT_BYTES = 1_048_576 - 65_536
 ZIP_WARNING_RATIO = 0.9
 MAX_PATH_LENGTH = 512
-SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+SEGMENT_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
 WINDOWS_RESERVED_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"} | {f"COM{i}" for i in range(1, 10)} | {f"LPT{i}" for i in range(1, 10)}
 )
@@ -725,7 +725,7 @@ def _path_problem(path: str) -> str | None:
             return f'"{path}" has an empty, "." or ".." part'
         if segment.startswith("."):
             return f'"{path}" is a hidden file or folder ("{segment}"), which would be published; remove it'
-        if not SEGMENT_PATTERN.match(segment):
+        if not SEGMENT_PATTERN.fullmatch(segment):
             return f'"{path}" may use only letters, digits, ".", "_" and "-" in each part of its path'
         if segment.endswith("."):
             return f'"{path}" has a part that ends with a period, which Windows can\'t extract'

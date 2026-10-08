@@ -404,6 +404,9 @@ class PackageTests(CheckSkillTestCase):
             with self.subTest(path=path):
                 self.assertOneError(with_files(path), fragment)
 
+    def test_folder_name_with_trailing_newline_is_rejected(self):
+        self.assertOneError(with_files("references\n/a.md"), "letters, digits")
+
     def test_case_collision(self):
         self.assertOneError(with_files("references/Guide.md", "references/guide.md"), "differ only in case")
 
