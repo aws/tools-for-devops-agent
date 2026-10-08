@@ -121,12 +121,16 @@ def _read_blobs(repo_root: Path, oids: list[str]) -> list[bytes]:
     out = _git(repo_root, "cat-file", "--batch", stdin="".join(f"{oid}\n" for oid in oids).encode("ascii"))
     blobs: list[bytes] = []
     pos = 0
-    for _ in oids:
-        header_end = out.index(b"\n", pos)
-        _, _, size = out[pos:header_end].decode("ascii").split(" ")
-        start = header_end + 1
-        blobs.append(out[start:start + int(size)])
-        pos = start + int(size) + 1
+    for oid in oids:
+        header_end = out.find(b"\n", pos)
+        header = out[pos:header_end].decode("ascii", "replace").split(" ") if header_end != -1 else []
+        if len(header) != 3 or header[0] != oid or header[1] != "blob" or not header[2].isdigit():
+            raise GitError(f"git cat-file could not read object {oid}: {' '.join(header) or 'no output'}")
+        start, size = header_end + 1, int(header[2])
+        if len(out) < start + size:
+            raise GitError(f"git cat-file returned a truncated object {oid}")
+        blobs.append(out[start:start + size])
+        pos = start + size + 1
     return blobs
 
 
@@ -181,6 +185,15 @@ def _escape_property(text: str) -> str:
     return _escape_data(text).replace(":", "%3A").replace(",", "%2C")
 
 
+def _plain(text: str) -> str:
+    """One log line, whatever the text holds: a newline in a path or value can't start a workflow command."""
+    return text.replace("\r", "\\r").replace("\n", "\\n")
+
+
+def _markdown(text: str) -> str:
+    return _plain(text).replace("|", "\\|").replace("`", "'")
+
+
 def _location(result: SkillResult, finding: sc.Finding) -> str:
     return f"{result.path}/{finding.path}" if finding.path else result.path
 
@@ -203,7 +216,7 @@ def report(results: list[SkillResult], touched: set[str] | None) -> int:
             location = _location(result, finding)
             where = f"{location}:{finding.line}" if finding.line else location
             label = "FAIL" if finding.severity == "error" else "WARN"
-            print(f"{label}  {where}: {finding.message}")
+            print(f"{label}  {_plain(where)}: {_plain(finding.message)}")
             if in_actions:
                 command = "error" if finding.severity == "error" else "warning"
                 props = f"file={_escape_property(location)}"
@@ -233,12 +246,11 @@ def _write_summary(results: list[SkillResult], touched: set[str] | None, failed:
             for finding in result.findings:
                 if finding.severity == "error":
                     where = _location(result, finding) + (f":{finding.line}" if finding.line else "")
-                    message = finding.message.replace("|", "\\|")
-                    lines.append(f"| `{where}` | {message} |")
+                    lines.append(f"| `{_markdown(where)}` | {_markdown(finding.message)} |")
     warnings = [(r, f) for r in results for f in _visible(r, touched) if f.severity == "warning"]
     if warnings:
         lines += ["", "**Warnings** (these don't fail the check):", ""]
-        lines += [f"- `{_location(r, f)}`: {f.message}" for r, f in warnings]
+        lines += [f"- `{_markdown(_location(r, f))}`: {_markdown(f.message)}" for r, f in warnings]
     lines += ["", DOCS_HINT, ""]
     with open(summary_path, "a", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
@@ -256,6 +268,15 @@ def self_check(rules_dir: Path, rules: sc.Rules) -> list[str]:
 
 
 def main(argv: list[str] | None = None, repo_root: Path | None = None, rules_dir: Path = RULES_DIR) -> int:
+    try:
+        return _run(argv, repo_root, rules_dir)
+    except Exception as exc:  # noqa: BLE001 - any crash means the check didn't run, never a finding.
+        print(f"::error title=Skill publishing rules could not run::{_escape_data(f'{type(exc).__name__}: {exc}')}")
+        print("The check stopped unexpectedly. This is not a finding about the pull request.")
+        return 2
+
+
+def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base-ref", help="the branch the pull request merges into, such as origin/main")
     parser.add_argument("--head-ref", default="HEAD", help="the commit to check (default: HEAD)")

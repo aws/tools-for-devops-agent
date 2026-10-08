@@ -158,6 +158,31 @@ class ValidateSkillsTests(RepoTestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("uncommitted changes under skills/ are not checked", out)
 
+    def test_missing_git_object_cannot_run(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.commit("base")
+        blob = self.git("rev-parse", "HEAD:skills/alpha/SKILL.md")
+        (self.repo / ".git" / "objects" / blob[:2] / blob[2:]).unlink()
+        code, out = self.run_check()
+        self.assertEqual(code, 2, out)
+        self.assertIn("This is not a finding about the pull request.", out)
+
+    def test_unexpected_exception_cannot_run(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.commit("base")
+        with mock.patch.object(validate_skills.sc, "check_skill", side_effect=RuntimeError("boom")):
+            code, out = self.run_check()
+        self.assertEqual(code, 2, out)
+        self.assertIn("boom", out)
+
+    def test_untrusted_text_cannot_start_a_workflow_command(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0") .replace(
+            'version: "1.0"', 'version: "1.0\\n::warning title=spoofed::x"'))
+        self.commit("base")
+        code, out = self.run_check(env={"GITHUB_ACTIONS": "true"})
+        self.assertEqual(code, 1, out)
+        self.assertFalse(any(line.startswith("::warning title=spoofed") for line in out.splitlines()), out)
+
     def test_step_summary_lists_errors(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.1"))
         self.commit("base")

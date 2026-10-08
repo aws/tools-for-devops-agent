@@ -25,20 +25,24 @@ RULES_DIR_DISPLAY = ".github/scripts/skill-rules"
 AGENT_TYPES_FILE = "agent-types.json"
 VOCABULARY_FILE = "vocabulary.json"
 
-NAME_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+NAME_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 1024
 MAX_TITLE_LENGTH = 100
 MAX_SUMMARY_LENGTH = 200
 
-VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 # Only ever accepted for the merge-base copy of a skill, so that a skill still
-# on a two-part version can be compared while it is being fixed.
-TWO_PART_VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+# on a two-part version can be compared while it is being fixed. The fix
+# changes SKILL.md, so it needs a version above the old one: 2.6 -> 2.6.1.
+TWO_PART_VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
+# Patterns are applied with fullmatch: a `$` would also match before a trailing
+# newline, which a YAML block scalar (`version: |`) produces.
+#
 # GitHub's own rule for usernames: alphanumerics and single hyphens, no leading
 # or trailing hyphen, at most 39 characters.
-GITHUB_LOGIN_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$")
+GITHUB_LOGIN_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}")
 
 DIMENSION_PREFIX = "aws-devops-agent-skills."
 DIMENSIONS = ("agent-types", "aws-services", "technical-domains")
@@ -122,20 +126,28 @@ def load_rules(rules_dir: Path) -> Rules:
     agent_types = _read_json(rules_dir / AGENT_TYPES_FILE)
     vocabulary = _read_json(rules_dir / VOCABULARY_FILE)
     try:
-        values = agent_types["values"]
+        values = _string_list(agent_types["values"], f"{AGENT_TYPES_FILE} values")
         dimensions = vocabulary["values"]
         aliases = vocabulary["aliases"]
-        if not all(isinstance(v, str) for v in values):
-            raise TypeError(f"{AGENT_TYPES_FILE}: every value must be a string")
-        if set(dimensions) != set(DIMENSIONS):
-            raise ValueError(f"{VOCABULARY_FILE}: values must have exactly the keys {', '.join(DIMENSIONS)}")
+        if not isinstance(dimensions, dict) or set(dimensions) != set(DIMENSIONS):
+            raise TypeError(f"{VOCABULARY_FILE}: values must have exactly the keys {', '.join(DIMENSIONS)}")
+        if not isinstance(aliases, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) and k and v for k, v in aliases.items()
+        ):
+            raise TypeError(f"{VOCABULARY_FILE}: aliases must map non-empty strings to non-empty strings")
         return Rules(
             agent_types=frozenset(values),
-            vocabulary={dim: frozenset(dimensions[dim]) for dim in DIMENSIONS},
+            vocabulary={dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in DIMENSIONS},
             aliases=dict(aliases),
         )
     except (KeyError, TypeError) as exc:
         raise ValueError(f"malformed rule data in {rules_dir}: {exc}") from exc
+
+
+def _string_list(value, label: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise TypeError(f"{label} must be a list of non-empty strings")
+    return value
 
 
 def _read_json(path: Path):
@@ -147,10 +159,10 @@ def _read_json(path: Path):
 
 def parse_version(text: str, *, allow_two_part: bool = False) -> tuple[int, int, int] | None:
     """`MAJOR.MINOR.PATCH` as a tuple, or None. `allow_two_part` reads `2.6` as 2.6.0."""
-    match = VERSION_PATTERN.match(text)
+    match = VERSION_PATTERN.fullmatch(text)
     if match:
         return (int(match[1]), int(match[2]), int(match[3]))
-    match = TWO_PART_VERSION_PATTERN.match(text) if allow_two_part else None
+    match = TWO_PART_VERSION_PATTERN.fullmatch(text) if allow_two_part else None
     if match:
         return (int(match[1]), int(match[2]), 0)
     return None
@@ -262,6 +274,9 @@ def _parse_frontmatter(frontmatter: str, report: _Report) -> Node | None:
     except yaml.YAMLError as exc:
         _report_yaml_error(exc, report)
         return None
+    except RecursionError:
+        report.error("the frontmatter is nested too deeply to read", line=2)
+        return None
     if root is None:
         report.error("the frontmatter is empty", line=2)
     return root
@@ -314,7 +329,7 @@ def _check_name(folder: str, top: dict, report: _Report) -> str | None:
     line = _line(top["name"][0])
     if len(name) > MAX_NAME_LENGTH:
         report.error(f'"name" is {len(name):,} characters; the limit is {MAX_NAME_LENGTH}', line=line)
-    if not NAME_PATTERN.match(name):
+    if not NAME_PATTERN.fullmatch(name):
         report.error('"name" must be lowercase letters, digits and single hyphens, such as my-skill', line=line)
     if name != folder:
         report.error(
@@ -390,7 +405,7 @@ def _check_author(metadata: dict, items: dict, lines: dict, metadata_line: int, 
         return
     if "author" not in metadata:
         return
-    if not all(GITHUB_LOGIN_PATTERN.match(part) for part in _split(metadata["author"])):
+    if not all(GITHUB_LOGIN_PATTERN.fullmatch(part) for part in _split(metadata["author"])):
         report.error(
             '"metadata.author" must be one or more GitHub usernames separated by commas, '
             'for example "octocat" or "octocat, hubot"',

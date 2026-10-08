@@ -189,6 +189,14 @@ class NameTests(CheckSkillTestCase):
         long_name = "a" * 65
         self.assertOneError(self.with_name(long_name, folder=long_name), "65 characters; the limit is 64")
 
+    def test_name_with_trailing_newline_is_rejected(self):
+        fm = VALID_FRONTMATTER.replace("name: demo-skill", "name: |\n  demo-skill")
+        self.assertOneError(tree(skill_md(fm)), "lowercase letters, digits and single hyphens")
+
+    def test_deeply_nested_frontmatter_is_a_finding_not_a_crash(self):
+        nested = "".join("  " * depth + f"k{depth}:\n" for depth in range(1, 1200)) + "  " * 1200 + "k: v\n"
+        self.assertOneError(tree(skill_md(VALID_FRONTMATTER + "deep:\n" + nested)), "nested too deeply")
+
     def test_name_must_match_folder(self):
         self.assertOneError(self.with_name("other-skill"), 'but the folder is "demo-skill"', line=2)
 
@@ -250,6 +258,10 @@ class MetadataTests(CheckSkillTestCase):
             with self.subTest(bad=bad):
                 self.assertOneError(tree(skill_md(frontmatter_with(version=bad))), "MAJOR.MINOR.PATCH", line=6)
 
+    def test_block_scalar_version_with_trailing_newline_is_rejected(self):
+        fm = frontmatter_with(version="|\n    1.0.0")
+        self.assertOneError(tree(skill_md(fm)), "MAJOR.MINOR.PATCH")
+
     def test_unquoted_three_part_version_is_text(self):
         findings, info = self.check(tree(skill_md(frontmatter_with(version="1.2.3"))))
         self.assertEqual(findings, [])
@@ -309,6 +321,35 @@ class LoadRulesTests(unittest.TestCase):
         for value, target in rules.aliases.items():
             self.assertNotIn(value, rules.vocabulary["aws-services"] | rules.vocabulary["technical-domains"])
             self.assertTrue(any(target in values for values in rules.vocabulary.values()), target)
+
+
+class LoadRulesValidationTests(unittest.TestCase):
+    def rules_dir(self, agent_types, vocabulary) -> Path:
+        import json
+        import tempfile
+
+        target = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, target)
+        source = ROOT / ".github" / "scripts" / "skill-rules"
+        for name in source.iterdir():
+            (target / name.name).write_bytes(name.read_bytes())
+        if agent_types is not None:
+            (target / "agent-types.json").write_text(json.dumps(agent_types), encoding="utf-8")
+        if vocabulary is not None:
+            (target / "vocabulary.json").write_text(json.dumps(vocabulary), encoding="utf-8")
+        return target
+
+    def test_string_where_a_list_is_expected_fails_closed(self):
+        vocabulary = {"values": {"agent-types": "Chat tasks", "aws-services": [], "technical-domains": []}, "aliases": {}}
+        with self.assertRaisesRegex(ValueError, "list of non-empty strings"):
+            sc.load_rules(self.rules_dir(None, vocabulary))
+        with self.assertRaisesRegex(ValueError, "list of non-empty strings"):
+            sc.load_rules(self.rules_dir({"values": "GENERIC"}, None))
+
+    def test_aliases_must_map_strings_to_strings(self):
+        vocabulary = {"values": {"agent-types": [], "aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}
+        with self.assertRaisesRegex(ValueError, "aliases"):
+            sc.load_rules(self.rules_dir(None, vocabulary))
 
 
 class ConformanceTests(unittest.TestCase):
