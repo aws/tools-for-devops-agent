@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.1] - 2026-10-07
+
+### Changed
+- `metadata.version` in `SKILL.md` is now the full `1.0.1`, where it read `1.0`. Skill publishing requires a `MAJOR.MINOR.PATCH` version. No change to the skill's instructions.
+
 ## [1.0.0] - 2026-07-16
 
 ### Added

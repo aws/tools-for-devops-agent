@@ -2,6 +2,10 @@
 
 All notable changes to the `analytics-opensearch-expertise` skill are documented here.
 
+## [2.6.1] - 2026-10-07
+### Changed
+- `metadata.version` in `SKILL.md` is now the full `2.6.1`, where it read `2.6`. Skill publishing requires a `MAJOR.MINOR.PATCH` version. No change to the skill's instructions.
+
 ## [2.6.0] - 2026-07-24
 ### Changed
 - Remediation Reference moved to `references/remediation-reference.md`, loaded on demand via

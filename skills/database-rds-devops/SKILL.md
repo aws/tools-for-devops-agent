@@ -2,7 +2,7 @@
 name: database-rds-devops
 description: "Database-level data-plane diagnostics for Aurora MySQL and Aurora PostgreSQL. Executes predefined read-only health check queries via RDS Data API to analyze buffer pool, connections, locks, replication, storage, performance, and index efficiency. Requires the rds-aidba MCP server for database-internal access beyond what CloudWatch and RDS APIs provide."
 metadata:
-  version: "1.0"
+  version: "1.0.1"
   author: kiranmam
 ---
 

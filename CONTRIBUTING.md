@@ -43,6 +43,38 @@ Follow these guidelines for each tool:
 
 Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
 
+#### Skill Publishing Rules
+
+Skills on `main` are published to customers as one set, and one skill that breaks a rule stops every skill from being published. A pull request check ([`.github/workflows/validate-skills.yml`](.github/workflows/validate-skills.yml)) therefore applies these rules to **every** skill in `skills/`, not only to the ones your pull request changes. Errors fail the check. Warnings don't, and they're shown only for skills your pull request touches.
+
+`SKILL.md` frontmatter:
+
+| Field | Rule |
+|---|---|
+| `name` | Required. Lowercase letters, digits and single hyphens, at most 64 characters, and equal to the folder name. The folder path `skills/<name>` is the skill's permanent identity. |
+| `description` | Required. 1 to 1,024 characters. |
+| `title` | Optional display name. One line, at most 100 characters. |
+| `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `version: "1.0"` or `deprecated: "true"`. |
+| `metadata.author` | Required. One or more GitHub usernames separated by commas. |
+| `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix or suffix. |
+| `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing summary is a warning for now; it becomes required once every skill has one. |
+| `metadata.deprecated` | Optional. `"true"` or `"false"`. |
+| `metadata.agent_types` | Optional override, as comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json). By default a skill's agent types come from `aws-devops-agent-skills.agent-types`, through the `display_mapping` in that file. A skill with neither loads for all agents (`GENERIC`), which is a warning. |
+| `metadata.aws-devops-agent-skills.*` | Optional. Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. A value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is a warning, with the approved spelling when there is one. |
+
+The frontmatter must be plain YAML that every parser reads the same way. Anchors (`&`), aliases (`*`), tags (`!`), directives (`%`), flow collections (`[...]` or `{...}`) and duplicate keys are rejected.
+
+Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
+
+```bash
+python3 -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
+git remote add upstream https://github.com/aws/tools-for-devops-agent.git
+git fetch upstream main
+python3 .github/scripts/validate_skills.py --base-ref upstream/main
+```
+
+Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
+
 #### Test Your Skill
 
 1. Test relevant scenarios with DevOps Agent, with and without skill, to understand what good looks like. Iterate several times and make changes as necessary. Make sure you test relevant functionalities. For example, if your skill is intended for DevOps Agent investigations related to RDS PostgreSQL, then set up relevant AWS resources, simulate issues, and then start DevOps Agent investigations and evaluate the root cause with and without skill. Another example is, if your skill is intended to generate a report using DevOps Agent chat (such as EKS operations review), then set up relevant AWS resources, simulate scenarios that you expect your report to highlight, and then start DevOps Agent chat and evaluate its response with and without skill. Some tips for what you should check when evaluating your skill: for investigation, evaluate the different investigation root cause parts in the "Root cause" investigation tab (root cause, key findings, gaps, evidence) for correctness and quality across multiple iterations with and without skill. For chat, evaluate the chat's final response for actionability, correctness and completeness, with and without skill. Compare with and without skill runs and iterate to see if there are improvements. In both chat and investigation, evaluate multiple iterations for output consistency (investigation root cause or chat final response).

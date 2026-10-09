@@ -76,6 +76,21 @@ metadata:
 
 The `metadata` block with `author` and `version` fields is required. Initial version should be `"1.0.0"`.
 
+### Skill Publishing Check
+
+`.github/workflows/validate-skills.yml` runs `.github/scripts/validate_skills.py` on every pull request. The rules and their reasons are in the "Skill Publishing Rules" section of [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+- The rules live in `.github/scripts/skill_checks.py` as pure functions over an in-memory skill folder (`SkillTree` of `Entry(path, mode, data)`). `validate_skills.py` only reads Git objects, computes the merge base and reports. Keep rules out of the CLI so the conformance cases and unit tests exercise exactly what CI runs.
+- Every skill is checked on every PR, because skills on `main` are published as one set. Errors from any skill fail; warnings print only for skills the PR touches.
+- Skills are read from Git objects (`git ls-tree -r -z` plus `git cat-file --batch`), never the working tree, so modes are exact and a local run checks only committed changes.
+- Rule data lives in `.github/scripts/skill-rules/` and the check fails closed (exit 2) when a file there is malformed: `agent-types.json`, `vocabulary.json` (dimension values; unknown values only warn) and `conformance-cases.json`.
+- `conformance-cases.json` is a language-neutral contract: every tool that validates or publishes these skills must give each case's `expect` result. The script runs it before checking any skill and exits 2 on a mismatch. A rule change needs a matching case change in the same PR.
+- Every rule applies to every skill; nothing is exempted. A rule that existing skills don't meet yet starts as a warning (missing `metadata.summary`, dimension values outside the vocabulary) and becomes an error after a cleanup PR brings every skill into line.
+- Runtime agent types (`runtime_agent_types`): `metadata.agent_types` when set, otherwise the display values in `aws-devops-agent-skills.agent-types` mapped through `display_mapping` in `agent-types.json`, otherwise `GENERIC` (all agents), which warns. `display_mapping` must have one entry per display value in `vocabulary.json`; `null` means not agreed yet.
+- Exit codes: 0 pass (warnings allowed), 1 a rule broken, 2 could not run. Never report a 2 as the PR's fault.
+- PyYAML is the only dependency, pinned by every PyPI hash in `skill-rules/requirements.txt`; actions are pinned by commit SHA.
+- Tests: `python3 -m unittest discover -s tests -v`.
+
 ### Skill README.md Structure
 
 Each skill must have a README.md following this structure (see `skills/support-cases/README.md` as reference):
