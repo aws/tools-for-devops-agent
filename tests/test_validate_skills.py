@@ -36,7 +36,8 @@ GIT_ENV = {
 def skill_md(name: str, version: str = "1.0.0", extra: str = "") -> str:
     return (
         f"---\nname: {name}\ndescription: Use this skill when testing {name}.\n"
-        f'metadata:\n  author: octocat\n  version: "{version}"\n{extra}---\n\n# {name}\n'
+        f'metadata:\n  author: octocat\n  version: "{version}"\n'
+        f'  summary: "Tests {name}."\n  aws-devops-agent-skills.agent-types: "Chat tasks"\n{extra}---\n\n# {name}\n'
     )
 
 

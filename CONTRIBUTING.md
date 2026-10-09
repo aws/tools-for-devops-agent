@@ -57,9 +57,9 @@ Skills on `main` are published to customers as one set, and one skill that break
 | `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `version: "1.0"` or `deprecated: "true"`. |
 | `metadata.author` | Required. One or more GitHub usernames separated by commas. |
 | `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix or suffix. |
-| `metadata.summary` | Optional card text. One line, at most 200 characters. |
+| `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing summary is a warning for now; it becomes required once every skill has one. |
 | `metadata.deprecated` | Optional. `"true"` or `"false"`. |
-| `metadata.agent_types` | Optional. Comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json) that set which agent types load the skill after install. Without it, a skill installs as `GENERIC`. |
+| `metadata.agent_types` | Optional override, as comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json). By default a skill's agent types come from `aws-devops-agent-skills.agent-types`, through the `display_mapping` in that file. A skill with neither loads for all agents (`GENERIC`), which is a warning. |
 | `metadata.aws-devops-agent-skills.*` | Optional. Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. A value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is a warning, with the approved spelling when there is one. |
 
 The frontmatter must be plain YAML that every parser reads the same way. Anchors (`&`), aliases (`*`), tags (`!`), directives (`%`), flow collections (`[...]` or `{...}`) and duplicate keys are rejected.

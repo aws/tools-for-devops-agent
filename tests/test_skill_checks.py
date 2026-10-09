@@ -25,6 +25,7 @@ RULES = sc.Rules(
         "technical-domains": frozenset({"Operations"}),
     },
     aliases={"CloudWatch": "Amazon CloudWatch"},
+    display_agent_types={"Chat tasks": ("CHAT",), "Evaluation": None},
 )
 
 VALID_FRONTMATTER = """\
@@ -34,6 +35,7 @@ metadata:
   author: octocat
   version: "1.0.0"
   aws-devops-agent-skills.agent-types: "Chat tasks"
+  summary: "Checks a demo skill."
 """
 
 
@@ -56,6 +58,7 @@ def frontmatter_with(**overrides: str | None) -> str:
         "author": "octocat",
         "version": '"1.0.0"',
         "aws-devops-agent-skills.agent-types": '"Chat tasks"',
+        "summary": '"Checks a demo skill."',
     }
     for key, value in overrides.items():
         if value is None:
@@ -144,18 +147,18 @@ class FileAndYamlTests(CheckSkillTestCase):
 
     def test_flow_collection_is_rejected(self):
         fm = VALID_FRONTMATTER + "allowed-tools: [read, write]\n"
-        self.assertOneError(tree(skill_md(fm)), "flow collections", line=8)
+        self.assertOneError(tree(skill_md(fm)), "flow collections", line=9)
 
     def test_frontmatter_must_be_a_mapping(self):
         self.assertOneError(tree(b"---\n- one\n- two\n---\n"), "must be a mapping")
 
     def test_duplicate_key_reports_second_line(self):
         fm = VALID_FRONTMATTER + "name: demo-skill\n"
-        self.assertOneError(tree(skill_md(fm)), 'duplicate key "name"', line=8)
+        self.assertOneError(tree(skill_md(fm)), 'duplicate key "name"', line=9)
 
     def test_duplicate_metadata_key(self):
         fm = VALID_FRONTMATTER + '  version: "1.0.1"\n'
-        self.assertOneError(tree(skill_md(fm)), 'duplicate key "metadata.version"', line=8)
+        self.assertOneError(tree(skill_md(fm)), 'duplicate key "metadata.version"', line=9)
 
     def test_non_string_key_is_rejected(self):
         fm = VALID_FRONTMATTER + "1: one\n"
@@ -239,7 +242,7 @@ class MetadataTests(CheckSkillTestCase):
 
     def test_metadata_values_must_not_be_nested(self):
         fm = VALID_FRONTMATTER + "  extra:\n    nested: value\n"
-        self.assertOneError(tree(skill_md(fm)), '"metadata.extra" must be text, not a mapping', line=8)
+        self.assertOneError(tree(skill_md(fm)), '"metadata.extra" must be text, not a mapping', line=9)
 
     def test_author_is_required_and_github_shaped(self):
         self.assertOneError(tree(skill_md(frontmatter_with(author=None))), '"metadata.author" is required')
@@ -304,6 +307,37 @@ class DimensionTests(CheckSkillTestCase):
         self.assertIn('"Amazon S3" is not an approved aws-services value', messages[1])
 
 
+class SummaryAndAgentTypeTests(CheckSkillTestCase):
+    def test_missing_summary_is_a_warning_for_every_skill(self):
+        skill = tree(skill_md(frontmatter_with(summary=None)))
+        self.assertEqual(self.errors(skill), [])
+        (warning,) = self.warnings(skill)
+        self.assertIn('"metadata.summary" is missing', warning.message)
+        self.assertEqual(warning.line, 4)
+
+    def test_agent_types_come_from_the_display_tag(self):
+        metadata = {"aws-devops-agent-skills.agent-types": "Chat tasks, Evaluation, Chat tasks"}
+        self.assertEqual(sc.runtime_agent_types(metadata, RULES), (["CHAT"], False))
+
+    def test_explicit_agent_types_override_the_display_tag(self):
+        metadata = {"agent_types": "INCIDENT_RCA, GENERIC", "aws-devops-agent-skills.agent-types": "Chat tasks"}
+        self.assertEqual(sc.runtime_agent_types(metadata, RULES), (["INCIDENT_RCA", "GENERIC"], False))
+
+    def test_no_mapped_agent_type_falls_back_to_generic_with_a_warning(self):
+        self.assertEqual(sc.runtime_agent_types({}, RULES), (["GENERIC"], True))
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"Evaluation"'})
+        (warning,) = self.warnings(tree(skill_md(fm)))
+        self.assertIn('none of "Evaluation" has an agent-type mapping yet', warning.message)
+        self.assertIn("GENERIC", warning.message)
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": None})
+        (warning,) = self.warnings(tree(skill_md(fm)))
+        self.assertIn("it sets no agent types", warning.message)
+
+    def test_explicit_generic_does_not_warn(self):
+        fm = frontmatter_with(agent_types='"GENERIC"', **{"aws-devops-agent-skills.agent-types": None})
+        self.assertEqual(self.check(tree(skill_md(fm)))[0], [])
+
+
 class ParseVersionTests(unittest.TestCase):
     def test_strict_and_lenient(self):
         self.assertEqual(sc.parse_version("1.2.3"), (1, 2, 3))
@@ -313,6 +347,11 @@ class ParseVersionTests(unittest.TestCase):
 
 
 class LoadRulesTests(unittest.TestCase):
+    def test_display_mapping_covers_every_display_agent_type(self):
+        rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules")
+        self.assertEqual(set(rules.display_agent_types), set(rules.vocabulary["agent-types"]))
+        self.assertEqual(rules.display_agent_types["Incident RCA"], ("INCIDENT_RCA",))
+
     def test_repository_rule_files_load(self):
         rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules")
         self.assertIn("GENERIC", rules.agent_types)
@@ -345,6 +384,19 @@ class LoadRulesValidationTests(unittest.TestCase):
             sc.load_rules(self.rules_dir(None, vocabulary))
         with self.assertRaisesRegex(ValueError, "list of non-empty strings"):
             sc.load_rules(self.rules_dir({"values": "GENERIC"}, None))
+
+    def test_display_mapping_fails_closed(self):
+        agent_types = {"values": ["GENERIC", "CHAT"]}
+        vocabulary = {"values": {"agent-types": ["Chat tasks"], "aws-services": [], "technical-domains": []}, "aliases": {}}
+        cases = {
+            "one entry for each agent-types value": {**agent_types, "display_mapping": {}},
+            "unknown values": {**agent_types, "display_mapping": {"Chat tasks": ["PAGER"]}},
+            "list of non-empty strings": {**agent_types, "display_mapping": {"Chat tasks": "CHAT"}},
+        }
+        for fragment, data in cases.items():
+            with self.subTest(fragment=fragment):
+                with self.assertRaisesRegex(ValueError, fragment):
+                    sc.load_rules(self.rules_dir(data, vocabulary))
 
     def test_aliases_must_map_strings_to_strings(self):
         vocabulary = {"values": {"agent-types": [], "aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}

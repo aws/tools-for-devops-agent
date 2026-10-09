@@ -110,6 +110,8 @@ class Rules:
     agent_types: frozenset[str]
     vocabulary: dict[str, frozenset[str]]
     aliases: dict[str, str]
+    # Display agent type -> AgentType values, or None while no mapping is agreed.
+    display_agent_types: dict[str, tuple[str, ...] | None] = field(default_factory=dict)
 
 
 @dataclass
@@ -135,13 +137,52 @@ def load_rules(rules_dir: Path) -> Rules:
             isinstance(k, str) and isinstance(v, str) and k and v for k, v in aliases.items()
         ):
             raise TypeError(f"{VOCABULARY_FILE}: aliases must map non-empty strings to non-empty strings")
+        vocabulary_sets = {dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in DIMENSIONS}
+        mapping = _display_mapping(agent_types.get("display_mapping"), frozenset(values), vocabulary_sets["agent-types"])
         return Rules(
             agent_types=frozenset(values),
-            vocabulary={dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in DIMENSIONS},
+            vocabulary=vocabulary_sets,
             aliases=dict(aliases),
+            display_agent_types=mapping,
         )
-    except (KeyError, TypeError) as exc:
+    except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"malformed rule data in {rules_dir}: {exc}") from exc
+
+
+def _display_mapping(raw, agent_types: frozenset[str], display_values: frozenset[str]) -> dict:
+    """agent-types.json display_mapping, checked against the AgentType values and the display vocabulary."""
+    if not isinstance(raw, dict) or set(raw) != set(display_values):
+        raise TypeError(
+            f"{AGENT_TYPES_FILE}: display_mapping must have one entry for each agent-types value in {VOCABULARY_FILE}"
+        )
+    mapping = {}
+    for display, targets in raw.items():
+        if targets is not None:
+            targets = _string_list(targets, f"{AGENT_TYPES_FILE} display_mapping[{display!r}]")
+            unknown = [target for target in targets if target not in agent_types]
+            if unknown:
+                raise TypeError(f"{AGENT_TYPES_FILE}: display_mapping[{display!r}] has unknown values {unknown}")
+            targets = tuple(targets)
+        mapping[display] = targets
+    return mapping
+
+
+def runtime_agent_types(metadata: dict[str, str], rules: Rules) -> tuple[list[str], bool]:
+    """The AgentType values a skill installs for, and whether they are only the GENERIC fallback.
+
+    metadata.agent_types wins when set. Otherwise the display values in
+    aws-devops-agent-skills.agent-types are mapped through display_mapping.
+    With neither, the skill installs as GENERIC, for all agents.
+    """
+    explicit = metadata.get("agent_types")
+    if explicit is not None:
+        return [part for part in _split(explicit) if part], False
+    derived: list[str] = []
+    for display in _split(metadata.get(DIMENSION_PREFIX + "agent-types", "")):
+        for agent in rules.display_agent_types.get(display) or ():
+            if agent not in derived:
+                derived.append(agent)
+    return (derived, False) if derived else (["GENERIC"], True)
 
 
 def _string_list(value, label: str) -> list[str]:
@@ -388,7 +429,7 @@ def _check_metadata(top: dict, rules: Rules, report: _Report) -> tuple[dict[str,
 
     _check_author(metadata, items, lines, metadata_line, report)
     version = _check_version(metadata, items, lines, metadata_line, report)
-    _check_summary(metadata, lines, report)
+    _check_summary(metadata, lines, metadata_line, report)
     _check_deprecated(metadata, lines, report)
     _check_agent_types(metadata, lines, rules, report)
     _check_dimensions(metadata, items, rules, report)
@@ -431,9 +472,15 @@ def _check_version(
     return version
 
 
-def _check_summary(metadata: dict, lines: dict, report: _Report) -> None:
+def _check_summary(metadata: dict, lines: dict, metadata_line: int, report: _Report) -> None:
     summary = metadata.get("summary")
     if summary is None:
+        # Becomes an error once every existing skill has a summary.
+        report.warning(
+            '"metadata.summary" is missing. It will be required once every skill has one: '
+            "one line of at most 200 characters, shown as the skill's card text in catalogs",
+            line=metadata_line,
+        )
         return
     if not _single_line(summary):
         report.error('"metadata.summary" must be a single line', line=lines["summary"])
@@ -456,6 +503,20 @@ def _check_deprecated(metadata: dict, lines: dict, report: _Report) -> None:
 def _check_agent_types(metadata: dict, lines: dict, rules: Rules, report: _Report) -> None:
     value = metadata.get("agent_types")
     if value is None:
+        _, fallback = runtime_agent_types(metadata, rules)
+        if fallback:
+            display_key = DIMENSION_PREFIX + "agent-types"
+            unmapped = [part for part in _split(metadata.get(display_key, "")) if part]
+            reason = (
+                "none of " + ", ".join(f'"{part}"' for part in unmapped) + " has an agent-type mapping yet"
+                if unmapped
+                else "it sets no agent types"
+            )
+            report.warning(
+                f"{reason}, so the skill would load for all agents (GENERIC). Set {display_key} to a mapped "
+                f"value or set metadata.agent_types; the mapping is in {RULES_DIR_DISPLAY}/{AGENT_TYPES_FILE}",
+                line=lines.get(display_key),
+            )
         return
     for part in _split(value):
         if not part:
