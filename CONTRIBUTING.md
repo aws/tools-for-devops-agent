@@ -64,6 +64,21 @@ Skills on `main` are published to customers as one set, and one skill that break
 
 The frontmatter must be plain YAML that every parser reads the same way. Anchors (`&`), aliases (`*`), tags (`!`), directives (`%`), flow collections (`[...]` or `{...}`) and duplicate keys are rejected.
 
+Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml`, `.skilleval.yml`, `CHANGELOG.md`, `README.md` and `images/` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). For the published files:
+
+- At most 100 files, and their zip at most 983,040 bytes (1 MiB less a margin, because zip sizes vary by tool). The check warns past 90%.
+- Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a new extension takes effect only after the `skills/.gitignore` change that adds it has merged.
+- Paths use only letters, digits, `.`, `_` and `-`, are at most 512 characters, have no hidden parts (such as `.DS_Store`), no Windows-reserved names (such as `CON`) and no part ending in a period, and don't differ from another path only in case.
+- No file starts with `#!`.
+
+Anywhere in the skill folder, `evals/` included:
+
+- Only regular files: no executable bits, symbolic links or submodules. Remove an executable bit with `git update-index --chmod=-x <path>`.
+- No `scripts/` folders.
+- No AWS access key IDs or private keys.
+
+In published text files, invisible characters (zero-width characters, bidirectional controls, a byte order mark, Unicode tag characters) are errors, because they can hide instructions from a reviewer while the model still reads them. In published Markdown, raw HTML elements such as `<script>` or `<iframe>`, `javascript:` links and `http://` links are warnings.
+
 Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
 
 ```bash
