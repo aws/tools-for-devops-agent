@@ -1,0 +1,54 @@
+name: Validate skills on main
+
+# Runs the skill publishing check again after every push to `main`.
+#
+# The pull request check (validate-skills.yml) is exact only for the base commit
+# it ran on. Two pull requests that each passed on an older base can break the
+# rules together once both merge, for example by bumping one skill to the same
+# version. Skills on `main` are published as one set, so such a break stops every
+# skill from publishing; this run reports it as soon as it lands, against the
+# commit `main` pointed at before the push.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-skills-main
+  cancel-in-progress: false
+
+jobs:
+  validate-skills-main:
+    name: validate-skills-main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned dependencies
+        run: python3 -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
+
+      - name: Check every skill against the previous main
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # `before` is all zeros when the branch is new, and may be missing
+          # after a force push; fall back to the parent commit, and to a check
+          # without a base when there is none.
+          if [ -z "${BEFORE//0/}" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            BEFORE="$(git rev-parse --verify --quiet HEAD^ || true)"
+          fi
+          if [ -n "${BEFORE}" ]; then
+            python3 .github/scripts/validate_skills.py --base-ref "${BEFORE}" --head-ref HEAD
+          else
+            python3 .github/scripts/validate_skills.py --head-ref HEAD
+          fi
