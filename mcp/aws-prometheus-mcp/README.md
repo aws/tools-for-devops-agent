@@ -16,6 +16,41 @@ An MCP server that gives AWS DevOps Agent read-only access to Amazon Managed Pro
 
 The backing AMP workspace is **customer-owned and is not created by this stack** — you supply an existing workspace. The Lambda is granted read-only AMP permissions only (`aps:QueryMetrics`, `aps:GetSeries`, `aps:GetLabels`, `aps:GetMetricMetadata`, `aps:ListWorkspaces`, `aps:DescribeWorkspace`).
 
+### Tool safety classification
+
+Every tool is **read-only**; none mutate customer state.
+
+| Tool | Classification | AWS actions |
+|------|----------------|-------------|
+| `GetAvailableWorkspaces` | Read-only | `aps:ListWorkspaces`, `aps:DescribeWorkspace` |
+| `ListMetrics` | Read-only | AMP query API (label/metadata read) |
+| `ExecuteQuery` | Read-only | AMP query API (`aps:QueryMetrics`) |
+| `ExecuteRangeQuery` | Read-only | AMP query API (`aps:QueryMetrics`) |
+| `GetServerInfo` | Read-only | AMP metadata read |
+
+There are no write, remote-write, create, modify, or delete operations in this
+server's tool surface.
+
+## Security
+
+- **AuthN/AuthZ:** `/mcp` is protected by a Cognito machine-to-machine OAuth flow;
+  a Lambda authorizer verifies the JWT signature against the Cognito JWKS, the
+  issuer, expiry, `token_use`, and the required scope before the request reaches
+  the MCP Lambda. `/health` is unauthenticated and returns only static liveness.
+- **Least privilege:** the MCP Lambda role carries only the read-only AMP actions
+  listed above plus basic Lambda logging. No write actions, no `iam:*`, no
+  `organizations:*`.
+- **Data boundary:** the server reads time-series metric values (data-plane) from
+  the operator-supplied AMP workspace and returns them to the caller. It stores
+  nothing and writes nothing back to the workspace.
+- **Threat-model notes for review:** inputs are PromQL strings and workspace ids
+  from an authenticated caller; the main abuse vectors are expensive/high-
+  cardinality queries (mitigated by AMP's own query limits and the companion
+  skill's query-hygiene guidance) and token misuse (mitigated by signature +
+  scope verification). The generated `mcp-server-config.json` contains an OAuth
+  client secret and is git-ignored. This tool has not yet completed a Talos
+  AppSec review; that review is tracked as a prerequisite in the pull request.
+
 ## Architecture
 
 ```
@@ -31,7 +66,7 @@ Prometheus MCP Lambda  ──►  Amazon Managed Prometheus (AMP)  [customer-own
 - `/mcp` (POST) — protected by the Cognito JWT authorizer
 - `/health` (GET) — public health check
 
-Three CDK stacks are deployed: `PrometheusLambdaMCPCognitoStack` (user pool, M2M client, domain), `PrometheusLambdaMCPStack` (MCP Lambda + IAM role), and `PrometheusLambdaMCPAPIGatewayStack` (REST API, authorizer, config generation). See [`documentation/CALL_FLOW.md`](documentation/CALL_FLOW.md) and [`documentation/AUTHENTICATION_METHODS.md`](documentation/AUTHENTICATION_METHODS.md) for details.
+Three CDK stacks are deployed: `PrometheusLambdaMCPCognitoStack` (user pool, M2M client, domain), `PrometheusLambdaMCPStack` (MCP Lambda + IAM role), and `PrometheusLambdaMCPAPIGatewayStack` (REST API, authorizer, config generation). See [`docs/CALL_FLOW.md`](docs/CALL_FLOW.md) and [`docs/AUTHENTICATION_METHODS.md`](docs/AUTHENTICATION_METHODS.md) for details.
 
 ## Prerequisites
 
@@ -96,6 +131,32 @@ python3 -m pytest test_migration.py test_properties.py
 cdk destroy --app 'npx ts-node bin/lambda-app.ts' --all --region us-west-2
 rm -f mcp-server-config.json
 ```
+
+## Repository layout
+
+This server is an AWS CDK app, following the CDK-based MCP convention already
+used in this repo by `mcp/ecs-instance-log-mcp/` and
+`mcp/aws-eks-node-diagnostics-mcp/`:
+
+| Path | Contents |
+|------|----------|
+| `bin/`, `lib/`, `cdk.json` | CDK app entry and the three stacks |
+| `lambda-mcp-wrapper/lambda/` | MCP server Lambda source (`awslabs/prometheus_mcp_server`, handlers) + `requirements.txt` |
+| `lambda/` | JWT authorizer Lambda source + `requirements.txt` |
+| `docs/` | call flow and authentication-method docs, architecture image |
+| `tests` | `test_lambda_mcp_endpoint.py` (endpoint) and `lambda-mcp-wrapper/lambda/test_*.py` (unit/property/integration) |
+
+Python dependencies are installed at synth time via CDK pip bundling, so no
+third-party packages are committed. The other repo layout — a SAM
+`template.yaml` + `src/` (as in `rds-aidba` and `aws-vpc-dns-diagnostics-mcp`) —
+is an alternative convention; this contribution stays on CDK. Happy to convert
+to the SAM layout if maintainers prefer it standardized.
+
+## Companion skill
+
+An investigation skill that teaches the agent when and how to use these five
+tools (discover-before-query, RED/USE method, baselining, query hygiene) is at
+[`skills/prometheus-amp-investigation/`](../../skills/prometheus-amp-investigation).
 
 ## Attribution
 
