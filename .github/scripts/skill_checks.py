@@ -18,7 +18,7 @@ import io
 import json
 import re
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -28,6 +28,9 @@ RULES_DIR_DISPLAY = ".github/scripts/skill-rules"
 AGENT_TYPES_FILE = "agent-types.json"
 VOCABULARY_FILE = "vocabulary.json"
 PUBLISHED_FILES_FILE = "published-files.json"
+REMOVED_SKILLS_FILE = "removed-skills.json"
+FIRST_VERSION = (1, 0, 0)
+DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 NAME_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAX_NAME_LENGTH = 64
@@ -151,6 +154,8 @@ class Rules:
     published_excludes: tuple[str, ...]
     # Display agent type -> AgentType values, or None while no mapping is agreed.
     display_agent_types: dict[str, tuple[str, ...] | None] = field(default_factory=dict)
+    # Skills removed in an emergency (removed-skills.json); their folders may be deleted.
+    removed_skills: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -193,6 +198,7 @@ def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
             allowed_extensions=allowed_extensions_from_gitignore(gitignore_text),
             published_excludes=tuple(excludes),
             display_agent_types=mapping,
+            removed_skills=_removed_skills(_read_json(rules_dir / REMOVED_SKILLS_FILE)),
         )
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"malformed rule data in {rules_dir}: {exc}") from exc
@@ -214,6 +220,29 @@ def _display_mapping(raw, agent_types: frozenset[str], display_values: frozenset
             targets = tuple(targets)
         mapping[display] = targets
     return mapping
+
+
+def _removed_skills(document) -> frozenset[str]:
+    """The skill names in removed-skills.json. Every entry needs a skill, a reason, an approver and a date."""
+    entries = document.get("removed") if isinstance(document, dict) else None
+    if not isinstance(entries, list):
+        raise TypeError(f"{REMOVED_SKILLS_FILE}: removed must be a list")
+    names = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise TypeError(f"{REMOVED_SKILLS_FILE}: every entry must be an object")
+        skill, reason = entry.get("skill"), entry.get("reason")
+        approver, date = entry.get("approved_by"), entry.get("date")
+        if not (isinstance(skill, str) and NAME_PATTERN.fullmatch(skill)):
+            raise TypeError(f"{REMOVED_SKILLS_FILE}: skill must be a skill folder name, got {skill!r}")
+        if not (isinstance(reason, str) and reason.strip()):
+            raise TypeError(f"{REMOVED_SKILLS_FILE}: {skill}: reason must say why the skill was removed")
+        if not (isinstance(approver, str) and GITHUB_LOGIN_PATTERN.fullmatch(approver)):
+            raise TypeError(f"{REMOVED_SKILLS_FILE}: {skill}: approved_by must be the approving maintainer's GitHub username")
+        if not (isinstance(date, str) and DATE_PATTERN.fullmatch(date)):
+            raise TypeError(f"{REMOVED_SKILLS_FILE}: {skill}: date must be YYYY-MM-DD")
+        names.add(skill)
+    return frozenset(names)
 
 
 def runtime_agent_types(metadata: dict[str, str], rules: Rules) -> tuple[list[str], bool]:
@@ -829,6 +858,12 @@ def _format_version(version: tuple[int, int, int]) -> str:
     return ".".join(str(part) for part in version)
 
 
+def _next_versions(version: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
+    """The only versions allowed after `version`: the next patch, minor or major release."""
+    major, minor, patch = version
+    return ((major, minor, patch + 1), (major, minor + 1, 0), (major + 1, 0, 0))
+
+
 def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
     """The merge-base copy's version, reading a two-part version such as 2.6 as 2.6.0. None if unreadable.
 
@@ -858,17 +893,23 @@ def check_history(
     name: str, base: SkillTree | None, head: SkillTree | None, rules: Rules, retired: frozenset[str]
 ) -> list[Finding]:
     """The rules that compare a skill with its merge-base copy. `retired` holds paths of skills removed earlier."""
+    removed_list = f"{RULES_DIR_DISPLAY}/{REMOVED_SKILLS_FILE}"
     if base is not None and head is None:
+        if name in rules.removed_skills:
+            return []  # An emergency removal, approved through removed-skills.json.
         return [
             Finding(
                 "error",
                 f"the skill folder skills/{name} was removed. A skill's folder is its permanent identity, "
                 'so a skill is never removed: set metadata.deprecated: "true" instead. To rename a skill, '
-                "deprecate this folder and add the new one",
+                "deprecate this folder and add the new one. An emergency removal (malicious content, or a legal "
+                f"or security request) also adds the skill to {removed_list}",
             )
         ]
     if head is None:
         return []
+    if name in rules.removed_skills:
+        return [Finding("error", f"skills/{name} is listed in removed-skills.json, so its folder must be deleted")]
     if base is None:
         if name in retired:
             return [
@@ -878,6 +919,10 @@ def check_history(
                     "reused, because installed copies still point at it. Choose a new name",
                 )
             ]
+        info = check_skill(head, rules)[1]
+        if info is not None and info.version is not None and info.version != FIRST_VERSION:
+            message = f"a new skill starts at version 1.0.0, not {_format_version(info.version)}"
+            return [Finding("error", message, "SKILL.md", info.version_line)]
         return []
 
     head_info = check_skill(head, rules)[1]
@@ -902,6 +947,13 @@ def check_history(
         message = (
             f"published files changed, so metadata.version must go up from {_format_version(old)}. "
             f"A published version is immutable. Changes only to {', '.join(rules.published_excludes)} need no bump"
+        )
+        return [Finding("error", message, "SKILL.md", head_info.version_line)]
+    if new > old and new not in _next_versions(old):
+        steps = [_format_version(v) for v in _next_versions(old)]
+        message = (
+            f"metadata.version can only go up one step from {_format_version(old)}: to {steps[0]}, {steps[1]} "
+            f"or {steps[2]}, not {_format_version(new)}"
         )
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
     if new > old:
@@ -943,10 +995,11 @@ def _case_problem(case) -> str | None:
         return '"expect" must be "pass" or "fail"'
     if case["expect"] == "fail" and not isinstance(case.get("error"), str):
         return 'a "fail" case needs an "error" string'
-    if "base" in case and not isinstance(case["base"], dict):
-        return '"base" must be an object of files'
-    if "retired" in case and not isinstance(case["retired"], bool):
-        return '"retired" must be true or false'
+    if "base" in case and case["base"] is not None and not isinstance(case["base"], dict):
+        return '"base" must be an object of files, or null for a skill the pull request adds'
+    for flag in ("retired", "removed"):
+        if flag in case and not isinstance(case[flag], bool):
+            return f'"{flag}" must be true or false'
     files = case.get("files")
     if files is None and isinstance(case.get("base"), dict):
         pass  # The pull request removes the skill folder.
@@ -995,10 +1048,11 @@ def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
         name = case["name"]
         head = tree_from_files(name, case["files"]) if case.get("files") is not None else None
         findings = check_skill(head, rules)[0] if head is not None else []
-        if "base" in case or case.get("retired"):
+        if "base" in case or case.get("retired") or case.get("removed"):
             base = tree_from_files(name, case["base"]) if case.get("base") is not None else None
             retired = frozenset({name}) if case.get("retired") else frozenset()
-            findings += check_history(name, base, head, rules, retired)
+            case_rules = replace(rules, removed_skills=rules.removed_skills | {name}) if case.get("removed") else rules
+            findings += check_history(name, base, head, case_rules, retired)
         errors = [f.message for f in findings if f.severity == "error"]
         if case["expect"] == "pass" and errors:
             problems.append(f"case {case['id']}: expected pass, got: {'; '.join(errors)}")

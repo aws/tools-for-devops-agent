@@ -8,6 +8,7 @@ Git repository is needed. Run with:
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import unittest
 from pathlib import Path
@@ -529,10 +530,10 @@ class HistoryTests(unittest.TestCase):
         finding = next(f for f in self.history(base, head) if f.severity == "error")
         self.assertEqual((finding.path, finding.line), ("SKILL.md", 6))
 
-    def test_readme_is_published_so_it_needs_a_bump(self):
-        base = versioned("1.0.0", **{"README.md": b"# Demo\n"})
-        head = versioned("1.0.0", **{"README.md": b"# Demo, fixed\n"})
-        self.assertEqual(len(self.errors(base, head)), 1)
+    def test_readme_and_images_changes_need_no_bump(self):
+        base = versioned("1.0.0", **{"README.md": b"# Demo\n", "images/a.png": b"1"})
+        head = versioned("1.0.0", **{"README.md": b"# Demo, fixed\n", "images/a.png": b"2"})
+        self.assertEqual(self.history(base, head), [])
 
     def test_unpublished_changes_need_no_bump(self):
         base = versioned("1.0.0", **{"CHANGELOG.md": b"a\n", "evals/evals.json": b"{}\n"})
@@ -563,6 +564,34 @@ class HistoryTests(unittest.TestCase):
         (finding,) = self.history(versioned("latest"), versioned("1.0.0"))
         self.assertEqual(finding.severity, "warning")
         self.assertIn("were not checked", finding.message)
+
+    def test_version_goes_up_one_step_at_a_time(self):
+        changelog = {"CHANGELOG.md": b"new entry\n"}
+        for new in ("3.4.1", "3.5.0", "4.0.0"):
+            with self.subTest(new=new):
+                self.assertEqual(self.history(versioned("3.4.0"), versioned(new, **changelog)), [])
+        for new in ("3.4.2", "3.6.0", "79.5.0", "3.5.1", "4.0.1", "4.1.0"):
+            with self.subTest(new=new):
+                (message,) = self.errors(versioned("3.4.0"), versioned(new, **changelog))
+                self.assertIn("can only go up one step from 3.4.0: to 3.4.1, 3.5.0 or 4.0.0", message)
+
+    def test_new_skill_starts_at_1_0_0(self):
+        self.assertEqual(self.history(None, versioned("1.0.0")), [])
+        (message,) = self.errors(None, versioned("2.0.0"))
+        self.assertIn("a new skill starts at version 1.0.0, not 2.0.0", message)
+
+    def test_emergency_removal_needs_an_entry_in_removed_skills(self):
+        removed = dataclasses.replace(RULES, removed_skills=frozenset({"demo-skill"}))
+        self.assertEqual(sc.check_history("demo-skill", versioned(), None, removed, frozenset()), [])
+        (finding,) = sc.check_history("demo-skill", versioned(), None, RULES, frozenset())
+        self.assertIn("removed-skills.json", finding.message)
+
+    def test_a_removed_skill_must_not_stay_in_the_tree(self):
+        removed = dataclasses.replace(RULES, removed_skills=frozenset({"demo-skill"}))
+        for base in (versioned(), None):
+            with self.subTest(base=base is not None):
+                (finding,) = sc.check_history("demo-skill", base, versioned(), removed, frozenset())
+                self.assertIn("is listed in removed-skills.json", finding.message)
 
     def test_invalid_head_version_is_left_to_check_skill(self):
         self.assertEqual(self.history(versioned("1.0.0"), versioned("1.0")), [])
@@ -633,6 +662,22 @@ class LoadRulesValidationTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 with self.assertRaisesRegex(ValueError, fragment):
                     sc.load_rules(self.rules_dir(data, vocabulary), "!*.md\n")
+
+    def test_removed_skills_file_fails_closed(self):
+        import json
+
+        target = self.rules_dir(None, None)
+        for removed, fragment in (
+            ([{"skill": "Bad Name", "reason": "x", "approved_by": "octocat", "date": "2026-10-09"}], "skill"),
+            ([{"skill": "demo", "reason": "", "approved_by": "octocat", "date": "2026-10-09"}], "reason"),
+            ([{"skill": "demo", "reason": "x", "approved_by": "not a login", "date": "2026-10-09"}], "approved_by"),
+            ([{"skill": "demo", "reason": "x", "approved_by": "octocat", "date": "yesterday"}], "date"),
+            ("demo", "list"),
+        ):
+            with self.subTest(fragment=fragment):
+                (target / "removed-skills.json").write_text(json.dumps({"removed": removed}), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, fragment):
+                    sc.load_rules(target, "!*.md\n")
 
     def test_aliases_must_map_strings_to_strings(self):
         vocabulary = {"values": {"agent-types": [], "aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}

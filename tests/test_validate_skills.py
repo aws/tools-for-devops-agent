@@ -245,6 +245,20 @@ class HistoryIntegrationTests(RepoTestCase):
         self.assertIn("FAIL  skills/beta: the skill folder skills/beta was removed", out)
         self.assertIn("1 skill(s) checked", out)
 
+    def test_emergency_removal_passes_with_an_entry(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/beta/SKILL.md", skill_md("beta"))
+        base = self.commit("base")
+        self.git("rm", "-q", "-r", "skills/beta")
+        self.commit("remove beta")
+        rules_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, rules_dir)
+        shutil.copytree(validate_skills.RULES_DIR, rules_dir, dirs_exist_ok=True)
+        entry = {"skill": "beta", "reason": "Malicious instructions", "approved_by": "octocat", "date": "2026-10-09"}
+        (rules_dir / "removed-skills.json").write_text(json.dumps({"removed": [entry]}), encoding="utf-8")
+        code, out = self.run_check("--base-ref", base, rules_dir=rules_dir)
+        self.assertEqual(code, 0, out)
+
     def test_rename_fails_as_a_removal(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
         base = self.commit("base")
