@@ -26,7 +26,7 @@ RULES = sc.Rules(
     },
     aliases={"CloudWatch": "Amazon CloudWatch"},
     allowed_extensions=frozenset({"md", "json", "png", "html"}),
-    published_excludes=("evals/", ".skilleval.yaml", ".skilleval.yml", "CHANGELOG.md"),
+    published_excludes=("evals/", ".skilleval.yaml", ".skilleval.yml", "CHANGELOG.md", "README.md", "images/"),
     display_agent_types={"Chat tasks": ("CHAT",), "Evaluation": None},
 )
 
@@ -348,14 +348,21 @@ def with_files(*paths: str, mode: str = "100644", data: bytes = b"text\n") -> sc
 
 
 class PublishedSetTests(unittest.TestCase):
-    def test_excludes_evals_eval_config_and_changelog_but_keeps_readme(self):
+    def test_excludes_evals_eval_config_changelog_readme_and_images(self):
         skill = with_files(
-            "README.md", "CHANGELOG.md", ".skilleval.yaml", "evals/evals.json", "references/a.md", "docs/CHANGELOG.md"
+            "README.md", "CHANGELOG.md", ".skilleval.yaml", "evals/evals.json", "images/diagram.png",
+            "references/a.md", "docs/CHANGELOG.md", "references/README.md",
         )
         self.assertEqual(
             sorted(sc.published_files(skill, RULES)),
-            ["README.md", "SKILL.md", "docs/CHANGELOG.md", "references/a.md"],
+            ["SKILL.md", "docs/CHANGELOG.md", "references/README.md", "references/a.md"],
         )
+
+    def test_repository_published_set_leaves_out_readme_and_images(self):
+        gitignore = (ROOT / "skills" / ".gitignore").read_text(encoding="utf-8")
+        rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules", gitignore)
+        for name in ("README.md", "images/", "evals/", "CHANGELOG.md"):
+            self.assertIn(name, rules.published_excludes)
 
     def test_zip_is_deterministic(self):
         files = {"b.md": b"b", "a.md": b"a" * 100}

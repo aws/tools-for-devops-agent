@@ -64,7 +64,7 @@ Skills on `main` are published to customers as one set, and one skill that break
 
 The frontmatter must be plain YAML that every parser reads the same way. Anchors (`&`), aliases (`*`), tags (`!`), directives (`%`), flow collections (`[...]` or `{...}`) and duplicate keys are rejected.
 
-Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml`, `.skilleval.yml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). For the published files:
+Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml`, `.skilleval.yml`, `CHANGELOG.md`, `README.md` and `images/` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). For the published files:
 
 - At most 100 files, and their zip at most 983,040 bytes (1 MiB less a margin, because zip sizes vary by tool). The check warns past 90%.
 - Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a new extension takes effect only after the `skills/.gitignore` change that adds it has merged.
