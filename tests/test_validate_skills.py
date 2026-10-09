@@ -111,8 +111,8 @@ class ValidateSkillsTests(RepoTestCase):
         self.write("skills/alpha/SKILL.md", skill_md("alpha", extra=off_vocabulary))
         self.write("skills/beta/SKILL.md", skill_md("beta", extra=off_vocabulary))
         base = self.commit("base")
-        self.write("skills/beta/README.md", "# Beta\n")
-        self.commit("touch beta")
+        self.write("skills/beta/CHANGELOG.md", "# Changelog\n")
+        self.commit("touch beta without changing its published files")
         code, out = self.run_check("--base-ref", base)
         self.assertEqual(code, 0, out)
         self.assertIn("WARN  skills/beta/SKILL.md", out)
@@ -233,6 +233,120 @@ class PackageIntegrationTests(RepoTestCase):
         self.assertEqual(code, 0, out)
 
 
+class HistoryIntegrationTests(RepoTestCase):
+    def test_removed_skill_folder_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/beta/SKILL.md", skill_md("beta"))
+        base = self.commit("base")
+        self.git("rm", "-q", "-r", "skills/beta")
+        self.commit("remove beta")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  skills/beta: the skill folder skills/beta was removed", out)
+        self.assertIn("1 skill(s) checked", out)
+
+    def test_emergency_removal_passes_with_an_entry(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/beta/SKILL.md", skill_md("beta"))
+        base = self.commit("base")
+        self.git("rm", "-q", "-r", "skills/beta")
+        self.commit("remove beta")
+        rules_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, rules_dir)
+        shutil.copytree(validate_skills.RULES_DIR, rules_dir, dirs_exist_ok=True)
+        entry = {"skill": "beta", "reason": "Malicious instructions", "approved_by": "octocat", "date": "2026-10-09"}
+        (rules_dir / "removed-skills.json").write_text(json.dumps({"removed": [entry]}), encoding="utf-8")
+        code, out = self.run_check("--base-ref", base, rules_dir=rules_dir)
+        self.assertEqual(code, 0, out)
+
+    def test_rename_fails_as_a_removal(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        self.git("mv", "skills/alpha", "skills/alpha-two")
+        self.write("skills/alpha-two/SKILL.md", skill_md("alpha-two"))
+        self.commit("rename")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("skills/alpha was removed", out)
+
+    def test_reusing_a_retired_path_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("first")
+        self.git("rm", "-q", "-r", "skills/old")
+        base = self.commit("retire old")
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("bring old back")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("skills/old was used by a skill that was removed earlier", out)
+
+    def test_a_path_renamed_away_on_main_is_retired(self):
+        # A long body keeps every file similar enough that Git reports the
+        # move as a rename (R), not a delete (D) plus an add.
+        body = "".join(f"Step {i}: check the thing.\n" for i in range(200))
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/old/SKILL.md", skill_md("old") + body)
+        self.write("skills/old/references/guide.md", body)
+        self.commit("first")
+        self.git("mv", "skills/old", "skills/new")
+        self.write("skills/new/SKILL.md", skill_md("new") + body)
+        base = self.commit("rename old to new on main")
+        self.assertIn("R", self.git("log", "-1", "--name-status", "--format="))
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("bring old back")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("skills/old was used by a skill that was removed earlier", out)
+
+    def test_a_path_that_only_existed_on_a_merged_branch_is_not_retired(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.commit("base")
+        self.git("checkout", "-q", "-b", "feature")
+        self.write("skills/draft/SKILL.md", skill_md("draft"))
+        self.commit("add draft")
+        self.git("mv", "skills/draft", "skills/final")
+        self.write("skills/final/SKILL.md", skill_md("final"))
+        self.commit("rename before merge")
+        self.git("checkout", "-q", "main")
+        self.git("merge", "-q", "--no-ff", "-m", "merge feature", "feature")
+        base = self.git("rev-parse", "HEAD")
+        self.write("skills/draft/SKILL.md", skill_md("draft"))
+        self.commit("add a skill named draft")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 0, out)
+
+    def test_content_change_without_bump_fails_and_with_bump_passes(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/alpha/references/a.md", "one\n")
+        base = self.commit("base")
+        self.write("skills/alpha/references/a.md", "two\n")
+        self.commit("change without bump")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("metadata.version must go up from 1.0.0", out)
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1"))
+        self.write("skills/alpha/CHANGELOG.md", "## 1.0.1\n")
+        self.commit("bump")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 0, out)
+
+    def test_merge_base_not_base_tip_is_the_comparison(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        fork_point = self.commit("base")
+        self.git("checkout", "-q", "-b", "feature")
+        self.write("skills/beta/SKILL.md", skill_md("beta"))
+        self.commit("add beta")
+        self.git("checkout", "-q", "main")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="2.0.0"))
+        self.commit("main moves on")
+        self.git("checkout", "-q", "feature")
+        code, out = self.run_check("--base-ref", "main")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("went down", out)
+        self.assertTrue(fork_point)
+
+
 class SelfCheckTests(RepoTestCase):
     def rules_copy(self) -> Path:
         target = Path(tempfile.mkdtemp())
@@ -257,6 +371,18 @@ class SelfCheckTests(RepoTestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("case valid-minimal: expected an error", out)
         self.assertNotIn("skill(s) checked", out)
+
+    def test_changed_hash_function_stops_the_check(self):
+        rules_dir = self.rules_copy()
+        path = rules_dir / validate_skills.CONFORMANCE_FILE
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["content_hash"]["sha256"] = "0" * 64
+        path.write_text(json.dumps(document), encoding="utf-8")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.commit("base")
+        code, out = self.run_check("--self-check-only", rules_dir=rules_dir)
+        self.assertEqual(code, 2, out)
+        self.assertIn("content hash of the golden fixture", out)
 
     def test_malformed_rule_data_cannot_run(self):
         rules_dir = self.rules_copy()

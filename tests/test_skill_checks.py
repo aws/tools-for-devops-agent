@@ -8,6 +8,7 @@ Git repository is needed. Run with:
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import unittest
 from pathlib import Path
@@ -479,6 +480,123 @@ class ContentSafetyTests(CheckSkillTestCase):
         self.assertEqual(self.warnings(with_files("references/a.md", data=data)), [])
 
 
+
+def versioned(version: str = "1.0.0", **files: bytes) -> sc.SkillTree:
+    fm = VALID_FRONTMATTER.replace('version: "1.0.0"', f'version: "{version}"')
+    return tree(skill_md(fm), **files)
+
+
+class ContentHashTests(unittest.TestCase):
+    def test_hash_is_sha256_over_sorted_path_and_file_digest_records(self):
+        import hashlib
+
+        files = {"b.md": b"bee\n", "a/c.md": b"sea\n"}
+        expected = hashlib.sha256(
+            b"a/c.md\0" + hashlib.sha256(b"sea\n").hexdigest().encode() + b"\n"
+            + b"b.md\0" + hashlib.sha256(b"bee\n").hexdigest().encode() + b"\n"
+        ).hexdigest()
+        self.assertEqual(sc.content_hash(files), expected)
+
+    def test_any_byte_or_path_change_changes_the_hash(self):
+        base = sc.content_hash({"a.md": b"x"})
+        self.assertNotEqual(base, sc.content_hash({"a.md": b"x "}))
+        self.assertNotEqual(base, sc.content_hash({"b.md": b"x"}))
+
+
+class HistoryTests(unittest.TestCase):
+    def history(self, base, head, retired=frozenset()) -> list[sc.Finding]:
+        return sc.check_history("demo-skill", base, head, RULES, retired)
+
+    def errors(self, base, head, retired=frozenset()) -> list[str]:
+        return [f.message for f in self.history(base, head, retired) if f.severity == "error"]
+
+    def test_unchanged_skill_passes(self):
+        self.assertEqual(self.history(versioned(), versioned()), [])
+
+    def test_removed_folder_is_an_error(self):
+        (message,) = self.errors(versioned(), None)
+        self.assertIn('set metadata.deprecated: "true"', message)
+
+    def test_new_skill_passes_unless_its_path_was_retired(self):
+        self.assertEqual(self.history(None, versioned()), [])
+        (message,) = self.errors(None, versioned(), retired=frozenset({"demo-skill"}))
+        self.assertIn("was used by a skill that was removed", message)
+
+    def test_content_change_needs_a_higher_version(self):
+        base = versioned("1.0.0", **{"references/a.md": b"one\n"})
+        head = versioned("1.0.0", **{"references/a.md": b"two\n"})
+        (message,) = self.errors(base, head)
+        self.assertIn("metadata.version must go up from 1.0.0", message)
+        finding = next(f for f in self.history(base, head) if f.severity == "error")
+        self.assertEqual((finding.path, finding.line), ("SKILL.md", 6))
+
+    def test_readme_and_images_changes_need_no_bump(self):
+        base = versioned("1.0.0", **{"README.md": b"# Demo\n", "images/a.png": b"1"})
+        head = versioned("1.0.0", **{"README.md": b"# Demo, fixed\n", "images/a.png": b"2"})
+        self.assertEqual(self.history(base, head), [])
+
+    def test_unpublished_changes_need_no_bump(self):
+        base = versioned("1.0.0", **{"CHANGELOG.md": b"a\n", "evals/evals.json": b"{}\n"})
+        head = versioned("1.0.0", **{"CHANGELOG.md": b"b\n", "evals/evals.json": b"[]\n", ".skilleval.yaml": b"x\n"})
+        self.assertEqual(self.history(base, head), [])
+
+    def test_version_must_never_go_down(self):
+        (message,) = self.errors(versioned("1.2.0"), versioned("1.1.9"))
+        self.assertIn("went down from 1.2.0 to 1.1.9", message)
+
+    def test_bump_with_changelog_passes(self):
+        base = versioned("1.0.0", **{"CHANGELOG.md": b"## 1.0.0\n"})
+        head = versioned("1.1.0", **{"CHANGELOG.md": b"## 1.1.0\n## 1.0.0\n"})
+        self.assertEqual(self.history(base, head), [])
+
+    def test_bump_without_changelog_change_warns(self):
+        base = versioned("1.0.0", **{"CHANGELOG.md": b"## 1.0.0\n"})
+        head = versioned("1.0.1", **{"CHANGELOG.md": b"## 1.0.0\n"})
+        (finding,) = self.history(base, head)
+        self.assertEqual(finding.severity, "warning")
+        self.assertIn("CHANGELOG.md", finding.message)
+
+    def test_two_part_base_version_is_compared_as_patch_zero(self):
+        self.assertEqual(self.errors(versioned("2.6"), versioned("2.6.1", **{"CHANGELOG.md": b"x\n"})), [])
+        self.assertEqual(len(self.errors(versioned("2.6"), versioned("2.6.0"))), 1)
+
+    def test_unreadable_base_version_skips_the_version_rules_with_a_warning(self):
+        (finding,) = self.history(versioned("latest"), versioned("1.0.0"))
+        self.assertEqual(finding.severity, "warning")
+        self.assertIn("were not checked", finding.message)
+
+    def test_version_goes_up_one_step_at_a_time(self):
+        changelog = {"CHANGELOG.md": b"new entry\n"}
+        for new in ("3.4.1", "3.5.0", "4.0.0"):
+            with self.subTest(new=new):
+                self.assertEqual(self.history(versioned("3.4.0"), versioned(new, **changelog)), [])
+        for new in ("3.4.2", "3.6.0", "79.5.0", "3.5.1", "4.0.1", "4.1.0"):
+            with self.subTest(new=new):
+                (message,) = self.errors(versioned("3.4.0"), versioned(new, **changelog))
+                self.assertIn("can only go up one step from 3.4.0: to 3.4.1, 3.5.0 or 4.0.0", message)
+
+    def test_new_skill_starts_at_1_0_0(self):
+        self.assertEqual(self.history(None, versioned("1.0.0")), [])
+        (message,) = self.errors(None, versioned("2.0.0"))
+        self.assertIn("a new skill starts at version 1.0.0, not 2.0.0", message)
+
+    def test_emergency_removal_needs_an_entry_in_removed_skills(self):
+        removed = dataclasses.replace(RULES, removed_skills=frozenset({"demo-skill"}))
+        self.assertEqual(sc.check_history("demo-skill", versioned(), None, removed, frozenset()), [])
+        (finding,) = sc.check_history("demo-skill", versioned(), None, RULES, frozenset())
+        self.assertIn("removed-skills.json", finding.message)
+
+    def test_a_removed_skill_must_not_stay_in_the_tree(self):
+        removed = dataclasses.replace(RULES, removed_skills=frozenset({"demo-skill"}))
+        for base in (versioned(), None):
+            with self.subTest(base=base is not None):
+                (finding,) = sc.check_history("demo-skill", base, versioned(), removed, frozenset())
+                self.assertIn("is listed in removed-skills.json", finding.message)
+
+    def test_invalid_head_version_is_left_to_check_skill(self):
+        self.assertEqual(self.history(versioned("1.0.0"), versioned("1.0")), [])
+
+
 class ParseVersionTests(unittest.TestCase):
     def test_strict_and_lenient(self):
         self.assertEqual(sc.parse_version("1.2.3"), (1, 2, 3))
@@ -544,6 +662,22 @@ class LoadRulesValidationTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 with self.assertRaisesRegex(ValueError, fragment):
                     sc.load_rules(self.rules_dir(data, vocabulary), "!*.md\n")
+
+    def test_removed_skills_file_fails_closed(self):
+        import json
+
+        target = self.rules_dir(None, None)
+        for removed, fragment in (
+            ([{"skill": "Bad Name", "reason": "x", "approved_by": "octocat", "date": "2026-10-09"}], "skill"),
+            ([{"skill": "demo", "reason": "", "approved_by": "octocat", "date": "2026-10-09"}], "reason"),
+            ([{"skill": "demo", "reason": "x", "approved_by": "not a login", "date": "2026-10-09"}], "approved_by"),
+            ([{"skill": "demo", "reason": "x", "approved_by": "octocat", "date": "yesterday"}], "date"),
+            ("demo", "list"),
+        ):
+            with self.subTest(fragment=fragment):
+                (target / "removed-skills.json").write_text(json.dumps({"removed": removed}), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, fragment):
+                    sc.load_rules(target, "!*.md\n")
 
     def test_aliases_must_map_strings_to_strings(self):
         vocabulary = {"values": {"agent-types": [], "aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}
