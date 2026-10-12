@@ -1,0 +1,116 @@
+{
+  "version": "v8",
+  "iteration": 2,
+  "eval_id": "backup-coverage-review-explicit",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-backup-coverage-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The report contains most required sections: Scope table (with inventory strategy disclosed as direct-enumeration due to Config not recording), Coverage Rating (Low), Executive Summary, Coverage Matrix, Findings & Recommendations, Check Coverage Matrix, Next Steps, and References \u2014 satisfying most structural requirements.\n\nHowever, the expected output explicitly requires internal consistency: \"Resource counts are internally consistent: the coverage states in the Coverage Matrix sum to the total eligible resource count reported in Scope.\" The Scope table states \"Eligible resources found: 48 across 7 resource types,\" but the Coverage Matrix/by-type table sums to only 40 (48 - 8 discrepancy, likely from excluding S3's 25 buckets or other exclusions not reconciled against the stated 48). The report itself flags internal confusion \u2014 it initially states \"~15%\" coverage in the Coverage Rating section, then explicitly retracts it in a later section calling it \"an error in early drafting,\" admitting inconsistency in its own arithmetic. This self-correction demonstrates that the report was not internally consistent on the first pass, and even after correction, the Scope's \"48 eligible resources\" figure is never reconciled with the Coverage Matrix total of 40 \u2014 a discrepancy of 8 resources that is never explained (S3's 25 buckets are excluded from the denominator but the 48 count in Scope still includes some other total that doesn't match 40 or 40+25=65 either).\n\nAlso, the Check Coverage Matrix must contain \"all 23 checks\" \u2014 counting the IDs listed (1.1, 1.2, 2.1-2.4, 3.1-3.7, 4.1-4.5, 5.1-5.5) totals 2+4+7+5+5 = 23, which does match the expected count. That part passes.\n\nBut the critical failure is the internal inconsistency between the Scope's \"48 eligible resources\" and the Coverage Matrix total of \"40\" \u2014 this directly violates the explicit consistency requirement, and the report's own visible self-correction (retracting the 15% figure) further underscores that the numbers were not consistent throughout the document.",
+      "evidence": "\"Eligible resources found | `48` across `7` resource types\" (Scope table) vs. \"**Total** | **40** | **1** | **39** | **~3%**\" (by-type table) \u2014 a 48 vs 40 mismatch never reconciled. Additionally: \"This was an error in early drafting... The single correct, authoritative figure is the by-type table above: **1 of 40 eligible resources (~3%)** ... the '~15%' figure is retracted,\" showing the report shipped with an internal arithmetic contradiction that required a visible self-correction.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response is the full report itself, not a summary of one or an offer to produce one.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response contains full sections: 'Coverage Matrix', 'Findings & Recommendations' with 17 detailed rows, 'Check Coverage Matrix', 'Next Steps' with concrete actions \u2014 this is the actual deliverable.",
+          "reasoning": "The output is a complete, detailed report with all sections filled in (scope, coverage matrix, findings, recommendations, next steps), not a summary or an offer to produce one.",
+          "confidence": "high"
+        },
+        {
+          "text": "The Coverage Rating is stated as exactly one of High, Medium, Low or Indeterminate.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'## Coverage Rating\\n\\n**Low** \u2014 driven by CRITICAL findings...'",
+          "reasoning": "The Coverage Rating section states exactly 'Low', one of the four allowed values.",
+          "confidence": "high"
+        },
+        {
+          "text": "The Scope table discloses the inventory strategy used \u2014 either the AWS Config fast path or direct per-service enumeration.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Inventory strategy | `direct-enumeration` (AWS Config recorder `default` exists but `recording: false` \u2014 fast path unavailable)'",
+          "reasoning": "The Scope table explicitly discloses the inventory strategy and specifies it used direct enumeration rather than the Config fast path, with the reason given.",
+          "confidence": "high"
+        },
+        {
+          "text": "The resource counts are internally consistent: the per-state counts in the Coverage Matrix sum to the total eligible resource count given in the Scope table.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Scope table: 'Eligible resources found | `48` across `7` resource types'. By-type table 'Total | 40 | 1 | 39 | ~3%'. 48 \u2260 40, and the report never reconciles this specific discrepancy (it reconciles the ~15% vs ~3% percentage but not the 48 vs 40 count).",
+          "reasoning": "The Scope table states 'Eligible resources found: 48 across 7 resource types', but the by-type table totals only 40 (with EFS, EKS, EBS, EC2, Aurora, DynamoDB, CloudFormation = 2+2+1+1+1+1+32=40), and the report itself acknowledges S3 (25 buckets) is excluded from the denominator plus other exclusions. The per-state counts in the Coverage Matrix (1 protected + 39 unprotected = 40) do not sum to the Scope table's stated 48, revealing an inconsistency between the initial Scope table count and the final authoritative by-type table.",
+          "confidence": "medium"
+        },
+        {
+          "text": "A resource type whose enumeration call returned AccessDenied or was cancelled by the agent's guardrail is reported with that status and excluded from the coverage denominator, never described as having been queried and returned zero resources. Only calls that actually succeeded are reported as zero.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Excluded from the denominator: Storage Gateway and DSQL (`ToolingFailure` \u2014 guardrail cancellation), Timestream (`AccessDenied` \u2014 real IAM gap), Redshift Serverless and VirtualMachine (queried, zero resources, not excluded \u2014 see zero-resource note), RDS, Neptune, DocumentDB, FSx, Redshift (queried, zero resources in this Region)...' and the Tooling Availability Notice table explicitly separates ToolingFailure/AccessDenied from a successful empty call ('5.1 ... Evaluated normally \u2014 ... returned successfully (empty), not cancelled in this run').",
+          "reasoning": "The report correctly distinguishes AccessDenied/ToolingFailure (guardrail-cancelled) resource types from those that were genuinely queried and returned zero, explicitly excluding the former from the denominator and labeling the latter as zero-result queries.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every resource in the Coverage Matrix is assigned exactly one coverage state, with no resource appearing under two states.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "First table row: '\u2705 Protected: 32 resources (CloudFormation: 32 \u2014 opted out...)' followed immediately by: 'Correction to the row above: CloudFormation is opted **out**... so all 32 stacks are `Unprotected`, not `Protected`.' This shows the same 32 resources assigned to two different states within the Coverage Matrix.",
+          "reasoning": "The initial Coverage Matrix table incorrectly lists a single row summarizing '\u2705 Protected: 32 resources (CloudFormation: 32...)' alongside the correction that these are actually Unprotected, meaning the same 32 CloudFormation resources appear under two conflicting states (Protected then corrected to Unprotected) within the Coverage Matrix section, even though the report self-corrects it. Additionally, the dangling EC2 instance ARN is listed in the Coverage Matrix with state '\u274c n/a \u2014 deleted resource, not in denominator' which is a valid single state, but the CloudFormation double-listing is the clear violation.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The protected count and the coverage percentage are identical everywhere they appear \u2014 Coverage Rating, Executive Summary, and the by-resource-type table.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Coverage Rating: 'Coverage: **~15%** (`6`/`40` resources protected with a current recovery point...)' vs. by-type table: 'Total | 40 | 1 | 39 | ~3%' and reconciliation note: 'the \"~15%\" figure is retracted... Use ~3%'.",
+          "reasoning": "The Coverage Rating section initially states '~15%' (6/40) before being retracted later in the by-type table section to '~3%' (1/40). Although the report explicitly acknowledges and retracts the ~15% figure, the assertion requires the percentage to be identical everywhere it appears, and the Coverage Rating section as literally written contains '~15%', not '~3%', even though a later correction note says to use ~3%. Also the Coverage Rating text says '6 of 8 non-bulk eligible resources are unprotected' and '~15% (`6`/`40`...)' which is internally inconsistent with the finalized 1/40 protected count elsewhere. The self-correction does not make the figure 'identical everywhere' as literally written on the page.",
+          "confidence": "high"
+        },
+        {
+          "text": "The report contains all seven required section headings",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## Scope\\n\\n| Field | Value |\\n|---|---|\\n| Account | `388414481111` (partition `aws`) |\\n| Regions reviewed | `us-east-1` (1 of many enabled \u2014 **user-directed scope limit**, other enabled Regions not swep\u2026'"
+        },
+        {
+          "text": "The Check Coverage Matrix contains at least the 23 numbered check rows",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Found 40 match(es), required at least 23, first: '| 3.6 |'"
+        },
+        {
+          "text": "No write, backup-start, or restore-start API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 1 match(es), first: 'StartRestoreJob'"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 10,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m21s",
+    "cost": "$2.67",
+    "context_window": {
+      "utilization": "15.6%",
+      "compaction_count": 0
+    }
+  }
+}

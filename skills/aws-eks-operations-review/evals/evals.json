@@ -1,0 +1,307 @@
+{
+  "skill_name": "aws-eks-operations-review",
+  "evals": [
+    {
+      "id": "eks-review-smoke-test",
+      "should_trigger": false,
+      "prompt": "List the cluster names, regions, and accounts in the context below. No analysis needed.\n\n```json\n{\n  \"clusters\": [\n    { \"name\": \"demo-cluster\", \"region\": \"us-east-1\", \"account\": \"$accountid\", \"environment\": \"non-prod\", \"kubeconfig_context\": \"demo-cluster\" }\n  ]\n}\n```",
+      "expected_output": "Lists every cluster in the supplied context with its name, region, and account exactly as defined.",
+      "assertions": [
+        "The response lists the cluster demo-cluster together with its region",
+        "The response reports the account value exactly as supplied, without substituting an invented numeric account ID",
+        {
+          "text": "The region is reported",
+          "evaluator": "regex",
+          "pattern": "us-east-1"
+        }
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-review-no-runtime-files",
+      "prompt": "According to the skill, may AWS DevOps Agent create an inventory JSON, review-state sidecar, Markdown report file, or disk checkpoint during a review? How is the report delivered?",
+      "expected_output": "States that no runtime files or disk checkpoints are created. Review state is a bounded transient in-conversation ledger, and the complete report is delivered after QA passes.",
+      "assertions": [
+        "The response states the agent does not create runtime files such as inventory JSON, sidecars, report files, or disk checkpoints",
+        "The response states review state is held as a bounded transient in-conversation ledger",
+        "The response states the completed report is delivered once QA has passed",
+        {
+          "text": "No review-state sidecar filename is offered",
+          "evaluator": "regex",
+          "pattern": "review-state-",
+          "match": "absent"
+        }
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-review-two-phase-model",
+      "prompt": "According to the skill, how is discovery separated from grading, and which part runs only once? No cluster access required.",
+      "expected_output": "States that discovery runs once to collect the evidence and inventory, and grading then runs per unit against that evidence.",
+      "assertions": [
+        "The response states discovery runs once to collect evidence before grading begins",
+        "The response states grading proceeds per pillar or per unit against the already-collected evidence",
+        "The response states one unit's definition is loaded at a time rather than all of them up front"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-review-nine-pillars",
+      "prompt": "List the pillars the skill grades during a full EKS operations review. No cluster access required.",
+      "expected_output": "Mentions Operations, Resilience, Security, Scalability, Performance, Observability, Networking, Cost, and Control Plane Health, plus the AWS-API & Cluster Insights component.",
+      "assertions": [
+        "All nine pillars are named: Operations, Resilience, Security, Scalability, Performance, Observability, Networking, Cost, and Control Plane",
+        "The AWS API and Cluster Insights component is named alongside the nine pillars",
+        "The response does not present any unit beyond the nine pillars and the AWS API component as a core pillar"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-review-read-only-contract",
+      "prompt": "Is this skill allowed to modify the cluster? Name the kubectl verbs it is restricted to and what it does instead of remediating. No cluster access required.",
+      "expected_output": "States the skill is strictly read-only, uses only read verbs such as get, describe, and logs, runs no mutating verb, and proposes remediations for human approval instead of applying them.",
+      "assertions": [
+        "The response states the skill is strictly read-only and performs no mutation",
+        "The response names permitted read verbs such as get, describe, or logs",
+        "The response states remediations are proposals requiring human approval rather than changes the agent applies",
+        "The response states no mutating kubectl verb is ever used"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-review-cluster-confirmation-gate",
+      "prompt": "Before running discovery, what must the skill confirm first? No cluster access required.",
+      "expected_output": "States that the first step requires confirming the target cluster identity (name, region, account, kubeconfig context, environment) before running discovery or grading.",
+      "assertions": [
+        "The response states the target cluster identity must be confirmed before discovery or grading starts",
+        "The confirmation covers at least the region, account, context, or environment in addition to the cluster name",
+        "The response states an ambiguous target stops the review for selection rather than being guessed",
+        "The response states production requires timing approval before the broad read sweep"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-review-conditional-checklists",
+      "prompt": "Which cross-cutting checklists does the skill auto-load, and what node type triggers each? No cluster access required.",
+      "expected_output": "States Windows checks load on Windows nodes, Hybrid checks load on hybrid nodes, and AI/ML checks load on GPU or Neuron accelerator nodes.",
+      "assertions": [
+        "Windows checks are described as loading only when Windows nodes are present",
+        "Hybrid checks are described as loading only when hybrid nodes are present",
+        "AI/ML checks are described as loading only when GPU or Neuron nodes are present",
+        "The response states a gate that does not fire records an explicit false-gate line instead of loading the checklist"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-pending-pods-taint",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nTwo pods are Pending. The FailedScheduling event reads: \"0/4 nodes are available: 4 node(s) had untolerated taint {workload-type: batch}\".\n\nPer the skill's grading guards: what must be ruled out before any cause is asserted, what conclusions are forbidden here, and what must the finding quote as evidence?",
+      "expected_output": "Applies the pending-pods guard: distinguishes taints from capacity, selectors, affinity/spread, EBS AZ, scheduling gates, and autoscaler failure before asserting a cause, forbids concluding the scheduler is broken or that nodes must be added, and requires the finding to quote the observed scheduling event.",
+      "assertions": [
+        "The response requires alternatives to be ruled out before a cause is asserted, naming several of: capacity or fragmentation, node selectors, affinity or topology spread, EBS availability zone, scheduling gates, autoscaler failure",
+        "The response states that concluding the scheduler is broken is a forbidden conclusion for this signal",
+        "The response states that recommending more nodes or added capacity is a forbidden conclusion for this signal",
+        "The response requires the finding to quote the observed scheduling event as its evidence",
+        "The response refers to consulting the pending-pods decision tree before asserting the cause"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-oomkilled-not-leak",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nOne container shows last_terminated_reason OOMKilled with restart_count 1, a memory limit of 256Mi, and a 7-day memory trend flat at ~250Mi with a single spike during a 02:00 UTC cache warm-up.\n\nPer the skill's grading guards: may this be recorded as a memory leak, and what does the guard require before any leak conclusion?",
+      "expected_output": "Applies the OOMKilled guard: a leak requires sustained growth over time, which this evidence does not show. Distinguishes a low limit, a legitimate burst, sidecar usage, node pressure, and runtime/GC behaviour, and points at the OOM decision tree.",
+      "assertions": [
+        "The response states a memory leak may not be recorded here",
+        "The response states a leak conclusion requires sustained memory growth over time as evidence",
+        "The response distinguishes at least two alternative explanations before settling on a cause",
+        "The response refers to consulting the OOMKilled decision tree before asserting the cause"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-logging-disabled-na-not-pass",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nControl-plane logging is disabled on the cluster, so the audit-log queries return no records.\n\nPer the skill's grading guards: how are the audit-log-derived Control Plane checks graded, what must be verified before an empty result means anything, is a finding raised, and how many Control Plane rows does the scorecard still contain?",
+      "expected_output": "Grades those checks N/A with the reason 'control-plane logging disabled', never PASS, raises the visibility FAIL recommending enablement, still attempts public control-plane metrics, and requires source, stream, delay, filters, and window to be verified before an empty result is treated as meaningful.",
+      "assertions": [
+        "The response grades the audit-log-derived checks N/A rather than PASS",
+        "The stated reason for N/A is that control-plane logging is disabled",
+        "The response states missing telemetry is a visibility gap and never evidence of health",
+        "The response records a visibility FAIL for the disabled control-plane logging",
+        "The response states public control-plane metrics are still attempted and that all 20 Control Plane rows still appear in the scorecard, the audit-derived ones marked N/A"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-429-workload-low-informational",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nA 3-minute burst of HTTP 429 responses was observed, all in the API Priority and Fairness priority level workload-low, during a deployment rollout.\n\nPer the skill's grading guards: what must be verified before calling this API saturation, and does this justify scaling the control plane?",
+      "expected_output": "Applies the 429 guard: verifies duration beyond five minutes, priority level, reason, and caller; treats low-tier rejection during a rollout as APF working as designed; fixes a noisy caller before considering control-plane scaling.",
+      "assertions": [
+        "The response requires the duration, priority level, reason, and calling identity to be verified before saturation is claimed",
+        "The response states rejection in a low-priority level can be API Priority and Fairness working as designed",
+        "The response declines to recommend scaling or upgrading the control plane on this evidence",
+        "The response states a noisy caller is addressed before control-plane capacity is considered"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-missing-pdb-severity",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nOne workload has no PodDisruptionBudget: a Deployment with replicas 1 in a namespace labelled environment=dev.\n\nPer the skill's grading guards: what severity does the guard assign, and what evidence drives that decision?",
+      "expected_output": "Applies the PDB guard: severity comes from replicas, environment, workload type, and customer impact \u2014 high for production multi-replica stateful or customer-facing workloads, lower for stateless, dev, or batch. This one is low.",
+      "assertions": [
+        "The response assigns a low severity to this finding",
+        "The response bases severity on the replica count, the environment, the workload type, and customer impact rather than on a fixed baseline",
+        "The response states a missing PDB is high severity only for production multi-replica stateful or customer-facing workloads",
+        "The response explains why a PDB adds little for a single-replica workload"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-403-authz-not-authn",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nAudit logs show 45 HTTP 403 responses over 24 hours from system:serviceaccount:legacy/old-reporter.\n\nPer the skill's grading guards: is this an authentication failure, what evidence would be required for one, and what should be inspected instead?",
+      "expected_output": "Applies the 403 guard: 403 is authorization, not authentication; an authentication failure would require 401 evidence. Inspects RBAC, access policy, namespace, and intentional policy denies, and does not claim compromise.",
+      "assertions": [
+        "The response states 403 indicates an authorization failure, not an authentication failure",
+        "The response states evidence of HTTP 401 would be required to claim an authentication failure",
+        "The response directs inspection at RBAC bindings, access policy, namespace, or an intentional deny",
+        "The response confines its conclusion to a permissions or configuration problem, without escalating to a security breach"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-healthy-no-invented-findings",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nDiscovery shows 0 NotReady nodes, 0 crashlooping pods, 0 ImagePullBackOff pods, 9 NetworkPolicies, 8 PodDisruptionBudgets, a single autoscaler, and no VPA or GuardDuty.\n\nPer the skill's grading guards: may any additional finding be recorded from this evidence, how are the absent VPA and GuardDuty treated, and where do non-actionable signals and facts that map to no canonical row appear in the report?",
+      "expected_output": "Records no invented findings. An absent tool is graded against its own canonical row \u2014 a FAIL where the row requires the feature present, N/A only where the row says so \u2014 and facts mapping to no canonical row are kept as Observations.",
+      "assertions": [
+        "The response states an absent tool is graded against its canonical row rather than becoming a newly invented finding",
+        "The response states a fact that maps to no canonical row is recorded as an Observation rather than as a verdict",
+        "The response distinguishes an absent feature, which its row may grade as a failure, from evidence that could not be obtained, which is N/A"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-false-gates-no-load",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nThe request is a normal full review, not an upgrade or migration. Discovery reports support_type STANDARD, windows_nodes 0, hybrid_nodes 0, gpu_nodes 0, and neuron_nodes 0.\n\nPer the skill's grading guards: which of the Upgrade, Windows, Hybrid, and AI/ML conditional definitions may be loaded, and what is recorded instead?",
+      "expected_output": "None are loaded: support is standard and every node-type count is zero. An explicit false-gate line is recorded for each so coverage stays reconcilable.",
+      "assertions": [
+        "The response states none of the Upgrade, Windows, Hybrid, or AI/ML definitions may be loaded",
+        "The reason given cites standard support and the zero Windows, hybrid, GPU, and Neuron node counts",
+        "The response states an explicit false-gate line is recorded for each gate that does not fire",
+        "The response states the conditional definitions stay unloaded when their gate is false"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-tool-unavailable-stop",
+      "prompt": "According to the skill, what must you do if the first use_kubectl call returns an error indicating the tool is not assigned or not available? No cluster access required.",
+      "expected_output": "States the review must stop immediately and report that kubectl access is not assigned to the agent, without proceeding with discovery or fabricating results.",
+      "assertions": [
+        "The response states the review must stop immediately",
+        "The response states the user is told the tool access problem that stopped the review",
+        "The response rules out continuing discovery or producing results without evidence",
+        "The response states what was completed so far is reported along with the retry requirement"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-aws-api-denied-na",
+      "prompt": "According to the skill, if AWS-API access (describe/list operations) is denied, how are the AX-series checks graded and what extra information is included? No cluster access required.",
+      "expected_output": "States the AX rows are graded N/A rather than guessed, lists the read-only IAM actions required, and flags them for follow-up.",
+      "assertions": [
+        "The AX-series checks are graded N/A rather than guessed as PASS or FAIL",
+        "The response names the read-only IAM actions or the permission set needed to complete those checks",
+        "The response states the items are flagged for follow-up",
+        "The response states the AX rows are still reported rather than dropped from the review"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-transient-ledger-final-response",
+      "prompt": "According to the skill, what happens after each pillar is graded, and how is the completed report delivered? No cluster access required.",
+      "expected_output": "States that every scorecard row, totals, and FAIL inputs are committed to the bounded transient ledger before the next pillar is loaded. After QA passes, the complete report is delivered with every mandatory section present.",
+      "assertions": [
+        "The response states grading results are committed to a ledger held in the conversation rather than to storage",
+        "The response states the ledger is updated before the next pillar or unit is loaded",
+        "The response states QA must pass before the report is rendered",
+        "The response states the delivered report contains every mandatory section rather than being split into parts the reader must reassemble",
+        {
+          "text": "No claim of writing review state to disk",
+          "evaluator": "regex",
+          "pattern": "saved to disk|written to disk",
+          "match": "absent"
+        }
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-full-vs-targeted-routing",
+      "prompt": "According to the skill, compare routing for (a) a full EKS operations review and (b) a Security-only review when all conditional gates are false. Which grading units are selected? No cluster access required.",
+      "expected_output": "A full review selects all nine pillars plus AWS API/Insights. A Security-only review selects Security and only the AWS-side evidence its checks require, loading no unrelated pillars and no false-gate conditionals.",
+      "assertions": [
+        "For a full review the response selects all nine pillars together with AWS API and Cluster Insights",
+        "For the Security-only review the response grades Security plus only the AWS-side evidence its own checks require",
+        "The response states the targeted review loads no unrelated pillars and no false-gate conditional checklists"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-control-plane-20-rows",
+      "prompt": "List the exact Control Plane scorecard namespace and explain how it differs from CP1-CP25 query IDs. How many scorecard rows must a full review render? No cluster access required.",
+      "expected_output": "States the scorecard contains exactly 20 rows \u2014 CP1-CP11, CP-M1-CP-M6, and CPM1-CPM3 \u2014 and that CP1-CP25 in query files are query identifiers only, so CP12-CP25 never become scorecard rows.",
+      "assertions": [
+        "The response states the Control Plane scorecard has exactly 20 rows",
+        "The membership is given as CP1 through CP11, CP-M1 through CP-M6, and CPM1 through CPM3",
+        "The response explains CP1-CP25 are query identifiers that never become scorecard rows",
+        {
+          "text": "The row count is stated",
+          "evaluator": "regex",
+          "pattern": "\\b20\\b"
+        }
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-qa-failure-blocks-finalization",
+      "prompt": "During QA of a full EKS operations review, Operations is missing Op1 while every other selected ID is present. May the review finalize and render, and what exact repair target must be reported? No cluster access required.",
+      "expected_output": "QA fails and blocks rendering. The repair target identifies Operations/Op1 and requires grading that exact canonical row before QA is rerun.",
+      "assertions": [
+        "The response states QA fails and blocks finalization or rendering",
+        "The repair target names the Operations unit and the missing row Op1",
+        "The response states QA must be rerun after the missing row is graded",
+        "The response states only the named unit is repaired rather than the whole review being regraded"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-one-fail-one-shard",
+      "prompt": "Assume an Operations review has exactly one FAIL: Op1. According to the remediation index and just-in-time loading rules, which remediation reference is loaded, and may other Operations remediation shards be preloaded? No cluster access required.",
+      "expected_output": "Loads only references/remediations/operations-01.md, and only after the Op1 FAIL verdict exists. No other Operations shard and no remediation before verdicts are fixed.",
+      "assertions": [
+        "The response identifies operations-01.md as the only remediation reference loaded",
+        "The response states loading happens only after the Op1 FAIL verdict exists",
+        "The response states other Operations shards must not be preloaded",
+        "The response does not present any shard other than operations-01.md as one that gets loaded"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    }
+  ]
+}
