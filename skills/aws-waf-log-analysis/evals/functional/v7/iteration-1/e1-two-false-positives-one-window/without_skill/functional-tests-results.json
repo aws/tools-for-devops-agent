@@ -1,0 +1,84 @@
+{
+  "version": "v7",
+  "iteration": 1,
+  "eval_id": "e1-two-false-positives-one-window",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's Cause finding closely matches the expected root cause: AWS WAF's AWSManagedRulesCommonRuleSet is identified as responsible, specifically two sub-rules - SizeRestrictions_BODY blocking ~1,200 oversized POST /checkout form submissions (17:32-17:52 UTC) and NoUserAgent_HEADER blocking ~599-600 GET /home and /catalog requests from clients without User-Agent headers (18:05-18:25 UTC). The investigation also correctly notes these are false positives (not an attack, rate-based rule was Count-only and didn't block) and confirms no WAF/config change occurred. Timestamps, counts, rule names, and affected endpoints all align closely with the expected root cause.",
+      "evidence": "\"All ~1,799 blocks in the window came from AWSManagedRulesCommonRuleSet (priority 3) via two sub-rules: SizeRestrictions_BODY (1,200 blocks) terminating legitimate POST /checkout form submissions whose bodies (~10.1 KB) exceed the 8 KB body-inspection limit (phase 1, 17:32\u201317:52); and NoUserAgent_HEADER (599 blocks) terminating GET /home and /catalog from automated clients sending no User-Agent header (phase 2, 18:05\u201318:25). No WAF/CloudFront config change occurred (CloudTrail); the rate-based rule is Count-only and did not block.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Names both sub-rules, SizeRestrictions_BODY and NoUserAgent_HEADER (any casing)",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'SizeRestrictions_BODY + NoUserAgent_HEADER)\\n**Description:** All ~1,799 blocks in the window came from AWSManagedRulesCommonRuleSet (priority 3) via two sub-rules: **SizeRestrictions_BODY** (1,200 blo\u2026'"
+        },
+        {
+          "text": "The Findings contain two separate Cause records, one per sub-rule: one Cause for SizeRestrictions_BODY (about 1,200 blocked POST /checkout requests, about 17:32 to 17:52 UTC) and a different Cause for NoUserAgent_HEADER (about 600 blocked GET requests with no User-Agent, about 18:05 to 18:26 UTC), each giving its own count and time window. A single Cause record that names both sub-rules together does not pass",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The Findings section has a single Cause record titled 'Cause: AWSManagedRulesCommonRuleSet blocked legitimate traffic via two sub-rules (SizeRestrictions_BODY + NoUserAgent_HEADER)' which names both sub-rules together with their counts and times inside one combined description, rather than two separate Cause records.",
+          "reasoning": "Assertion explicitly requires two separate Cause records; the output has one combined Cause record naming both sub-rules together, which the assertion says does not pass.",
+          "confidence": "high"
+        },
+        {
+          "text": "A Cause or Root Cause finding classifies both sub-rule matches as false positives on legitimate traffic, not as an attack",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The Cause description states the rules were 'terminating legitimate POST /checkout form submissions' and 'terminating GET /home and /catalog from automated clients sending no User-Agent header' but never uses the term 'false positive' or explicitly classifies the blocks as false positives rather than an attack.",
+          "reasoning": "While the language implies legitimate traffic was blocked, there is no explicit classification as 'false positive' vs 'attack' in a Cause/Root Cause finding. The word 'legitimate' is used but a formal false-positive classification statement is absent, making this a partial/weak pass at best; graded as fail since no explicit false-positive classification is given.",
+          "confidence": "medium"
+        },
+        {
+          "text": "A Root Cause finding states that no WAF configuration change (Web ACL, managed rule group or version, or distribution association) preceded the blocks, and does not name a rule update or configuration change as the root cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The Cause finding states: 'No WAF/CloudFront config change occurred (CloudTrail); the rate-based rule is Count-only and did not block.'",
+          "reasoning": "This directly states no WAF/CloudFront configuration change preceded the blocks and does not attribute the root cause to a rule update or config change.",
+          "confidence": "high"
+        },
+        {
+          "text": "Supporting Observations cite log or metric evidence for each cause (per-sub-rule blocked counts, the client IP or URI involved)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Supporting Observations cite 'SizeRestrictions_BODY (1,200 blocks)' and 'NoUserAgent_HEADER (599 blocks)' with specific URIs ('POST /checkout', 'GET /home and /catalog') and CloudWatch WAFV2 metrics evidence ('BlockedRequests series is identical value-for-value to the WebACL-wide Rule=ALL series at every minute').",
+          "reasoning": "The observations include per-sub-rule counts, URIs, and metric/log evidence (CloudWatch WAFV2 metrics, Athena query of waf_logs), satisfying the assertion though client IP is not explicitly mentioned.",
+          "confidence": "high"
+        },
+        {
+          "text": "A Root Cause finding, its Supporting Observations, or a Gaps entry states that the managed rule group version did not change before the blocks (no managed rule set version update, for example CRS version stable or no version-related CloudTrail event), as well as no Web ACL or association change. A summary that leaves an AWS-side managed rule version update open as a possible trigger does not pass",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'No WAF/CloudFront config change occurred (CloudTrail)' but does not explicitly mention 'managed rule group version' or state that the CRS version remained stable/unchanged. No Gaps entry addresses rule group version changes either.",
+          "reasoning": "The assertion requires an explicit statement about managed rule group version stability (e.g., CRS version unchanged) in addition to no Web ACL/association change. The output only generically states no WAF/CloudFront config change via CloudTrail, without specifically ruling out a managed rule set version update, leaving that possibility implicitly but not explicitly closed.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "16m53s",
+    "cost": "$8.42",
+    "context_window": {
+      "utilization": "6.7%",
+      "compaction_count": 0
+    }
+  }
+}
