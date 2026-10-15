@@ -53,7 +53,7 @@ Skills live under `skills/` and should follow both the [Agent Skills spec](https
 ### SKILL.md Requirements
 
 - Must include valid frontmatter with `name` and `description` fields.
-- `name`: lowercase letters, numbers, and hyphens only (max 64 characters, no leading/trailing hyphens).
+- `name`: lowercase letters, numbers, and single hyphens only (max 64 characters, no leading/trailing hyphens), equal to the folder name, and not `index`.
 - `description`: written from the agent's perspective, specifying when and why the skill should activate. Be specific about scenarios, services, error types, or symptoms that should trigger the skill. Minimum 100 characters recommended.
 - Instructions should be step-by-step, actionable, and include decision trees for different scenarios.
 - Include expected outputs and success criteria.
@@ -71,10 +71,28 @@ description: Use this skill when investigating [specific scenarios].
 metadata:
   author: github-username
   version: "1.0.0"
+  summary: "One line, at most 200 characters, shown as the skill's card text."
+  agent_types: "INCIDENT_RCA"
 ---
 ```
 
-The `metadata` block with `author` and `version` fields is required. Initial version should be `"1.0.0"`.
+The `metadata` block with `author` and `version` fields is required, and `summary` and `agent_types` should be set (see Skill Publishing Check). Initial version should be `"1.0.0"`.
+
+### Skill Publishing Check
+
+`.github/workflows/validate-skills.yml` runs `.github/scripts/validate_skills.py` on every pull request. The rules and their reasons are in the "Skill Publishing Rules" section of [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+- The rules live in `.github/scripts/skill_checks.py` as pure functions over an in-memory skill folder (`SkillTree` of `Entry(path, mode, data)`). `validate_skills.py` reads Git objects, computes the merge base and reports. The only rules it holds look beyond one skill folder (a file or submodule directly under `skills/`); `tests/test_validate_skills.py` covers them, since a conformance case is one skill folder. Keep every per-skill rule in `skill_checks.py`, so the conformance cases and unit tests exercise exactly what CI runs.
+- Every skill is checked on every PR, because skills on `main` are published automatically. Errors from any skill fail; warnings print only for skills the PR touches.
+- Skills are read from Git objects (`git ls-tree -r -z` plus `git cat-file --batch`), never the working tree, so modes are exact and a local run checks only committed changes.
+- Rule data lives in `.github/scripts/skill-rules/` and the check fails closed (exit 2) when a file there is malformed: `agent-types.json`, `vocabulary.json` (dimension values; unknown values only warn) and `conformance-cases.json`.
+- `conformance-cases.json` holds language-neutral cases for these rules. Another tool that validates or publishes these skills should give the same `expect` result on the cases for the rules it implements; some rules here are stricter than any other tool's. The script runs every case before checking any skill and exits 2 on a mismatch. A rule change needs a matching case change in the same PR.
+- Every rule applies to every skill; nothing is exempted. A rule that existing skills don't meet yet starts as a warning and becomes an error after a cleanup PR brings every skill into line: a missing `metadata.summary`, and dimension values outside the vocabulary. A missing `metadata.agent_types` stays a warning.
+- Agent types come only from `metadata.agent_types` (comma-separated values from `agent-types.json`). Without it a skill installs as `GENERIC`, which warns; the display tag `aws-devops-agent-skills.agent-types` never sets them.
+- Metadata values are always text, `deprecated` (`"true"`/`"false"`) and `agent_types` included, as the Agent Skills spec and the skill evaluation tool's structure test require. `metadata.tier` is `aws-managed` or `partner-managed`. Unknown top-level and metadata keys warn, naming the nearest known key; a misspelled `aws-devops-agent-skills.` prefix is an error.
+- Exit codes: 0 pass (warnings allowed), 1 a rule broken, 2 could not run. Never report a 2 as the PR's fault.
+- PyYAML is the only dependency, pinned by every PyPI hash in `skill-rules/requirements.txt`; actions are pinned by commit SHA.
+- Tests: `python3 -m unittest discover -s tests -v`.
 
 ### Skill README.md Structure
 

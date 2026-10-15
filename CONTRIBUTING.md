@@ -43,6 +43,43 @@ Follow these guidelines for each tool:
 
 Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
 
+#### Skill Publishing Rules
+
+Skills on `main` are published automatically, so a pull request check ([`.github/workflows/validate-skills.yml`](.github/workflows/validate-skills.yml)) applies these rules to **every** skill in `skills/`, not only to the ones your pull request changes. Errors fail the check. Warnings don't, and they're shown only for skills your pull request touches.
+
+`SKILL.md` frontmatter:
+
+| Field | Rule |
+|---|---|
+| `name` | Required. Lowercase letters, digits and single hyphens, at most 64 characters, and equal to the folder name. The folder path `skills/<name>` is the skill's permanent identity. `index` is reserved. |
+| `description` | Required. 1 to 1,024 characters, counted as Unicode code points. |
+| `title` | Optional display name. Non-empty, one line, at most 100 characters. |
+| `license`, `compatibility`, `allowed-tools` | Optional. When present, non-empty text; `compatibility` is at most 500 characters. |
+| `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `deprecated: "true"`. A key that isn't listed below is a warning, with the nearest known key when there is one. |
+| `metadata.author` | Required. One or more GitHub usernames separated by commas. |
+| `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix, suffix or leading zeros, at most 32 characters and at most 10 digits in each part. |
+| `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing or empty summary is a warning for now; it becomes required once every skill has one. |
+| `metadata.deprecated` | Optional. `"true"` or `"false"`. |
+| `metadata.tier` | Optional. `"aws-managed"` or `"partner-managed"`: who maintains the skill. |
+| `metadata.agent_types` | The agents that load the skill, as comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json), such as `"INCIDENT_RCA"`. Without it the skill installs as `GENERIC` and loads for every agent, which is a warning. The display tag `aws-devops-agent-skills.agent-types` doesn't set it. |
+| `metadata.aws-devops-agent-skills.*` | Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. Any other key under this prefix, or a misspelling of the prefix, is an error, so a typo can't drop the skill from a filter. A value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is a warning, with the approved spelling when there is one. |
+
+The frontmatter must be plain YAML that every parser reads the same way. These are rejected: tabs; a byte order mark at the start of the file; line breaks other than newlines (U+0085, U+2028, U+2029); `---` anywhere but the closing line; anchors (`&`), aliases (`*`), tags (`!`), directives (`%`) and document markers; flow collections (`[...]` or `{...}`); keys that aren't plain text, and duplicate keys, at any depth; and unquoted values that some parsers read as numbers, such as `1e3`. A top-level key other than the Agent Skills specification's fields and `title` is a warning.
+
+A `SKILL.md` body over 500 lines is a warning, as it is in the skill evaluation tool: move reference material into `references/` and link to it.
+
+Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
+
+```bash
+python3 -m venv venv && . venv/bin/activate
+python3 -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
+git remote add upstream https://github.com/aws/tools-for-devops-agent.git
+git fetch upstream main
+python3 .github/scripts/validate_skills.py --base-ref upstream/main
+```
+
+Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
+
 #### Test Your Skill
 
 1. Test relevant scenarios with DevOps Agent, with and without skill, to understand what good looks like. Iterate several times and make changes as necessary. Make sure you test relevant functionalities. For example, if your skill is intended for DevOps Agent investigations related to RDS PostgreSQL, then set up relevant AWS resources, simulate issues, and then start DevOps Agent investigations and evaluate the root cause with and without skill. Another example is, if your skill is intended to generate a report using DevOps Agent chat (such as EKS operations review), then set up relevant AWS resources, simulate scenarios that you expect your report to highlight, and then start DevOps Agent chat and evaluate its response with and without skill. Some tips for what you should check when evaluating your skill: for investigation, evaluate the different investigation root cause parts in the "Root cause" investigation tab (root cause, key findings, gaps, evidence) for correctness and quality across multiple iterations with and without skill. For chat, evaluate the chat's final response for actionability, correctness and completeness, with and without skill. Compare with and without skill runs and iterate to see if there are improvements. In both chat and investigation, evaluate multiple iterations for output consistency (investigation root cause or chat final response).

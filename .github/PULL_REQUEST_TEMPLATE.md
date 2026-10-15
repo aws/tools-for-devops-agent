@@ -59,9 +59,11 @@ before this check existed" in CONTRIBUTING.md.
 
 ## Skills — complete if this PR adds or changes a skill
 
-- [ ] `SKILL.md` frontmatter is valid: `name` matches the directory, `description` present and within length limits, body within the length budget.
+<!-- The validate-skills check verifies the SKILL.md frontmatter, including the version format, automatically; see "Skill Publishing Rules" in CONTRIBUTING.md. -->
+
+- [ ] `SKILL.md` frontmatter is valid: `name` matches the directory, `description` present and within length limits, body at most 500 lines.
 - [ ] The `description` is written from the agent's point of view — scenarios, services, error types, symptoms.
-- [ ] Scoped to a specific agent type (Incident RCA, Triage, Mitigation, …), not left Generic without reason.
+- [ ] Scoped to a specific agent type in `metadata.agent_types` (`INCIDENT_RCA`, `INCIDENT_TRIAGE`, `INCIDENT_MITIGATION`, …), not left `GENERIC` without reason.
 - [ ] Procedures are structured as decision trees on real conditions, not flat prose.
 - [ ] Reference material lives in `references/` or `assets/` and loads on demand.
 - [ ] Non-executable content only — **no scripts or code** in the skill directory. Deterministic compute belongs in an MCP server.
