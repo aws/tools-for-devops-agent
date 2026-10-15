@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.4] - 2026-09-21
+### Added
+- `references/tgw-routing-patterns.md`: new "DXGW advertises only ONE best path per prefix to TGW" subsection — a single DXGW aggregates its VIFs and propagates one winner per prefix to the TGW, so redundant VIFs on one DXGW are active/passive at the TGW; multiple paths per prefix at the TGW require multiple DXGW attachments.
+### Changed
+- `references/tgw-routing-patterns.md`: clarified that TGW ECMP across multiple DXGWs requires the **same ASN** (identical AS-path, not just equal length) because TGW does not support AS-path relax; distinguished this from DX-side ECMP across VIFs, where the AS_PATH ASNs do not need to match. Marked the DXGW-one-path and same-ASN behaviors as field knowledge to validate in-account.
+- `SKILL.md`: set `metadata.version` to `1.2.4` to match the changelog.
+
 ## [1.2.3] - 2026-09-21
 ### Changed
 - `SKILL.md`: set `metadata.author` to a resolvable GitHub login (`midakin`) so the generated docs-catalog profile link points to a valid account.
