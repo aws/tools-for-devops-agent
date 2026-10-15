@@ -67,6 +67,12 @@ class RepoTestCase(unittest.TestCase):
         self.git("commit", "-q", "-m", message)
         return self.git("rev-parse", "HEAD")
 
+    def rules_copy(self) -> Path:
+        target = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, target)
+        shutil.copytree(validate_skills.RULES_DIR, target, dirs_exist_ok=True)
+        return target
+
     def run_check(self, *argv: str, env: dict | None = None, rules_dir: Path | None = None) -> tuple[int, str]:
         # Strict UTF-8, as on a real stdout, so text that can't be printed fails the test.
         raw = io.BytesIO()
@@ -159,6 +165,26 @@ class ValidateSkillsTests(RepoTestCase):
         self.assertNotIn("could not run", out)
         self.assertIn("caf\\xe9", out)
 
+    def test_a_file_name_that_is_not_utf8_is_reported_not_a_crash(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        blob = self.git("hash-object", "-w", "skills/alpha/SKILL.md")
+        subprocess.run(
+            ["git", "update-index", "--add", "--index-info"],
+            cwd=self.repo,
+            input=b"100644 " + blob.encode() + b"\tskills/alpha/references/caf\xe9.md\n",
+            check=True,
+            capture_output=True,
+            env={**os.environ, **GIT_ENV},
+        )
+        self.git("commit", "-q", "-m", "a file name that isn't UTF-8")
+        for env in ({}, {"GITHUB_ACTIONS": "true", "GITHUB_STEP_SUMMARY": str(self.repo / "summary.md")}):
+            with self.subTest(env=env):
+                code, out = self.run_check("--base-ref", base, env=env)
+                self.assertEqual(code, 1, out)
+                self.assertNotIn("could not run", out)
+                self.assertIn("references/caf\\xe9.md", out)
+
     def test_submodule_skill_folder_fails(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
         head = self.commit("base")
@@ -217,13 +243,100 @@ class ValidateSkillsTests(RepoTestCase):
         self.assertIn("| `skills/alpha/SKILL.md:6` |", summary.read_text(encoding="utf-8"))
 
 
-class SelfCheckTests(RepoTestCase):
-    def rules_copy(self) -> Path:
-        target = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, target)
-        shutil.copytree(validate_skills.RULES_DIR, target, dirs_exist_ok=True)
-        return target
+class PackageIntegrationTests(RepoTestCase):
+    def test_executable_bit_from_git_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/alpha/references/run.md", "steps\n")
+        base = self.commit("base")
+        (self.repo / "skills/alpha/references/run.md").chmod(0o755)
+        self.git("update-index", "--chmod=+x", "skills/alpha/references/run.md")
+        self.git("commit", "-q", "-m", "make it executable")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn('"references/run.md" is executable', out)
 
+    def test_symlink_from_git_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        (self.repo / "skills/alpha/link.md").symlink_to("SKILL.md")
+        self.commit("add a link")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn('"link.md" is a symbolic link', out)
+
+    def test_a_new_extension_applies_only_after_it_merges(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        self.write("skills/.gitignore", "*\n!*/\n!*.md\n!*.sh\n")
+        self.write("skills/alpha/references/run.sh", "echo hi\n")
+        self.commit("allow and add a shell file")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn('extension ".sh"', out)
+
+    def test_symlink_outside_skills_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("docs/index.md", "# Docs\n")
+        base = self.commit("base")
+        (self.repo / "docs/latest.md").symlink_to("index.md")
+        self.commit("add a link outside skills/")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("docs/latest.md is a symbolic link", out)
+
+    def test_root_gitattributes_that_change_skill_bytes_fail(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write(".gitattributes", "mcp/** text eol=lf\n*.png binary\n")
+        base = self.commit("scoped attributes are fine")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 0, out)
+        self.write(".gitattributes", "mcp/** text eol=lf\n*.md export-ignore\n")
+        self.commit("an attribute that applies under skills/")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  .gitattributes:2: this line can change how Git archives files under skills/", out)
+        self.write(".gitattributes", "[attr]gone export-ignore\nskills/** gone\n")
+        self.commit("a macro that drops skills/ from the archive")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  .gitattributes:1: this line can change how Git archives files under skills/", out)
+        # Git stops reading the file at its first NUL byte.
+        self.write(".gitattributes", "skills/** export-ignore\x00\n")
+        self.commit("a NUL byte after the attribute")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  .gitattributes:1: this line can change how Git archives files under skills/", out)
+        # Git splits the file at newlines only: these are one line each for Git.
+        self.write(".gitattributes", "# a\x0cb\n[\x0bs]kills/** export-ignore\n")
+        self.commit("characters Python would split a line at")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  .gitattributes:2: this line can change how Git archives files under skills/", out)
+
+    def test_internal_names_on_added_lines_warn_for_the_touched_skill(self):
+        rules_dir = self.rules_copy()
+        names = {"description": "Made-up names for this test.", "hosts": ["corp.example"], "terms": ["Rivendell"]}
+        (rules_dir / "internal-names.json").write_text(json.dumps(names), encoding="utf-8")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/alpha/evals/journal.md", "role: ops-Rivendell\n")
+        base = self.commit("base already names an internal tool")
+        self.write("skills/alpha/references/notes.md", "See https://wiki.corp.example/x\n")
+        self.commit("add an internal link")
+        code, out = self.run_check("--base-ref", base, rules_dir=rules_dir)
+        self.assertEqual(code, 0, out)
+        self.assertIn('WARN  skills/alpha/references/notes.md:1: adds "wiki.corp.example"', out)
+        self.assertNotIn("journal.md", out)
+
+    def test_extension_allowlist_comes_from_head_without_a_base(self):
+        self.write("skills/.gitignore", "*\n!*/\n!*.md\n!*.txt\n")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/alpha/notes.txt", "notes\n")
+        self.commit("base")
+        code, out = self.run_check()
+        self.assertEqual(code, 0, out)
+
+
+class SelfCheckTests(RepoTestCase):
     def test_repository_cases_pass(self):
         code, out = self.run_check("--self-check-only")
         self.assertEqual(code, 0, out)

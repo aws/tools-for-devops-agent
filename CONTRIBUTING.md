@@ -68,6 +68,25 @@ The frontmatter must be plain YAML that every parser reads the same way. These a
 
 A `SKILL.md` body over 500 lines is a warning, as it is in the skill evaluation tool: move reference material into `references/` and link to it.
 
+Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). `README.md` and `images/` are published too. For the published files:
+
+- At most 100 files, each at most 1 MiB, and their zip at most 4,128,768 bytes (4 MiB less a margin, because zip sizes vary by tool). The check warns past 90% of each of these limits. The `SKILL.md` frontmatter is at most 32 KiB.
+- Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a new extension takes effect only after the `skills/.gitignore` change that adds it has merged.
+- Paths use only letters, digits, `.`, `_` and `-`, are at most 512 characters, have no hidden parts (such as `.DS_Store` or `.gitignore`), no part named `__proto__`, no Windows-reserved names (such as `CON` or `COM1`) and no part ending in a period. No two files or folders differ only in case, and no file has the same path as a folder, ignoring case.
+- No file starts with `#!`.
+
+Anywhere in the skill folder, `evals/` included:
+
+- Only regular files: no executable bits, symbolic links or submodules. Remove an executable bit with `git update-index --chmod=-x <path>`.
+- No `scripts/` folders.
+- No AWS access key IDs or private keys (PEM, OpenSSH, PGP or PuTTY).
+- No `cli_debug/` or `sdk_debug/` folders, and no `evals/functional/*/_metadata.json`. The skill evaluation tool writes these unredacted; the run metadata names the AWS account the run used. `skills/.gitignore` already skips them.
+- A warning when a pull request adds a line that names an internal host or tool ([`internal-names.json`](.github/scripts/skill-rules/internal-names.json)), since this repository is public.
+
+In published text files, invisible characters are errors, because they can hide instructions from a reviewer while the model still reads them: zero-width and other invisible characters (such as U+200B, U+00AD, U+3164 or U+180B), bidirectional controls, a byte order mark, Unicode tag characters, and variation selectors, except a single U+FE0E or U+FE0F after a character, as emoji use. In published Markdown, active HTML elements (`script`, `iframe`, `embed`, `form`, `style`, `link`, `meta`, `object` and `img`) and links to `javascript:` or `http://` targets are warnings, and so is a `<script>` element in a published `.html` or `.svg` file.
+
+Outside `skills/`: skills are published from GitHub's archive of the whole repository, which must hold exactly what Git holds. So no symbolic link may sit anywhere in the repository, and no root `.gitattributes` line may change how Git archives files under `skills/`: `export-ignore`, `export-subst`, `ident`, `filter`, `working-tree-encoding`, or an `eol`, `text` or `crlf` setting other than `text`, `text=auto`, `eol=lf`, `crlf` or `crlf=input`, which only normalize line endings when files are committed. A macro (`[attr]name ...`) that sets one of these is an error wherever it's defined. Scope such a line to another folder, such as `mcp/**`.
+
 Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
 
 ```bash
@@ -111,7 +130,7 @@ skills/<name>/evals/
     └── v<N>/
         ├── benchmark.json                            # scores for the run
         ├── evals.json                                # the evals this run executed
-        ├── _metadata.json                            # run metadata
+        ├── _metadata.json                            # gitignored; validate-skills rejects it
         └── iteration-<n>/
             └── <scenario-name>/                      # one per scenario in evals.json
                 ├── with_skill/
@@ -189,7 +208,7 @@ An exemption is a claim about what can't be produced, and a maintainer who doesn
 
 The label is all-or-nothing for the whole pull request: it withdraws every exempted test type on every skill the PR touches, not just the claim a maintainer means to refuse. On a PR where one exemption is unfounded and another is legitimate, applying the label requires the results for both, and the legitimate one has to be settled in review — either by producing those results too, or by splitting the skills across separate PRs.
 
-Everything below that depth is left unchecked, so `outputs/`, `_metadata.json`, `cli_debug/`, `sdk_debug/`, iteration counts, and scenario names are all free to vary, as are any extra files.
+Everything below that depth is left unchecked, so `outputs/`, `_metadata.json`, `cli_debug/`, `sdk_debug/`, iteration counts, and scenario names are all free to vary, as are any extra files. The separate skill publishing check still rejects a committed `_metadata.json` and any `cli_debug/` or `sdk_debug/` folder; see "Skill Publishing Rules".
 
 The check is rolling out gradually, so whether a violation fails the check or is only reported depends on the skill:
 

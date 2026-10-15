@@ -8,6 +8,7 @@ Git repository is needed. Run with:
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import unittest
 from pathlib import Path
@@ -25,6 +26,10 @@ RULES = sc.Rules(
         "technical-domains": frozenset({"Operations"}),
     },
     aliases={"CloudWatch": "Amazon CloudWatch"},
+    allowed_extensions=frozenset({"md", "json", "png", "html"}),
+    published_excludes=("evals/", ".skilleval.yaml", "CHANGELOG.md"),
+    # Made-up names, so the tests name no real internal host or tool.
+    internal_names=sc._internal_name_patterns({"hosts": ["corp.example", "intra.example"], "terms": ["Rivendell"]}),
 )
 
 VALID_FRONTMATTER = """\
@@ -240,7 +245,11 @@ class NameTests(CheckSkillTestCase):
 
     def test_deeply_nested_frontmatter_is_a_finding_not_a_crash(self):
         nested = "".join("  " * depth + f"k{depth}:\n" for depth in range(1, 1200)) + "  " * 1200 + "k: v\n"
-        self.assertOneError(tree(skill_md(VALID_FRONTMATTER + "deep:\n" + nested)), "nested too deeply")
+        self.assertOneError(
+            tree(skill_md(VALID_FRONTMATTER + "deep:\n" + nested)),
+            "nested too deeply",
+            also=("the limit is 32,768", "a published file can be at most"),
+        )
 
     def test_name_must_match_folder(self):
         self.assertOneError(self.with_name("other-skill"), 'but the folder is "demo-skill"', line=2)
@@ -488,6 +497,351 @@ class LimitsAndTierTests(CheckSkillTestCase):
         self.assertEqual(self.warnings(tree(skill_md(body="\n" + "x\n" * 498))), [])
 
 
+def with_files(*paths: str, mode: str = "100644", data: bytes = b"text\n") -> sc.SkillTree:
+    skill = tree(skill_md())
+    for path in paths:
+        skill.entries[path] = sc.Entry(path, mode, data)
+    return skill
+
+
+class PublishedSetTests(unittest.TestCase):
+    def test_excludes_evals_eval_config_and_changelog_but_keeps_readme_and_images(self):
+        skill = with_files(
+            "README.md",
+            "CHANGELOG.md",
+            ".skilleval.yaml",
+            "evals/evals.json",
+            "references/a.md",
+            "docs/CHANGELOG.md",
+            "images/diagram.png",
+        )
+        self.assertEqual(
+            sorted(sc.published_files(skill, RULES)),
+            ["README.md", "SKILL.md", "docs/CHANGELOG.md", "images/diagram.png", "references/a.md"],
+        )
+
+    def test_repository_published_set_matches_the_catalog(self):
+        gitignore = (ROOT / "skills" / ".gitignore").read_text(encoding="utf-8")
+        rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules", gitignore)
+        self.assertEqual(rules.published_excludes, ("evals/", ".skilleval.yaml", "CHANGELOG.md"))
+
+    def test_zip_is_deterministic(self):
+        files = {"b.md": b"b", "a.md": b"a" * 100}
+        self.assertEqual(sc.build_zip(files), sc.build_zip(dict(reversed(files.items()))))
+
+
+class PackageTests(CheckSkillTestCase):
+    def test_typical_skill_passes(self):
+        skill = with_files("README.md", "references/guide.md", "assets/diagram.png", "evals/evals.json")
+        self.assertEqual(self.errors(skill), [])
+
+    def test_file_count_limit(self):
+        paths = [f"references/{i:03}.md" for i in range(99)]
+        self.assertEqual(self.errors(with_files(*paths)), [])
+        self.assertOneError(with_files(*paths, "references/extra.md"), "101 published files; the limit is 100")
+
+    def test_file_count_warning(self):
+        paths = [f"references/{i:03}.md" for i in range(90)]
+        self.assertEqual(self.warnings(with_files(*paths[:89])), [])
+        (warning,) = self.warnings(with_files(*paths))
+        self.assertIn("91 published files, over 90% of the limit of 100", warning.message)
+
+    def test_evals_do_not_count_toward_the_file_limit(self):
+        paths = [f"evals/run/{i:03}.json" for i in range(200)]
+        self.assertEqual(self.errors(with_files(*paths)), [])
+
+    def test_zip_size_limit_and_warning(self):
+        import random
+
+        rng = random.Random(7)
+
+        def skill_with(count: int, size: int) -> sc.SkillTree:
+            skill = tree(skill_md())
+            for i in range(count):
+                path = f"assets/big{i}.png"
+                skill.entries[path] = sc.Entry(path, "100644", rng.randbytes(size))
+            return skill
+
+        near = skill_with(5, 760_000)
+        self.assertEqual(self.errors(near), [])
+        (warning,) = self.warnings(near)
+        self.assertIn("zip to", warning.message)
+        self.assertIn("over 90% of the 4,128,768-byte limit", warning.message)
+        self.assertOneError(skill_with(5, 900_000), "the limit is 4,128,768")
+
+    def test_file_size_limit(self):
+        self.assertEqual(self.errors(with_files("references/big.md", data=b"a" * 1_048_576)), [])
+        self.assertOneError(
+            with_files("references/big.md", data=b"a" * 1_048_577), "a published file can be at most 1,048,576"
+        )
+        self.assertEqual(self.errors(with_files("evals/big.json", data=b"a" * 2_000_000)), [])
+
+    def test_file_size_warning(self):
+        self.assertEqual(self.warnings(with_files("references/big.md", data=b"a" * 943_718)), [])
+        (warning,) = self.warnings(with_files("references/big.md", data=b"a" * 943_719))
+        self.assertIn("over 90% of the 1,048,576-byte limit", warning.message)
+        self.assertEqual(warning.path, "references/big.md")
+
+    def test_frontmatter_size_limit(self):
+        fm = frontmatter_with().replace("metadata:\n", "compatibility: " + "c" * 400 + "\nmetadata:\n")
+        padding = "".join(f'  extra-{i}: "{"x" * 300}"\n' for i in range(110))
+        self.assertOneError(tree(skill_md(fm + padding)), "the limit is 32,768", line=1)
+        self.assertEqual(self.errors(tree(skill_md(fm))), [])
+
+    def test_executable_symlink_and_submodule_are_rejected_anywhere(self):
+        self.assertOneError(with_files("references/a.md", mode="100755"), "executable")
+        self.assertOneError(with_files("evals/run.json", mode="100755"), "executable")
+        self.assertOneError(with_files("references/link.md", mode="120000", data=b"../../x"), "symbolic link")
+        self.assertOneError(with_files("vendor", mode="160000", data=b""), "Git submodule")
+
+    def test_path_rules(self):
+        cases = {
+            "references/my notes.md": "letters, digits",
+            "references/naïve.md": "letters, digits",
+            "references/CON.md": "reserved name",
+            "references/com0.md": "reserved name",
+            "references/LPT0/a.md": "reserved name",
+            "references/caf\udce9.md": "letters, digits",
+            "references/notes.": "ends with a period",
+            "references/" + "a" * 510 + ".md": "the limit is 512",
+            "references/__proto__/a.md": "silently drop",
+        }
+        for path, fragment in cases.items():
+            with self.subTest(path=path):
+                self.assertOneError(with_files(path), fragment)
+
+    def test_folder_name_with_trailing_newline_is_rejected(self):
+        self.assertOneError(with_files("references\n/a.md"), "letters, digits")
+
+    def test_case_collision(self):
+        self.assertOneError(with_files("references/Guide.md", "references/guide.md"), "differ only in case")
+
+    def test_folder_case_collision_is_reported_once(self):
+        skill = with_files("references/Guide/Sub/a.md", "references/guide/sub/b.md", "references/guide/c.md")
+        messages = [f.message for f in self.errors(skill) if "folders" in f.message]
+        self.assertEqual(len(messages), 1, messages)
+        self.assertIn('"references/Guide" and "references/guide" differ only in case', messages[0])
+
+    def test_file_and_folder_with_the_same_path_collide(self):
+        self.assertOneError(with_files("references/Notes.md", "references/notes.md/a.md"), "is a folder")
+
+    def test_hidden_files_are_rejected_in_the_published_set_only(self):
+        self.assertOneError(with_files(".DS_Store"), "hidden")
+        self.assertOneError(with_files("references/.notes.md"), "hidden")
+        self.assertOneError(with_files(".claude/settings.json"), "hidden")
+        self.assertEqual(self.errors(with_files(".skilleval.yaml", "evals/.cache.json")), [])
+        self.assertOneError(with_files(".skilleval.yml"), "hidden")  # only .skilleval.yaml is left out
+
+    def test_eval_debug_folders_and_run_metadata_are_rejected(self):
+        self.assertOneError(with_files("evals/functional/v1/cli_debug/run.json"), "cli_debug/ folder")
+        self.assertOneError(with_files("evals/sdk_debug/trace.json"), "sdk_debug/ folder")
+        self.assertOneError(with_files("evals/functional/v2/_metadata.json"), "run metadata")
+        self.assertOneError(with_files("evals/CLI_Debug/run.json"), "CLI_Debug/ folder")
+        self.assertOneError(with_files("references/evals/functional/v1/_metadata.json"), "run metadata")
+        self.assertEqual(self.errors(with_files("evals/functional/v2/benchmark.json", "references/_metadata.json")), [])
+
+    def test_extension_allowlist(self):
+        self.assertOneError(with_files("references/run.sh"), 'extension ".sh"')
+        self.assertOneError(with_files("LICENSE"), "no file extension")
+        self.assertEqual(self.errors(with_files("references/page.HTML")), [])
+        self.assertEqual(self.errors(with_files("evals/results.log")), [])
+
+    def test_scripts_folder_is_rejected_anywhere(self):
+        self.assertOneError(with_files("scripts/run.md"), "scripts/ folders")
+        self.assertOneError(with_files("evals/scripts/run.json"), "scripts/ folders")
+
+    def test_shebang_in_published_file(self):
+        self.assertOneError(with_files("references/run.md", data=b"#!/bin/sh\necho hi\n"), "starts with #!")
+
+
+AWS_KEY_ID = "AKIA" + "Q7X2" * 4
+PEM_HEADER = "-----BEGIN " + "RSA PRIVATE KEY-----"
+
+
+class ContentSafetyTests(CheckSkillTestCase):
+    def test_access_key_id_anywhere_in_the_folder(self):
+        data = f"line one\nkey = {AWS_KEY_ID}\n".encode()
+        error = self.assertOneError(with_files("evals/journal.json", data=data), "AWS access key ID")
+        self.assertEqual((error.path, error.line), ("evals/journal.json", 2))
+        self.assertNotIn(AWS_KEY_ID, error.message)
+
+    def test_documented_example_key_is_allowed(self):
+        data = ("AKIA" + "IOSFODNN7EXAMPLE\n").encode()
+        self.assertEqual(self.errors(with_files("references/a.md", data=data)), [])
+
+    def test_private_key(self):
+        data = f"\n\n{PEM_HEADER}\nMIIB...\n".encode()
+        self.assertOneError(with_files("references/a.md", data=data), "private key", line=3)
+        for header in ("-----BEGIN " + "PGP PRIVATE KEY BLOCK-----", "PuTTY-User-Key-File-" + "3: ssh-ed25519"):
+            with self.subTest(header=header):
+                data = f"ok\n{header}\n".encode()
+                self.assertOneError(with_files("evals/run.json", data=data), "private key", line=2)
+
+    def test_invisible_characters(self):
+        for char in (
+            "\u200b", "\u202e", "\u2066", "\ufeff", "\U000e0041",
+            "\u00ad", "\u061c", "\u180e", "\u3164", "\u206a", "\ufe00", "\U000e0100",
+            "\u180b", "\u17b4", "\u2065", "\ufff0", "\U0001d173", "\U000e0080",
+        ):
+            with self.subTest(code=hex(ord(char))):
+                data = f"fine\nhidden{char}text\n".encode()
+                self.assertOneError(with_files("references/a.md", data=data), f"U+{ord(char):04X}", line=2)
+
+    def test_one_presentation_selector_after_a_character_is_allowed(self):
+        data = "\u26a0\ufe0f Warning\n\u2139\ufe0e Note\n".encode()
+        self.assertEqual(self.errors(with_files("references/a.md", data=data)), [])
+        data = "fine\n\u26a0\ufe0f\ufe0f\ufe0f run\n".encode()
+        self.assertOneError(with_files("references/a.md", data=data), "U+FE0F", line=2)
+
+    def test_invisible_characters_in_skill_md(self):
+        content = skill_md(body="\n# Demo\nignore\u200bprevious\n")
+        self.assertOneError(tree(content), "U+200B", line=13)
+
+    def test_active_html_and_insecure_links_warn(self):
+        data = b'<script>alert(1)</script>\n<iframe src="x"></iframe>\n[a](javascript:void(0))\n[b](http://example.com)\n'
+        skill = with_files("references/a.md", data=data)
+        self.assertEqual(self.errors(skill), [])
+        messages = " | ".join(w.message for w in self.warnings(skill))
+        for fragment in ("<script>", "<iframe>", "javascript:", "http://"):
+            self.assertIn(fragment, messages)
+
+    def test_every_link_form_warns(self):
+        for line in (b"<http://example.com>", b"[x]: http://example.com", b'<a href="http://example.com">x</a>'):
+            with self.subTest(line=line):
+                (warning,) = self.warnings(with_files("references/a.md", data=b"ok\n" + line + b"\n"))
+                self.assertIn("http://", warning.message)
+                self.assertEqual(warning.line, 2)
+        for line in (
+            b"> [x]: http://example.com/a",
+            b"- [x]: http://example.com/b",
+            b"[the page](&#104;ttp://example.com/d)",
+            b"[the page](http\\://example.com/e)",
+            b'<a href="&#104;ttp://example.com/f">x</a>',
+            b"[a\\]b]: http://example.com/g",
+            b'<a href="&#104ttp://example.com/z">x</a>',
+            b"[x](&#00000104;ttp://example.com/q)",
+        ):
+            with self.subTest(line=line):
+                (warning,) = self.warnings(with_files("references/a.md", data=b"ok\n" + line + b"\n"))
+                self.assertIn("http://", warning.message)
+                self.assertEqual(warning.line, 2)
+        for data, line in (
+            (b"[x]:\nhttp://example.com/c\n", 1),
+            (b"- a\n  - b\n\n    [x]: http://example.com/k\n", 4),
+            (b'See <abbr title="one&#10;two">x</abbr>.\n\n[the page](http\\://example.com/w)\n', 3),
+        ):
+            with self.subTest(data=data):
+                (warning,) = self.warnings(with_files("references/a.md", data=data))
+                self.assertIn("http://", warning.message)
+                self.assertEqual(warning.line, line)
+        # Without its ";", Markdown leaves a character reference as text, so this is no link.
+        self.assertEqual(self.warnings(with_files("references/a.md", data=b"[the page](&#104ttp://example.com/z)\n")), [])
+        for line in (b"[x]: <javascript:run()>", b"[x](<javascript:run()>)", b"[x](&#106;avascript:run())"):
+            with self.subTest(line=line):
+                (warning,) = self.warnings(with_files("references/a.md", data=line + b"\n"))
+                self.assertIn("javascript:", warning.message)
+
+    def test_link_schemes_in_prose_do_not_warn(self):
+        data = b"The IMDS address is http://169.254.169.254.\nA javascript: URL runs code.\n"
+        self.assertEqual(self.warnings(with_files("references/a.md", data=data)), [])
+
+    def test_placeholders_and_comments_do_not_warn(self):
+        data = b"Returns { data: <object> | null }\n<!-- REPEAT per queue -->\n<details>more</details>\n"
+        self.assertEqual(self.warnings(with_files("references/a.md", data=data)), [])
+
+    def test_script_in_html_or_svg_warns(self):
+        rules = dataclasses.replace(RULES, allowed_extensions=RULES.allowed_extensions | {"svg"})
+        for path, script in (
+            ("assets/report.html", b"<SCRIPT>run()</SCRIPT>"),
+            ("assets/diagram.svg", b"<SCRIPT>run()</SCRIPT>"),
+            ("assets/diagram.svg", b"<svg:script>run()</svg:script>"),
+        ):
+            with self.subTest(path=path, script=script):
+                findings, _ = sc.check_skill(with_files(path, data=b"<p>ok</p>\n" + script + b"\n"), rules)
+                self.assertEqual([f for f in findings if f.severity == "error"], [])
+                (warning,) = [f for f in findings if f.severity == "warning"]
+                self.assertIn("<script> element", warning.message)
+                self.assertEqual(warning.line, 2)
+        self.assertEqual(self.warnings(with_files("assets/report.html", data=b"<p>no scripts</p>\n")), [])
+
+
+class AddedContentTests(unittest.TestCase):
+    def test_internal_names_on_added_lines_warn(self):
+        base = with_files("evals/journal.json", data=b'{"role": "ops"}\n')
+        head = with_files("evals/journal.json", data=b'{"role": "ops"}\n{"role": "ops-Rivendell"}\nsee https://w.x.intra.example/p\n')
+        (warning,) = sc.check_added_content(base, head, RULES)
+        self.assertEqual((warning.path, warning.line), ("evals/journal.json", 2))
+        self.assertIn('adds "Rivendell"', warning.message)
+        self.assertIn("1 more line(s)", warning.message)
+
+    def test_names_already_on_the_base_branch_do_not_warn(self):
+        data = b"host: build.corp.example\n"
+        base = with_files("references/a.md", data=data)
+        self.assertEqual(sc.check_added_content(base, with_files("references/a.md", data=data), RULES), [])
+        shifted = with_files("references/a.md", data=b"intro\n" + data)
+        self.assertEqual(sc.check_added_content(base, shifted, RULES), [])
+        moved = tree(skill_md(), **{"references/b.md": data})
+        self.assertEqual(sc.check_added_content(base, moved, RULES), [])
+
+    def test_lines_are_numbered_at_newlines_only(self):
+        data = "one\x0ctwo\nthree \u2028 four\r\nsee build.corp.example\r\n".encode()
+        (warning,) = sc.check_added_content(None, with_files("references/a.md", data=data), RULES)
+        self.assertEqual(warning.line, 3)
+
+    def test_a_new_skill_is_scanned_whole(self):
+        (warning,) = sc.check_added_content(None, with_files("references/a.md", data=b"ok\nsee Docs.CORP.Example\n"), RULES)
+        self.assertIn("Docs.CORP.Example", warning.message)
+
+    def test_lookalikes_do_not_match(self):
+        data = b"notcorp.example\nfoo-corp.examples\nrivendellian\ncorp.example.org\nfoo_corp.example\n"
+        self.assertEqual(sc.check_added_content(None, with_files("references/a.md", data=data), RULES), [])
+
+
+class GitattributesTests(unittest.TestCase):
+    def test_lines_that_change_archived_bytes_under_skills(self):
+        applies = [
+            "*.md text eol=crlf",
+            "skills/** export-ignore",
+            "/skills/x/a.md export-subst",
+            "*.json filter=lfs",
+            "**/x.md ident",
+            "/skills export-ignore",
+            "sk*/** ident",
+            "*.md\teol=crlf",
+            "\\skills/** eol=crlf",  # A backslash escapes the next character.
+            "/[s]kills/** export-ignore",
+            '"skills/a b/*.md" eol=crlf',
+            "skills/**\rexport-ignore",  # Git also splits a line at a carriage return.
+            "[\x0bs]kills/** export-ignore",
+            "[attr]crlfy text eol=crlf",  # A macro counts where it is defined.
+            "[attr]gone export-ignore",
+        ]
+        ignored = [
+            "# comment",
+            "",
+            "*.png binary",
+            "*.md -text",
+            "mcp/** export-ignore",
+            "/docs/*.md eol=lf",
+            "[attr]bin -diff",
+            "*.md linguist-documentation",
+            "/README.md export-ignore",  # Anchored at the root.
+            "/*.md text eol=crlf",
+            "!*.md eol=crlf",  # Git ignores negative patterns here.
+            '"docs/a b/*.md" eol=crlf',
+            "* text=auto",
+            "*.md text",
+            "*.md eol=lf",
+            "*.md crlf=input",
+        ]
+        for line in applies:
+            with self.subTest(line=line):
+                self.assertTrue(sc.gitattributes_line_applies_to_skills(line))
+        for line in ignored:
+            with self.subTest(line=line):
+                self.assertFalse(sc.gitattributes_line_applies_to_skills(line))
+
+
 class ParseVersionTests(unittest.TestCase):
     def test_a_very_long_part_is_rejected_not_a_crash(self):
         self.assertIsNone(sc.parse_version("1." + "9" * 4301 + ".0"))
@@ -500,7 +854,13 @@ class ParseVersionTests(unittest.TestCase):
 
 class LoadRulesTests(unittest.TestCase):
     def test_repository_rule_files_load(self):
-        rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules")
+        gitignore = (ROOT / "skills" / ".gitignore").read_text(encoding="utf-8")
+        rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules", gitignore)
+        self.assertEqual(
+            rules.allowed_extensions,
+            frozenset("md txt json yaml yml xml csv tsv html htm png jpg jpeg gif svg webp pdf".split()),
+        )
+        self.assertIn("evals/", rules.published_excludes)
         self.assertIn("GENERIC", rules.agent_types)
         self.assertIn("Amazon CloudWatch", rules.vocabulary["aws-services"])
         self.assertEqual(rules.aliases["CloudWatch"], "Amazon CloudWatch")
@@ -528,14 +888,14 @@ class LoadRulesValidationTests(unittest.TestCase):
     def test_string_where_a_list_is_expected_fails_closed(self):
         vocabulary = {"values": {"agent-types": "Chat tasks", "aws-services": [], "technical-domains": []}, "aliases": {}}
         with self.assertRaisesRegex(ValueError, "list of non-empty strings"):
-            sc.load_rules(self.rules_dir(None, vocabulary))
+            sc.load_rules(self.rules_dir(None, vocabulary), "!*.md\n")
         with self.assertRaisesRegex(ValueError, "list of non-empty strings"):
-            sc.load_rules(self.rules_dir({"values": "GENERIC"}, None))
+            sc.load_rules(self.rules_dir({"values": "GENERIC"}, None), "!*.md\n")
 
     def test_aliases_must_map_strings_to_strings(self):
         vocabulary = {"values": {"agent-types": [], "aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}
         with self.assertRaisesRegex(ValueError, "aliases"):
-            sc.load_rules(self.rules_dir(None, vocabulary))
+            sc.load_rules(self.rules_dir(None, vocabulary), "!*.md\n")
 
 
 class ConformanceTests(unittest.TestCase):
@@ -549,7 +909,8 @@ class ConformanceTests(unittest.TestCase):
         return Path(handle.name)
 
     def test_repository_cases_give_their_expected_results(self):
-        rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules")
+        gitignore = (ROOT / "skills" / ".gitignore").read_text(encoding="utf-8")
+        rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules", gitignore)
         cases = sc.load_cases(ROOT / ".github" / "scripts" / "skill-rules" / "conformance-cases.json")
         self.assertEqual(sc.run_conformance(cases, rules), [])
 
@@ -571,6 +932,16 @@ class ConformanceTests(unittest.TestCase):
         problems = sc.run_conformance([case], RULES)
         self.assertEqual(len(problems), 1)
         self.assertIn("expected an error containing 'nope', got: no errors", problems[0])
+
+
+class GitignoreAllowlistTests(unittest.TestCase):
+    def test_reads_extension_lines_only(self):
+        text = "*\n!*/\n!.gitignore\n# comment\n!*.md\n!*.PNG\n**/scripts/\n"
+        self.assertEqual(sc.allowed_extensions_from_gitignore(text), frozenset({"md", "png"}))
+
+    def test_empty_allowlist_fails_closed(self):
+        with self.assertRaises(ValueError):
+            sc.allowed_extensions_from_gitignore("*\n")
 
 
 if __name__ == "__main__":

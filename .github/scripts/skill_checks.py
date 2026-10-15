@@ -13,8 +13,12 @@ from __future__ import annotations
 
 import base64
 import difflib
+import fnmatch
+import html
+import io
 import json
 import re
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,6 +28,8 @@ from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 RULES_DIR_DISPLAY = ".github/scripts/skill-rules"
 AGENT_TYPES_FILE = "agent-types.json"
 VOCABULARY_FILE = "vocabulary.json"
+PUBLISHED_FILES_FILE = "published-files.json"
+INTERNAL_NAMES_FILE = "internal-names.json"
 
 NAME_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAX_NAME_LENGTH = 64
@@ -64,6 +70,98 @@ METADATA_KEYS = ("author", "version", "summary", "deprecated", "tier", "agent_ty
 # A key this close to one of DIMENSION_KEYS counts too.
 NEAR_DIMENSION_PREFIX = re.compile(r"aws[-_.]?devops[-_.]?agents?[-_.]?skills?[-_.]", re.IGNORECASE)
 NEAR_DIMENSION_KEY_CUTOFF = 0.8
+
+# Package limits. A published skill is capped at 100 files, each at most 1 MiB,
+# and a 4 MiB zip. Zip sizes vary a little by tool, so the check leaves a 64 KiB
+# margin on the zip. It warns once a skill passes 90% of any of the three.
+MAX_PUBLISHED_FILES = 100
+MAX_FILE_BYTES = 1_048_576
+ZIP_LIMIT_BYTES = 4 * 1_048_576 - 65_536
+WARNING_RATIO = 0.9
+# The frontmatter is capped as well.
+MAX_FRONTMATTER_BYTES = 32_768
+MAX_PATH_LENGTH = 512
+SEGMENT_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
+WINDOWS_RESERVED_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"} | {f"COM{i}" for i in range(10)} | {f"LPT{i}" for i in range(10)}
+)
+# Some zip tools silently drop a part with this name.
+RESERVED_SEGMENTS = frozenset({"__proto__"})
+REGULAR_FILE_MODE = "100644"
+TEXT_EXTENSIONS = frozenset({"md", "txt", "json", "yaml", "yml", "xml", "csv", "tsv", "html", "htm", "svg"})
+GITIGNORE_EXTENSION_PATTERN = re.compile(r"^!\*\.([A-Za-z0-9]+)\s*$")
+
+# Content that must never be public. Matched on bytes in every file of the
+# skill folder, evals included, since the whole repository is public.
+AWS_ACCESS_KEY_PATTERN = re.compile(rb"(?<![A-Z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])")
+DOCUMENTED_EXAMPLE_KEYS = frozenset({b"AKIA" + b"IOSFODNN7EXAMPLE"})
+# PEM and OpenSSH keys, PGP secret key blocks, and PuTTY .ppk files.
+PRIVATE_KEY_PATTERN = re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|PuTTY-User-Key-File-[0-9]+:")
+
+# Characters that render as nothing, or reorder the text around them, so a
+# reviewer reading the diff can't see what the model will read: zero-width and
+# other invisible characters (soft hyphen, fillers, joiners, and the code points
+# Unicode reserves to render as nothing), bidirectional controls, the byte order
+# mark, Unicode tags, and variation selectors, which can carry a hidden payload
+# one byte per character. U+FE0E and U+FE0F choose text or emoji presentation
+# for the character before them, as in an emoji, so only a run of variation
+# selectors counts for those two.
+#
+# Each range above U+FFFF has a character class of its own: some regular
+# expression scanners can't read those characters and would take two of them
+# in one class for overlapping ranges.
+INVISIBLE_PATTERN = re.compile(
+    "[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f"
+    "\u3164\ufe00-\ufe0d\ufeff\uffa0\ufff0-\ufff8]"
+    "|[\U0001bca0-\U0001bca3]|[\U0001d173-\U0001d17a]|[\U000e0000-\U000e0fff]"
+    "|[\ufe0e\ufe0f](?=[\u180b-\u180d\u180f\ufe00-\ufe0f]|[\U000e0100-\U000e01ef])"
+)
+
+# Markdown that skill previews won't render the way the source reads. Warnings
+# only: placeholders such as <object> and HTML comments are common and harmless.
+ACTIVE_HTML_PATTERN = re.compile(r"<(script|iframe|embed|form|style|link|meta)\b|<(object|img)\s", re.IGNORECASE)
+# Where Markdown takes a link target: an inline link, an autolink, an HTML
+# href, or a reference definition, which may be indented, sit in a block quote
+# or a list item, and put its target on the next line.
+_LINK_TARGET = (
+    r"(?:\]\(\s*<?|<|\bhref\s*=\s*[\"']?\s*"
+    r"|^[ \t]*(?:(?:>|[-+*]|[0-9]{1,9}[.)])[ \t]*)*\[(?:[^\]\n\\]|\\.)+\]:\s*<?)"
+)
+# A backslash escape, which Markdown renders as the character alone, and a
+# character reference as Markdown reads one (it must end in ";").
+_MARKDOWN_ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
+_CHARACTER_REFERENCE = re.compile(r"&(?:#[0-9]{1,8}|#[xX][0-9a-fA-F]{1,8}|[A-Za-z][A-Za-z0-9]{1,31});")
+JAVASCRIPT_URL_PATTERN = re.compile(_LINK_TARGET + r"javascript:", re.IGNORECASE | re.MULTILINE)
+HTTP_LINK_PATTERN = re.compile(_LINK_TARGET + r"http://", re.IGNORECASE | re.MULTILINE)
+# Inside an HTML attribute a numeric character reference needs no ";", so an
+# href is also searched with those decoded.
+_HTML_CHARACTER_REFERENCE = re.compile(r"&(?:#[0-9]+;?|#[xX][0-9a-fA-F]+;?|[A-Za-z][A-Za-z0-9]{1,31};)")
+_HREF = r"\bhref\s*=\s*[\"']?\s*"
+JAVASCRIPT_HREF_PATTERN = re.compile(_HREF + r"javascript:", re.IGNORECASE)
+HTTP_HREF_PATTERN = re.compile(_HREF + r"http://", re.IGNORECASE)
+# <script>, or a namespaced <svg:script>.
+SCRIPT_TAG_PATTERN = re.compile(r"<(?:[A-Za-z][\w.-]*:)?script\b", re.IGNORECASE)
+SCRIPT_EXTENSIONS = frozenset({"html", "htm", "svg"})
+
+# What the skill evaluation tool writes that must not be committed: its debug
+# transcripts (with --debug) and each functional run's metadata, which names
+# the AWS account the run used. skills/.gitignore skips both, but git add -f
+# gets around it.
+DEBUG_FOLDERS = frozenset({"cli_debug", "sdk_debug"})
+# Matched at any depth, as skills/.gitignore matches it.
+FUNCTIONAL_METADATA_PATTERN = re.compile(r"(?:.*/)?evals/functional/[^/]+/_metadata\.json")
+
+# .gitattributes settings that change the bytes `git archive`, and so GitHub's
+# archive of the repository, holds for a file. Skills are published from that
+# archive, so a setting that applies under skills/ would make the published
+# files differ from the Git objects this check reads.
+ARCHIVE_ATTRIBUTES = frozenset({"export-ignore", "export-subst", "ident", "filter", "eol", "text", "crlf", "working-tree-encoding"})
+# Line-ending settings that only take effect when a file is committed. On a
+# server with Git's default settings they leave archived bytes as stored.
+ARCHIVE_NEUTRAL_SETTINGS = frozenset({"text", "text=auto", "eol=lf", "crlf", "crlf=input"})
+SKILLS_FOLDER = "skills"
+# Git splits a .gitattributes file at newlines only, and a line at these.
+GITATTRIBUTES_BLANKS = " \t\r"
 
 # Plain (unquoted) values that PyYAML, a YAML 1.1 parser, reads as text but
 # other parsers read as numbers, such as 1e3, 0o17 or 1_0e3.
@@ -134,6 +232,10 @@ class Rules:
     agent_types: frozenset[str]
     vocabulary: dict[str, frozenset[str]]
     aliases: dict[str, str]
+    allowed_extensions: frozenset[str]
+    published_excludes: tuple[str, ...]
+    # Internal host and tool names (internal-names.json), each a compiled pattern.
+    internal_names: tuple[re.Pattern[str], ...] = ()
 
 
 @dataclass
@@ -145,11 +247,19 @@ class SkillInfo:
     metadata: dict[str, str]
 
 
-def load_rules(rules_dir: Path) -> Rules:
-    """Read the rule data files. Raises ValueError when one is malformed, so the check fails closed."""
+def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
+    """Read the rule data files and the extension allowlist in skills/.gitignore.
+
+    Raises ValueError when any of them is malformed, so the check fails closed.
+    """
     agent_types = _read_json(rules_dir / AGENT_TYPES_FILE)
     vocabulary = _read_json(rules_dir / VOCABULARY_FILE)
+    published = _read_json(rules_dir / PUBLISHED_FILES_FILE)
+    internal = _read_json(rules_dir / INTERNAL_NAMES_FILE)
     try:
+        excludes = _string_list(published["exclude"], f"{PUBLISHED_FILES_FILE} exclude")
+        if not excludes or not all("/" not in e.rstrip("/") for e in excludes):
+            raise TypeError(f"{PUBLISHED_FILES_FILE}: exclude must list root-level names, folders ending in /")
         values = _string_list(agent_types["values"], f"{AGENT_TYPES_FILE} values")
         dimensions = vocabulary["values"]
         aliases = vocabulary["aliases"]
@@ -160,15 +270,49 @@ def load_rules(rules_dir: Path) -> Rules:
         ):
             raise TypeError(f"{VOCABULARY_FILE}: aliases must map non-empty strings to non-empty strings")
         vocabulary_sets = {dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in DIMENSIONS}
-        return Rules(agent_types=frozenset(values), vocabulary=vocabulary_sets, aliases=dict(aliases))
+        return Rules(
+            agent_types=frozenset(values),
+            vocabulary=vocabulary_sets,
+            aliases=dict(aliases),
+            allowed_extensions=allowed_extensions_from_gitignore(gitignore_text),
+            published_excludes=tuple(excludes),
+            internal_names=_internal_name_patterns(internal),
+        )
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"malformed rule data in {rules_dir}: {exc}") from exc
+
+
+def _internal_name_patterns(document) -> tuple[re.Pattern[str], ...]:
+    """internal-names.json as patterns: each host with any subdomain, each term as a whole word, ignoring case."""
+    if not isinstance(document, dict):
+        raise TypeError(f"{INTERNAL_NAMES_FILE}: expected an object with hosts and terms")
+    hosts = _string_list(document.get("hosts"), f"{INTERNAL_NAMES_FILE} hosts")
+    terms = _string_list(document.get("terms"), f"{INTERNAL_NAMES_FILE} terms")
+    patterns = [
+        re.compile(
+            r"(?<![A-Za-z0-9._-])(?:[A-Za-z0-9-]+\.)*" + re.escape(host) + r"(?![A-Za-z0-9_-]|\.[A-Za-z0-9])",
+            re.IGNORECASE,
+        )
+        for host in hosts
+    ]
+    patterns += [re.compile(r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])", re.IGNORECASE) for term in terms]
+    return tuple(patterns)
 
 
 def _string_list(value, label: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
         raise TypeError(f"{label} must be a list of non-empty strings")
     return value
+
+
+def allowed_extensions_from_gitignore(text: str) -> frozenset[str]:
+    """The extensions skills/.gitignore allows, from its `!*.<ext>` lines, lowercased."""
+    extensions = frozenset(
+        match[1].lower() for line in text.splitlines() if (match := GITIGNORE_EXTENSION_PATTERN.match(line.strip()))
+    )
+    if not extensions:
+        raise ValueError("skills/.gitignore lists no allowed extensions (lines such as !*.md)")
+    return extensions
 
 
 def _read_json(path: Path):
@@ -191,11 +335,37 @@ def check_skill(tree: SkillTree, rules: Rules) -> tuple[list[Finding], SkillInfo
     """Every rule that needs only this copy of the skill. Returns the findings and, when SKILL.md parses, its info."""
     findings: list[Finding] = []
     skill_md = tree.entries.get("SKILL.md")
+    info = None
     if skill_md is None:
         findings.append(Finding("error", "the skill folder has no SKILL.md"))
-        return findings, None
-    info = _check_skill_md(tree.name, skill_md.data, rules, findings)
+    else:
+        info = _check_skill_md(tree.name, skill_md.data, rules, findings)
+    _check_package(tree, rules, findings)
+    _check_content(tree, rules, findings)
     return findings, info
+
+
+def published_files(tree: SkillTree, rules: Rules) -> dict[str, Entry]:
+    """The entries that are published and that customers install: the folder minus the excluded names."""
+    folders = tuple(e for e in rules.published_excludes if e.endswith("/"))
+    names = frozenset(e for e in rules.published_excludes if not e.endswith("/"))
+    return {
+        path: entry
+        for path, entry in tree.entries.items()
+        if path not in names and not path.startswith(folders)
+    }
+
+
+def build_zip(files: dict[str, bytes]) -> bytes:
+    """A reproducible zip: entries sorted by UTF-8 path, deflate level 6, all dated 1980-01-01."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for path in sorted(files, key=lambda p: p.encode("utf-8", "surrogateescape")):
+            info = zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, files[path], compresslevel=6)
+    return buffer.getvalue()
 
 
 # --- SKILL.md -----------------------------------------------------------------
@@ -247,6 +417,9 @@ def _check_skill_md(folder: str, data: bytes, rules: Rules, findings: list[Findi
         report.error("the frontmatter has no closing --- line", line=1)
         return None
     frontmatter = match.group(1) or ""
+    size = len(frontmatter.encode("utf-8"))
+    if size > MAX_FRONTMATTER_BYTES:
+        report.error(f"the frontmatter is {size:,} bytes; the limit is {MAX_FRONTMATTER_BYTES:,}", line=1)
     if "\t" in frontmatter:
         line = frontmatter.count("\n", 0, frontmatter.index("\t")) + 2
         report.error("the frontmatter contains a tab character; use spaces", line=line)
@@ -668,6 +841,347 @@ def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report
                     else f"approved values are listed in {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}"
                 )
                 report.warning(f'"{part}" is not an approved {dimension} value; {hint}', line=line)
+
+
+# --- Package: the files that are published and installed -----------------------
+
+
+def _extension(path: str) -> str | None:
+    name = path.rsplit("/", 1)[-1]
+    stem, dot, ext = name.rpartition(".")
+    return ext.lower() if dot and stem else None
+
+
+def _check_package(tree: SkillTree, rules: Rules, findings: list[Finding]) -> None:
+    def error(message: str, path: str | None = None) -> None:
+        findings.append(Finding("error", message, path))
+
+    for path, entry in sorted(tree.entries.items()):
+        if entry.mode == "100755":
+            error(
+                f'"{path}" is executable; remove the executable bit with '
+                f'git update-index --chmod=-x "skills/{tree.name}/{path}"',
+                path,
+            )
+        elif entry.mode == "120000":
+            error(f'"{path}" is a symbolic link; a skill must contain only regular files', path)
+        elif entry.mode == "160000":
+            error(f'"{path}" is a Git submodule; a skill must contain only regular files', path)
+        elif entry.mode != REGULAR_FILE_MODE:
+            error(f'"{path}" has the unsupported Git mode {entry.mode}', path)
+
+    scripts = next((p for p in sorted(tree.entries) if "scripts" in p.split("/")[:-1]), None)
+    if scripts:
+        error(
+            f'scripts/ folders are not allowed in a skill ("{scripts}"): DevOps Agent rejects them '
+            "on upload, and skills are instructions, not code",
+            scripts,
+        )
+
+    debug = next((p for p in sorted(tree.entries) if DEBUG_FOLDERS & {d.lower() for d in p.split("/")[:-1]}), None)
+    if debug:
+        folder = next(part for part in debug.split("/") if part.lower() in DEBUG_FOLDERS)
+        error(
+            f'"{debug}" is in a {folder}/ folder, which the skill evaluation tool writes unredacted with --debug; '
+            "remove the folder",
+            debug,
+        )
+    for path in sorted(tree.entries):
+        if FUNCTIONAL_METADATA_PATTERN.fullmatch(path):
+            error(
+                f'"{path}" is run metadata from the skill evaluation tool, which names the AWS account the run '
+                "used; remove it (skills/.gitignore already skips it)",
+                path,
+            )
+
+    def warning(message: str, path: str | None = None) -> None:
+        findings.append(Finding("warning", message, path))
+
+    published = published_files(tree, rules)
+    if len(published) > MAX_PUBLISHED_FILES:
+        error(
+            f"the skill has {len(published)} published files; the limit is {MAX_PUBLISHED_FILES}. "
+            f"Files under {', '.join(rules.published_excludes)} don't count"
+        )
+    elif len(published) > MAX_PUBLISHED_FILES * WARNING_RATIO:
+        warning(f"the skill has {len(published)} published files, over 90% of the limit of {MAX_PUBLISHED_FILES}")
+
+    folded: dict[str, str] = {}
+    for path, entry in sorted(published.items()):
+        problem = _path_problem(path)
+        if problem:
+            error(problem, path)
+            continue
+        other = folded.setdefault(path.casefold(), path)
+        if other != path:
+            error(f'"{other}" and "{path}" differ only in case, so they collide when the zip is extracted', path)
+        if entry.mode != REGULAR_FILE_MODE:
+            continue  # Already reported above.
+        ext = _extension(path)
+        if ext is None:
+            error(f'"{path}" has no file extension; DevOps Agent skill uploads accept only the extensions in skills/.gitignore', path)
+        elif ext not in rules.allowed_extensions:
+            error(
+                f'"{path}" has extension ".{ext}", which DevOps Agent skill uploads don\'t accept; '
+                "the allowed extensions are listed in skills/.gitignore",
+                path,
+            )
+        if entry.data.startswith(b"#!"):
+            error(f'"{path}" starts with #!, which DevOps Agent skill uploads reject', path)
+        if len(entry.data) > MAX_FILE_BYTES:
+            error(f'"{path}" is {len(entry.data):,} bytes; a published file can be at most {MAX_FILE_BYTES:,}', path)
+        elif len(entry.data) > MAX_FILE_BYTES * WARNING_RATIO:
+            warning(f'"{path}" is {len(entry.data):,} bytes, over 90% of the {MAX_FILE_BYTES:,}-byte limit', path)
+    _check_folder_collisions(sorted(published), error)
+
+    # Paths already reported above are left out, so the zip can always be built.
+    regular = {
+        p: e.data for p, e in published.items() if e.mode == REGULAR_FILE_MODE and _path_problem(p) is None
+    }
+    zip_bytes = len(build_zip(regular))
+    if zip_bytes > ZIP_LIMIT_BYTES:
+        error(f"the skill's published files zip to {zip_bytes:,} bytes; the limit is {ZIP_LIMIT_BYTES:,}")
+    elif zip_bytes > ZIP_LIMIT_BYTES * WARNING_RATIO:
+        warning(f"the skill's published files zip to {zip_bytes:,} bytes, over 90% of the {ZIP_LIMIT_BYTES:,}-byte limit")
+
+
+def _check_folder_collisions(paths: list[str], error) -> None:
+    """Folders that differ only in case, and a file whose path is also a folder's, in any case."""
+    folders: dict[str, str] = {}
+    reported: set[str] = set()
+    for path in paths:
+        parts = path.split("/")[:-1]
+        for depth in range(1, len(parts) + 1):
+            folder = "/".join(parts[:depth])
+            key = folder.casefold()
+            other = folders.setdefault(key, folder)
+            if other != folder and key not in reported:
+                reported.add(key)
+                # Folders inside a colliding pair collide too; report only the outermost.
+                if not any(key.startswith(r + "/") for r in reported):
+                    error(f'the folders "{other}" and "{folder}" differ only in case, so they collide when extracted', path)
+    for path in paths:
+        folder = folders.get(path.casefold())
+        if folder is not None:
+            error(f'"{path}" is a file, but "{folder}/" is a folder; a case-insensitive file system can\'t hold both', path)
+
+
+def _path_problem(path: str) -> str | None:
+    if len(path) > MAX_PATH_LENGTH:
+        return f'"{path[:60]}…" is {len(path):,} characters long; the limit is {MAX_PATH_LENGTH}'
+    for segment in path.split("/"):
+        if segment in ("", ".", ".."):
+            return f'"{path}" has an empty, "." or ".." part'
+        if segment.startswith("."):
+            return f'"{path}" is a hidden file or folder ("{segment}"), which would be published; remove it'
+        if segment in RESERVED_SEGMENTS:
+            return f'"{path}" has a part named "{segment}", which some zip tools silently drop'
+        if not SEGMENT_PATTERN.fullmatch(segment):
+            return f'"{path}" may use only letters, digits, ".", "_" and "-" in each part of its path'
+        if segment.endswith("."):
+            return f'"{path}" has a part that ends with a period, which Windows can\'t extract'
+        if segment.split(".")[0].upper() in WINDOWS_RESERVED_NAMES:
+            return f'"{path}" uses the reserved name "{segment.split(".")[0]}", which Windows can\'t extract'
+    return None
+
+
+# --- Content: what must never be public, or hidden from reviewers ---------------
+
+
+def _line_at(data: bytes | str, index: int) -> int:
+    newline = b"\n" if isinstance(data, bytes) else "\n"
+    return data.count(newline, 0, index) + 1
+
+
+def _check_content(tree: SkillTree, rules: Rules, findings: list[Finding]) -> None:
+    for path, entry in sorted(tree.entries.items()):
+        if entry.mode != REGULAR_FILE_MODE:
+            continue
+        for match in AWS_ACCESS_KEY_PATTERN.finditer(entry.data):
+            if match.group() not in DOCUMENTED_EXAMPLE_KEYS:
+                findings.append(
+                    Finding(
+                        "error",
+                        "contains what looks like an AWS access key ID; remove it, and deactivate the key if it is real",
+                        path,
+                        _line_at(entry.data, match.start()),
+                    )
+                )
+        for match in PRIVATE_KEY_PATTERN.finditer(entry.data):
+            findings.append(
+                Finding(
+                    "error",
+                    "contains a private key; remove it, and treat the key as compromised",
+                    path,
+                    _line_at(entry.data, match.start()),
+                )
+            )
+
+    for path, entry in sorted(published_files(tree, rules).items()):
+        if entry.mode != REGULAR_FILE_MODE or _extension(path) not in TEXT_EXTENSIONS:
+            continue
+        text = entry.data.decode("utf-8", "replace")
+        # A byte order mark at the start of SKILL.md is reported with its frontmatter.
+        start = 1 if path == "SKILL.md" and text.startswith("\ufeff") else 0
+        match = INVISIBLE_PATTERN.search(text, start)
+        if match:
+            findings.append(
+                Finding(
+                    "error",
+                    f"contains an invisible character (U+{ord(match.group()):04X}) that can hide text from "
+                    "reviewers while the model still reads it; remove it",
+                    path,
+                    _line_at(text, match.start()),
+                )
+            )
+        if len(entry.data) > MAX_FILE_BYTES:
+            continue  # Already an error; not worth scanning further.
+        if _extension(path) == "md":
+            _check_markdown(path, text, findings)
+        elif _extension(path) in SCRIPT_EXTENSIONS and (script := SCRIPT_TAG_PATTERN.search(text)):
+            findings.append(
+                Finding(
+                    "warning",
+                    "contains a <script> element; a skill holds instructions and templates, not code, so remove it",
+                    path,
+                    _line_at(text, script.start()),
+                )
+            )
+
+
+def _lines(data: bytes) -> list[str]:
+    """Lines as GitHub numbers them: split at newlines only, each without a trailing carriage return."""
+    return [line.removesuffix("\r") for line in data.decode("utf-8", "replace").split("\n")]
+
+
+def check_added_content(base: SkillTree | None, head: SkillTree, rules: Rules) -> list[Finding]:
+    """Warnings for internal host or tool names on lines the pull request adds, in any file of the skill.
+
+    Only added lines count, as in scan-aws-identifiers, so names already on the
+    base branch don't warn on every pull request that touches the skill. A line
+    that any file of the skill held on the base branch isn't added, so moving a
+    file doesn't warn either.
+    """
+    findings: list[Finding] = []
+    base_entries = base.entries if base is not None else {}
+    changed = [
+        (path, entry)
+        for path, entry in sorted(head.entries.items())
+        if entry.mode == REGULAR_FILE_MODE
+        and not (path in base_entries and base_entries[path].data == entry.data)
+    ]
+    if not changed:
+        return findings
+    old_lines = {
+        line for entry in base_entries.values() if entry.mode == REGULAR_FILE_MODE for line in _lines(entry.data)
+    }
+    for path, entry in changed:
+        hits = []
+        for number, line in enumerate(_lines(entry.data), 1):
+            if line in old_lines:
+                continue
+            match = next((m for pattern in rules.internal_names if (m := pattern.search(line))), None)
+            if match:
+                hits.append((number, match.group()))
+        if hits:
+            number, name = hits[0]
+            more = f", and {len(hits) - 1} more line(s) like it" if len(hits) > 1 else ""
+            findings.append(
+                Finding(
+                    "warning",
+                    f'adds "{name}", an internal host or tool name{more}; this repository is public, so remove it',
+                    path,
+                    number,
+                )
+            )
+    return findings
+
+
+def gitattributes_line_applies_to_skills(line: str) -> bool:
+    """Whether one line of the root .gitattributes can change archived bytes under skills/.
+
+    It errs toward yes. A macro definition counts when it sets an archive
+    attribute, since the macro can then be used on any pattern, and a pattern
+    this function can't read exactly is taken to match skills/.
+    """
+    line = line.strip(GITATTRIBUTES_BLANKS)
+    if not line or line.startswith("#"):
+        return False
+    if line.startswith('"'):
+        # A C-style quoted pattern, which may contain spaces.
+        quoted = re.match(r'"((?:[^"\\]|\\.)*)"', line)
+        if quoted is None:
+            return _sets_archive_attribute(_gitattributes_tokens(line)[1:])
+        pattern, rest = quoted[1], line[quoted.end():]
+    else:
+        pattern, *more = re.split(f"[{GITATTRIBUTES_BLANKS}]+", line, maxsplit=1)
+        rest = more[0] if more else ""
+    if not _sets_archive_attribute(_gitattributes_tokens(rest)):
+        return False
+    if pattern.startswith("[attr]"):
+        return True
+    if pattern.startswith("!"):
+        return False  # Git ignores negative patterns in .gitattributes.
+    anchored = pattern.startswith("/")
+    first, slash, _ = pattern.lstrip("/").rstrip("/").partition("/")
+    if anchored or slash:
+        # Matched from the root, so its first part must match the skills folder.
+        # Without a further slash only that folder itself matches, which
+        # export-ignore drops whole.
+        return _part_may_match(first, SKILLS_FOLDER)
+    return True  # Matched at any depth, so under skills/ too.
+
+
+def _gitattributes_tokens(text: str) -> list[str]:
+    return [token for token in re.split(f"[{GITATTRIBUTES_BLANKS}]+", text) if token]
+
+
+def _sets_archive_attribute(tokens: list[str]) -> bool:
+    return any(
+        not token.startswith(("-", "!"))
+        and token not in ARCHIVE_NEUTRAL_SETTINGS
+        and token.split("=", 1)[0] in ARCHIVE_ATTRIBUTES
+        for token in tokens
+    )
+
+
+def _part_may_match(pattern: str, name: str) -> bool:
+    """Whether one part of a .gitattributes pattern can match `name`. Brackets and backslashes count as a match."""
+    if "[" in pattern or "\\" in pattern:
+        return True
+    return fnmatch.fnmatchcase(name, pattern)
+
+
+def _check_markdown(path: str, text: str, findings: list[Finding]) -> None:
+    def warn(message: str, index: int) -> None:
+        findings.append(Finding("warning", message, path, _line_at(text, index)))
+
+    seen: set[str] = set()
+    for match in ACTIVE_HTML_PATTERN.finditer(text):
+        tag = (match.group(1) or match.group(2)).lower()
+        if tag not in seen:
+            seen.add(tag)
+            warn(f"contains an HTML <{tag}> element; skill previews don't render raw HTML, so use Markdown", match.start())
+    # Character references and backslash escapes can spell a scheme Markdown
+    # still renders as a link, so the decoded text is searched too. A decoded
+    # newline stays a space, so line numbers still match the file.
+    def decode(pattern: re.Pattern[str], source: str) -> str:
+        return pattern.sub(lambda m: html.unescape(m[0]).replace("\n", " "), source)
+
+    decoded = _MARKDOWN_ESCAPE.sub(r"\1", decode(_CHARACTER_REFERENCE, text))
+    html_decoded: str | None = None
+    for pattern, href_pattern, message in (
+        (JAVASCRIPT_URL_PATTERN, JAVASCRIPT_HREF_PATTERN, "contains a javascript: link; links must use https://"),
+        (HTTP_LINK_PATTERN, HTTP_HREF_PATTERN, "links to an http:// address; use https://"),
+    ):
+        source, match = text, pattern.search(text)
+        if match is None:
+            source, match = decoded, pattern.search(decoded)
+        if match is None:
+            html_decoded = html_decoded if html_decoded is not None else decode(_HTML_CHARACTER_REFERENCE, text)
+            source, match = html_decoded, href_pattern.search(html_decoded)
+        if match:
+            findings.append(Finding("warning", message, path, _line_at(source, match.start())))
 
 
 # --- Conformance cases ------------------------------------------------------------

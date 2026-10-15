@@ -158,17 +158,71 @@ def uncommitted_skill_changes(repo_root: Path) -> bool:
         return False
 
 
+def read_gitignore(repo_root: Path, rev: str) -> str:
+    return _git(repo_root, "show", f"{rev}:{SKILLS_DIR}/.gitignore").decode("utf-8")
+
+
+def repository_results(repo_root: Path, rev: str) -> list[SkillResult]:
+    """Rules outside skill folders that still decide what is published.
+
+    Skills are published from GitHub's archive of the whole repository, which
+    must contain no symbolic link, and a root .gitattributes setting can change
+    the bytes that archive holds for a skill's files.
+    """
+    listing = _git(repo_root, "ls-tree", "-r", "-z", "--full-tree", rev)
+    results: list[SkillResult] = []
+    for record in listing.split(b"\0"):
+        if not record:
+            continue
+        meta, _, raw_path = record.partition(b"\t")
+        mode, kind, oid = meta.decode("ascii").split(" ")
+        path = _decode_path(raw_path)
+        if path.startswith(f"{SKILLS_DIR}/"):
+            continue  # Checked per skill.
+        if mode == "120000":
+            message = (
+                f"{path} is a symbolic link; skills are published from an archive of the whole repository, "
+                "which must not contain any"
+            )
+            results.append(SkillResult(path, [sc.Finding("error", message)], is_skill=False))
+        elif path == ".gitattributes" and kind == "blob":
+            # Git stops reading the file at its first NUL byte, so this does too.
+            text = _read_blobs(repo_root, [oid])[0].split(b"\0", 1)[0].decode("utf-8", "replace")
+            findings = [
+                sc.Finding(
+                    "error",
+                    "this line can change how Git archives files under skills/, so the published files could "
+                    "differ from what the check reads; scope it to another folder, or remove the setting",
+                    line=number,
+                )
+                # Git splits the file at newlines only, so line numbers match GitHub's.
+                for number, line in enumerate(text.split("\n"), 1)
+                if sc.gitattributes_line_applies_to_skills(line)
+            ]
+            if findings:
+                results.append(SkillResult(path, findings, is_skill=False))
+    return results
+
+
 def check_repository(
-    repo_root: Path, rules: sc.Rules, base_ref: str | None, head_ref: str
+    repo_root: Path, rules: sc.Rules, base: str | None, head_ref: str
 ) -> tuple[list[SkillResult], set[str] | None]:
-    """Results for every skill at `head_ref`, and the skills touched since the merge base (None without a base)."""
+    """Results for every skill at `head_ref`, and the skills touched since `base` (None without a base).
+
+    With a base, the lines a pull request adds are also checked for internal
+    host and tool names.
+    """
     head_trees, results = read_skills(repo_root, head_ref)
+    results += repository_results(repo_root, head_ref)
     touched = None
-    if base_ref is not None:
-        base = merge_base(repo_root, base_ref, head_ref)
+    base_trees: dict[str, sc.SkillTree] = {}
+    if base is not None:
         touched = touched_skills(repo_root, base, head_ref)
+        base_trees, _ = read_skills(repo_root, base)
     for name in sorted(head_trees):
         findings, _ = sc.check_skill(head_trees[name], rules)
+        if base is not None:
+            findings += sc.check_added_content(base_trees.get(name), head_trees[name], rules)
         results.append(SkillResult(f"{SKILLS_DIR}/{name}", findings))
     return results, touched
 
@@ -278,6 +332,12 @@ def self_check(rules_dir: Path, rules: sc.Rules) -> list[str]:
     return sc.run_conformance(cases, rules)
 
 
+def _could_not_run(exc: GitError) -> int:
+    print(f"::error title=Skill publishing rules could not run::{_escape_data(str(exc))}")
+    print("The check could not read the repository. This is not a finding about the pull request.")
+    return 2
+
+
 def main(argv: list[str] | None = None, repo_root: Path | None = None, rules_dir: Path = RULES_DIR) -> int:
     try:
         return _run(argv, repo_root, rules_dir)
@@ -295,8 +355,24 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
     args = parser.parse_args(argv)
     repo_root = repo_root or _repo_root()
 
+    base = None
     try:
-        rules = sc.load_rules(rules_dir)
+        if args.self_check_only:
+            # The cases test the rules, not the repository, so no Git is needed.
+            gitignore = (repo_root / SKILLS_DIR / ".gitignore").read_text(encoding="utf-8")
+        else:
+            # The extension allowlist is read from the merge base when there is
+            # one, so a new extension takes effect only after the
+            # skills/.gitignore change that adds it has merged.
+            base = merge_base(repo_root, args.base_ref, args.head_ref) if args.base_ref else None
+            gitignore = read_gitignore(repo_root, base or args.head_ref)
+    except OSError as exc:
+        print(f"::error title=Skill publishing rules::cannot read {SKILLS_DIR}/.gitignore: {_escape_data(str(exc))}")
+        return 2
+    except GitError as exc:
+        return _could_not_run(exc)
+    try:
+        rules = sc.load_rules(rules_dir, gitignore)
     except ValueError as exc:
         print(f"::error title=Skill publishing rules::{_escape_data(str(exc))}")
         return 2
@@ -313,11 +389,9 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
     try:
         if args.head_ref == "HEAD" and uncommitted_skill_changes(repo_root):
             print(f"note: uncommitted changes under {SKILLS_DIR}/ are not checked; commit them first.\n")
-        results, touched = check_repository(repo_root, rules, args.base_ref, args.head_ref)
+        results, touched = check_repository(repo_root, rules, base, args.head_ref)
     except GitError as exc:
-        print(f"::error title=Skill publishing rules could not run::{_escape_data(str(exc))}")
-        print("The check could not read the repository. This is not a finding about the pull request.")
-        return 2
+        return _could_not_run(exc)
     return report(results, touched)
 
 
