@@ -10,11 +10,22 @@ name: Validate skills
 #
 # NOTE: a red check does not block merging on its own. An admin must add the
 # job's name ("validate-skills") to the required status checks for `main` in
-# branch protection. Until then this workflow is advisory.
+# branch protection. Until then this workflow is advisory. Use "Require branches
+# to be up to date before merging" with it rather than a merge queue: the
+# workflow doesn't run on merge_group events.
+#
+# Kill switch: when the check is wrong about one pull request, a maintainer adds
+# the skip-validate-skills label. The check still runs and reports, but its steps
+# no longer fail the job, so the pull request can merge. When the check breaks
+# every pull request, an admin removes "validate-skills" from the required status
+# checks until the fix merges (see "Skill Publishing Rules" in CONTRIBUTING.md).
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # labeled and unlabeled re-run the check when the skip label changes. The
+    # job must never be skipped with `if:` instead: a skipped required check
+    # counts as passed.
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
     # Deliberately NOT filtered with `paths:`. A required status check that never
     # runs is reported as pending forever, so a path filter would block every pull
     # request that touches nothing under skills/. The check is fast and simply
@@ -50,13 +61,20 @@ jobs:
 
       # -I (isolated mode) keeps a file such as pip.py or unittest.py at the
       # repository root from running in place of the module.
+      - name: Note the skip label
+        if: contains(github.event.pull_request.labels.*.name, 'skip-validate-skills')
+        run: echo "::warning title=validate-skills isn't blocking::The skip-validate-skills label is set, so this check's failures don't block the merge. Remove the label once the check is fixed."
+
       - name: Install the pinned dependencies
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'skip-validate-skills') }}
         run: python3 -I -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
 
       - name: Test the check
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'skip-validate-skills') }}
         run: python3 -I -m unittest discover -s tests -v
 
       - name: Check every skill
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'skip-validate-skills') }}
         # Event values are passed through the environment rather than
         # interpolated into the command, and quoted on use.
         env:
