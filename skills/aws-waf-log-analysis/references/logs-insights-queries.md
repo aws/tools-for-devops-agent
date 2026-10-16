@@ -426,3 +426,47 @@ filter action = "ALLOW" and httpRequest.clientIp in [<ip_list>]
 Build the rule regex from the ACL: also OR in every custom Block or Challenge rule name from D-2 and the exact terminating rule-group names seen in QI-02. For the **blocked slice** of one rule (threat-hunting B-C), run step 2 with `filter terminatingRuleId = "<rule>"` instead of the ALLOW and client filter. `uriSafe` is the URI lowercased and defanged as in SKILL.md, "Output", for use inside the querying subagent only; return to the main agent the application path, or `[traversal-lfi]` / the class when the URI itself carries the payload, plus class and count. Never group by `httpRequest.args`, which would return raw payloads. A `sqliHits` count that rests only on a quote (`'` or `%27`) can be a benign value: treat it as low confidence. **Not validated with data:** the flag sums and the `replace`/`tolower` chain (the `fields (... like /.../) as flag` form is validated in QI-18 on `@message` only).
 
 **Interpret:** as QA-19 in `athena-queries.md`: every row is a missed-by-rule finding; a non-zero class column names the payload class that got through (report class and count, never raw text); rows with all flags 0 are the attacker's ordinary requests and still count. Return the field location with each row (URI path when `uriSafe` itself carries the class; otherwise query argument) and give a miss reason only from the rule's documented inspection target (L-1), otherwise "reason not determined".
+
+### QI-20 — Payload patterns inside one sub-rule (attack vs legitimate content, blocking or Count)
+
+**Use when:** as QA-20 in `athena-queries.md`: one managed sub-rule matches payload-bearing requests, in Block or in Count, and you need to split its matches into attack payloads and legitimate content. QI-06 reads only the first match detail of a terminating rule; this query reads the entry of `<sub_rule>` wherever it appears (terminating rule or Count-mode `nonTerminatingMatchingRules`).
+
+```
+filter @message like /"ruleId":"<sub_rule>"/
+| parse @message /"ruleId":"<sub_rule>","action":"(?<subAction>[^"]+)"(?<detail>[^\]]{0,600})/
+| parse detail /"location":"(?<loc>[^"]+)"/
+| parse detail /"matchedData":\[(?<md>[^\]]*)/
+| parse @message /"terminatingRuleMatchDetails":\[\{"conditionType":"[^"]*","location":"(?<tloc>[^"]*)","matchedData":\[(?<tmd>[^\]]*)\](?:,"matchedFieldName":"(?<field>[^"]*)")?/
+| parse httpRequest.args /^(?<queryArg>[^=&]+)=/
+| fields coalesce(loc, tloc) as location, coalesce(md, tmd, httpRequest.args) as fragment
+| fields substr(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(tolower(fragment), "<", "_"), ">", "_"), "'", "_"), "\"", "_"), ";", "_"), "`", "_"), "$", "_"), "|", "_"), "%3c", "_"), "%3e", "_"), "%27", "_"), "%22", "_"), 0, 40) as patternSafe
+| stats count(*) as requests, count_distinct(httpRequest.clientIp) as clients, count_distinct(httpRequest.uri) as distinctUris, earliest(httpRequest.httpMethod) as sampleMethod, min(@timestamp) as firstSeen, max(@timestamp) as lastSeen
+  by action, subAction, location, field, queryArg, patternSafe
+| sort requests desc | limit 50
+```
+
+**Validated with data.** `subAction` is the sub-rule's own action in the record: `COUNT` for a Count-mode match (the request was not stopped by this sub-rule), `BLOCK` for a terminating one; `action` is the request's final action. `detail` stops at the first `]`, so `md` holds the matched tokens of the first match-detail object only; an empty `location` means the sub-rule logged no match details, and `fragment` then falls back to the query arguments. `queryArg` is the first query-argument name only. To name the endpoint of one pattern group, rerun with `filter` on that `patternSafe` value and `stats count(*) by httpRequest.httpMethod, httpRequest.uri` (report a payload-bearing URI as its class). Never group by raw `httpRequest.args` or `md`.
+
+**Interpret:** as QA-20: classify each `patternSafe` inside the querying subagent as attack, legitimate content or not determinable (access-denied-triage, "Payload split inside one sub-rule"); return per (sub-rule, verdict) the counts, distinct clients, field location (`location`, `field`, `queryArg`), endpoint and a pattern summary in words, never `patternSafe`. Only SQL injection and cross-site scripting matches log `matchedData` and a location; other managed sub-rules (for example `Log4JRCE_BODY`) log no match detail, so their split by payload is "not determinable from logs": report it as such.
+
+### QI-21 — Per-client profile of a denied population
+
+**Use when:** as QA-21: one client or a small population is denied by one rule, and you need one profile per client for the Symptom records.
+
+Step 1: run QI-03 for the rule (or sub-rule) and collect the `httpRequest.clientIp` values into `<ip_list>`.
+
+Step 2:
+
+```
+filter httpRequest.clientIp in [<ip_list>]
+| parse @message /"name":"(?i:user-agent)","value":"(?<ua>[^"]*)"/
+| stats sum(action != "ALLOW") as denied, sum(action = "ALLOW") as allowed, count_distinct(httpRequest.uri) as distinctUris, min(@timestamp) as firstSeen, max(@timestamp) as lastSeen
+  by httpRequest.clientIp, httpRequest.country, ua
+| sort denied desc | limit 50
+```
+
+For the paths, rerun step 2 with `stats count(*) as requests by httpRequest.clientIp, action, httpRequest.httpMethod, httpRequest.uri` (report a payload-bearing URI as its class, as QI-19 `uriSafe`). Add `clientAsn` to the `by` list only when the ACL uses an ASN match statement.
+
+**Validated with data.** One row per client and user agent; `denied` and `allowed` add up to the client's requests in the window.
+
+**Interpret:** as QA-21: one row per client and user agent, each one Symptom; the row count (or QI-02 `clients`) is the measured distinct client count.

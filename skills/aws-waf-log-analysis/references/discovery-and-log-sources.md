@@ -14,7 +14,7 @@ Procedures D-1 to D-7 take the agent from "something is denying traffic" to the 
 | Procedure | Purpose | Default-policy permission needed | If missing |
 |---|---|---|---|
 | D-1 | Resource to Web ACL | `cloudfront:GetDistribution*`, `wafv2:GetWebACLForResource`, `wafv2:List*` | Use the ACL named in the request, or rank ACLs by metrics (D-5) |
-| D-2 | Read the ACL | `wafv2:GetWebACL` | Report rule names from metric dimensions and sampled requests |
+| D-2 | Read the ACL | `wafv2:GetWebACL`; `wafv2:GetIPSet` and `wafv2:ListIPSets` for a denying IP-set rule | Report rule names from metric dimensions and sampled requests; an unread IP set is a gap |
 | D-2b | Token posture | none beyond D-2 (`wafv2:GetWebACL`) | Classify from logs only (Q-18) and say the ACL was not read |
 | D-3 | Logging destination to backend | `wafv2:GetLoggingConfiguration`, `firehose:Describe*` | Treat logging as unknown and go to D-5 |
 | D-4 | Find the table or log group | `glue:GetDatabases`, `glue:GetTables`, `glue:GetTable` | Go to D-5 and offer D-6 (table missing), or D-5 (Athena not permitted) |
@@ -26,7 +26,7 @@ Procedures D-1 to D-7 take the agent from "something is denying traffic" to the 
 
 ## D-1 - Resource to Web ACL
 
-Goal: find the Web ACL (name, ID, ARN, scope, Region) that fronts the affected resource.
+Goal: find the Web ACL (name, ID, ARN, scope, Region) that fronts the affected resource. Run D-1 first for every request, including one that only describes a symptom on a CloudFront distribution, ALB or API Gateway API and never names WAF. No Web ACL in the path is `WAF_CLEARED` (access-denied-triage, A0 check 1), and the RCA continues to the actual cause.
 
 | Resource | Call | Result field |
 |---|---|---|
@@ -70,6 +70,7 @@ Checklist (record what you find; each item feeds the triage verdict):
 | `AssociationConfig.RequestBody` (per-resource-type inspection size limit) | Bodies larger than the limit are only partly inspected; compare with `requestbodysizeinspectedbywaf`. |
 | `LabelNamespace`, `Rules[].RuleLabels` | Label sources for label-based rules. |
 | `VisibilityConfig.MetricName` and each rule's `VisibilityConfig.MetricName` | The dimension values used for metrics and for `GetSampledRequests` (D-5). |
+| `IPSetReferenceStatement` (`ARN`, in a rule or a scope-down) | For a rule that denies the affected client, read the set with `wafv2:GetIPSet` and name the entry that contains the client IP; list IP sets (`wafv2:ListIPSets`) for a similarly named allow or trusted set and record which rule, if any, references it (access-denied-triage, "Per-client symptoms and IP-set evidence"). |
 | Rule named `ShieldMitigationRuleGroup_*` | Shield Advanced automatic application layer mitigation (L7AM) is attached. Go to D-7. |
 
 The `ShieldMitigationRuleGroup_*` rule runs at priority 10,000,000, after your own rules.
@@ -325,8 +326,8 @@ Read this section in the main agent before you start the log subagent (SKILL.md,
 - the UTC window;
 - the probe as its first query (Athena);
 - the mode and the steps to run:
-  - Mode A: A0 check 4, the A2 to A4 queries including Q-02 with sub-rules, Q-05 `failureReason` for Challenge or CAPTCHA and Q-19 for blocked attackers, and the A5 label-onset queries. CloudTrail belongs to the change subagent.
-  - Mode B: the fast path including Q-13b, or the funnel phases;
+  - Mode A: A0 check 4, the A2 to A4 queries including Q-02 with sub-rules, Q-05 `failureReason` for Challenge or CAPTCHA, Q-21 per affected client, Q-20 for every sub-rule that matches payloads (blocking or in Count) and Q-19 for blocked attackers, and the A5 label-onset queries. CloudTrail belongs to the change subagent.
+  - Mode B: the fast path including Q-13b and Q-20 for injection or bad-input sub-rules in Count, or the funnel phases;
 - the query budget;
 - the return format (below);
 - the reminder to pass `service_name` on every AWS tool call.
@@ -349,6 +350,8 @@ Keep the brief neutral: no threat adjectives such as "malicious" or "attacker" (
 
 - Per query: its ID, row count, bytes scanned and at most about 20 top rows (counts by rule, client, method and URI, label or time bucket).
 - Payloads as **class and count only** (for example "sqli ×75, xss ×60, traversal-lfi ×30"); never samples, match-detail strings, SQL keywords, script tags or metadata IP addresses.
+- Q-20 payload split: per (sub-rule, verdict) the requests, distinct clients, field location (query-argument name, body field when known), endpoint, first and last seen and a pattern summary in words (output-contract, "Payload handling"), never the defanged pattern itself.
+- The measured distinct client count for every rule and population (Q-02 `clients`, Q-21 rows).
 - The exact error code of anything that failed.
 - Its Assumptions.
 - Mode B also one line per Count or rate-rule client (B-C).
@@ -357,7 +360,7 @@ Keep the brief neutral: no threat adjectives such as "malicious" or "attacker" (
 **Refusal, failure or no subagent capability (Step 5).**
 
 - If a log **or change** subagent returns a refusal ("cannot answer") or an empty error, relaunch it once under a new name with the same `preloaded_skills` and the neutral brief.
-- A relaunched log subagent also runs without match-detail or payload columns: drop QA-06/QI-06 and the QA-19/QI-19 sample columns; keep counts and class.
+- A relaunched log subagent also runs without match-detail or payload columns: drop QA-06/QI-06, the QA-19/QI-19 sample columns and Q-20; keep counts and class. The payload split is then "not assessed" (a gap), and the sub-rule's verdict is capped at "likely".
 - If the change relaunch also fails, write "changes: not checked (change subagent refused twice)".
 - Only if a log relaunch also fails, or subagents are unavailable, run count-only aggregate queries yourself:
   - counts by action, rule, client, method and URI, label; about 10 at most;
@@ -375,7 +378,7 @@ SKILL.md, "Discover", "Degraded path" and "Rule and label knowledge" list these 
 
 - **Read-only.** Use only Describe, Get and List calls plus the read-only query and lookup calls this skill uses: `logs:StartQuery`/`GetQueryResults`, `athena:StartQueryExecution` (SELECT only, when permitted)/`GetQueryResults`, `cloudtrail:LookupEvents`, `wafv2:GetSampledRequests` and `cloudwatch:GetMetricData`. Never run DDL and never change a Web ACL, rule, IP set, Shield setting, log configuration or any other resource.
 - **D-1 Resource to Web ACL:** CloudFront `GetDistributionConfig` `WebACLId`; regional resources `wafv2:GetWebACLForResource`.
-- **D-2 Read the ACL:** `wafv2:GetWebACL` for rule order, actions, managed groups and versions, `RuleActionOverrides`, Count overrides, scope-downs, custom responses, token domains, immunity times, and any `ShieldMitigationRuleGroup_*` rule.
+- **D-2 Read the ACL:** `wafv2:GetWebACL` for rule order, actions, managed groups and versions, `RuleActionOverrides`, Count overrides, scope-downs, custom responses, token domains, immunity times, IP set references (read a denying rule's set with `wafv2:GetIPSet`), and any `ShieldMitigationRuleGroup_*` rule.
 - **D-2b Token posture:** from the same response, classify P0 (no token-aware rules), P1 (token labels, no or only threshold-based enforcement) or P2 (strict token enforcement), using Bot Control `InspectionLevel` and ML, ATP/ACFP/Anti-DDoS, token-absent rules, `TokenDomains` and immunity times; confirm with Q-18.
 - **D-3 Log destination:** `wafv2:GetLoggingConfiguration`, including logging filters and redacted fields; a log group means Logs Insights, S3 or Firehose means Athena, none, or a non-S3 Firehose destination (HTTP endpoint or third-party platform) without a full S3 backup, means the degraded path.
 - **D-4 Find the table or log group:** `glue:GetDatabases`, then `glue:GetTables` for **every** database, including `default`, matching the table `Location` or `storage.location.template` to the bucket/prefix, in the ACL's Region, then the session Region, then the Regions of other resources in the request (the table lives wherever Athena is set up). Write "no table" only after that full listing; then take the degraded path and D-6. Never analyze raw log objects (`s3:GetObject`, directly or through a subagent) as a substitute.

@@ -91,7 +91,8 @@ poll each once; re-poll only the ones still running.
 6. Label frequency on ALLOW: Q-09 with `action = 'ALLOW'` added (Logs Insights:
    `filter action = "ALLOW"` first).
 7. Attacker residue: Q-19 (two steps on Logs Insights).
-8. Within the budget: if the D-2b posture is P1 or P2, add Q-16b (or Q-18); if Shield L7AM is
+8. **Payload split (mandatory):** Q-20 for each injection, cross-site scripting or bad-input sub-rule that D-2 shows overridden to Count (start it with the others), and for such a sub-rule that item 1 shows blocking (in the follow-up pass); the top two or three by matches within the budget. Split into attack, legitimate content and not determinable (access-denied-triage, "Payload split inside one sub-rule").
+9. Within the budget: if the D-2b posture is P1 or P2, add Q-16b (or Q-18); if Shield L7AM is
    attached (D-7), add Q-14.
 
 Judge B0 known automation from items 2 to 4 (with Q-01 for its rate). Every per-client line from item 3 carries the client's user-agent class (from Q-13 `sample_ua`), method and URI; a line returned without a URI is completed (QA-08c `top_endpoints`, or QI-01 / QA-01 for that client) before any conclusion such as "no burst", and that completion is the one allowed follow-up pass. Any client whose `max_per_5min` exceeds a rate-rule limit, or that sends POSTs to a payment, checkout, login, signup or password-reset path, gets a per-client method and path breakdown with its peak per-minute rate (QA-08c `top_endpoints`, or Q-01 filtered to that client with 1-minute buckets and method and URI in the grouping) and is reported as a finding (known automation under B0, or a card-testing, credential-stuffing or abuse candidate); never describe it as "ordinary" or "normal" traffic without that breakdown. **Every Q-13b row outside the top-talker cohort with a burst on a sensitive path, and every client whose `peak_per_5min` exceeds a rate-rule limit, is a finding** with its client, method, URI, requests, peak rates and first to last seen (for example "browser UA, POST <uri>: 400 requests in 20 s (<start>-<end> UTC), peak 400 per minute, limit 300 per 5 min: card-testing candidate (likely), matched by the rate rule in Count, not blocked"). A browser user agent, a small share of the window, ALLOW actions, few distinct URIs or the absence of threat labels never make it "ordinary", "normal", "a retry or refresh burst" or "not corroborated as abuse": card testing and credential stuffing carry no WAF labels by design. In testing, runs that already had such a client in Q-13 and Q-08c (a browser UA, two URIs, a few hundred rate-rule matches) still dismissed it as ordinary browser traffic because no query named its method, URI and peak minute. Then drill only the top one to three candidates (for example Q-01 or Q-03 filtered to one client).
@@ -144,7 +145,7 @@ monitors, uptime checkers, partner integrations), so they do not distort baselin
 - Compute these with and without the B0 clients. This is the baseline everything else is
   compared against.
 
-### B-B - Detect standouts (anomaly heuristic; Q-01, Q-03, Q-08, Q-11, Q-12, Q-14, Q-16b, Q-17, Q-19)
+### B-B - Detect standouts (anomaly heuristic; Q-01, Q-03, Q-08, Q-11, Q-12, Q-14, Q-16b, Q-17, Q-19, Q-20)
 
 With no chart to eyeball, define numerically what stands out and rank candidates:
 
@@ -157,6 +158,15 @@ With no chart to eyeball, define numerically what stands out and rank candidates
   whose owning rule is in Count mode (Q-08, plus Q-09; on Athena also QA-08b, which is Athena-only because QI-08 covers both the top-level and rule-group lists; cross-check D-2 Count
   overrides). Include rate-based rules in Count. Missed-threat lead. Limited if the logging
   filter drops ALLOW records.
+- **Count-mode payload split:** for every injection, cross-site scripting or bad-input sub-rule
+  in Count (D-2 `RuleActionOverrides`, Q-08), run Q-20 and split its matches by pattern and
+  field. The attack part is a "detected, not blocked" finding (the requests reached the origin);
+  the legitimate-content part (business text that only looks like SQL, script or JNDI, for
+  example product descriptions or educational text) is a false positive of that sub-rule that
+  must stay unblocked. Report both with counts, distinct clients, field location and pattern
+  summary, and never one verdict for all of the group's matches. The same clients or IPs can
+  send both, so never attribute every match from one IP to an attacker; report the measured
+  distinct client count (Q-20 `clients`), never an assumed "distributed" or "single source".
 - **Attacker residue:** for every client IP with any BLOCK from an injection, bad-input or bot
   rule in the window, list its ALLOW requests (count, URIs, args class) with Q-19 and report
   each as a missed-by-rule finding with its URI pattern (application path, or the class such as
@@ -331,7 +341,9 @@ applied, and any logging-filter limit. The output is final and never ends with a
    called a "flood", "abusive", an attack or "over-limit abuse" in any message, finding or root cause, and is not grouped with an attacker ("both clients exceeded the limit"): describe it separately as known automation that exceeds the rule limit. Counts in findings and the final answer come from the same subagent table.
 4. **Detected-not-blocked findings:** labels present on ALLOW requests, Count-mode matches and
    Count-mode rate-based rules; the rule that should have caught them and whether it is in Count
-   mode (D-2). One line per client behind each Count or rate rule (B-C: user-agent class, method, URI,
+   mode (D-2). Per injection or bad-input sub-rule in Count, the payload split (Q-20): the attack
+   part ("detected, not blocked") and the legitimate-content part (a false positive that must
+   stay unblocked), each with counts, distinct clients, field location and pattern summary. One line per client behind each Count or rate rule (B-C: user-agent class, method, URI,
    requests, `max_per_5min` vs the limit, classification), and one line per Q-13b sensitive-path
    burst (method, URI, requests, peak per minute and per 5 minutes, first to last seen).
    Attacker residue: per blocked attacker, a missed-by-rule line with its ALLOW count, URI
@@ -343,7 +355,10 @@ applied, and any logging-filter limit. The output is final and never ends with a
 6. **Recommended mitigations** (required heading, never omitted when any finding exists), with
    two sub-headings, **WAF layer** and **Application layer** (R-11), each item ranked, citing
    R-xx, marked *reduces* or *eliminates* the observed pattern, with a Count-first validation
-   step, scoped to the abused path, rule or country. For a card-testing or credential-stuffing
+   step, scoped to the abused path, rule or country. Never switch a whole managed rule group,
+   or all of its sub-rules, from Count to Block, or remove its `RuleActionOverrides` wholesale:
+   enforce per sub-rule on the affected path and field with a label-based exception for the
+   legitimate content (R-01, "Enforcing a Count-mode sub-rule"), Count first. For a card-testing or credential-stuffing
    burst, the first WAF-layer item is a path-scoped rate-based rule on that method and URI
    (R-10, Count first), and its application-layer pair is listed too (for example payment
    velocity limits per card, session or account, CAPTCHA or step-up on the payment form for
@@ -379,6 +394,7 @@ SKILL.md, "Mode B" lists each step in short form. Read this section when you nee
 - Step B1: **Fast path first** for a window of 2 hours or less, or one specific question: a fixed set of about 10 queries (action-by-rule time series, top talkers with an action split, per-client split of every Count and rate rule, distinct URIs per IP, the mandatory Q-13b, label frequency on ALLOW, attacker residue), started together where the backend allows and polled once. Q-13b gives one row per (client, method, URI) for non-GET methods and payment, checkout, login, signup or password-reset paths, plus per-client peak 1-minute and 5-minute rates, with the top talker sorted apart and reported separately, so a short burst cannot hide under a known-automation client. Every such burst, and every client over a rate-rule limit, is a finding with method, URI, count, peaks and first to last seen, never "ordinary", "normal" or "a retry burst" (a browser UA, ALLOW and no labels are what card testing looks like). Run the full funnel only for candidates the fast path cannot settle.
 - Step B2: **B0 Known automation:** high-volume, low-diversity clients with corroborating evidence, excluded from baselines (Q-13, Q-12, Q-01); a steady-rate load-testing or monitoring client with low URI diversity and no threat labels goes under a required "Known automation" heading and is never labelled card testing or abuse; never exclude a population carrying token-reuse or coordinated-activity labels.
 - Step B3: **B-A Overview and B-B Standouts:** time series by action, one-dimension breakdowns and label frequency (Q-01, Q-02, Q-03, Q-09), then temporal, concentration, enforcement-mismatch, distribution-shape and Shield signals ranked numerically (Q-08, Q-11, Q-12, Q-14, Q-16b, Q-17).
+- Step B4 (Count-mode payload split): for every injection or bad-input sub-rule in Count, Q-20 splits its matches by pattern and field; the attack part is "detected, not blocked", the legitimate-content part a false positive that must stay unblocked, each with counts, distinct clients, field and pattern summary.
 - Step B4: **Attacker residue (B-B):** for every client with any BLOCK from an injection, bad-input or bot rule, report its ALLOW requests as a missed-by-rule finding (count, defanged URI pattern or class, payload class from `args_class`, field location; Q-19); never call them "benign", "clean" or "accounted for" unless Q-19 ran and showed `args_class` `none` on application paths. Label-based checks cannot see unlabeled ALLOWs. Explain a miss only from the rule's documented inspection target (L-1) against that field location (taken from `args_class` and the URI column, so the step-5 retry without sample columns loses nothing); otherwise write "reason not determined". Copy the subagent's field location verbatim into your residue line and the mitigation handoff: a query-argument residue needs a query-string rule or a scoped query-argument match, and a `UriPath` rule does not cover it.
 - Step B5: **B-C to B-E Drill, narrow, confirm:** re-pivot one standout across the other facets, with a per-client line for every Count or rate rule (Q-08c: user-agent class, method, URI, requests and `max_per_5min` against the limit; a line without a URI is completed with Q-08c `top_endpoints` or Q-01 before concluding; a burst on a payment, checkout, login, signup or password-reset URI is a card-testing or credential-stuffing finding whatever its size, even when a known-automation client dominates the totals, fixed by a path-scoped R-10 on that URI, Count-first, not by excluding known automation) and token analysis chosen by the D-2b posture; narrow to one client, rule or endpoint (Q-13b supplies method, URI and peak minute) (at most four or five filters); confirm with label co-occurrence (Q-10) or token reuse (Q-16b or Q-16).
 - Step B6: **B-F and B-G:** resolve load-bearing labels (L-1, then bundled semantics; unverified stays unverified), map each signature to volumetric, bot, malicious injection or missed-by-rule and to an R-xx mitigation; hand legitimate-user denials to Mode A.

@@ -9,14 +9,15 @@ These patterns are the advice the agent gives in step A7 of `access-denied-triag
 - Always include a **Count-first validation step**: deploy the new or changed rule in Count, watch its matches in logs (Q-08 (QA-08 / QI-08), QA-08b for rule-group sub-rules) and `CountedRequests` metrics for a representative period, then switch to the terminating action. A rule placed **after** a rule that blocks can never see the blocked requests (a terminating action ends evaluation), so a later label rule cannot be validated while the earlier sub-rule still blocks; use the label-rule sequence in R-01 for that case.
 - Name what a human should confirm before acting (for example, that the excluded client really is the partner, or that the excluded URI cannot carry attack payloads).
 - Never recommend loosening a rule for traffic judged `CORRECT_MITIGATION`. Never recommend turning a rule or rule group off as the fix (deleting it, removing it from the ACL, or a blanket Count override of a whole group), nor removing the Web ACL or disassociating it from a resource. Scoped sub-rule Count overrides paired with a label rule (R-01) and the R-08 options with their stated trade-off are allowed.
+- Never recommend switching a whole managed rule group, or all of its sub-rules, from Count to Block, or removing its `RuleActionOverrides` wholesale, even when a Count-mode sub-rule shows real attacks (detected, not blocked). Enforcement is per sub-rule, scoped to the affected path and field, with a label-based exception (or a scope-down) for the legitimate pattern, validated in Count first (R-01, "Enforcing a Count-mode sub-rule"). Removing one sub-rule's override is the same as a site-wide Block of that sub-rule: recommend it only when Q-20 showed no legitimate matches for it anywhere.
 - Use exact rule and label names as they appear in the logs or `GetWebACL`. Rule names and label names can differ in casing (rule `SizeRestrictions_BODY`, label `awswaf:managed:aws:core-rule-set:SizeRestrictions_Body`); copy labels from Q-09 (QA-09 / QI-09), never build them from rule IDs.
 
 | ID | Pattern | Typical verdict |
 |---|---|---|
-| R-01 | Override one managed sub-rule to Count, then block on its label with a scoped exception | `FALSE_POSITIVE` on one sub-rule |
+| R-01 | Override one managed sub-rule to Count, then block on its label with a scoped exception; enforce a Count-mode sub-rule the same way | `FALSE_POSITIVE` or `MIXED` on one sub-rule; a sub-rule in Count that detected attacks |
 | R-02 | Size-rule exception for specific URIs | `FALSE_POSITIVE` on `SizeRestrictions_BODY` |
 | R-03 | Scope-down statement on the managed rule group | `FALSE_POSITIVE` for one known client |
-| R-04 | IP-based exception for a verified partner, scoped to the denying rule only (never an Allow rule) | `FALSE_POSITIVE` or `CLIENT_CANNOT_SOLVE` for a verified partner, last resort |
+| R-04 | Correct a wrong entry in a custom block IP set; otherwise an IP-based exception for a verified partner, scoped to the denying rule only (never an Allow rule) | `FALSE_POSITIVE` or `CLIENT_CANNOT_SOLVE` for a verified partner (the exception is the last resort) |
 | R-05 | Restrict Challenge/CAPTCHA to HTML GETs | `CLIENT_CANNOT_SOLVE` |
 | R-06 | Client integration (WAF JavaScript or mobile SDK) and `TokenDomains` | `CLIENT_CANNOT_SOLVE` |
 | R-07 | Block or rate-based rule instead of Challenge on machine-to-machine endpoints | `CLIENT_CANNOT_SOLVE` on API endpoints |
@@ -29,7 +30,7 @@ These patterns are the advice the agent gives in step A7 of `access-denied-triag
 
 ## R-01 - Override one managed sub-rule to Count, then block on its label with a scoped exception
 
-**When it applies:** one sub-rule of a managed rule group blocks legitimate requests on a well-defined scope (a URI, method, host or client), and the sub-rule is still valuable everywhere else.
+**When it applies:** one sub-rule of a managed rule group blocks legitimate requests on a well-defined scope (a URI, method, host, client or field content), and the sub-rule is still valuable everywhere else; or a sub-rule in Count detected real attacks and has to be enforced without blocking the legitimate content it also matches.
 
 **Change (prose):** in the managed rule group reference, add a rule action override that sets only that sub-rule to Count. The sub-rule still adds its label to matching requests. Then add a custom rule **after** the rule group (higher priority number) whose statement is: the request has that sub-rule's label AND NOT (the scoped exception, for example URI path starts with the affected path and method is POST). Its action is Block (with the same custom response, if one was used). Requests outside the exception are still blocked exactly as before.
 
@@ -43,6 +44,17 @@ These patterns are the advice the agent gives in step A7 of `access-denied-triag
 4. Switch the label rule to Block.
 
 **Reduced-protection window:** between steps 1 and 4 the sub-rule's traffic is counted but not blocked anywhere. Keep that window short: deploy steps 1 and 2 together, use the shortest review window that still covers the application's normal traffic cycle, and schedule step 4 in advance. The Count-first sequence above is the recommendation.
+
+**Mixed matches inside one blocking sub-rule** (Q-20 split it into legitimate content and attack payloads, verdict `MIXED`): the exception in the label rule is the legitimate part's scope, not the whole path when the path also carries attacks. Write it as: label AND NOT (affected path AND method), plus a second Block rule for label AND affected path AND a match statement for the attack pattern classes Q-20 showed (for example an XSS match or a regex for event-handler attributes on the body field; a JNDI-lookup-with-remote-host regex), described as classes, not literal payloads. Both start in Count.
+
+**Enforcing a Count-mode sub-rule (detected, not blocked).** When a sub-rule overridden to Count matched real attacks and Q-20 also found legitimate content in its matches (or in a sibling sub-rule's matches):
+
+1. Keep the group's `RuleActionOverrides` as they are. Never switch the whole group or all its sub-rules to Block.
+2. Per sub-rule with attack matches, add a label rule after the group: that sub-rule's label (copied from Q-09) AND the affected path (and method) AND NOT (the legitimate pattern's scope: for example the catalog search terms or the field that carries business text), action Count.
+3. A sub-rule whose matches were all legitimate content (for example a body sub-rule that matched only product descriptions on one path) stays in Count, or is enforced only outside that path with the same label-rule form.
+4. Over a representative window, confirm the label rule matches every attack request Q-20 found and none of the legitimate ones (Q-08 and QA-08b, Q-20 rerun on the label rule), then switch it to Block.
+
+Effect: *reduces* to *eliminates* the detected-not-blocked attack part on that path, with no new false positives on the legitimate content. Name in "Verify before acting" that a human should confirm the legitimate pattern's scope with the application owner.
 
 **Alternative (explicitly labelled, not the default): straight to Block.** When the exception is well understood (one exact path and method, confirmed from Q-03 and Q-04), a human may choose to put the label rule straight into Block in the same change as step 1. This avoids the reduced-protection window, but the risk is that an error in the label rule's statement or exception scope blocks legitimate traffic, or lets attack traffic through, without a Count review first. If chosen, watch the label rule's `BlockedRequests` and the excluded path closely right after the change and be ready to roll back.
 
@@ -79,6 +91,8 @@ Also check `AssociationConfig.RequestBody` in the Web ACL (D-2). It sets how muc
 **When it applies:** a partner with fixed, verified egress addresses keeps being denied by one rule, and narrower patterns (R-01, R-03, and for Challenge or CAPTCHA R-05, R-06 and a path scope-down) are not practical. For `CLIENT_CANNOT_SOLVE`, R-04 ranks below R-05, R-06 and the path scope-down of the challenge rule: list it last, if at all, and say why (egress addresses change, and the address loses that rule's protection).
 
 **Change (prose):** use the partner's verified addresses only as an exclusion on the rule that denies it: a scope-down statement on that Challenge, CAPTCHA or blocking rule (or on the managed group reference, R-03) of the form "NOT (source IP in <partner IP set>)", preferably combined with the partner's paths or host (for example "NOT (IP in set AND URI path starts with `/api/`)"), or a label-scoped rule that excludes the set (R-01). Every other rule keeps evaluating the partner's requests.
+
+**Entry in a custom block IP set (the narrowest fix, before any exception).** When the denying rule is a custom Block rule on a customer-managed IP set and `wafv2:GetIPSet` shows the client's IP inside one entry (access-denied-triage, "Per-client symptoms and IP-set evidence"), the fix is to correct that entry: remove it, or narrow the CIDR so it no longer covers the verified partner, after the owner confirms that the address belongs to the partner and how the entry got there. *Eliminates* the denial for that client; every rule still evaluates it. Validate by checking in logs (Q-21 for the client) that the client's requests are allowed afterwards and that no other client covered by the old entry needs it. Report a similarly named allow or trusted set only as a finding (exists, referenced or not); do not recommend adding the client to it or referencing it from an Allow rule.
 
 **Never** add the client's address to an IP set that an Allow-action rule references (an existing "allow" or trusted-address set included), and never create such an Allow rule: Allow is terminating and ends evaluation, so every rule after it, including managed rule groups, rate-based rules, Bot Control, Anti-DDoS and Shield L7AM mitigation, is skipped for that address, and a compromised or shared address gets unrestricted access. When D-2 shows an existing Allow rule on an IP set, name it only to say the client must not be added to it.
 
@@ -177,7 +191,7 @@ Also check `AssociationConfig.RequestBody` in the Web ACL (D-2). It sets how muc
 
 **WAF layer**
 
-- Close enforcement gaps: reference firing labels in a Block rule, or change offending rule actions from Count or CAPTCHA to Block, scoped narrowly (geography + endpoint + label) to limit collateral impact.
+- Close enforcement gaps: reference firing labels in a Block rule, or change offending rule actions from Count or CAPTCHA to Block, scoped narrowly (geography + endpoint + label) to limit collateral impact. For a managed sub-rule in Count, enforce per sub-rule with the R-01 "Enforcing a Count-mode sub-rule" sequence, with an exception for the legitimate content Q-20 found; never the whole group or all its sub-rules.
 - Endpoint and geography-scoped rule: geography AND URI AND an OR of the relevant labels.
 - Rate-based rules with appropriate aggregation keys (IP, forwarded IP, or custom keys) for volumetric patterns (see R-10).
 - **Attacker residue** (Q-19 (QA-19 / QI-19)): the allowed requests carry no labels, so a rule that matches labels cannot catch them. Match the request component the residue used: for a query-argument residue, a string or regex match statement on query arguments scoped to the affected path, or the managed sub-rule that inspects the query string (for example `LFI_QUERYSTRING` in `AWSManagedRulesLinuxRuleSet`); for a URI-path residue, the matching `_URIPATH` sub-rule or a scoped URI-path match. A `UriPath` rule never covers a query-argument residue. Cover every LFI class the residue showed: relative-traversal patterns (dot-dot-slash and its encodings) do not match absolute-path LFI, so a custom match also needs the absolute-path classes (absolute references to OS process-information and system-configuration directories, and their encoded forms), described as classes in the advisory text, not as literal probe strings. Check in D-2 whether that group is already in the ACL, and validate in Count first. Marked *reduces* unless the Count run shows it matches every residue request.

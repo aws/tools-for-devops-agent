@@ -4,7 +4,7 @@ Use this structure for the hunting report artifact produced in SKILL.md, Step B7
 
 Artifact naming: `waf-threat-hunt-<web-acl-name>-<YYYY-MM-DD>.md`
 
-Data handling for every section: payloads as class and count plus field location only ("sqli ×75, query argument"); URIs defanged per the SKILL.md defang rule, path traversal shown as the class `traversal-lfi`; no tokens, cookies, authorization values or match-detail samples.
+Data handling for every section: payloads as class and count plus field location only ("sqli ×75, query argument"), plus a pattern summary in words for a payload split; URIs defanged per the SKILL.md defang rule, path traversal shown as the class `traversal-lfi`; no tokens, cookies, authorization values or match-detail samples.
 
 ## Report Header
 
@@ -42,6 +42,7 @@ Classify a blocked portion as `CORRECT_MITIGATION`. Use exact rule and sub-rule 
 
 - Rate-based rules in Count: one line per client over the limit (UA class, method, URI, requests, `max_per_5min` against the limit, classification)
 - Count-mode matches and threat labels on ALLOW requests: rule, label, count, and the rule that would have acted
+- Payload split per injection or bad-input sub-rule (Q-20): one line per (sub-rule, verdict) with requests, distinct clients, field location, endpoint and pattern summary; the attack part "detected, not blocked", the legitimate-content part a false positive that must stay unblocked
 - Sensitive-path bursts (Q-13b): method, URI, requests, peak per minute and per 5 minutes, first to last seen
 
 Write "none found (<query IDs>)" when empty.
@@ -59,7 +60,7 @@ Per blocked attacker: ALLOW count, payload class (`args_class`) and count, field
 
 ## Recommended Mitigations
 
-Advisory only; validate each change in Count first; never disable or remove a rule group or the Web ACL, and never add a client to an Allow IP set.
+Advisory only; validate each change in Count first; never disable or remove a rule group or the Web ACL, never add a client to an Allow IP set, and never switch a whole managed rule group (or all its sub-rules) from Count to Block: enforce per sub-rule, scoped to the path and field, with a label-based exception for the legitimate content (R-01).
 
 ### WAF layer
 

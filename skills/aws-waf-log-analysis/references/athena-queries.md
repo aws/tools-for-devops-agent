@@ -513,3 +513,60 @@ FROM allowed GROUP BY 1, 2, 3 ORDER BY requests DESC LIMIT 50
 Build the rule regex from the ACL: also OR in every custom Block or Challenge rule name from D-2 and the exact terminating rule-group names seen in QA-02. For the **blocked slice** of one rule (threat-hunting B-C), reuse the `allowed` CTE with `action = 'BLOCK' AND terminatingruleid = '<rule>'` instead of the ALLOW and attacker filters, and add the sub-rule expression from QA-02 as a column. **Validated in testing:** on an injection probe that WAF mostly blocked, it returned exactly the missed requests: one client, one application URI, class `traversal-lfi`, 15 allowed requests that no label-based check had surfaced. (The URI defang and the `[class only]` rule were added after that run and are not validated.)
 
 **Interpret:** Every row is a missed-by-rule finding: a client that WAF identified as hostile still got these requests through. `uri_defanged` and `sample_defanged` are for use inside the querying subagent only. Return to the main agent the client, the URI (an application path without its query string, or `[traversal-lfi]` / the class for a payload-bearing path), `args_class`, `requests` and the field location (URI path when the URI column is `[traversal-lfi]`; otherwise query argument for any class other than `none`); never the sample or the raw `args`. `traversal-lfi`, `ssrf`, `xss`, `sqli` or `cmd-rce` on ALLOW means no rule caught that payload: name the managed sub-rule whose documented inspection target is that field location (for example a Linux operating system group's `_QUERYSTRING` sub-rule for a query-argument `/proc/` probe) and whether it is in the ACL (D-2). Give a reason for the miss only from the documented inspection target (L-1); otherwise "reason not determined". A `sqli` row that rests only on a quote (`'` or `%27`) can be a benign value (a name with an apostrophe): treat it as low confidence. `none` or `other` rows are the attacker's ordinary requests (reconnaissance) and still count. No rows means the blocked clients got nothing through in the window (if the logging filter keeps ALLOW records).
+
+### QA-20 — Payload patterns inside one sub-rule (attack vs legitimate content, blocking or Count)
+
+**Use when:** one managed sub-rule (for example a SQL injection, cross-site scripting or Log4j sub-rule) matches payload-bearing requests, in Block or in Count, and you need to split its matches into attack payloads and legitimate content (access-denied-triage, "Payload split inside one sub-rule"). Q-06 only covers terminating matches; this query reads the sub-rule's terminating **and** Count-mode (`nonterminatingmatchingrules` inside `rulegrouplist`) match details.
+
+```sql
+WITH m AS (
+  SELECT action, <req>httpmethod AS method, <req>uri AS uri, <req>clientip AS client_ip, coalesce(<req>args, '') AS args, timestamp AS ts,
+         if(g.terminatingrule.ruleid = '<sub_rule>', 'terminating', 'count') AS match_kind,
+         coalesce(if(g.terminatingrule.ruleid = '<sub_rule>', g.terminatingrule.rulematchdetails),
+                  element_at(filter(g.nonterminatingmatchingrules, r -> r.ruleid = '<sub_rule>'), 1).rulematchdetails) AS d,
+         if(g.terminatingrule.ruleid = '<sub_rule>', terminatingrulematchdetails) AS td
+  FROM <table> CROSS JOIN UNNEST(rulegrouplist) AS x(g)
+  WHERE <pf>
+    AND (g.terminatingrule.ruleid = '<sub_rule>' OR any_match(g.nonterminatingmatchingrules, r -> r.ruleid = '<sub_rule>'))),
+p AS (
+  SELECT action, match_kind, method, uri, client_ip, ts,
+         CASE WHEN coalesce(cardinality(d), 0) > 0 THEN element_at(d, 1).location
+              WHEN coalesce(cardinality(td), 0) > 0 THEN element_at(td, 1).location ELSE 'not logged' END AS location,
+         CASE WHEN coalesce(cardinality(d), 0) > 0 THEN array_join(element_at(d, 1).matcheddata, ' ')
+              WHEN coalesce(cardinality(td), 0) > 0 THEN array_join(element_at(td, 1).matcheddata, ' ') ELSE args END AS fragment,
+         regexp_extract(args, '(?:^|&)([^=&]+)=', 1) AS first_arg
+  FROM m)
+SELECT location, first_arg AS query_arg, action, match_kind,
+       substr(regexp_replace(regexp_replace(fragment, '(?i)%(3c|3e|22|27|60|3b)', '_'), '[<>"''`;(){}$|]', '_'), 1, 40) AS pattern_defanged,
+       count(*) AS requests, count(DISTINCT client_ip) AS clients, count(DISTINCT uri) AS distinct_uris,
+       arbitrary(method || ' ' || CASE WHEN regexp_like(uri, '(?i)(\.\.|%2e%2e|/etc/|%2fetc|/proc/|%2fproc|win\.ini)') THEN '[traversal-lfi]' ELSE split_part(uri, '?', 1) END) AS sample_endpoint,
+       min(from_unixtime(ts / 1000)) AS first_seen, max(from_unixtime(ts / 1000)) AS last_seen
+FROM p GROUP BY 1, 2, 3, 4, 5 ORDER BY requests DESC LIMIT 50
+```
+
+**Validated with data.**
+
+**Interpret:** One row per (location, query argument, action, match kind, defanged pattern). `match_kind` `count` rows are Count-mode matches: those requests were not stopped by this sub-rule ("detected, not blocked" for the attack part). `location` is the matched component (`ALL_QUERY_ARGS`, `QUERY_STRING`, `BODY`, a header); `query_arg` is the first query-argument name (for example `q`); for `BODY`, the JSON field name shows only when the defanged pattern carries it. `not logged` means the sub-rule logged no match details: the pattern then comes from the query arguments, and a body match without details is "pattern not determinable". Classify each `pattern_defanged` inside the querying subagent as attack, legitimate content or not determinable (criteria in access-denied-triage, "Payload split inside one sub-rule"), then sum `requests` and `clients` per (sub-rule, verdict, location, query argument). Return to the main agent only the verdict, class, counts, distinct clients, field location, endpoint and a pattern summary in words; never `pattern_defanged` itself. Many rows with `requests` of 1 are normal (each payload differs); classify them as groups.
+
+### QA-21 — Per-client profile of a denied population
+
+**Use when:** one client or a small population (an IP, a user agent, a path set: for example a partner webhook) is denied by one rule, and you need one profile per client for the Symptom records: user agent, country, paths, blocked and allowed counts, first and last seen.
+
+```sql
+WITH denied AS (
+  SELECT DISTINCT <req>clientip AS ip FROM <table>
+  WHERE <pf> AND action IN ('BLOCK', 'CAPTCHA', 'CHALLENGE') AND terminatingruleid = '<rule>')
+SELECT w.<req>clientip AS client_ip, w.<req>country AS country,
+       element_at(filter(w.<req>headers, h -> lower(h.name) = 'user-agent'), 1).value AS ua,
+       count_if(w.action IN ('BLOCK', 'CAPTCHA', 'CHALLENGE')) AS denied, count_if(w.action = 'ALLOW') AS allowed,
+       count(DISTINCT w.<req>uri) AS distinct_uris,
+       slice(array_agg(DISTINCT w.<req>httpmethod || ' ' || CASE WHEN regexp_like(w.<req>uri, '(?i)(\.\.|%2e%2e|/etc/|%2fetc|/proc/|%2fproc|win\.ini)') THEN '[traversal-lfi]' ELSE w.<req>uri END), 1, 5) AS endpoints,
+       min(from_unixtime(w.timestamp / 1000)) AS first_seen, max(from_unixtime(w.timestamp / 1000)) AS last_seen
+FROM <table> w JOIN denied d ON w.<req>clientip = d.ip
+WHERE <pf>
+GROUP BY 1, 2, 3 ORDER BY denied DESC LIMIT 50
+```
+
+**Validated with data.**
+
+**Interpret:** One row per (client, country, user agent): each is one Symptom (access-denied-triage, "Per-client symptoms and IP-set evidence"). A client with `allowed` 0 was denied from its first request in the window, which is not evidence of attack by itself (verdict criteria). The number of rows (or QA-02 `clients`) is the measured distinct client count; report it instead of assuming the traffic is distributed or from one source. Several user agents on one IP, or the same user agent on many IPs, are separate facts: report both. `endpoints` lists up to five method and path pairs; a URI that carries a payload is reported as its class.

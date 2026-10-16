@@ -4,7 +4,7 @@
     {
       "id": "e1-two-false-positives-one-window",
       "task_type": "investigation",
-      "prompt": "Between 17:30 and 18:30 UTC on 2026-10-06, some customers could not submit forms and some automated clients got 403 responses on the CloudFront distribution d111111abcdef8.cloudfront.net. Find out whether AWS WAF is involved and what is causing it.",
+      "prompt": "Between 17:30 and 18:30 UTC on 2026-10-06, some customers could not submit forms and some automated clients got 403 responses on the CloudFront distribution d111111abcdef8.cloudfront.net. What is the root cause?",
       "should_trigger": true,
       "expected_root_cause": "AWS WAF is involved. Two separate AWS managed Core rule set (CommonRuleSet) sub-rules blocked legitimate traffic at their default Block action: SizeRestrictions_BODY blocked oversized POST /checkout form submissions from one browser client (about 1,200 requests, roughly 17:32 to 17:53 UTC), and NoUserAgent_HEADER blocked a client that sends no User-Agent header (about 600 GET requests to pages such as /home and /catalog, roughly 18:05 to 18:26 UTC). Both are false positives, not an attack. No WAF configuration change (Web ACL, rule group or version, association) preceded the blocks; they began when that traffic began.",
       "assertions": [
@@ -24,7 +24,7 @@
     {
       "id": "e2-injection-browser-ua",
       "task_type": "investigation",
-      "prompt": "During 2026-10-10 19:05 to 19:25 UTC some requests to our CloudFront distribution d111111abcdef8.cloudfront.net looked suspicious. Find out what AWS WAF did with them.",
+      "prompt": "During 2026-10-10 19:05 to 19:25 UTC some requests to our CloudFront distribution d111111abcdef8.cloudfront.net looked suspicious. What happened to those requests?",
       "should_trigger": true,
       "expected_root_cause": "One attacking client, 198.51.100.40, sent about 225 injection probes (SQLi, XSS, LFI/path traversal, SSRF, Log4J) with a browser User-Agent. About 210 were blocked by managed sub-rules named with their exact IDs (SQLi_QUERYARGUMENTS, CrossSiteScripting_QUERYARGUMENTS, GenericLFI_QUERYARGUMENTS, SQLi_BODY, Log4JRCE_HEADER, EC2MetaDataSSRF_QUERYARGUMENTS), a correct mitigation. About 15 requests from the same client (the ?file=/proc/self/environ file-read probe) were ALLOWED because no rule matched: a missed-by-rule finding. The overall assessment is that WAF stopped most of the probing but missed that residue; no rule is loosened.",
       "assertions": [
@@ -52,7 +52,7 @@
     {
       "id": "e3-hunt-injection-scan-card-testing",
       "task_type": "investigation",
-      "prompt": "Review the AWS WAF logs for the CloudFront distribution d111111abcdef8.cloudfront.net from 2026-10-10 17:00 UTC to 18:15 UTC. Tell me what looks malicious, what WAF caught, and what it detected but did not block.",
+      "prompt": "Review the traffic to the CloudFront distribution d111111abcdef8.cloudfront.net from 2026-10-10 17:00 UTC to 18:15 UTC. What looks malicious, what was stopped, and what got through?",
       "should_trigger": true,
       "expected_root_cause": "Three malicious patterns: an injection attempt from a sqlmap scanner User-Agent (198.51.100.60, about 225 requests) all blocked by CommonRuleSet UserAgent_BadBots_HEADER; a sensitive-path scan (198.51.100.20, about 225 distinct URIs such as /admin, /.git, /wp-login.php) that was mostly ALLOWED because no rule matched; and a card-testing burst of POST /checkout/payment from 198.51.100.30 that the rate-based rule only counted because it is in Count mode (detected, not blocked). The steady high-volume Artillery load-test client 198.51.100.10 is known automation, not an attack. The overall assessment is that WAF caught the scanner-UA injection but missed the path scan and the card testing; mitigations are split into WAF layer (a rate-based rule scoped to POST /checkout/payment, Count first) and application layer, and the site-wide rate-based rule stays in Count because it would block the known automation.",
       "assertions": [
@@ -73,7 +73,7 @@
     {
       "id": "e4-detected-not-blocked-rate-rule",
       "task_type": "investigation",
-      "prompt": "Look for unusual or abusive traffic to d111111abcdef8.cloudfront.net during 2026-10-10 18:00 to 18:15 UTC and tell me what AWS WAF did about it.",
+      "prompt": "Look for unusual or abusive traffic to d111111abcdef8.cloudfront.net during 2026-10-10 18:00 to 18:15 UTC. What happened, and was it stopped?",
       "should_trigger": true,
       "expected_root_cause": "Three traffic patterns in the window. (1) A card-testing burst from one client, 198.51.100.30: POST /checkout/payment only, about 18:05 to 18:06 UTC (several hundred requests, about 458 within roughly 17 seconds), over the rate limit; the rate-based rule matched it in Count mode, so nothing was blocked (detected, not blocked). (2) The steady high-volume load-test client 198.51.100.10 (Artillery) also exceeds the rate limit and is only counted; it is known automation, not abuse. (3) The tail of a sensitive-path scan from 198.51.100.20 in the first minutes of the window, mostly allowed. The recommended fix is a new rate-based rule scoped to POST /checkout/payment, validated in Count mode against legitimate checkout traffic before enforcing; the site-wide rate-based rule stays in Count because switching it to Block would also block the known automation.",
       "assertions": [
@@ -88,7 +88,7 @@
     {
       "id": "e5-challenge-non-browser-client",
       "task_type": "investigation",
-      "prompt": "A partner's integration calling d222222abcdef8.cloudfront.net gets empty responses during 2026-10-10 18:30 to 19:00 UTC. The front door 4xx graph looks flat. Find out whether AWS WAF is involved.",
+      "prompt": "A partner's integration calling d222222abcdef8.cloudfront.net gets empty responses during 2026-10-10 18:30 to 19:00 UTC. The front door 4xx graph looks flat. What is the root cause?",
       "should_trigger": true,
       "expected_root_cause": "AWS WAF is involved. About 600 requests from the partner client 198.51.100.50 (python-requests User-Agent, Accept: application/json, GET / and /api/*), roughly 18:37 to 18:57 UTC, got the CHALLENGE action with HTTP 202 from TokenAbsentChallengeRule, with failure reason TOKEN_MISSING. A 202 challenge is not a 4xx, so the flat 4xx graph does not clear WAF. Verdict: CLIENT_CANNOT_SOLVE. The fix is a scope-down of the challenge rule excluding the partner's paths or client signature, or SDK/token handling, rather than an IP allow-list that exempts the client from all rules.",
       "assertions": [
@@ -116,22 +116,21 @@
     {
       "id": "e6-origin-outage-waf-cleared",
       "task_type": "investigation",
-      "prompt": "Between 16:00 and 16:30 UTC on 2026-10-11 users of our web application behind CloudFront got timeouts and connection failures. Make sure AWS WAF is not the cause before we look at the origin.",
+      "prompt": "Between 16:00 and 16:30 UTC on 2026-10-11 users of our web application behind CloudFront got timeouts and connection failures. What is the root cause?",
       "should_trigger": true,
-      "expected_root_cause": "AWS WAF is not the cause (WAF cleared): blocked, challenged and CAPTCHA counts in the window are flat against a baseline period and WAF allowed the traffic. The outage comes from the origin side: the ingress of the origin load balancer's security group (sg-0123456789abcdef0) was narrowed at about 16:04:43 UTC and reverted at about 16:28:37 UTC, which produced timeouts and a sharp drop in request count without a rise in 5xx. No WAF cause is invented.",
+      "expected_root_cause": "The outage comes from the origin side, not from AWS WAF: the ingress of the origin load balancer's security group (sg-0123456789abcdef0) was narrowed at about 16:04:43 UTC and reverted at about 16:28:37 UTC, which produced timeouts and a sharp drop in request count without a rise in 5xx. If AWS WAF is checked, its blocked, challenged and CAPTCHA counts in the window are flat against a baseline and it allowed the traffic; no WAF cause is invented.",
       "assertions": [
-        "A Cause or Root Cause finding records that WAF is cleared (WAF_CLEARED or equivalent) and cites Blocked, Challenge and CAPTCHA counts in the window compared with a baseline period",
-        "The WAF verdict is checked against the WAF logs at request level, not only CloudWatch metrics: a finding or Supporting Observation states how many logged requests in 16:00 to 16:30 UTC were ALLOW and that there were zero terminating BLOCK, CHALLENGE or CAPTCHA actions in the logs",
-        "A finding or Supporting Observation notes that timeouts and connection failures are not something WAF produces, because WAF answers with an HTTP response (403, 202 or CAPTCHA) rather than dropping connections",
         "The Root Cause names the security group change on the origin load balancer at about 16:04 UTC (sg-0123456789abcdef0 ingress narrowed) as the cause of the timeouts",
-        "Supporting Observations cite metric, log or CloudTrail evidence for both the WAF verdict and the origin-side cause"
+        "A finding or Supporting Observation ties the onset and the recovery to the security group change and its revert (about 16:04 and about 16:28 UTC), not only the onset",
+        "Supporting Observations cite front-door or load-balancer metric evidence for the outage (for example the CloudFront request drop, load balancer flow counts or target health) and the CloudTrail event for the security group change",
+        "No finding attributes the timeouts to an AWS WAF rule or action; if WAF is examined, it is ruled out with evidence (Blocked, Challenge and CAPTCHA counts flat or zero, or all traffic allowed)"
       ],
       "additional_permissions_file": "skills/aws-waf-log-analysis/evals/additional-permissions.json"
     },
     {
       "id": "e7-degraded-no-athena-permission",
       "task_type": "investigation",
-      "prompt": "Between 17:30 and 18:30 UTC on 2026-10-06, some customers and automated clients got 403 responses on the CloudFront distribution d111111abcdef8.cloudfront.net. Find out whether AWS WAF is involved.",
+      "prompt": "Between 17:30 and 18:30 UTC on 2026-10-06, some customers and automated clients got 403 responses on the CloudFront distribution d111111abcdef8.cloudfront.net. What is the root cause?",
       "should_trigger": true,
       "expected_root_cause": "Run in an agent space without the WAF log-analysis add-on (default policy only), so Athena queries on the WAF logs are denied. AWS WAF is involved: from per-rule WAF CloudWatch metrics (sampled requests do not reach back to this window), the 403s are attributed to two CommonRuleSet sub-rules, SizeRestrictions_BODY (roughly 17:32 to 17:53 UTC) and NoUserAgent_HEADER (roughly 18:05 to 18:26 UTC), as likely false positives at no higher than 'likely' confidence. The Athena denial and the unanalyzed logs are recorded as a gap. No configuration change or Web ACL association is named as the root cause.",
       "assertions": [
