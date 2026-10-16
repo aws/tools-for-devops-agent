@@ -14,6 +14,7 @@ Auth: SigV4 (via Lambda Function URL with AWS_IAM auth)
 
 import json
 import os
+import re
 from time import monotonic
 from typing import Any
 
@@ -652,12 +653,12 @@ QUERY_ALLOWLIST["5"] = {
         "name": "Top 20 Tables by Size",
         "sql": (
             "SELECT schemaname, relname, "
-            "pg_size_pretty(pg_total_relation_size(schemaname || '.' || relname)) AS total_size, "
-            "pg_size_pretty(pg_relation_size(schemaname || '.' || relname)) AS table_size, "
-            "pg_size_pretty(pg_indexes_size(schemaname || '.' || relname)) AS index_size, "
+            "pg_size_pretty(pg_total_relation_size(relid)) AS total_size, "
+            "pg_size_pretty(pg_relation_size(relid)) AS table_size, "
+            "pg_size_pretty(pg_indexes_size(relid)) AS index_size, "
             "n_live_tup, n_dead_tup "
             "FROM pg_stat_user_tables "
-            "ORDER BY pg_total_relation_size(schemaname || '.' || relname) DESC "
+            "ORDER BY pg_total_relation_size(relid) DESC "
             "LIMIT 20"
         ),
     },
@@ -668,7 +669,7 @@ QUERY_ALLOWLIST["5"] = {
             "CASE WHEN n_live_tup > 0 "
             "THEN round(100.0 * n_dead_tup / (n_live_tup + n_dead_tup), 2) "
             "ELSE 0 END AS dead_tuple_pct, "
-            "pg_size_pretty(pg_total_relation_size(schemaname || '.' || relname)) AS total_size "
+            "pg_size_pretty(pg_total_relation_size(relid)) AS total_size "
             "FROM pg_stat_user_tables "
             "WHERE n_dead_tup > 1000 "
             "ORDER BY n_dead_tup DESC LIMIT 20"
@@ -969,6 +970,13 @@ def _get_connection(
         read_only = connection.run("SHOW transaction_read_only")
         if not read_only or str(read_only[0][0]).lower() != "on":
             raise RuntimeError("PostgreSQL did not enter a read-only transaction.")
+        ensure_time("search_path restriction")
+        # Resolve every unqualified operator, function, and relation through
+        # pg_catalog only. Without this pin, a database user with CREATE on a
+        # schema in the default search_path ("$user", public) could plant an
+        # exact-signature operator or function (CVE-2018-1058 pattern) that the
+        # predefined queries would run with this login's privileges.
+        connection.run(SEARCH_PATH_RESTRICTION_SQL)
         ensure_time("database timeout setup")
         connection.run("SET LOCAL statement_timeout = '60s'")
         ensure_time("database timeout setup")
@@ -982,6 +990,44 @@ def _get_connection(
     return connection
 
 
+SEARCH_PATH_RESTRICTION_SQL = "SET LOCAL search_path = pg_catalog, pg_temp"
+
+# Unqualified references to the pg_stat_statements extension relations. Matches
+# only bare identifiers, never string literals, quoted identifiers, qualified
+# names, or longer identifiers such as pg_stat_statements_reset.
+_EXTENSION_RELATION_PATTERN = re.compile(
+    r"(?<![\w.\"'])(pg_stat_statements(?:_info)?)(?![\w\"'])"
+)
+
+PG_STAT_STATEMENTS_SCHEMA_SQL = (
+    "SELECT pg_catalog.quote_ident(n.nspname) "
+    "FROM pg_catalog.pg_extension e "
+    "JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace "
+    "WHERE e.extname = 'pg_stat_statements'"
+)
+
+
+def _qualify_extension_relations(conn, sql: str) -> str:
+    """Schema-qualify pg_stat_statements relations using the extension catalog.
+
+    The connection's search_path contains only pg_catalog and pg_temp, so the
+    extension's views must be named through the schema that pg_extension
+    records. Fails closed when the extension is not installed, which also
+    prevents a same-named object elsewhere from standing in for it.
+    """
+    if not _EXTENSION_RELATION_PATTERN.search(sql):
+        return sql
+    rows = conn.run(PG_STAT_STATEMENTS_SCHEMA_SQL)
+    if not rows or not rows[0] or not rows[0][0]:
+        raise RuntimeError(
+            "The pg_stat_statements extension is not installed in this database."
+        )
+    schema = str(rows[0][0])
+    return _EXTENSION_RELATION_PATTERN.sub(
+        lambda match: f"{schema}.{match.group(1)}", sql
+    )
+
+
 def _execute_query(conn, sql: str) -> list[dict]:
     """Execute a query and return results as list of dicts."""
     rows = conn.run(sql)
@@ -989,6 +1035,11 @@ def _execute_query(conn, sql: str) -> list[dict]:
         return []
     columns = [col["name"] for col in conn.columns]
     return [dict(zip(columns, row)) for row in rows]
+
+
+def _execute_catalog_query(conn, sql: str) -> list[dict]:
+    """Execute a predefined catalog query with extension relations qualified."""
+    return _execute_query(conn, _qualify_extension_relations(conn, sql))
 
 
 def _format_results_table(results: list[dict], query_name: str) -> str:
@@ -1092,7 +1143,7 @@ def execute_health_query(
     try:
         conn = _get_connection(instance_endpoint, port, database, resolved_secret)
         try:
-            results = _execute_query(conn, query_def["sql"])
+            results = _execute_catalog_query(conn, query_def["sql"])
             results = transform_query_results(results, query_def)
             return _format_results_table(results, query_def["name"])
         finally:
@@ -1198,7 +1249,7 @@ def run_full_health_check(
                 report_args = {
                     "conn": conn,
                     "query_allowlist": QUERY_ALLOWLIST,
-                    "execute_query": _execute_query,
+                    "execute_query": _execute_catalog_query,
                     "rds_client": rds_client,
                     "cloudwatch_client": cloudwatch_client,
                     "instance_id": instance_id,
@@ -1249,7 +1300,7 @@ def run_full_health_check(
             for cat_num, qid in key_queries:
                 query_def = QUERY_ALLOWLIST[cat_num][qid]
                 try:
-                    results = _execute_query(conn, query_def["sql"])
+                    results = _execute_catalog_query(conn, query_def["sql"])
                     report += _format_results_table(results, query_def["name"])
                     report += "\n\n---\n\n"
                 except Exception as exc:

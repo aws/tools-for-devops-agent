@@ -247,6 +247,7 @@ class TestConnectionSafety:
         assert connection.calls == [
             "BEGIN READ ONLY",
             "SHOW transaction_read_only",
+            "SET LOCAL search_path = pg_catalog, pg_temp",
             "SET LOCAL statement_timeout = '60s'",
             "SET LOCAL lock_timeout = '5s'",
             "SET LOCAL idle_in_transaction_session_timeout = '170s'",
@@ -330,6 +331,165 @@ class TestConnectionSafety:
                 "test-db-1.example.rds.amazonaws.com", 5432, "postgres", ""
             )
         assert connection.closed is True
+
+
+class TestSearchPathHardening:
+    """Regression tests for the unpinned search_path finding (CVE-2018-1058 pattern)."""
+
+    class RecordingConnection:
+        """Minimal pg8000-like connection that records SQL and serves scripted rows."""
+
+        def __init__(self, extension_schema="public"):
+            self.extension_schema = extension_schema
+            self.calls = []
+            self.columns = []
+
+        def run(self, sql):
+            import server
+
+            self.calls.append(sql)
+            if sql == server.PG_STAT_STATEMENTS_SCHEMA_SQL:
+                self.columns = [{"name": "quote_ident"}]
+                return [] if self.extension_schema is None else [[self.extension_schema]]
+            self.columns = [{"name": "value"}]
+            return [[1]]
+
+    @staticmethod
+    def _catalog_queries():
+        import server
+
+        for category, queries in server.QUERY_ALLOWLIST.items():
+            for query_id, definition in queries.items():
+                if query_id.startswith("_"):
+                    continue
+                yield f"{category}/{query_id}", definition["sql"]
+
+    def test_search_path_is_pinned_before_any_diagnostic_sql(self, monkeypatch, tmp_path):
+        import server
+
+        bundle = tmp_path / "rds-global-bundle.pem"
+        bundle.write_text("test bundle", encoding="utf-8")
+        monkeypatch.setenv("RDS_CA_BUNDLE", str(bundle))
+        monkeypatch.setattr(
+            server,
+            "_get_db_credentials",
+            lambda _: {"username": "reader", "password": "value"},
+        )
+        monkeypatch.setattr(ssl, "create_default_context", lambda *, cafile: object())
+        connection = TestConnectionSafety.FakeConnection()
+        monkeypatch.setattr(server.pg8000.native, "Connection", lambda **kwargs: connection)
+
+        server._get_connection("test-db-1.example.rds.amazonaws.com", 5432, "postgres", "")
+
+        assert server.SEARCH_PATH_RESTRICTION_SQL == "SET LOCAL search_path = pg_catalog, pg_temp"
+        pin_index = connection.calls.index(server.SEARCH_PATH_RESTRICTION_SQL)
+        # Pinned inside the verified read-only transaction, before timeouts or queries.
+        assert connection.calls[:pin_index] == ["BEGIN READ ONLY", "SHOW transaction_read_only"]
+
+    def test_connection_closes_if_search_path_pin_fails(self, monkeypatch, tmp_path):
+        import server
+
+        class FailingPinConnection(TestConnectionSafety.FakeConnection):
+            def run(self, sql):
+                if sql.startswith("SET LOCAL search_path"):
+                    raise RuntimeError("permission denied")
+                return super().run(sql)
+
+        bundle = tmp_path / "rds-global-bundle.pem"
+        bundle.write_text("test bundle", encoding="utf-8")
+        monkeypatch.setenv("RDS_CA_BUNDLE", str(bundle))
+        monkeypatch.setattr(
+            server,
+            "_get_db_credentials",
+            lambda _: {"username": "reader", "password": "value"},
+        )
+        monkeypatch.setattr(ssl, "create_default_context", lambda *, cafile: object())
+        connection = FailingPinConnection()
+        monkeypatch.setattr(server.pg8000.native, "Connection", lambda **kwargs: connection)
+
+        with pytest.raises(RuntimeError, match="permission denied"):
+            server._get_connection("test-db-1.example.rds.amazonaws.com", 5432, "postgres", "")
+        assert connection.closed is True
+
+    def test_pg_stat_statements_is_qualified_with_extension_schema(self):
+        import server
+
+        connection = self.RecordingConnection(extension_schema='"Stats Schema"')
+        sql = (
+            "SELECT p.query FROM pg_stat_statements p "
+            "JOIN pg_database d ON d.oid=p.dbid"
+        )
+
+        rows = server._execute_catalog_query(connection, sql)
+
+        assert rows == [{"value": 1}]
+        assert connection.calls == [
+            server.PG_STAT_STATEMENTS_SCHEMA_SQL,
+            'SELECT p.query FROM "Stats Schema".pg_stat_statements p '
+            "JOIN pg_database d ON d.oid=p.dbid",
+        ]
+
+    def test_pg_stat_statements_info_is_qualified(self):
+        import server
+
+        connection = self.RecordingConnection()
+        server._execute_catalog_query(connection, "SELECT stats_reset FROM pg_stat_statements_info")
+        assert connection.calls[-1] == "SELECT stats_reset FROM public.pg_stat_statements_info"
+
+    def test_missing_extension_fails_closed_without_running_query(self):
+        import server
+
+        connection = self.RecordingConnection(extension_schema=None)
+
+        with pytest.raises(RuntimeError, match="pg_stat_statements extension is not installed"):
+            server._execute_catalog_query(connection, "SELECT query FROM pg_stat_statements")
+        assert connection.calls == [server.PG_STAT_STATEMENTS_SCHEMA_SQL]
+
+    def test_extension_lookup_is_fully_qualified(self):
+        import server
+
+        lookup = server.PG_STAT_STATEMENTS_SCHEMA_SQL
+        assert "pg_catalog.quote_ident(" in lookup
+        assert "FROM pg_catalog.pg_extension " in lookup
+        assert "JOIN pg_catalog.pg_namespace " in lookup
+
+    def test_queries_without_extension_relations_skip_lookup(self):
+        import server
+
+        connection = self.RecordingConnection()
+        server._execute_catalog_query(connection, "SELECT datname FROM pg_database")
+        assert connection.calls == ["SELECT datname FROM pg_database"]
+
+    def test_literals_quoted_and_longer_identifiers_are_not_rewritten(self):
+        import server
+
+        for sql in (
+            "SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pg_stat_statements'",
+            'SELECT 1 FROM "pg_stat_statements"',
+            "SELECT 1 FROM ext.pg_stat_statements",
+            "SELECT pg_stat_statements_reset_count FROM pg_database",
+        ):
+            assert server._qualify_extension_relations(self.RecordingConnection(), sql) == sql
+
+    def test_every_catalog_query_leaves_no_unqualified_extension_relation(self):
+        import server
+
+        for query_name, sql in self._catalog_queries():
+            qualified = server._qualify_extension_relations(self.RecordingConnection(), sql)
+            assert not server._EXTENSION_RELATION_PATTERN.search(qualified), query_name
+
+    def test_catalog_queries_do_not_build_regclass_from_name_concatenation(self):
+        for query_name, sql in self._catalog_queries():
+            assert "schemaname || '.' || relname" not in sql, query_name
+
+    def test_catalog_query_paths_use_qualifying_executor(self):
+        import server
+
+        execute_health_query = inspect.getsource(server.execute_health_query)
+        full_health_check = inspect.getsource(server.run_full_health_check)
+        assert '_execute_catalog_query(conn, query_def["sql"])' in execute_health_query
+        assert '_execute_catalog_query(conn, query_def["sql"])' in full_health_check
+        assert '"execute_query": _execute_catalog_query' in full_health_check
 
 
 class TestExplainSafety:
