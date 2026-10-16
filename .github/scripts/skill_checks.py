@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import difflib
 import fnmatch
+import hashlib
 import html
 import io
 import json
@@ -47,6 +48,11 @@ VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)
 # At most 10 digits in each part, so a version is at most 32 characters and
 # each part is an exact integer in JavaScript as well as in Python.
 MAX_VERSION_PART_DIGITS = 10
+# The version a new skill starts at.
+FIRST_VERSION = (1, 0, 0)
+# Read only from a merge-base copy of a skill, so a branch cut while a skill
+# still had a two-part version, such as 2.6, can be compared.
+TWO_PART_VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 # Patterns are applied with fullmatch: a `$` would also match before a trailing
 # newline, which a YAML block scalar (`version: |`) produces.
@@ -245,6 +251,9 @@ class SkillInfo:
     name: str
     version: tuple[int, int, int] | None
     metadata: dict[str, str]
+    version_line: int | None = None
+    deprecated_line: int | None = None
+    name_line: int | None = None
 
 
 def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
@@ -322,13 +331,17 @@ def _read_json(path: Path):
         raise ValueError(f"cannot read {path}: {exc}") from exc
 
 
-def parse_version(text: str) -> tuple[int, int, int] | None:
-    """`MAJOR.MINOR.PATCH` as a tuple, or None, also when a part has more than MAX_VERSION_PART_DIGITS digits."""
-    match = VERSION_PATTERN.fullmatch(text)
+def parse_version(text: str, *, allow_two_part: bool = False) -> tuple[int, int, int] | None:
+    """`MAJOR.MINOR.PATCH` as a tuple, or None, also when a part has more than MAX_VERSION_PART_DIGITS digits.
+
+    `allow_two_part` also reads `2.6` as 2.6.0.
+    """
+    match = VERSION_PATTERN.fullmatch(text) or (TWO_PART_VERSION_PATTERN.fullmatch(text) if allow_two_part else None)
     # The digit limit comes first: Python refuses to convert a very long number.
     if not match or any(len(part) > MAX_VERSION_PART_DIGITS for part in match.groups()):
         return None
-    return (int(match[1]), int(match[2]), int(match[3]))
+    parts = [int(part) for part in match.groups()]
+    return (parts[0], parts[1], parts[2] if len(parts) == 3 else 0)
 
 
 def check_skill(tree: SkillTree, rules: Rules) -> tuple[list[Finding], SkillInfo | None]:
@@ -457,12 +470,28 @@ def _check_skill_md(folder: str, data: bytes, rules: Rules, findings: list[Findi
     _check_spec_text_fields(top, report)
     _check_body_length(text[match.end():], report)
 
-    metadata, version = _check_metadata(top, rules, report)
-    return SkillInfo(name=name or folder, version=version, metadata=metadata)
+    metadata, version, lines = _check_metadata(top, rules, report)
+    return SkillInfo(
+        name=name or folder,
+        version=version,
+        metadata=metadata,
+        version_line=lines.get("version"),
+        deprecated_line=lines.get("deprecated"),
+        name_line=_line(top["name"][0]) if "name" in top else None,
+    )
 
 
-def _parse_frontmatter(frontmatter: str, report: _Report) -> Node | None:
-    """The composed YAML node tree, or None after reporting why the frontmatter can't be read safely."""
+def _parse_frontmatter(frontmatter: str, report: _Report, *, strict: bool = True) -> Node | None:
+    """The composed YAML node tree, or None after reporting why the frontmatter can't be read safely.
+
+    With strict=False only PyYAML's own reading applies, for a merge-base copy
+    that may predate the stricter rules.
+    """
+    if not strict:
+        try:
+            return yaml.compose(frontmatter, Loader=yaml.SafeLoader)
+        except (yaml.YAMLError, RecursionError):
+            return None
     try:
         forbidden = [
             (token, what)
@@ -659,15 +688,18 @@ def _check_body_length(body: str, report: _Report) -> None:
         )
 
 
-def _check_metadata(top: dict, rules: Rules, report: _Report) -> tuple[dict[str, str], tuple[int, int, int] | None]:
+def _check_metadata(
+    top: dict, rules: Rules, report: _Report
+) -> tuple[dict[str, str], tuple[int, int, int] | None, dict[str, int]]:
+    """The metadata values, the parsed version, and the SKILL.md line of each value."""
     if "metadata" not in top:
         report.error('"metadata" is required, with at least author and version')
-        return {}, None
+        return {}, None, {}
     key_node, node = top["metadata"]
     metadata_line = _line(key_node)
     if not isinstance(node, MappingNode):
         report.error('"metadata" must be a mapping, with one key: value pair per line', line=metadata_line)
-        return {}, None
+        return {}, None, {}
 
     items = _mapping_items(node, "metadata.", report)
     metadata: dict[str, str] = {}
@@ -686,7 +718,7 @@ def _check_metadata(top: dict, rules: Rules, report: _Report) -> tuple[dict[str,
     _check_tier(metadata, lines, report)
     _check_agent_types(metadata, items, lines, metadata_line, rules, report)
     _check_dimensions(metadata, items, rules, report)
-    return metadata, version
+    return metadata, version, lines
 
 
 def _check_unknown_metadata_keys(items: dict, report: _Report) -> None:
@@ -1184,6 +1216,138 @@ def _check_markdown(path: str, text: str, findings: list[Finding]) -> None:
             findings.append(Finding("warning", message, path, _line_at(source, match.start())))
 
 
+# --- History: identity and versions against the merge base --------------------
+
+
+def content_hash(files: dict[str, bytes]) -> str:
+    """The skill content hash: SHA-256 over sorted `<path>\\0<sha256 hex of the file>\\n` records.
+
+    Any other tool that computes it must give the same result; the golden
+    fixture in conformance-cases.json pins the function.
+    """
+    outer = hashlib.sha256()
+    for path in sorted(files, key=lambda p: p.encode("utf-8", "surrogateescape")):
+        digest = hashlib.sha256(files[path]).hexdigest()
+        outer.update(path.encode("utf-8", "surrogateescape") + b"\0" + digest.encode("ascii") + b"\n")
+    return outer.hexdigest()
+
+
+def published_hash(tree: SkillTree, rules: Rules) -> str:
+    return content_hash({p: e.data for p, e in published_files(tree, rules).items()})
+
+
+def _format_version(version: tuple[int, int, int]) -> str:
+    return ".".join(str(part) for part in version)
+
+
+def _next_versions(version: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
+    """The only versions allowed after `version`: the next patch, minor or major release."""
+    major, minor, patch = version
+    return ((major, minor, patch + 1), (major, minor + 1, 0), (major + 1, 0, 0))
+
+
+def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
+    """The merge-base copy's version, reading a two-part version such as 2.6 as 2.6.0. None if unreadable.
+
+    Fixing a two-part version changes SKILL.md, so the fix itself needs a
+    version above the old one: 2.6 -> 2.6.1, not 2.6.0.
+    """
+    entry = tree.entries.get("SKILL.md")
+    try:
+        match = FRONTMATTER_PATTERN.match(entry.data.decode("utf-8")) if entry else None
+    except UnicodeDecodeError:
+        return None
+    scratch = _Report([])
+    root = _parse_frontmatter(match.group(1) or "", scratch, strict=False) if match else None
+    metadata = _last_value(root, "metadata")
+    node = _last_value(metadata, "version")
+    if isinstance(node, ScalarNode) and node.tag == STR_TAG:
+        return parse_version(node.value, allow_two_part=True)
+    return None
+
+
+def _last_value(node: Node | None, key: str) -> Node | None:
+    """The value of `key` in a mapping node, the last one if it repeats, as PyYAML reads it."""
+    found = None
+    if isinstance(node, MappingNode):
+        for key_node, value_node in node.value:
+            if isinstance(key_node, ScalarNode) and key_node.tag == STR_TAG and key_node.value == key:
+                found = value_node
+    return found
+
+
+def check_history(
+    name: str, base: SkillTree | None, head: SkillTree | None, rules: Rules, retired: frozenset[str]
+) -> list[Finding]:
+    """The rules that compare a skill with its merge-base copy. `retired` holds paths of skills removed earlier."""
+    if base is not None and head is None:
+        return [
+            Finding(
+                "error",
+                f"the skill folder skills/{name} was removed. A skill's folder is its permanent identity, "
+                'so a skill is never removed, even in an emergency: set metadata.deprecated: "true" instead. '
+                "To rename a skill, deprecate this folder and add the new one",
+            )
+        ]
+    if head is None:
+        return []
+    if base is None:
+        info = check_skill(head, rules)[1]
+        if name in retired:
+            return [
+                Finding(
+                    "error",
+                    f"skills/{name} was used by a skill that was removed earlier, and a skill path is never "
+                    "reused, because installed copies still point at it. Choose a new name",
+                    "SKILL.md" if "SKILL.md" in head.entries else None,
+                    info.name_line if info is not None else None,
+                )
+            ]
+        if info is not None and info.version is not None and info.version != FIRST_VERSION:
+            message = f"a new skill starts at version 1.0.0, not {_format_version(info.version)}"
+            return [Finding("error", message, "SKILL.md", info.version_line)]
+        return []
+
+    head_info = check_skill(head, rules)[1]
+    if head_info is None or head_info.version is None:
+        return []  # check_skill already reports why the head version is unusable.
+    old = _lenient_version(base)
+    if old is None:
+        return [
+            Finding(
+                "warning",
+                "the version rules were not checked, because the version on the base branch can't be read",
+                "SKILL.md",
+                head_info.version_line,
+            )
+        ]
+    new = head_info.version
+    changed = published_hash(base, rules) != published_hash(head, rules)
+    if new < old:
+        message = f"metadata.version went down from {_format_version(old)} to {_format_version(new)}; it must never go down"
+        return [Finding("error", message, "SKILL.md", head_info.version_line)]
+    if new == old and changed:
+        message = (
+            f"published files changed, so metadata.version must go up from {_format_version(old)}. "
+            f"A published version is immutable. Changes only to {', '.join(rules.published_excludes)} need no bump"
+        )
+        return [Finding("error", message, "SKILL.md", head_info.version_line)]
+    if new > old and new not in _next_versions(old):
+        steps = [_format_version(v) for v in _next_versions(old)]
+        message = (
+            f"metadata.version can only go up one step from {_format_version(old)}: to {steps[0]}, {steps[1]} "
+            f"or {steps[2]}, not {_format_version(new)}"
+        )
+        return [Finding("error", message, "SKILL.md", head_info.version_line)]
+    if new > old:
+        before = base.entries.get("CHANGELOG.md")
+        after = head.entries.get("CHANGELOG.md")
+        if after is None or (before is not None and before.data == after.data):
+            message = f"metadata.version went up to {_format_version(new)}, but CHANGELOG.md has no new entry for it"
+            return [Finding("warning", message, "CHANGELOG.md")]
+    return []
+
+
 # --- Conformance cases ------------------------------------------------------------
 
 
@@ -1214,12 +1378,40 @@ def _case_problem(case) -> str | None:
         return '"expect" must be "pass" or "fail"'
     if case["expect"] == "fail" and not isinstance(case.get("error"), str):
         return 'a "fail" case needs an "error" string'
-    if not isinstance(case.get("files"), dict):
-        return '"files" must be an object'
-    for path, spec in case["files"].items():
+    if "base" in case and case["base"] is not None and not isinstance(case["base"], dict):
+        return '"base" must be an object of files, or null for a skill the pull request adds'
+    if "retired" in case and not isinstance(case["retired"], bool):
+        return '"retired" must be true or false'
+    files = case.get("files")
+    if files is None and isinstance(case.get("base"), dict):
+        pass  # The pull request removes the skill folder.
+    elif not isinstance(files, dict):
+        return '"files" must be an object (or null, with "base", for a removed folder)'
+    for group in (files or {}, case.get("base") or {}):
+        problem = _files_problem(group)
+        if problem:
+            return problem
+    return None
+
+
+def _files_problem(files: dict) -> str | None:
+    for path, spec in files.items():
         if not isinstance(spec, dict) or len({"text", "base64"} & set(spec)) != 1:
             return f'file "{path}" needs exactly one of "text" or "base64"'
     return None
+
+
+def load_golden_hash(path: Path) -> tuple[dict[str, bytes], str]:
+    """The golden content-hash fixture: its files and the hash every implementation must compute."""
+    document = _read_json(path)
+    golden = document.get("content_hash") if isinstance(document, dict) else None
+    if not isinstance(golden, dict) or not isinstance(golden.get("sha256"), str):
+        raise ValueError(f"{path.name}: expected a content_hash object with files and sha256")
+    files = golden.get("files")
+    if not isinstance(files, dict) or _files_problem(files):
+        raise ValueError(f"{path.name}: content_hash.files is malformed")
+    tree = tree_from_files("golden", files)
+    return {p: e.data for p, e in tree.entries.items()}, golden["sha256"]
 
 
 def tree_from_files(name: str, files: dict) -> SkillTree:
@@ -1235,7 +1427,13 @@ def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
     """Problems with the rules' results on the cases; an empty list means every case gives its expected result."""
     problems = []
     for case in cases:
-        findings, _ = check_skill(tree_from_files(case["name"], case["files"]), rules)
+        name = case["name"]
+        head = tree_from_files(name, case["files"]) if case.get("files") is not None else None
+        findings = check_skill(head, rules)[0] if head is not None else []
+        if "base" in case or case.get("retired"):
+            base = tree_from_files(name, case["base"]) if case.get("base") is not None else None
+            retired = frozenset({name}) if case.get("retired") else frozenset()
+            findings += check_history(name, base, head, rules, retired)
         errors = [f.message for f in findings if f.severity == "error"]
         if case["expect"] == "pass" and errors:
             problems.append(f"case {case['id']}: expected pass, got: {'; '.join(errors)}")

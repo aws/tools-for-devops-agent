@@ -59,7 +59,7 @@ before this check existed" in CONTRIBUTING.md.
 
 ## Skills — complete if this PR adds or changes a skill
 
-<!-- The validate-skills check verifies the SKILL.md frontmatter and the files a skill publishes automatically; see "Skill Publishing Rules" in CONTRIBUTING.md. -->
+<!-- The validate-skills check verifies the SKILL.md frontmatter, the files a skill publishes and its version history automatically; see "Skill Publishing Rules" in CONTRIBUTING.md. -->
 
 - [ ] `SKILL.md` frontmatter is valid: `name` matches the directory, `description` present and within length limits, body at most 500 lines.
 - [ ] The `description` is written from the agent's point of view — scenarios, services, error types, symptoms.

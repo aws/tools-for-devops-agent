@@ -87,6 +87,21 @@ In published text files, invisible characters are errors, because they can hide 
 
 Outside `skills/`: skills are published from GitHub's archive of the whole repository, which must hold exactly what Git holds. So no symbolic link may sit anywhere in the repository, and no root `.gitattributes` line may change how Git archives files under `skills/`: `export-ignore`, `export-subst`, `ident`, `filter`, `working-tree-encoding`, or an `eol`, `text` or `crlf` setting other than `text`, `text=auto`, `eol=lf`, `crlf` or `crlf=input`, which only normalize line endings when files are committed. A macro (`[attr]name ...`) that sets one of these is an error wherever it's defined. Scope such a line to another folder, such as `mcp/**`.
 
+Identity and versions, compared with the base branch:
+
+- A skill folder is never removed or renamed, because installed copies point at its path. To retire a skill, set `metadata.deprecated: "true"` and bump its version. To rename one, deprecate the old folder and add a new one.
+- There's no exception, even in an emergency such as malicious content: deprecate the skill; the DevOps Agent team can hide it from the catalog while the change publishes. Deleting the folder wouldn't remove the versions already published.
+- A path that belonged to a skill removed earlier can't be reused.
+- A published version is immutable. A change to any published file, `README.md` and `images/` included, needs a higher `metadata.version`. Changes only to `evals/`, `.skilleval.yaml` or `CHANGELOG.md` need no bump.
+- The version goes up one step at a time: from `3.4.0` to `3.4.1`, `3.5.0` or `4.0.0`. It never goes down.
+- The step is counted from the base branch, not from your last commit, so set `metadata.version` once, at the end. Bumping again for each round of review feedback (`1.0.0` to `1.0.1`, then `1.0.2`) fails the check.
+- A new skill starts at `1.0.0`.
+- When the version goes up, add a `CHANGELOG.md` entry for it. A bump without one is a warning.
+
+Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list. A `connector.yaml` that can't be read is a warning.
+
+The check is exact only for the base commit it ran on. Two pull requests that each pass on an older base can break the rules together, for example by both bumping a skill to the same version, so a later push to `main` can still fail.
+
 Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
 
 ```bash

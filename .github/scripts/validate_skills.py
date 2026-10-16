@@ -37,9 +37,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 import skill_checks as sc
 
 SKILLS_DIR = "skills"
+CONNECTORS_DIR = "connectors"
 RULES_DIR = Path(__file__).resolve().parent / "skill-rules"
 CONFORMANCE_FILE = "conformance-cases.json"
 DOCS_HINT = 'See the "Skill Publishing Rules" section of CONTRIBUTING.md.'
@@ -57,6 +60,7 @@ class SkillResult:
     path: str  # repository-relative, such as skills/my-skill
     findings: list[sc.Finding]
     is_skill: bool = True
+    always_visible: bool = False
 
 
 def _repo_root() -> Path:
@@ -204,26 +208,159 @@ def repository_results(repo_root: Path, rev: str) -> list[SkillResult]:
     return results
 
 
+def is_shallow(repo_root: Path) -> bool:
+    return _git(repo_root, "rev-parse", "--is-shallow-repository").decode("ascii").strip() == "true"
+
+
+def retired_skills(repo_root: Path, base: str, present: set[str]) -> frozenset[str]:
+    """Skill folder names that `base`'s first-parent history deleted and that `base` doesn't have.
+
+    First-parent only, so a path that existed only inside a pull request's
+    branch, renamed before it merged, never counts as retired. A merge commit
+    is compared with its first parent, which is how a pull request's removal
+    reaches `main`. Renames are turned off, so a folder renamed away on `main`
+    shows as deleted.
+    """
+    out = _git(
+        repo_root,
+        "log",
+        "--first-parent",
+        "--diff-merges=first-parent",
+        "--no-renames",
+        "--format=",
+        "--name-only",
+        "--diff-filter=D",
+        "-z",
+        base,
+        "--",
+        f"{SKILLS_DIR}/",
+    )
+    names = set()
+    for raw in out.split(b"\0"):
+        parts = _decode_path(raw).strip().split("/")
+        if len(parts) >= 3 and parts[0] == SKILLS_DIR:
+            names.add(parts[1])
+    return frozenset(names - present)
+
+
+def connector_skill_references(repo_root: Path, rev: str) -> tuple[dict[str, list[str]], list[SkillResult]]:
+    """Skill name -> the connectors whose connector.yaml lists it under skills: (recommended skills).
+
+    Also returns a warning for each connector.yaml that can't be read, isn't a
+    mapping, has a skills: value that isn't a list of skill names, or writes
+    skills: more than once, so a broken file doesn't silently skip the check. The YAML is composed, not
+    constructed, so a value PyYAML can't build (a bad date, say) can't stop
+    the check.
+    """
+    listing = _git(repo_root, "ls-tree", "-r", "-z", "--full-tree", rev, "--", f"{CONNECTORS_DIR}/")
+    files: list[tuple[str, str]] = []
+    for record in listing.split(b"\0"):
+        if not record:
+            continue
+        meta, _, raw_path = record.partition(b"\t")
+        _, kind, oid = meta.decode("ascii").split(" ")
+        parts = _decode_path(raw_path).split("/")
+        if kind == "blob" and len(parts) == 3 and parts[2] == "connector.yaml":
+            files.append((parts[1], oid))
+    references: dict[str, list[str]] = {}
+    unreadable: list[SkillResult] = []
+    for (connector, _), data in zip(files, _read_blobs(repo_root, [oid for _, oid in files])):
+        try:
+            problem, skills = _recommended_skills(*_compose_connector(data.decode("utf-8")))
+        except (UnicodeDecodeError, yaml.YAMLError, RecursionError):
+            problem, skills = "can't be read as YAML, so its skills: list wasn't checked", []
+        if problem:
+            message = f"{problem} against deprecated skills"
+            path = f"{CONNECTORS_DIR}/{connector}/connector.yaml"
+            unreadable.append(SkillResult(path, [sc.Finding("warning", message)], is_skill=False, always_visible=True))
+        for skill in skills:
+            references.setdefault(skill, []).append(connector)
+    return references, unreadable
+
+
+def _compose_connector(text: str) -> tuple[yaml.Node | None, int]:
+    """The YAML node tree of a connector.yaml, with merge keys (<<) resolved, and how many skills: keys it writes.
+
+    No values are built. The count is taken before merging, since a merge can
+    supply skills: as well without the file being ambiguous.
+    """
+    loader = yaml.SafeLoader(text)
+    try:
+        root = loader.get_single_node()
+        written = 0
+        if isinstance(root, yaml.MappingNode):
+            written = sum(1 for key, _ in root.value if isinstance(key, yaml.ScalarNode) and key.value == "skills")
+            loader.flatten_mapping(root)
+        return root, written
+    finally:
+        loader.dispose()
+
+
+def _recommended_skills(root: yaml.Node | None, written: int) -> tuple[str | None, list[str]]:
+    """The skill names under a connector.yaml's skills: key, and what kept any of it from being checked."""
+    if not isinstance(root, yaml.MappingNode):
+        return "isn't a YAML mapping, so its skills: list wasn't checked", []
+    values = [value for key, value in root.value if isinstance(key, yaml.ScalarNode) and key.value == "skills"]
+    if not values:
+        return None, []
+    if not isinstance(values[-1], yaml.SequenceNode):
+        return "has a skills: value that isn't a list, so it wasn't checked", []
+    items = values[-1].value  # As in PyYAML, the last skills: key wins.
+    names = [item.value for item in items if isinstance(item, yaml.ScalarNode) and item.tag == sc.STR_TAG]
+    if len(names) < len(items):
+        return "has a skills: entry that isn't a skill name, so that entry wasn't checked", names
+    if written > 1:
+        return "has more than one skills: key, so only the last one was checked", names
+    return None, names
+
+
 def check_repository(
     repo_root: Path, rules: sc.Rules, base: str | None, head_ref: str
 ) -> tuple[list[SkillResult], set[str] | None]:
     """Results for every skill at `head_ref`, and the skills touched since `base` (None without a base).
 
-    With a base, the lines a pull request adds are also checked for internal
-    host and tool names.
+    With a base, each skill is also compared with its merge-base copy: a folder
+    can't be removed or reuse a retired path, the version must go up when the
+    published files change, and the lines the pull request adds are checked
+    for internal host and tool names.
     """
     head_trees, results = read_skills(repo_root, head_ref)
     results += repository_results(repo_root, head_ref)
     touched = None
     base_trees: dict[str, sc.SkillTree] = {}
+    history: dict[str, list[sc.Finding]] = {}
     if base is not None:
         touched = touched_skills(repo_root, base, head_ref)
         base_trees, _ = read_skills(repo_root, base)
+        retired: frozenset[str] = frozenset()
+        if is_shallow(repo_root):
+            message = "the clone is shallow, so skill paths retired earlier in history were not checked; use fetch-depth: 0"
+            results.append(SkillResult(SKILLS_DIR, [sc.Finding("warning", message)], is_skill=False, always_visible=True))
+        else:
+            retired = retired_skills(repo_root, base, set(base_trees))
+        for name in sorted(set(base_trees) | set(head_trees)):
+            history[name] = sc.check_history(name, base_trees.get(name), head_trees.get(name), rules, retired)
+        for name in sorted(set(base_trees) - set(head_trees)):
+            results.append(SkillResult(f"{SKILLS_DIR}/{name}", history[name], is_skill=False))
+    recommended, unreadable = connector_skill_references(repo_root, head_ref)
+    results += unreadable
     for name in sorted(head_trees):
-        findings, _ = sc.check_skill(head_trees[name], rules)
+        findings, info = sc.check_skill(head_trees[name], rules)
         if base is not None:
             findings += sc.check_added_content(base_trees.get(name), head_trees[name], rules)
-        results.append(SkillResult(f"{SKILLS_DIR}/{name}", findings))
+        if info is not None and info.metadata.get("deprecated") == "true":
+            for connector in recommended.get(name, []):
+                findings.append(
+                    sc.Finding(
+                        "error",
+                        f"the skill is deprecated, but {CONNECTORS_DIR}/{connector}/connector.yaml still recommends it "
+                        "under skills:. Remove it from that list in the same pull request, or the connector fails "
+                        "validation",
+                        "SKILL.md",
+                        info.deprecated_line,
+                    )
+                )
+        results.append(SkillResult(f"{SKILLS_DIR}/{name}", findings + history.get(name, [])))
     return results, touched
 
 
@@ -263,7 +400,7 @@ def _location(result: SkillResult, finding: sc.Finding) -> str:
 def _visible(result: SkillResult, touched: set[str] | None) -> list[sc.Finding]:
     """Errors always; warnings only for touched skills (or every skill when there is no base)."""
     name = result.path.split("/", 1)[-1]
-    show_warnings = touched is None or name in touched
+    show_warnings = result.always_visible or touched is None or name in touched
     return [f for f in result.findings if f.severity == "error" or show_warnings]
 
 
@@ -327,9 +464,14 @@ def _write_summary(results: list[SkillResult], touched: set[str] | None, failed:
 def self_check(rules_dir: Path, rules: sc.Rules) -> list[str]:
     try:
         cases = sc.load_cases(rules_dir / CONFORMANCE_FILE)
+        golden_files, golden_hash = sc.load_golden_hash(rules_dir / CONFORMANCE_FILE)
     except ValueError as exc:
         return [str(exc)]
-    return sc.run_conformance(cases, rules)
+    problems = sc.run_conformance(cases, rules)
+    actual = sc.content_hash(golden_files)
+    if actual != golden_hash:
+        problems.append(f"the content hash of the golden fixture is {actual}, not {golden_hash}")
+    return problems
 
 
 def _could_not_run(exc: GitError) -> int:

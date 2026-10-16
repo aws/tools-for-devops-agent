@@ -73,7 +73,9 @@ class RepoTestCase(unittest.TestCase):
         shutil.copytree(validate_skills.RULES_DIR, target, dirs_exist_ok=True)
         return target
 
-    def run_check(self, *argv: str, env: dict | None = None, rules_dir: Path | None = None) -> tuple[int, str]:
+    def run_check(
+        self, *argv: str, env: dict | None = None, rules_dir: Path | None = None, repo_root: Path | None = None
+    ) -> tuple[int, str]:
         # Strict UTF-8, as on a real stdout, so text that can't be printed fails the test.
         raw = io.BytesIO()
         out = io.TextIOWrapper(raw, encoding="utf-8", errors="strict", newline="\n")
@@ -81,7 +83,7 @@ class RepoTestCase(unittest.TestCase):
         environ.update(env or {})
         with mock.patch.dict(os.environ, environ, clear=True), contextlib.redirect_stdout(out):
             code = validate_skills.main(
-                list(argv), repo_root=self.repo, rules_dir=rules_dir or validate_skills.RULES_DIR
+                list(argv), repo_root=repo_root or self.repo, rules_dir=rules_dir or validate_skills.RULES_DIR
             )
         out.flush()
         return code, raw.getvalue().decode("utf-8")
@@ -121,8 +123,8 @@ class ValidateSkillsTests(RepoTestCase):
         self.write("skills/alpha/SKILL.md", skill_md("alpha", extra=off_vocabulary))
         self.write("skills/beta/SKILL.md", skill_md("beta", extra=off_vocabulary))
         base = self.commit("base")
-        self.write("skills/beta/README.md", "# Beta\n")
-        self.commit("touch beta")
+        self.write("skills/beta/CHANGELOG.md", "# Changelog\n")
+        self.commit("touch beta without changing its published files")
         code, out = self.run_check("--base-ref", base)
         self.assertEqual(code, 0, out)
         self.assertIn("WARN  skills/beta/SKILL.md", out)
@@ -321,6 +323,7 @@ class PackageIntegrationTests(RepoTestCase):
         self.write("skills/alpha/evals/journal.md", "role: ops-Rivendell\n")
         base = self.commit("base already names an internal tool")
         self.write("skills/alpha/references/notes.md", "See https://wiki.corp.example/x\n")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1"))
         self.commit("add an internal link")
         code, out = self.run_check("--base-ref", base, rules_dir=rules_dir)
         self.assertEqual(code, 0, out)
@@ -334,6 +337,209 @@ class PackageIntegrationTests(RepoTestCase):
         self.commit("base")
         code, out = self.run_check()
         self.assertEqual(code, 0, out)
+
+
+class HistoryIntegrationTests(RepoTestCase):
+    def test_removed_skill_folder_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/beta/SKILL.md", skill_md("beta"))
+        base = self.commit("base")
+        self.git("rm", "-q", "-r", "skills/beta")
+        self.commit("remove beta")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  skills/beta: the skill folder skills/beta was removed", out)
+        self.assertIn("1 skill(s) checked", out)
+
+    def test_a_deprecated_skill_cannot_stay_recommended_by_a_connector(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("connectors/acme/connector.yaml", "name: acme\nskills: [alpha, beta]\n")
+        base = self.commit("base")
+        deprecated = skill_md("alpha", version="1.0.1", extra='  deprecated: "true"\n')
+        self.write("skills/alpha/SKILL.md", deprecated)
+        self.commit("deprecate alpha")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        line = deprecated.splitlines().index('  deprecated: "true"') + 1
+        self.assertIn(f"FAIL  skills/alpha/SKILL.md:{line}: the skill is deprecated, but connectors/acme/connector.yaml still recommends it", out)
+        self.write("connectors/acme/connector.yaml", "name: acme\nskills: [beta]\n")
+        self.commit("drop alpha from the connector")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 0, out)
+
+    def test_a_connector_yaml_that_cannot_be_read_is_a_warning_not_a_crash(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        cases = {
+            "skills: [alpha\n": "can't be read as YAML",
+            "skills: " + "[" * 2000 + "]" * 2000 + "\n": "can't be read as YAML",
+            "name: acme\nreleased: 2024-13-45\nskills: [alpha]\n": None,
+            "port: !!int abc\nskills: [alpha]\n": None,
+            "name: acme\nskills: alpha\n": "has a skills: value that isn't a list",
+            "- alpha\n": "isn't a YAML mapping",
+        }
+        for text, warning in cases.items():
+            with self.subTest(text=text[:24]):
+                self.write("connectors/acme/connector.yaml", text)
+                self.commit("an odd connector")
+                code, out = self.run_check("--base-ref", base)
+                self.assertEqual(code, 0, out)
+                if warning:
+                    self.assertIn(f"WARN  connectors/acme/connector.yaml: {warning}", out)
+                else:
+                    self.assertNotIn("connectors/acme", out)
+
+    def test_odd_connector_lists_still_find_the_skill(self):
+        cases = {
+            "name: acme\nskills: [alpha, null]\n": "has a skills: entry that isn't a skill name",
+            "defaults: &d\n  skills: [alpha]\nname: acme\n<<: *d\n": None,
+            "skills: []\nname: acme\nskills: [alpha]\n": "has more than one skills: key",
+            "defaults: &d\n  skills: []\nname: acme\nskills: [alpha]\n<<: *d\n": None,
+        }
+        for text, warning in cases.items():
+            with self.subTest(text=text[:24]):
+                self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+                self.write("connectors/acme/connector.yaml", text)
+                base = self.commit("base")
+                self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1", extra='  deprecated: "true"\n'))
+                self.commit("deprecate alpha")
+                code, out = self.run_check("--base-ref", base)
+                self.assertEqual(code, 1, out)
+                self.assertIn("connectors/acme/connector.yaml still recommends it", out)
+                if warning:
+                    self.assertIn(f"WARN  connectors/acme/connector.yaml: {warning}", out)
+                else:
+                    self.assertNotIn("WARN  connectors/", out)
+
+    def test_values_pyyaml_cannot_build_still_find_the_skill(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("connectors/acme/connector.yaml", "name: acme\nreleased: 2024-13-45\nskills: [alpha]\n")
+        base = self.commit("base")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1", extra='  deprecated: "true"\n'))
+        self.commit("deprecate alpha")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("connectors/acme/connector.yaml still recommends it", out)
+
+    def test_a_skill_removed_through_a_merge_commit_is_retired(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("first")
+        self.git("checkout", "-q", "-b", "remove-old")
+        self.git("rm", "-q", "-r", "skills/old")
+        self.commit("remove old on a branch")
+        self.git("checkout", "-q", "main")
+        self.git("merge", "-q", "--no-ff", "-m", "merge the removal", "remove-old")
+        base = self.git("rev-parse", "HEAD")
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("bring old back")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  skills/old/SKILL.md:2: skills/old was used by a skill that was removed earlier", out)
+
+    def test_a_shallow_clone_skips_retired_paths_with_a_warning(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.commit("first")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1"))
+        self.commit("second")
+        clone = Path(tempfile.mkdtemp()) / "clone"
+        self.addCleanup(shutil.rmtree, clone.parent)
+        subprocess.run(
+            ["git", "clone", "-q", "--depth", "1", self.repo.as_uri(), str(clone)],
+            check=True,
+            capture_output=True,
+            env={**os.environ, **GIT_ENV},
+        )
+        code, out = self.run_check("--base-ref", "HEAD", repo_root=clone)
+        self.assertEqual(code, 0, out)
+        self.assertIn("WARN  skills: the clone is shallow", out)
+
+    def test_rename_fails_as_a_removal(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        self.git("mv", "skills/alpha", "skills/alpha-two")
+        self.write("skills/alpha-two/SKILL.md", skill_md("alpha-two"))
+        self.commit("rename")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("skills/alpha was removed", out)
+
+    def test_reusing_a_retired_path_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("first")
+        self.git("rm", "-q", "-r", "skills/old")
+        base = self.commit("retire old")
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("bring old back")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("skills/old was used by a skill that was removed earlier", out)
+
+    def test_a_path_renamed_away_on_main_is_retired(self):
+        # A long body keeps every file similar enough that Git reports the
+        # move as a rename (R), not a delete (D) plus an add.
+        body = "".join(f"Step {i}: check the thing.\n" for i in range(200))
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/old/SKILL.md", skill_md("old") + body)
+        self.write("skills/old/references/guide.md", body)
+        self.commit("first")
+        self.git("mv", "skills/old", "skills/new")
+        self.write("skills/new/SKILL.md", skill_md("new") + body)
+        base = self.commit("rename old to new on main")
+        self.assertRegex(self.git("log", "-1", "--name-status", "--format="), r"(?m)^R\d+\tskills/old/")
+        self.write("skills/old/SKILL.md", skill_md("old"))
+        self.commit("bring old back")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("skills/old was used by a skill that was removed earlier", out)
+
+    def test_a_path_that_only_existed_on_a_merged_branch_is_not_retired(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.commit("base")
+        self.git("checkout", "-q", "-b", "feature")
+        self.write("skills/draft/SKILL.md", skill_md("draft"))
+        self.commit("add draft")
+        self.git("mv", "skills/draft", "skills/final")
+        self.write("skills/final/SKILL.md", skill_md("final"))
+        self.commit("rename before merge")
+        self.git("checkout", "-q", "main")
+        self.git("merge", "-q", "--no-ff", "-m", "merge feature", "feature")
+        base = self.git("rev-parse", "HEAD")
+        self.write("skills/draft/SKILL.md", skill_md("draft"))
+        self.commit("add a skill named draft")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 0, out)
+
+    def test_content_change_without_bump_fails_and_with_bump_passes(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/alpha/references/a.md", "one\n")
+        base = self.commit("base")
+        self.write("skills/alpha/references/a.md", "two\n")
+        self.commit("change without bump")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("metadata.version must go up from 1.0.0", out)
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1"))
+        self.write("skills/alpha/CHANGELOG.md", "## 1.0.1\n")
+        self.commit("bump")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 0, out)
+
+    def test_merge_base_not_base_tip_is_the_comparison(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        fork_point = self.commit("base")
+        self.git("checkout", "-q", "-b", "feature")
+        self.write("skills/beta/SKILL.md", skill_md("beta"))
+        self.commit("add beta")
+        self.git("checkout", "-q", "main")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="2.0.0"))
+        self.commit("main moves on")
+        self.git("checkout", "-q", "feature")
+        code, out = self.run_check("--base-ref", "main")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("went down", out)
+        self.assertEqual(self.git("merge-base", "main", "feature"), fork_point)
 
 
 class SelfCheckTests(RepoTestCase):
@@ -354,6 +560,18 @@ class SelfCheckTests(RepoTestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("case valid-minimal: expected an error", out)
         self.assertNotIn("skill(s) checked", out)
+
+    def test_changed_hash_function_stops_the_check(self):
+        rules_dir = self.rules_copy()
+        path = rules_dir / validate_skills.CONFORMANCE_FILE
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["content_hash"]["sha256"] = "0" * 64
+        path.write_text(json.dumps(document), encoding="utf-8")
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.commit("base")
+        code, out = self.run_check("--self-check-only", rules_dir=rules_dir)
+        self.assertEqual(code, 2, out)
+        self.assertIn("content hash of the golden fixture", out)
 
     def test_malformed_rule_data_cannot_run(self):
         rules_dir = self.rules_copy()
