@@ -1,0 +1,92 @@
+{
+  "version": "v9",
+  "iteration": 1,
+  "eval_id": "ddos-flood",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies the core elements of the expected root cause: an external L7 HTTP GET flood from ~10 AWS-hosted IPs (SG/IN/IE/US) each sending ~55-58K requests (~600K total) with a Chrome UA, over a similar time window (04:14-04:25 UTC vs expected 04:15-04:21 UTC). It correctly identifies the rate-based rule `rate-limit` (100 req/300s per IP) as the mechanism that blocked 566,070 requests - matching the expected 566,070 figure exactly. It also correctly notes ~38,222 allowed (close to the expected ~34,000, consistent with 'allowed before rate limit took effect'). Critically, it correctly determines that the Anti-DDoS managed rule group did NOT declare an event/take blocking action - it only classified traffic as volumetric/tagged it but took no terminating action, which aligns with the expected finding that Anti-DDoS 'declared no event... only challengeable-request.' The investigation's hypothesis section further explores why Anti-DDoS didn't escalate, consistent with the expected explanation. The agent also flags the log group dual-purpose issue in gaps is not explicitly mentioned, but the core causal chain (flood details, rate-limit blocking count matching exactly, Anti-DDoS not declaring an event) matches very well.",
+      "evidence": "\"its per-rule BlockedRequests (432,530 at 04:15 + 133,540 at 04:20 = 566,070 total) exactly match the WebACL-ALL and Attack=Volumetric totals. The Anti-DDoS rule group classified the traffic as volumetric (Attack=Volumetric tag; CountRuleMatch spike to 34,088) but took no terminating action.\" and \"~10 cloud-hosted source IPs (SG/IN/IE/US, AWS EC2 ranges), each sending ~55K-58K GET / requests with a single spoofed Chrome UA (~604K requests total over ~11 min)\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the 10 source IPs as the drivers of the flood",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'a distributed Layer-7 HTTP GET flood hit cf-httpecho.a.example.com: 100% GET to `/` from a single user-agent (Chrome 125/Windows), ~10 source IPs each ~55K-58K requests (SG/IN/IE/US)' and 'an external, moderately-distributed Layer-7 HTTP GET flood from ~10 cloud-hosted source IPs (SG/IN/IE/US, AWS EC2 ranges), each sending ~55K-58K GET / requests'",
+          "reasoning": "The summary explicitly identifies ~10 source IPs as the drivers of the flood in multiple places.",
+          "confidence": "high"
+        },
+        {
+          "text": "Names the rate-based rule rate-limit as what blocked the flood",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The flood was blocked entirely by the WebACL's rate-based `rate-limit` rule (100 req/300s per IP, Block): its per-rule BlockedRequests (432,530 at 04:15 + 133,540 at 04:20 = 566,070 total) exactly match the WebACL-ALL and Attack=Volumetric totals.'",
+          "reasoning": "The output explicitly names the rate-limit rule as what blocked the flood.",
+          "confidence": "high"
+        },
+        {
+          "text": "States that the Anti-DDoS rule group did not declare an event (no event-detected label) and does not treat challengeable-request labels as evidence of one",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'The Anti-DDoS rule group classified the traffic as volumetric (Attack=Volumetric tag; CountRuleMatch spike to 34,088) but took no terminating action' and later speculates 'the attack ended before it transitioned' from a 'challengeable' evaluation state to a declared ddos_event -- treating the challengeable label as a near-event rather than clearly stating no event was declared and firmly rejecting the challengeable label as evidence of one.",
+          "reasoning": "While the output does say Anti-DDoS took no terminating action, it does not clearly state that no event was declared (no event-detected label), and it treats the challengeable-request/Attack=Volumetric tagging as a basis for a hypothesis about near-escalation, rather than explicitly disclaiming it as evidence of a declared event. This is a nuanced partial match, not a clean pass.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Explains the requests allowed at the start of the flood as the rate-based rule's detection delay",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The 38,222 allowed requests are mentioned ('The rate-limit rule blocked 566,070 requests; 38,222 were allowed.') but the summary attributes allowed requests to the 300s window leak: 'the rate-limit rule's 300s evaluation window lets each source IP leak up to ~100 requests per 5-min window before throttling' -- this is about per-IP leakage/window, not explicitly framed as a 'detection delay' at the start of the flood.",
+          "reasoning": "The explanation given is about the inherent per-IP allowance within the 300s window (structural leakage), not specifically framed as initial allowed requests at flood onset due to a detection delay before the rule engaged. The assertion's specific framing is not clearly matched.",
+          "confidence": "high"
+        },
+        {
+          "text": "Describes it as a flood from a small number of sources rather than a widely distributed attack",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'a distributed Layer-7 HTTP GET flood... ~10 source IPs' and 'an external, moderately-distributed Layer-7 HTTP GET flood from ~10 cloud-hosted source IPs (SG/IN/IE/US, AWS EC2 ranges)' -- described as 'moderately-distributed' with a small, countable set of ~10 IPs, not as a massive widely distributed botnet.",
+          "reasoning": "The output uses the word 'distributed' but qualifies it with 'moderately-distributed' and specifies a small number (~10) of source IPs, consistent with describing a flood from a small number of sources rather than a widely distributed attack.",
+          "confidence": "high"
+        },
+        {
+          "text": "Reports a blocked count of roughly 566,000, not about double that",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The rate-limit rule blocked 566,070 requests' and 'its per-rule BlockedRequests (432,530 at 04:15 + 133,540 at 04:20 = 566,070 total)'",
+          "reasoning": "The output consistently reports a blocked count of 566,070, which is roughly 566,000 as asserted, not double that figure.",
+          "confidence": "high"
+        },
+        {
+          "text": "No CloudWatch command or SEARCH schema for the CloudFront WebACL includes a Region dimension",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.7143
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "11m7s",
+    "cost": "$5.54",
+    "context_window": {
+      "utilization": "6.5%",
+      "compaction_count": 0
+    }
+  }
+}

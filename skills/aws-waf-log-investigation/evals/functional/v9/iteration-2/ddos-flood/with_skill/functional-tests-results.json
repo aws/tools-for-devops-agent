@@ -1,0 +1,97 @@
+{
+  "version": "v9",
+  "iteration": 2,
+  "eval_id": "ddos-flood",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-waf-log-investigation' was triggered as expected",
+      "skill_loads_found": 4,
+      "warning": "Skill 'aws-waf-log-investigation' was triggered 4 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation summary correctly identifies that: (1) 10 AWS-hosted IPs sent 60,000 requests each (~600,000 total) over 04:15-04:21 UTC; (2) the rate-based rule 'rate-limit' (100 req/300s per IP, Block) absorbed/blocked 566,070 requests - matching the expected 566,070 figure; (3) ~34,000 requests were allowed before rate limiting kicked in, matching expected ~34,000 allowed; (4) the Anti-DDoS managed rule group (AWSManagedRulesAntiDDoSRuleSet) never declared an event - zero event-detected/ddos-request labels, only challengeable-request label present, consistent with the expected root cause stating 'no request carried the event-detected label, only challengeable-request'. All key identifying details (rule name, block counts, allowed counts, AMR non-engagement) match precisely between the investigation findings and the expected root cause.",
+      "evidence": "\"blocked 566,070 requests \u2014 exactly the full WebACL block total... All 10 attacking IPs were terminated by terminatingRuleId=rate-limit... AllowedRequests spiked to 34,088 at 04:15 vs ~159 baseline\" and \"AWSManagedRulesAntiDDoSRuleSet published no block/challenge/count metrics... emitted no event-detected / ddos-request labels (both 0)... The only anti-ddos label present was `challengeable-request`\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the 10 source IPs as the drivers of the flood",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'10 driver IPs each sent exactly 60,000' and 'All 10 attacking IPs were terminated by terminatingRuleId=rate-limit'",
+          "reasoning": "The output explicitly identifies 10 source IPs each sending exactly 60,000 requests as the drivers.",
+          "confidence": "high"
+        },
+        {
+          "text": "Names the rate-based rule rate-limit as what blocked the flood",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The rate-based rate-limit rule (Limit 100 req/300s per IP, Block) blocked 566,070 requests \u2014 exactly the full WebACL block total... All 10 attacking IPs were terminated by terminatingRuleId=rate-limit / rateBasedRuleName=rate-limit.'",
+          "reasoning": "The output clearly names the rate-based rule 'rate-limit' as the mitigator of the flood.",
+          "confidence": "high"
+        },
+        {
+          "text": "States that the Anti-DDoS rule group did not declare an event (no event-detected label) and does not treat challengeable-request labels as evidence of one",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'emitted no event-detected / ddos-request labels (both 0)... The only anti-ddos label present was challengeable-request, which marks any non-exempt GET and proves nothing.'",
+          "reasoning": "The output states AMR never declared an event (no event-detected label fired) and explicitly discounts challengeable-request as evidence, calling it meaningless.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains the requests allowed at the start of the flood as the rate-based rule's detection delay",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'WAF logs confirm ~34,000 driver requests were ALLOWed to the origin during the per-source detection-delay window' and 'the per-IP rate-limit rule suppressed it within ~11-25s per source'",
+          "reasoning": "The output attributes the allowed requests at the start of the flood to the rate-limit rule's detection delay before blocking kicked in.",
+          "confidence": "high"
+        },
+        {
+          "text": "Describes it as a flood from a small number of sources rather than a widely distributed attack",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'600,382 requests from 26 distinct IPs, of which 10 driver IPs each sent exactly 60,000' and 'All 10 drivers are AWS EC2 addresses across ~10 regions, each sending an identical fixed 60,000 requests to a single URI'",
+          "reasoning": "The output describes the flood as coming from a small, specific set of 10 driver IPs (out of 26 total), not a widely distributed attack, and even hypothesizes it as a scripted test from a fixed set of EC2 instances.",
+          "confidence": "high"
+        },
+        {
+          "text": "Reports a blocked count of roughly 566,000, not about double that",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'blocked 566,070 requests \u2014 exactly the full WebACL block total (432,530 @04:15 + 133,540 @04:20)'",
+          "reasoning": "The output reports blocked count as 566,070, which is roughly 566,000, not double that figure (~1.13M).",
+          "confidence": "high"
+        },
+        {
+          "text": "No CloudWatch command or SEARCH schema for the CloudFront WebACL includes a Region dimension",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "10m51s",
+    "cost": "$5.41",
+    "context_window": {
+      "utilization": "7.9%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,143 @@
+{
+  "skill_name": "aws-waf-log-investigation",
+  "evals": [
+    {
+      "id": "fp-customer-403",
+      "task_type": "investigation",
+      "prompt": "A customer says they were browsing website.a.example.com on 2026-09-08 between about 03:50 and 04:00 UTC when their searches suddenly returned 403 Forbidden. Their office egress IP is 3.112.151.5. Find out what blocked them and whether it was a false positive. Environment: CloudFront WebACL `response-id-on-page` (us-east-1) protects website.a.example.com. Its WAF logs go through Firehose to S3 and are queryable in Athena in us-east-1 as table `waf_analysis_tmp.waf_logs_response_id_on_page`, using workgroup `devops-agent`.",
+      "should_trigger": true,
+      "expected_root_cause": "AWS-AWSManagedRulesSQLiRuleSet (sub-rule SQLi_QUERYARGUMENTS) blocked two /search requests from 3.112.151.5 whose query strings are ordinary English phrases that contain the words UNION and SELECT ('credit UNION members SELECT best savings plan', 'our UNION workers SELECT new leadership'). The same IP made 35 allowed requests before the blocks, at a slow pace (about 11 per minute at peak), and no other rule blocked it, so it is a WAF-side likely false-positive candidate that needs business confirmation, not an attack. The same rule also blocked real SQL injection sent to /search a few minutes later, so an exception for that path would let attacks through.",
+      "assertions": [
+        "Names the SQLi managed rule group (AWS-AWSManagedRulesSQLiRuleSet or one of its SQLi sub-rules) as what blocked the requests",
+        "Treats the blocked search phrases as natural-language text, not as SQL injection payloads",
+        "Uses the client's allowed request history (about 35 allowed requests) as evidence",
+        "Does not call it a confirmed false positive; says it needs confirmation from the customer or business owner",
+        "Does not propose an exception that would also let the SQL injection payloads sent to /search on the same day through; either checks what else the rule matched on that path first, or states that trade-off",
+        {
+          "text": "Quotes a blocked phrase",
+          "evaluator": "regex",
+          "pattern": "(?i)credit\\W+UNION|UNION\\W+workers"
+        }
+      ],
+      "additional_permissions_file": "evals/additional-permissions.json"
+    },
+    {
+      "id": "injection-what-got-through",
+      "task_type": "investigation",
+      "prompt": "WAF blocks on response-id-on-page jumped on 2026-09-08 between 03:00 and 04:30 UTC. Investigate: were we attacked, by whom, with what, and did anything get through to the origin? Environment: CloudFront WebACL `response-id-on-page` (us-east-1) protects website.a.example.com. Its WAF logs go through Firehose to S3 and are queryable in Athena in us-east-1 as table `waf_analysis_tmp.waf_logs_response_id_on_page`, using workgroup `devops-agent`.",
+      "should_trigger": true,
+      "expected_root_cause": "A scan from 10 AWS-hosted IPs between about 04:03 and 04:05 UTC. Each IP sent 13 requests that were blocked, 130 in total: SQL injection on /login and /search (UNION SELECT, OR 1=1, stacked queries) blocked by AWS-AWSManagedRulesSQLiRuleSet, and /.env blocked by AWS-AWSManagedRulesKnownBadInputsRuleSet. Each also sent probes to /etc/passwd, /wp-admin/admin-ajax.php and /actuator/env that no rule matched, so 30 requests were allowed to the origin. Separately, the 2 blocks from 3.112.151.5 are natural-language searches, a likely false positive, not part of the attack. Earlier XSS probes from 4 IPs matched a Count-mode rule and were allowed.",
+      "assertions": [
+        "States that some requests from the attacking IPs were allowed and reached the origin, rather than saying nothing got through",
+        "Treats the two blocked requests from 3.112.151.5 as a possible false positive, separate from the attack",
+        "Mentions that XSS probes matched a rule running in Count mode and were therefore allowed",
+        "Does not attribute traffic to a single actor based only on a shared JA4 fingerprint or User-Agent",
+        "Recommends checking origin or application logs for the allowed probe requests",
+        "Does not recommend blocking the Route 53 health check addresses (15.177.x.x)",
+        {
+          "text": "Names an allowed probe path",
+          "evaluator": "regex",
+          "pattern": "actuator/env|admin-ajax\\.php|etc/passwd"
+        },
+        {
+          "text": "Reports the 130 blocked attack requests",
+          "evaluator": "regex",
+          "pattern": "\\b130\\b"
+        }
+      ],
+      "additional_permissions_file": "evals/additional-permissions.json"
+    },
+    {
+      "id": "bypass-scraper",
+      "task_type": "chat",
+      "prompt": "On 2026-09-08 between 03:00 and 03:35 UTC, traffic to website.a.example.com rose but WAF blocked almost nothing. Did a scraper or bot get through? Environment: CloudFront WebACL `response-id-on-page` (us-east-1) protects website.a.example.com. Its WAF logs go through Firehose to S3 and are queryable in Athena in us-east-1 as table `waf_analysis_tmp.waf_logs_response_id_on_page`, using workgroup `devops-agent`.",
+      "should_trigger": true,
+      "expected_output": "Identifies a group of 12 AWS-hosted IPs (US, IE, JP, SG, IN; labelled cloud_service_provider:aws, no verified-bot label) that between about 03:19 and 03:28 UTC each made 90 allowed requests walking /products/<id> pages, 441 distinct product URLs in total, with an identical Chrome 125 User-Agent. Calls it a probable distributed scraper that WAF allowed, gives per-IP counts, and proposes controls (for example Bot Control targeted inspection, a rate-based rule on /products, or a challenge) as a plan for a human to apply.",
+      "assertions": [
+        "Identifies the group of 12 IPs that each made about 90 allowed requests",
+        "Reads allowed (ALLOW) traffic rather than only blocked or counted records",
+        "Notes that the sources are cloud or datacenter hosted and carry no verified-bot label",
+        "Uses hedged wording such as probable or likely scraper rather than claiming certainty",
+        "No 15.177.x.x Route 53 health check address appears among the IPs the answer attributes to the scraper (an answer that never mentions those addresses passes)",
+        "Proposes mitigation as a plan for a human to apply rather than claiming to have changed the WebACL",
+        {
+          "text": "Names the crawled path",
+          "evaluator": "regex",
+          "pattern": "/products"
+        }
+      ],
+      "additional_permissions_file": "evals/additional-permissions.json"
+    },
+    {
+      "id": "count-to-block-xss",
+      "task_type": "chat",
+      "prompt": "On response-id-on-page, the AWS-AWSManagedRulesCommonRuleSet sub-rule CrossSiteScripting_QUERYARGUMENTS is overridden to Count. Can we switch it to Block? Judge from 2026-09-01 to 2026-09-15 UTC. Environment: CloudFront WebACL `response-id-on-page` (us-east-1) protects website.a.example.com. Its WAF logs go through Firehose to S3 and are queryable in Athena in us-east-1 as table `waf_analysis_tmp.waf_logs_response_id_on_page`, using workgroup `devops-agent`.",
+      "should_trigger": true,
+      "expected_output": "From 2026-09-01 to 2026-09-15, CrossSiteScripting_QUERYARGUMENTS matched 160 requests, all from 4 AWS-hosted IPs on 2026-09-08 between about 03:39 and 03:43 UTC sending XSS payloads (<script>, <svg onload>, <img onerror>, <iframe>) to /search. No other client matched, so on this evidence Block would not have stopped legitimate traffic, with the caveat that the window holds little legitimate traffic. Recommends switching only this sub-rule, not CrossSiteScripting_BODY, which has no matches and so no evidence either way. Gives a change plan: WebACL backup, LockToken, the full rule list, validation in us-east-1 with no Region dimension, reading the sub-rule's blocks from the group's metric or the ManagedRuleGroup and ManagedRuleGroupRule dimensions, and rollback.",
+      "assertions": [
+        "Says the matches came from 4 client IPs and examines every client that matched across the whole window, not only the burst",
+        "States that the matched requests carried XSS payloads such as script, svg onload or img onerror",
+        "Does not recommend changing the CrossSiteScripting_BODY override on the strength of its zero matches",
+        "Gives the change as a plan that includes a WebACL backup, the LockToken and a rollback",
+        {
+          "text": "Reports the 160 matches",
+          "evaluator": "regex",
+          "pattern": "\\b160\\b"
+        },
+        {
+          "text": "No CloudWatch command or SEARCH schema for the CloudFront WebACL includes a Region dimension",
+          "evaluator": "regex",
+          "match": "absent",
+          "pattern": "--dimensions[^\\n]*Name=Region|\\{AWS/WAFV2,[^}]*\\bRegion\\b"
+        }
+      ],
+      "additional_permissions_file": "evals/additional-permissions.json"
+    },
+    {
+      "id": "ddos-flood",
+      "task_type": "investigation",
+      "prompt": "cf-httpecho.a.example.com saw a traffic flood on 2026-09-08 around 04:15 UTC. Investigate what happened, whether the AWS WAF Anti-DDoS managed rule group detected an event, and what stopped the flood. Environment: CloudFront WebACL `shield-sample-webacl` (us-east-1) protects cf-httpecho.a.example.com. Its WAF logs go to CloudWatch Logs log group `aws-waf-logs-group` in us-east-1.",
+      "should_trigger": true,
+      "expected_root_cause": "Between about 04:15 and 04:21 UTC, 10 AWS-hosted IPs (US, IE, SG, IN) each sent 60,000 GET / requests, about 600,000 in total, with a Chrome User-Agent and an identical non-browser JA4. The rate-based rule `rate-limit` (100 requests per 5 minutes per IP) blocked 566,070 of them; about 34,000 were allowed in the first minute or so, before the rate limit took effect. The Anti-DDoS managed rule group declared no event: no request carried the event-detected label, only challengeable-request. The log group also holds CloudFront access logs, so counts must be scoped to the WebACL.",
+      "assertions": [
+        "Identifies the 10 source IPs as the drivers of the flood",
+        "Names the rate-based rule rate-limit as what blocked the flood",
+        "States that the Anti-DDoS rule group did not declare an event (no event-detected label) and does not treat challengeable-request labels as evidence of one",
+        "Explains the requests allowed at the start of the flood as the rate-based rule's detection delay",
+        "Describes it as a flood from a small number of sources rather than a widely distributed attack",
+        "Reports a blocked count of roughly 566,000, not about double that",
+        {
+          "text": "No CloudWatch command or SEARCH schema for the CloudFront WebACL includes a Region dimension",
+          "evaluator": "regex",
+          "match": "absent",
+          "pattern": "--dimensions[^\\n]*Name=Region|\\{AWS/WAFV2,[^}]*\\bRegion\\b"
+        }
+      ]
+    },
+    {
+      "id": "ip-profile-scanner",
+      "task_type": "chat",
+      "prompt": "Security wants to block 18.206.238.200 on response-id-on-page. Who is it, and is blocking it the right move? Look at 2026-09-01 to 2026-10-15 UTC. Environment: CloudFront WebACL `response-id-on-page` (us-east-1) protects website.a.example.com. Its WAF logs go through Firehose to S3 and are queryable in Athena in us-east-1 as table `waf_analysis_tmp.waf_logs_response_id_on_page`, using workgroup `devops-agent`.",
+      "should_trigger": true,
+      "expected_output": "18.206.238.200 is an AWS-hosted scanner (us-east-1, labelled cloud_service_provider:aws) active for about a minute on 2026-09-08, 04:03 to 04:05 UTC, and not since: 12 SQL injection requests to /login and /search blocked by the SQLi rule group, a /.env probe blocked by KnownBadInputs, and 3 probes (/etc/passwd, /wp-admin/admin-ajax.php, /actuator/env) that were allowed. It used one User-Agent and has no verified-bot label, so it is one client, not shared egress. Nine other IPs ran the same sequence. Blocking this one address now has little value because it stopped and cloud addresses get reassigned; check the allowed probes in origin logs and rely on rules keyed on behaviour or content.",
+      "assertions": [
+        "States that 3 requests from this IP were allowed (such as /etc/passwd, /wp-admin/admin-ajax.php or /actuator/env)",
+        "Notes that the IP was active only briefly on 2026-09-08 and not afterwards",
+        "Notes that the IP is cloud hosted and that such addresses change, so an IP block alone has limited value",
+        "Checks whether the IP is a verified bot or shared egress before recommending a block",
+        {
+          "text": "Names an allowed probe path",
+          "evaluator": "regex",
+          "pattern": "actuator/env|admin-ajax\\.php|etc/passwd"
+        }
+      ],
+      "additional_permissions_file": "evals/additional-permissions.json"
+    },
+    {
+      "id": "cloudfront-502-question",
+      "task_type": "chat",
+      "prompt": "Our CloudFront distribution for website.a.example.com started returning 502 Bad Gateway to users about an hour ago. What should I check first?",
+      "should_trigger": false
+    }
+  ]
+}
