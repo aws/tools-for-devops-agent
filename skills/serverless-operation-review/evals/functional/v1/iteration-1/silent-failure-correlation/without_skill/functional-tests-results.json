@@ -1,0 +1,75 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "silent-failure-correlation",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response substantively meets the expected criteria. It correlates configuration with metrics/logs to identify silent failure modes: (1) an event source mapping (DynamoDB Streams -> slsreview-stream-consumer) with no OnFailure destination and infinite retry, correlated with actual error metrics (\"PROBLEM: Function call failed\"); (2) an SQS queue with no redrive policy (DLQ absent), correlated with 150 errors in 24h for slsreview-sqs-consumer; (3) an EventBridge-triggered Lambda with no DLQ and 15 errors; (4) Step Functions with zero alarm coverage account-wide, correlated with an actual FAILED execution; (5) alarms that exist but have empty AlarmActions (observed value: enabled but no SNS notification) - a nuanced finding beyond the basic ask. The response gives observed values (counts of alarms, error counts, specific error messages) for each finding and names specific resources, which serves as a de facto 'check id' equivalent (resource names identified). While it doesn't use a formal 'check id' numbering scheme, it clearly identifies each check/finding with resource names and specific observed metrics, satisfying the substance of the expectation. The response covers OnFailure destinations missing, event source mapping error-handling controls missing, DLQ redrive policy absent (dead-letter queue issue), and absent CloudWatch alarms for each of these \u2014 all the key elements requested are present.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response ties each silent failure to the specific absent control that makes it silent \u2014 a missing destination, a missing redrive policy, or a missing alarm \u2014 rather than listing errors on their own",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'its DynamoDB Streams event source mapping is actively erroring... with no on-failure destination and MaximumRetryAttempts: -1'; '150 errors in 24h, feeding into slsreview-no-dlq-queue, which has no redrive policy at all'; '15 errors), no DLQ on the target, no alarm'; 'alarms exist and are enabled, but their AlarmActions list is empty'",
+          "reasoning": "Each silent-failure finding is explicitly tied to a specific absent control: missing on-failure destination/infinite retry, missing redrive policy, no DLQ/no alarm, and empty AlarmActions. This pattern holds across all the critical/high/medium findings.",
+          "confidence": "high"
+        },
+        {
+          "text": "Alarm coverage is assessed per resource, identifying which specific metrics have no alarm rather than stating that monitoring is insufficient",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'only 5 cover Lambda/SQS at all, and zero cover Step Functions or EventBridge' and 'Step Functions has no alarm coverage account-wide' and '6 apex-finservices-* functions have zero alarms' but does not break down which specific metrics (e.g., Errors, Throttles, DLQ depth, IteratorAge, duration) are missing per resource beyond the two examples given for atx-dispatcher and slsreview-healthy-control.",
+          "reasoning": "While the response does name specific alarms for atx-dispatcher and slsreview-healthy-control (errors/throttles, dlq-not-empty), for most findings (Step Functions, EventBridge, apex-finservices functions, slsreview-stream-consumer, slsreview-legacy-runtime) it states coverage is zero/insufficient at the service or function level without specifying which particular metrics lack alarms for each. This is a mix - partially satisfies but mostly states insufficiency rather than granular per-metric analysis for every resource.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response explains why each finding would go unnoticed, not only that it is a problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'It'll loop forever, invisibly.'; 'Failed messages will just silently expire after 4 days \u2014 actual data loss with no record.'; 'no DLQ on the target, no alarm' implying failures go unrecorded; 'they'll flip to ALARM state correctly but notify no one.'",
+          "reasoning": "The response explains the mechanism by which each finding escapes notice (infinite silent retry loop, silent message expiry/data loss, alarms firing but notifying nobody), not just stating a problem exists.",
+          "confidence": "high"
+        },
+        {
+          "text": "Findings are ordered so the reader can tell which to act on first, with a stated basis for the ordering",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response uses explicit severity headers: 'Critical \u2014 live failures, zero visibility:', 'High:', 'Medium:' and lists items under each.",
+          "reasoning": "Findings are explicitly grouped and labeled with severity levels (Critical, High, Medium), giving an ordering with a stated basis (severity/urgency), allowing the reader to know which to act on first.",
+          "confidence": "high"
+        },
+        {
+          "text": "Findings cite the skill's check identifiers",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m59s",
+    "cost": "$1.99",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}
