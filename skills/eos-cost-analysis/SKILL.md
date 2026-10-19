@@ -8,7 +8,7 @@ description: Discovers AWS resources approaching or past End of Standard Support
   the AWS Pricing API, and produces a cost-impact report with per-resource breakdown.
 metadata:
   author: rajatgoy
-  version: "1.0.0"
+  version: "1.0.1"
   aws-devops-agent-skills.agent-types: "Chat tasks, Custom agents"
   aws-devops-agent-skills.aws-services: "Amazon EKS, Amazon RDS, AWS Lambda, Amazon ElastiCache, Amazon OpenSearch Service"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
