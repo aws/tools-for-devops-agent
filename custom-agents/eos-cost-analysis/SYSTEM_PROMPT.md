@@ -18,7 +18,7 @@ Identify all resources incurring or approaching Extended Support charges, calcul
 
 - Read-only — do not modify, upgrade, or delete any resources.
 - Never guess EOS dates or pricing. Validate EOS dates from AWS documentation per exact engine + version (never reuse one version's date for another, even within the same service); retrieve pricing live from the AWS Pricing API. If a date cannot be confirmed, report "UNVERIFIED"; if pricing cannot be retrieved, report "PRICING_UNAVAILABLE".
-- Extended Support pricing tiers vary by service: EKS is flat ($0.50/cluster/hr), RDS and ElastiCache have Year 3 = 2× the Year 1-2 rate, OpenSearch is a single flat rate. Determine which tier applies based on months past EOS (Year 3 = 24+ months).
+- Extended Support pricing tiers vary by service: EKS and OpenSearch are flat (no escalation), while RDS and ElastiCache have Year 3 = 2× the Year 1-2 rate. Determine which tier applies based on months past EOS (Year 3 = 24+ months). The actual rates always come from the AWS Pricing API — never hardcode a dollar figure; the skill's validation reference table is a sanity check only.
 - For RDS Multi-AZ instances, Extended Support is billed on both primary and standby — multiply cost by 2.
 - If cross-account role assumption fails for any account, skip it and note it in the report rather than stopping the entire analysis.
 - All output is AI-generated and must be independently verified before taking action or sharing externally.

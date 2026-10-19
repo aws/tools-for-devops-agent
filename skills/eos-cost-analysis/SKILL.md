@@ -38,17 +38,25 @@ Support charges, and generate an actionable cost-impact report.
 | Amazon ElastiCache | Per node/hour | `elasticache:DescribeCacheClusters` |
 | Amazon OpenSearch | Per instance/hour | `opensearch:ListDomainNames`, `opensearch:DescribeDomains` |
 
+> **IAM prefix note:** the `use_aws` calls above use `opensearch` because that is the correct API client name, but the corresponding IAM actions live under the `es:` prefix (`es:ListDomainNames`, `es:DescribeDomain`, `es:DescribeDomains`). The `AIDevOpsAgentAccessPolicy` managed policy already grants the discovery actions for all five services.
+
 ## Extended Support Pricing
 
-Pricing is retrieved live from the AWS Pricing API (`pricing:GetProducts`) — see Phase 3, Step 3.2. Tier behavior differs by service:
+Pricing is ALWAYS retrieved live from the AWS Pricing API (`pricing:GetProducts`) — see Phase 3, Step 3.2. The API is the single source of truth; the rates below are a **validation reference only** (sanity-check the API result against them; never substitute them for the API value).
 
-- **EKS**: $0.50/cluster/hour, flat (no Year 3 escalation). This is the ES premium on top of the $0.10 standard cluster cost.
-- **RDS**: $0.10/vCPU/hour (Year 1-2), $0.20/vCPU/hour (Year 3)
-- **ElastiCache**: per-node rate varies by node type; Year 3 is 2× Year 1-2
-- **OpenSearch**: $0.0065 per Normalized Instance Hour, single tier
-- **Lambda**: no Extended Support charge (deprecated runtimes are a security risk only)
+### Validation reference rates (us-east-1)
+
+| Service | Year 1-2 rate | Year 3 rate | Billing unit | Tier behavior |
+|---------|---------------|-------------|--------------|---------------|
+| EKS | $0.50/cluster/hour | $0.50/cluster/hour | per cluster/hour | Flat — no Year 3 escalation. This is the ES premium on top of the $0.10 standard cluster cost. |
+| RDS | $0.10/vCPU/hour | $0.20/vCPU/hour | per vCPU/hour | Year 3 = 2× Year 1-2 |
+| ElastiCache | ~$0.165/node/hour (varies by node type) | ~$0.330/node/hour (varies by node type) | per node/hour | Year 3 = 2× Year 1-2 |
+| OpenSearch | $0.0065/NIH | $0.0065/NIH | per Normalized Instance Hour | Single tier — no escalation |
+| Lambda | — | — | — | No Extended Support charge (deprecated runtimes are a security risk only) |
 
 After Year 3, AWS may force-upgrade the resource.
+
+**Cost framing:** these rates represent the AVOIDABLE Extended Support premium (what the customer eliminates by upgrading). For EKS, the $0.50/hour is the ES surcharge on top of the $0.10 standard cluster cost the customer pays regardless — report the premium as the cost exposure/savings opportunity, not the standard cost.
 
 ## Prerequisites
 
@@ -282,16 +290,9 @@ Regions you MUST resolve via the API (prefixes vary / are not reliably guessable
    ```
    **Apply a `jmespath_filter` at the API call to return ONLY the price**, so the large PriceList JSON never enters context. Pricing API returns each product as a JSON-encoded string in `PriceList`; filter/parse down to the `pricePerUnit.USD` value inside the on-demand price dimensions rather than pulling the whole payload. Filtering at the call level is more reliable than asking the model to extract it afterward.
 3. Extract ONLY `pricePerUnit.USD` from the response — ignore everything else
-4. If the exact usagetype returns empty, call `pricing:GetAttributeValues` for the `usagetype` attribute to discover the correct format, then retry
+4. If the exact usagetype returns empty, call `pricing:GetAttributeValues` for the `usagetype` attribute to discover the correct format, then retry. If it is still empty, use `pricing:DescribeServices` to confirm the `ServiceCode` and the exact attribute names for that service before constructing another `GetAttributeValues`/`GetProducts` call — a wrong ServiceCode or attribute name also returns empty.
 
-**Known base rates (us-east-1, for validation — API is source of truth):**
-- **EKS**: $0.50/cluster/hour (this is the Extended Support premium; the $0.10 standard rate applies regardless of ES)
-- **RDS**: $0.10/vCPU/hour (Year 1-2), $0.20/vCPU/hour (Year 3)
-- **ElastiCache**: ~$0.165/node/hour (Year 1-2), ~$0.330/node/hour (Year 3) — varies by node type
-- **OpenSearch**: $0.0065/NIH/hour (single tier)
-- **Lambda**: No charge — flag deprecated runtimes as security risk only
-
-**IMPORTANT — Cost framing:** The rates above represent the AVOIDABLE Extended Support premium (what the customer eliminates by upgrading). For EKS, $0.50/hour is the ES surcharge on top of the $0.10 standard cluster cost the customer pays regardless. Report this premium as the cost exposure/savings opportunity.
+**Validate the returned rate against the reference table** in the [Extended Support Pricing](#extended-support-pricing) section (us-east-1 validation reference). The API result is authoritative — the table is only a sanity check. If the API rate is wildly different from the reference (orders of magnitude), re-check the usagetype before trusting it; never replace the API result with the reference number.
 
 ### Step 3.3 — Classify Each Resource
 
@@ -324,11 +325,11 @@ Extended Support pricing tiers are based on how long a resource has been past En
 
 Boundary is exclusive at 24: month 23 is still Year 1-2, month 24 is the first Year 3 month. No month falls in both tiers.
 
-Tier behavior by service:
-- **EKS**: flat rate — no Year 3 escalation (always $0.50/cluster/hour)
-- **RDS**: Year 1-2 = $0.10/vCPU/hr, Year 3 = $0.20/vCPU/hr (2×)
-- **ElastiCache**: Year 1-2 = base node rate, Year 3 = 2× node rate
-- **OpenSearch**: flat rate — single tier, no escalation
+Tier behavior by service (rates themselves come from the Pricing API; see the [validation reference table](#validation-reference-rates-us-east-1)):
+- **EKS**: flat — no Year 3 escalation
+- **RDS**: Year 3 = 2× Year 1-2
+- **ElastiCache**: Year 3 = 2× Year 1-2 (per node, varies by node type)
+- **OpenSearch**: single tier — no escalation
 
 **Use the exact rate returned by the Pricing API for the resource's tier (Step 3.2). Query the Yr3 usagetype pattern for resources 24+ months past EOS.**
 
@@ -336,16 +337,18 @@ Tier behavior by service:
 
 Use the rate from the Pricing API (Step 3.2), not hardcoded values. Formulas:
 
+Every `es_rate` below is the per-tier rate returned by the Pricing API for that resource (Step 3.2) — never a hardcoded value:
+
 | Service | Formula |
 |---------|---------|
-| EKS | `monthly_cost = es_rate × 730` (es_rate = $0.50, flat) |
-| RDS | `monthly_cost = vCPUs × es_rate × 730 × (2 if MultiAZ else 1)` (es_rate = $0.10 Yr1-2 / $0.20 Yr3 per vCPU) |
+| EKS | `monthly_cost = es_rate × 730` (flat) |
+| RDS | `monthly_cost = vCPUs × es_rate × 730 × (2 if MultiAZ else 1)` (per vCPU) |
 | ElastiCache | `monthly_cost = num_nodes × node_es_rate × 730` (node_es_rate from Pricing API for the node type + tier) |
 | OpenSearch | `monthly_cost = total_NIH_per_hour × es_rate_per_NIH × 730` (NIH-based; es_rate from Pricing API) |
 | Lambda | `monthly_cost = $0` (flag as security risk only) |
 
 **Notes:**
-- The EKS $0.50 rate is the Extended Support premium (the avoidable cost). The $0.10 standard cluster cost applies regardless and is NOT part of the exposure.
+- The EKS ES rate is the Extended Support premium (the avoidable cost). The standard cluster cost applies regardless and is NOT part of the exposure.
 - For RDS, map instance class to vCPU count (e.g., db.r6g.xlarge = 4 vCPUs). Multi-AZ doubles the cost.
 - For ElastiCache and OpenSearch, query the Pricing API per node type / instance type since rates vary.
 
@@ -492,7 +495,7 @@ a security and compliance risk.
 | Role assumption fails for a linked account | Skip that account, note in report: "Account [ID] skipped — role assumption failed" |
 | Service API returns AccessDenied | Skip that service/region, note: "Insufficient permissions for [service] in [region]" |
 | Documentation search returns no EOS date | Mark version as "UNVERIFIED", include in report with note |
-| Documentation search returns no pricing | Set current_monthly_es_cost and projected_monthly_es_cost to "PRICING_UNAVAILABLE", do not estimate |
+| Pricing API returns no product after the `GetAttributeValues` usagetype retry | Set current_monthly_es_cost and projected_monthly_es_cost to "PRICING_UNAVAILABLE", do not estimate |
 | No resources found for a service | Report: "No [service] resources found in scope" |
 | Rate limiting (throttling) | Retry with exponential backoff (1s, 2s, 4s), max 3 retries |
 | Timeout on large organization (1000+ accounts) | Report partial results, note which accounts were completed |
