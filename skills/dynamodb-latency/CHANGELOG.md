@@ -78,6 +78,30 @@ report only what the evidence proves, and hand off explicitly where it stops.
   operation, counters, periods, coincidence, capacity) that fires whenever throttling is
   recorded.
 
+### Validation
+
+- **skill-eval** (current tool): structure 12/12; best-practices 100% across 3 iterations;
+  functional, 5 iterations over 12 positive and 4 negative evals. Trigger 5/5 on 14 evals
+  (fault-injection 2/5 and GSI back-pressure 3/5); all negatives stayed out. Expected-output pass
+  rate with the skill was 80–100% on 10 of 12 positive evals, against 0% without the skill on 8 of
+  them. The weakest positive (flat curve with throttling, 1/5) missed two required details; both
+  are now enforced by the cross-reference table.
+- **Live A/B** in us-west-2: separate control and treatment Agent Spaces on three tables carrying
+  real traffic — a clean on-demand table under client-reported slowness, a 1-WCU table being
+  throttled, and a table whose 1-WCU GSI back-pressured base-table writes.
+  - Clean table: both arms said DynamoDB was not the cause. Only the skill arm withheld a
+    client-side conclusion and named the SDK latency measurement as the next step.
+  - Table throttling: the control arm found the throttling only when told to stay in chat, and
+    then prescribed capacity changes; the skill arm classified it as throttle-induced and handed
+    off with the evidence.
+  - GSI back-pressure: **the first skill runs missed it.** The Agent Space gates `DescribeTable`
+    behind operator approval, so the skill had no index names to query — while the control arm
+    found the GSI through `ListMetrics`. Fixed: GSI names are now recovered via
+    `cloudwatch:ListMetrics` when `DescribeTable` is unavailable. With the fix, the skill arm
+    identified GSI `inventory-by-status` as the throttled scope in 2/2 runs.
+- **Not live-tested:** organic `SystemErrors` (no documented way to induce them) and FIS-injected
+  errors. Those branches are covered by the hypothetical-profile evals only.
+
 ### Packaging
 
 - SKILL.md uses a checklist workflow with an explicit pre-output validation step, and links each
