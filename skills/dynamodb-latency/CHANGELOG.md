@@ -1,5 +1,97 @@
 # Changelog
 
+## 1.1.0
+
+Addresses the TFC review on the Project Nebula task (V2375108355). The theme of every change:
+report only what the evidence proves, and hand off explicitly where it stops.
+
+### Collection defects fixed (found while verifying the review against AWS documentation)
+
+- **`SystemErrors` was queried on `TableName` alone, which DynamoDB never publishes.** The
+  metric exists only on the `TableName` + `Operation` pair, so the 1.0.0 query always returned
+  an empty series on a real table — `LT-01` could never fire, and a healthy table could never
+  reach a clean verdict. Now queried per operation. The synthetic eval fixture had masked this.
+- **`UserErrors` was treated as a table metric.** It is aggregated across the account and
+  Region; it is no longer used as evidence about a table and is labelled account-wide if shown.
+- **Empty event-counter series are now classified, not assumed.** DynamoDB publishes error and
+  throttle counters only when events occur. An empty series is "none recorded" only when the
+  query used the published dimensions and the operation was demonstrably active; otherwise it
+  is unknown. 1.0.0 had no way to reach "measured zero" for these counters at all.
+- `ThrottledRequests` is now queried per operation, and `Read`/`WriteThrottleEvents` for each GSI
+  as well as the table — table-level throttle events exclude indexes.
+
+### Classification
+
+- **Outcomes are no longer exclusive.** Every outcome is evaluated; the first qualifying one is
+  the primary outcome and every other qualifying condition, or signal present but not causal,
+  is reported under **Also observed**. Each primary outcome carries a **confidence** with its
+  reasons.
+- **`LT-01` requires causal evidence.** Organic `SystemErrors` (FIS-induced errors subtracted
+  via the new `FaultInjectionServiceInducedErrors` collection) must persist and coincide in time
+  with elevated latency — or with client-reported slowness, since the SDKs retry 500s — or occur
+  on an operation where no request succeeded at all (`SystemErrors` is now queried for every
+  operation, so a total failure is no longer invisible). Errors that do not meet that bar are
+  reported by the new `CF-05` as observed, not causal.
+- **Baselines replace universal thresholds.** Each operation is compared with its own 7-day
+  baseline, computed by CloudWatch as a single long-period datapoint. Singleton operations keep
+  the 10 ms / 50 ms absolute floor only as a fallback without a baseline; multi-item and
+  transactional operations never use an absolute number. A `SampleCount` floor excludes periods
+  too sparse to read a percentile. Observation window, periods, persistence, and coincidence are
+  now defined in one place.
+- **`LT-04` tail elevation distinguishes isolated, recurring, and sustained tails,** and reports
+  breaches of an SLO the user states. A recurring or sustained tail is actionable even with
+  normal p50. The "slow first call" connection-cost clause was removed from it: client activity
+  is excluded from `SuccessfulRequestLatency`, so a client cold start cannot raise its p99.
+- Outcome names are canonical across the skill: Indeterminate, Service-side errors,
+  Throttle-induced, Typical-latency elevation, Tail elevation, No DynamoDB-side elevation. The
+  `description` now names all six (1.0.0 omitted indeterminate).
+
+### Observations separated from hypotheses
+
+- Every template is split into **Observed**, **Not established**, and **Next**.
+- **`LT-05` and `CF-01` no longer attribute residual latency to the client.** A normal
+  `SuccessfulRequestLatency` now reads as "no DynamoDB-side latency elevation"; candidate client,
+  SDK, and network causes are listed as unconfirmed, with SDK latency logging, tracing, or the
+  `aws-vpc-dns-investigation` skill as the next step. A pre-render check blocks "is
+  client-side" as a conclusion.
+- `CF-02` (mean item size from `TableSizeBytes / ItemCount`) is Info-only background context.
+- `CF-03` no longer asserts that time "scales with work"; it uses the new `ReturnedItemCount`
+  collection as evidence where available, and says when the returned count is flat.
+
+### Remediation accuracy
+
+- Connection-reuse advice is SDK-specific: JavaScript v3 reuses connections by default; Java 2.x
+  and botocore pool per client; the keep-alive `GetItem` is noted as consuming read capacity.
+- Retries and hedging are conditioned on operation idempotency and the application's latency
+  objective; transaction client tokens are documented.
+- DAX is recommended only for read-heavy workloads that tolerate eventual consistency, with its
+  documented trade-offs: eventually consistent node replication, strongly consistent and
+  transactional reads passed through uncached, a query cache not invalidated by item writes, and
+  negative caching.
+- The strongly-consistent-reads warning now uses the documented wording ("may increase
+  latency") rather than "make things worse".
+
+### Scope
+
+- Throttling diagnosis moved out: the 1.0.0 on-demand-ramp and provisioned-ceiling factors and
+  the pre-warm recommendation are replaced by `CF-04`, a structured handoff (table or GSI,
+  operation, counters, periods, coincidence, capacity) that fires whenever throttling is
+  recorded.
+
+### Packaging
+
+- SKILL.md uses a checklist workflow with an explicit pre-output validation step, and links each
+  reference with the condition for loading it.
+- Author metadata uses the GitHub handle.
+
+### Correction to the 1.0.0 entry
+
+The 1.0.0 live A/B is described below as identifying "DynamoDB-side tail queueing at the
+capacity ceiling with burst-capacity absorption". That is a mechanism the metrics did not
+establish. What the run showed: on a table whose successful-request latency rose with write
+volume against a low provisioned ceiling and no recorded throttling, the no-skill agent called
+it a client-side artifact, and the skill correctly kept it on the DynamoDB side.
+
 ## 1.0.0
 
 - Initial version.
