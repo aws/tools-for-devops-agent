@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5
+
+- Added the approval-gated `aws-gpu-diagnostics-mcp` handoff for node-local GPU evidence.
+
 ## 1.0.4
 
 Eval coverage only. No change to the skill's instructions.

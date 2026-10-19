@@ -14,7 +14,7 @@ description: Use this skill for GPU training or inference clusters on SageMaker 
   or Pending, nodes terminating at once, or "is my cluster ready for a multi-day run".
 metadata:
   author: nzuresh
-  version: "1.0.4"
+  version: "1.0.5"
   aws-devops-agent-skills.agent-types: "Incident RCA, Chat tasks"
   aws-devops-agent-skills.aws-services: "Amazon SageMaker HyperPod, AWS ParallelCluster, Amazon EC2, Amazon FSx for Lustre, Elastic Fabric Adapter, Amazon EKS, AWS Health"
   aws-devops-agent-skills.technical-domains: "Machine Learning, GenAI, High Performance Computing"
@@ -195,6 +195,22 @@ on, so the operator can re-run the same query. Where no stream carries kernel li
 groups you searched and that none did.
 
 ## Step 4: Classify faults and give node verdicts
+
+### Optional node-local GPU collection
+
+If CloudWatch, cluster APIs, and the coverage audit leave the hardware or fabric verdict
+`Not observable`, use the configured `aws-gpu-diagnostics-mcp` only for the affected EC2
+node. Request `collect_gpu_diagnostics` with the narrowest profile that closes the evidence
+gap: `standard` for driver, Xid, ECC, NVLink, and Fabric Manager evidence; `extended` only
+when EFA or PCIe evidence is required. Collection is an operational action, even though the
+commands are read-only: tell the operator that it awaits SSM human approval, poll
+`collection_status`, then call `validate_gpu_bundle` before relying on `get_gpu_findings` or
+`read_gpu_artifact`. Cite the execution ID, collection ID, and artifact key in the report.
+
+Do not request collection merely to compensate for an incomplete investigation. Do not
+replace the coverage table or the `Proven` versus `Hypothesis (to validate)` rules with a
+collector result. The collector is a node-local evidence source that can strengthen or close
+one of those branches.
 
 Load [references/xid-triage.md](references/xid-triage.md) for the Xid catalog and per-code
 verdicts, and [references/incident-branches.md](references/incident-branches.md) for the node
