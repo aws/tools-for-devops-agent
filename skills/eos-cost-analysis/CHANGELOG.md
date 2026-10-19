@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.1 (2026-10-19)
+
+Maintainer PR review round 1 — repo conventions, mergeability, and correctness. No behavioral change to the discovery/pricing/reporting logic.
+
+- Rebased onto current upstream `main` (resolved the `cloudformation/devops-agent-skill-policies.yaml` conflict, keeping all newer skill policies).
+- Added skill evaluation tests: `.skilleval.yaml`, `evals/evals.json`, `evals/eval_queries.json`.
+- Trimmed the CloudFormation IAM policy to only the AWS Pricing API gap; resource discovery is already covered by `AIDevOpsAgentAccessPolicy`.
+- Added `eos-cost-analysis` entries to `llms.txt` (skill and custom agent).
+- Restructured the skill README to the standard layout; added Limitations, Agent Types, and the required non-production disclaimer.
+- Consolidated all reference rates into one validation-reference table (Pricing API remains the source of truth).
+- Fixed the OpenSearch IAM prefix (`es:`) in the READMEs and noted it in SKILL.md.
+- Corrected the error-handling table's pricing row to reference the Pricing API rather than documentation search.
+- Cross-referenced the `eks-upgrade-readiness` and `analytics-opensearch-expertise` skills.
+
 ## 1.0.0 (2026-08-20)
 
 Initial release.
