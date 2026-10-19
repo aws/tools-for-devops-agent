@@ -1,6 +1,6 @@
 ---
 name: dynamodb-latency
-description: "Diagnose Amazon DynamoDB request latency and timeouts from CloudWatch metrics. Classifies a table's latency profile per API operation as indeterminate, service-side errors, throttle-induced, typical-latency elevation, tail elevation, or no DynamoDB-side elevation — comparing SuccessfulRequestLatency percentiles against each operation's own 7-day baseline and correlating SystemErrors, fault-injection errors, and table and GSI throttle events in time — and reports a primary outcome with confidence plus every other signal observed. Use when a DynamoDB table shows elevated or spiky p99 or average latency, intermittent timeouts, a slow first call after idle, or when asked whether DynamoDB is the source of an application's slowness. When DynamoDB-side metrics are clean it says what they rule out, does not guess the client-side cause, and names the client measurement or handoff that would find it. Read-only: CloudWatch metrics and DescribeTable only, never table contents."
+description: "Use this skill when someone asks whether Amazon DynamoDB is why their application is slow — a table shows high or spiky p99 or average latency, a SuccessfulRequestLatency alarm fired, requests intermittently time out, the first call after idle is slow, or the latency dashboard looks flat while users still see slow writes. Also use it to review a table's latency before a peak event or to compare latency across operations or tables. It reads CloudWatch metrics and table metadata only, compares each API operation with its own baseline, and returns one of six outcomes — indeterminate, service-side errors, throttle-induced, typical-latency elevation, tail elevation, or no DynamoDB-side elevation — with a confidence level, every other signal it observed, and the client-side measurement or handoff to use when DynamoDB is not the source."
 metadata:
   author: aditya-vikram-parakala
   version: "1.1.0"
@@ -173,6 +173,15 @@ dashboard, or a table that no longer exists, it does not apply.
 3. [dynamodb-facts.md](references/dynamodb-facts.md) **still applies in full** — every claim
    about what a metric includes, what a limit does, or what a fix costs must come from it.
 4. Offer to run the real analysis against a live table.
+
+Cite a rule ID only for a finding you actually derived from collected data.
+
+**One exception — a hypothetical the user asks you to classify.** If the user explicitly asks
+how this skill's rules would classify a metric profile they describe ("what would you conclude
+if…", "classify this profile"), apply [finding-logic.md](references/finding-logic.md) to the
+values given, cite the rule IDs, and open the answer with: *"Hypothetical classification of the
+profile you described — not an analysis of a live table."* Treat any value the user did not
+give as unknown, never as zero.
 
 ## Critical Rules
 
