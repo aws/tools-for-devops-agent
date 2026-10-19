@@ -103,7 +103,9 @@ Copy this checklist into your working notes and tick each item as it completes:
       `ThrottledRequests` **per `Operation`** — DynamoDB does not publish `SystemErrors` on
       `TableName` alone — and throttle events for the table **and each GSI**.
 - [ ] 3. **Stop on gaps.** Any `AccessDenied` → present the permissions audit and **wait**. Any
-      `ToolingFailure` → present the tooling notice and **wait**.
+      `ToolingFailure` → present the tooling notice and **wait**. Exception: if only
+      `DescribeTable` is unavailable, use the CloudWatch fallbacks in data-collection.md
+      (GSI names via `ListMetrics`) and continue at reduced confidence.
 - [ ] 4. **Assign statuses** — `recorded`, `none_recorded`, `not_exercised`, or `NoData` for
       every event counter; assessable periods under the `SampleCount` floor; coverage per
       operation.
@@ -125,7 +127,7 @@ One primary outcome, a confidence, and everything else that was observed:
 | Outcome | Established by |
 |---|---|
 | `LT-00` Indeterminate | No usable data, insufficient coverage or volume, or an error/throttle counter that could not be read |
-| `LT-01` Service-side errors | Organic `SystemErrors` (FIS-induced excluded) that persist **and** coincide with elevated latency, or with client-reported slowness (SDKs retry 500s), or on an operation where no request succeeded |
+| `LT-01` Service-side errors | Organic `SystemErrors` — minus `FaultInjectionServiceInducedErrors`, which counts AWS FIS-injected 500s — that persist **and** coincide with elevated latency, or with client-reported slowness (SDKs retry 500s), or on an operation where no request succeeded |
 | `LT-02` Throttle-induced | Table, GSI, or per-operation throttle events that coincide with elevated latency — or with client-reported slowness |
 | `LT-03` Typical-latency elevation | p50 elevated against the operation's own reference in a recurring or sustained pattern, or a p50 SLO breached |
 | `LT-04` Tail elevation | p99 elevated (isolated, recurring, or sustained) or an SLO breached, with p50 not sustained |
@@ -179,7 +181,8 @@ Cite a rule ID only for a finding you actually derived from collected data.
 **One exception — a hypothetical the user asks you to classify.** If the user explicitly asks
 how this skill's rules would classify a metric profile they describe ("what would you conclude
 if…", "classify this profile"), apply [finding-logic.md](references/finding-logic.md) to the
-values given, cite the rule IDs, and open the answer with: *"Hypothetical classification of the
+values given, cite the rule IDs, include the Recommended Actions and Not Recommended entries from
+[report-format.md](references/report-format.md) that the outcome triggers, and open the answer with: *"Hypothetical classification of the
 profile you described — not an analysis of a live table."* Treat any value the user did not
 give as unknown, never as zero.
 
@@ -204,6 +207,9 @@ give as unknown, never as zero.
   timeout (the often-repeated 50 ms) can cause client-induced availability issues, and strongly
   consistent reads may increase latency and cost twice the throughput. Do not recommend either
   as a latency fix.
+- **When you reject a proposed fix, give the documented alternative for the same goal** — e.g.
+  request hedging instead of a short timeout, eventually consistent reads instead of strong
+  consistency, request-shape changes instead of DAX for a `Scan`.
 - **Remediation is client-side, conditional, and you cannot apply it.** Connection reuse,
   retries, hedging, timeouts, caching, and region placement are changes in the caller. Present
   each with its precondition and trade-off.

@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "ddb-lat-scan-baseline",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a specific classification label \"LT-03 Typical-latency elevation, sustained\" from a named DynamoDB latency skill/taxonomy. The agent explicitly states it does NOT have a dedicated \"DynamoDB latency\" skill registered and does not apply any formal taxonomy \u2014 it explicitly says \"I don't have a dedicated 'DynamoDB latency' skill registered in this agent space to apply a formal taxonomy against.\" It instead gives an ad-hoc classification of \"Workload-driven latency increase \u2014 data volume growth\" rather than the required LT-03 label. \n\nWhile the agent does correctly: label as hypothetical (implied by not making AWS calls, though doesn't explicitly say 'hypothetical'), compute the ~3.4x latency growth vs baseline (not absolute threshold), report ReturnedItemCount rise (~3.2x) as correlated, it fails several other key criteria:\n- It does NOT explicitly state 'hypothetical' as a label\n- It does NOT use the LT-03 classification code/taxonomy\n- It does NOT caveat that ReturnedItemCount counts items returned, not evaluated (an important distinction the expected output calls for)\n- It treats 148KB item size as a confusing/contradictory detail rather than clearly treating it as background context that cannot explain the change \u2014 it actually uses it to speculate about projection expressions affecting the item count, which goes against the expected treatment of it as pure background context\n- It does NOT offer concrete request-shape levers (Limit, narrower ProjectionExpression, avoiding filter-heavy reads) as remediation; it only mentions checking ConsumedReadCapacityUnits and TableSizeBytes/ItemCount trends, not the specific levers expected\n- It does not explicitly exclude data-model changes from scope\n\nGiven the missing formal classification label (LT-03), missing explicit remediation levers, missing the ReturnedItemCount caveat, and the agent's explicit disclaimer about not having the skill, this response does not substantively meet the expected output criteria.",
+      "evidence": "\"I don't have a dedicated \\\"DevOps Agent's response acknowledges: I don't have a dedicated \\\"DynamoDB latency\\\" skill registered in this agent space to apply a formal taxonomy against \u2014 this classification is standard DynamoDB performance reasoning applied to your numbers, not a lookup from a named internal runbook.\" and \"Classification: *Workload-driven latency increase \u2014 data volume growth*\" (not LT-03)",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies as a sustained typical-latency elevation (LT-03) for Scan",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent explicitly states: \"I don't have a dedicated 'DynamoDB latency' skill registered in this agent space to apply a formal taxonomy against \u2014 this classification is standard DynamoDB performance reasoning applied to your numbers, not a lookup from a named internal runbook.\" The final classification given is 'Workload-driven latency increase \u2014 data volume growth (expected scaling behavior)' with no mention of 'LT-03' or 'sustained typical-latency elevation' terminology.",
+          "reasoning": "The assertion requires classification using a specific named category (LT-03, sustained typical-latency elevation). The agent did not use this taxonomy at all and even disclaims having access to such a skill/taxonomy. The substance of the classification (workload-driven, expected scaling) may be conceptually similar to a 'typical elevation' idea, but there's no evidence it matches the specific LT-03 label or that the agent is aware of this categorization scheme.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Judges Scan against its own baseline rather than an absolute or single-item threshold",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent computes 'Latency growth: 410ms / 120ms = 3.42x' and 'ReturnedItemCount growth: 980 / 310 = 3.16x' explicitly comparing current Scan performance against 'its 7-day baseline p50 of 120 ms' rather than any absolute millisecond threshold or single-item GetItem benchmark. It also explicitly contrasts Scan with 'a fixed-cost operation like GetItem' to clarify that single-item thresholds don't apply.",
+          "reasoning": "The agent's entire analysis hinges on baseline-relative comparison (current vs 7-day baseline), explicitly avoiding absolute thresholds.",
+          "confidence": "high"
+        },
+        {
+          "text": "Presents the increase in items returned per request as a candidate explanation, not a proven cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent uses qualifying language throughout: 'Most likely cause: the dataset got bigger, not the service got worse' and 'it suggests the slowdown tracks with how much report data exists on a given night' and recommends further verification: 'the next logical checks would be TableSizeBytes/ItemCount trend over the 14 days and ConsumedReadCapacityUnits for the Scan \u2014 both should show the same ~3x growth if this read is correct.'",
+          "reasoning": "The agent frames the item-count increase as a probable, evidence-supported explanation but explicitly flags it as not fully proven ('if this read is correct'), fitting the assertion that it's presented as a candidate rather than a certainty.",
+          "confidence": "high"
+        },
+        {
+          "text": "Treats mean item size as context only, not as the explanation",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent uses item size only to sanity-check the plausibility of the returned item count: 'At a mean item size of 148KB, a single ~1MB Scan page only fits ~6-7 full items, so \"980 items/request\" implies either a narrow projection expression or a paginated/aggregated metric \u2014 either way, the practical takeaway is the same: more underlying rows are being touched per scan now than during the baseline week.' It does not claim item size itself caused the slowdown; the causal story remains the increase in ReturnedItemCount/data volume.",
+          "reasoning": "Item size is used as contextual math to interpret the returned-item metric, not posited as the root cause of the latency increase.",
+          "confidence": "high"
+        },
+        {
+          "text": "Suggests at least one Scan request-shape lever such as Limit or ProjectionExpression",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent mentions 'projection expression' only in an analytical/diagnostic sense: '\"980 items/request\" implies either a narrow projection expression or a paginated/aggregated metric' \u2014 this is used to explain what the metric might mean, not as a remediation suggestion. No explicit recommendation to use Limit, add/narrow ProjectionExpression, implement pagination control, or otherwise reshape the Scan request to reduce data volume is given.",
+          "reasoning": "The assertion requires the agent to suggest a request-shape lever (e.g., Limit, ProjectionExpression) as an action to mitigate/address the latency, not merely reference ProjectionExpression while reasoning about what the metric implies. The agent's suggested next steps are only further diagnostic checks (TableSizeBytes/ItemCount trend, ConsumedReadCapacityUnits), not remediation levers.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m22s",
+    "cost": "$0.68",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -577,7 +577,7 @@ Before rendering, check these pairs. Each has produced a self-contradicting repo
 | `LT-04` fired | no client-side mechanism (cold start, connection setup, idle connection) is offered as the cause of the tail, no timeout reduction is recommended, and `isolated` is not called degradation |
 | `LT-01` fired | the coinciding periods or the reported-slowness overlap are named; FIS errors are excluded from the count |
 | `SystemErrors` recorded and `LT-01` did not fire | `CF-05` appears; the errors are not described as the cause |
-| `LT-02` fired | the report does not attribute the latency to the request path, names the coinciding periods or the overlap, and includes `CF-04` |
+| `LT-02` fired | the report does not attribute the latency to the request path, names the coinciding periods or the overlap, states that `ThrottledRequests` counts once per request and is therefore a floor, includes `CF-04`, and includes Recommended Action 3 (review the SDK's existing retry configuration rather than adding retries) |
 | Any throttle counter recorded | `CF-04` appears, even when `LT-02` is not primary |
 | More than one `LT` condition qualified | all but the primary appear under **Also observed** |
 | A counter is `NoData` | no conclusion that depends on it is asserted, and it is not written as "0" or "none recorded" |

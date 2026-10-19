@@ -1,0 +1,78 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "ddb-lat-remediations",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response substantively addresses all four expected points. (1) Rejects the 50ms socket timeout, explaining it causes premature timeouts and retry storms, and recommends adaptive retry mode (close to 'request hedging' guidance) instead of short timeouts. (2) Rejects strongly consistent reads for all reads, correctly noting 2x read capacity consumption, higher latency, and lack of GSI support - matching the expected rationale precisely. (3) Rejects DAX in front of the Scan job, correctly explaining DAX's query cache mechanics, that it's not useful for one-shot full-table scans, and that it suits repeated identical-key read patterns rather than batch scans - substantively matching the expected reasoning (though framed slightly differently regarding 'eventually consistent' and 'not invalidated by writes', the core conclusion and mechanism align). (4) Questions/mostly rejects the keep-alive GetItem, correctly noting SDK v3 already does keep-alive by default, making the point explicit. It doesn't explicitly mention read capacity consumption by the keep-alive calls, but conveys it's 'costly' and redundant, which captures the essence.\n\nThe one minor gap: the agent doesn't explicitly call out that each keep-alive GetItem consumes read capacity (cost), though it does mention it's 'a blunt, costly way' - which implies cost awareness. Also, for DAX, the agent doesn't explicitly state 'serves eventually consistent reads' or 'not invalidated by item writes' but the overall conclusion (don't use DAX for Scan) and most of the supporting mechanism (query cache, parameter-keyed, TTL) is correct and well-reasoned, meeting the substantive outcome even if not identical phrasing.\n\nDespite the agent's disclaimer about not having a DynamoDB-specific skill in this environment (a meta-comment about tool availability), the substance of the technical evaluation still fully aligns with and satisfies the expected output's four-part assessment.",
+      "evidence": "\"Making this the default across all reads is very likely to raise your p99, not lower it, plus roughly double your read costs\"; \"This is directly documented as counterproductive here: strongly consistent reads have *higher* latency... and consume **2x** the read capacity... not supported on GSIs at all\"; \"In the modular AWS SDK for JavaScript (v3), HTTP/HTTPS keep-alive is **already on by default**\"; \"A Scan only populates the query cache, and that cache is keyed by the exact scan parameters... DAX is built for repeated, identical-key read patterns, not infrequent batch scans\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Rejects the 50 ms socket timeout and cites availability risk or prefers hedging",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"this setting will fire premature timeouts on normal, successful requests, not just slow ones... can trigger a retry storm that pushes your tail latency worse, not better.\"",
+          "reasoning": "The agent rejects the 50ms socket timeout, citing that it will cause premature timeouts leading to retries and a retry storm that worsens tail latency, which is an availability/risk framing even though it doesn't explicitly mention 'hedging' as a technique.",
+          "confidence": "high"
+        },
+        {
+          "text": "Rejects strongly consistent reads as a latency fix, mentioning twice the throughput or possibly higher latency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"strongly consistent reads have higher latency than eventually consistent reads and consume 2x the read capacity.\"",
+          "reasoning": "The agent explicitly rejects strongly consistent reads as a fix, mentioning both higher latency and 2x read capacity consumption.",
+          "confidence": "high"
+        },
+        {
+          "text": "Rejects DAX for the Scan job and states at least one DAX consistency or caching trade-off",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"A Scan only populates the query cache, and that cache is keyed by the exact scan parameters... large Scan result sets sitting in the query cache can evict other entries if this DAX cluster is shared with latency-sensitive traffic.\"",
+          "reasoning": "The agent rejects DAX for the nightly Scan and explains caching trade-offs (query cache vs item cache, TTL-based exact-match caching, and cache eviction risk).",
+          "confidence": "high"
+        },
+        {
+          "text": "States that the AWS SDK for JavaScript v3 reuses connections by default",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"In the modular AWS SDK for JavaScript (v3), HTTP/HTTPS keep-alive is already on by default \u2014 the SDK reuses TCP connections for you without any extra calls.\"",
+          "reasoning": "The agent explicitly states that SDK v3 reuses connections by default via keep-alive.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes that a keep-alive GetItem consumes read capacity",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The closest statement is: \"Recommend: tune keepAliveMsecs/maxSockets on the HTTPS agent instead of adding synthetic traffic, and only add warming calls if you've confirmed cold-cache latency after idle gaps is actually contributing to your p99.\" No mention of read capacity units or throughput cost from the GetItem calls themselves.",
+          "reasoning": "The agent never mentions that the keep-alive GetItem consumes read capacity/cost; it focuses on redundancy for connection reuse and a KMS cache warming edge case, calling it 'a blunt, costly way' without specifying read capacity consumption explicitly.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "45s",
+    "cost": "$0.38",
+    "context_window": {
+      "utilization": "6.3%",
+      "compaction_count": 0
+    }
+  }
+}

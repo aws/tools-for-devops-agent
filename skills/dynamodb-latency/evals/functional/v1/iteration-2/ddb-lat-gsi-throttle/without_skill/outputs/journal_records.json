@@ -1,0 +1,58 @@
+[
+  {
+    "agentSpaceId": "c862cd31-ead9-4d9b-b078-90d3fc6d665e",
+    "executionId": "3b9a68d7-5d17-4cf8-8503-77c40504dc8e",
+    "recordId": "7ae4101f-936e-45c5-96e5-1de32e575f66",
+    "content": "{\"id\": \"7ae4101f-936e-45c5-96e5-1de32e575f66\", \"role\": \"user\", \"content\": [{\"text\": \"DynamoDB latency skill, hypothetical \\u2014 do not call AWS. Table orders-prod, provisioned, GSI orders-by-status. 3-hour window. Table-level WriteThrottleEvents: none recorded. WriteThrottleEvents for GSI orders-by-status: recorded in 9 periods 14:05\\u201314:20. PutItem p99 rose to 140 ms vs baseline 20 ms in 8 of those 9 periods; p50 slightly up. ThrottledRequests for PutItem recorded in the same periods. Why are base-table writes slow when the table itself is not throttled?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:12:14.489000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "c862cd31-ead9-4d9b-b078-90d3fc6d665e",
+    "executionId": "3b9a68d7-5d17-4cf8-8503-77c40504dc8e",
+    "recordId": "662d89fb-39b0-46b9-95f6-acc6bfa3109d",
+    "content": "{\"id\": \"87a304e2-47aa-4ae9-a199-bfea8ed7c659\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"DynamoDB GSI write throttle impact on base table latency\"}]}",
+    "createdAt": "2026-10-19T13:12:16.423000-05:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "c862cd31-ead9-4d9b-b078-90d3fc6d665e",
+    "executionId": "3b9a68d7-5d17-4cf8-8503-77c40504dc8e",
+    "recordId": "d6b5430d-e383-421f-8baa-d124621b6321",
+    "content": "{\"id\": \"18505250-2ff7-4bcb-9649-44c8364a13d6\", \"role\": \"assistant\", \"block_type\": \"thinking\", \"content\": [{\"type\": \"text\", \"text\": \"This is a hypothetical, conceptual question about how GSI throttling propagates in DynamoDB \\u2014 no AWS calls are needed, just a direct explanation based on known DynamoDB mechanics.\\n\\n\"}]}",
+    "createdAt": "2026-10-19T13:12:21.939000-05:00",
+    "recordType": "thinking"
+  },
+  {
+    "agentSpaceId": "c862cd31-ead9-4d9b-b078-90d3fc6d665e",
+    "executionId": "3b9a68d7-5d17-4cf8-8503-77c40504dc8e",
+    "recordId": "c49556d1-859e-4863-9187-8612c7768a51",
+    "content": "{\"id\": \"ab49e6ea-9d45-4a69-bd68-906e3c9ca305\", \"role\": \"assistant\", \"block_type\": \"thinking_duration\", \"content\": [{\"type\": \"text\", \"text\": \"3707\"}]}",
+    "createdAt": "2026-10-19T13:12:22.047000-05:00",
+    "recordType": "thinking_duration"
+  },
+  {
+    "agentSpaceId": "c862cd31-ead9-4d9b-b078-90d3fc6d665e",
+    "executionId": "3b9a68d7-5d17-4cf8-8503-77c40504dc8e",
+    "recordId": "d7acc020-2e80-4498-bdea-d5d8bd6ea8bb",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 3.8, \"compaction_count\": 0}}}",
+    "createdAt": "2026-10-19T13:12:30.880000-05:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "c862cd31-ead9-4d9b-b078-90d3fc6d665e",
+    "executionId": "3b9a68d7-5d17-4cf8-8503-77c40504dc8e",
+    "recordId": "45dcae59-91a5-47e7-b39b-e9e595d2b782",
+    "content": "{\"id\": \"45dcae59-91a5-47e7-b39b-e9e595d2b782\", \"role\": \"assistant\", \"content\": [{\"text\": \"Because in DynamoDB, writes to a table with a GSI are atomic across the base table and all its indexes \\u2014 a `PutItem`/`UpdateItem`/`DeleteItem` only succeeds if DynamoDB can also write the corresponding projected change into every GSI. If a GSI can't absorb that write (its own provisioned write capacity is exhausted), DynamoDB throttles the *base table write itself*, even though the base table's own capacity still had room.\\n\\nThat maps cleanly onto what you're seeing:\\n\\n- **GSI `orders-by-status` WriteThrottleEvents in 9 periods (14:05\\u201314:20)** \\u2014 this index's provisioned WCUs are saturated, likely because its partition key (`status`) has low cardinality, so writes concentrate on a small number of partitions regardless of how well-distributed the base table's primary key is.\\n- **Table-level WriteThrottleEvents: none** \\u2014 the base table's own capacity/key distribution is fine in isolation.\\n- **PutItem ThrottledRequests + p99 latency spike (140ms vs 20ms baseline) in the same 8\\u20139 periods** \\u2014 this is the request-level view of the same event. Each `PutItem` call that gets throttled on the GSI side shows up as a throttled `PutItem` at the table's request metrics, and the retries (client-side SDK backoff, or your own retry logic) inflate p99 latency. p50 barely moves because most requests aren't hitting the hot GSI partition \\u2014 only the subset mapping to the saturated `status` value(s) are affected, which is consistent with a skew issue rather than a global capacity shortfall.\\n\\nSo the causal chain is: **GSI hot-partition/WCU exhaustion \\u2192 synchronous propagation requirement \\u2192 base-table write throttled \\u2192 client retries \\u2192 tail latency (p99) rises while table-level throttle metric stays at zero** because CloudWatch attributes the WriteThrottleEvents to the GSI, not the table.\\n\\n**What this points to, if it were real:**\\n- Check `orders-by-status` GSI's write capacity relative to the base table's provisioned WCUs \\u2014 a common cause is the GSI being provisioned far below the base table or the GSI's partition key having a handful of hot values (e.g., `status=PENDING` getting most writes).\\n- If on provisioned mode without auto scaling on the GSI, that's the likely root cause \\u2014 the GSI needs its own adequate (and possibly auto-scaled) write capacity, independent of the base table's.\\n\\nWant me to pull the actual CloudWatch metrics and GSI config for `orders-prod` to confirm this pattern in your account?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:12:31.002000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "c862cd31-ead9-4d9b-b078-90d3fc6d665e",
+    "executionId": "3b9a68d7-5d17-4cf8-8503-77c40504dc8e",
+    "recordId": "4637d1b6-41a3-47c2-80ec-c8c1d2c24c3f",
+    "content": "{\"id\": \"f9575f4f-081d-4aa9-a834-60cdcc81769f\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Because in DynamoDB, writes to a table with a GSI are atomic across the base table and all its indexes \\u2014 a `PutItem`/`UpdateItem`/`DeleteItem` only succeeds if DynamoDB can also write the corresponding projected change into every GSI. If a GSI can't absorb that write (its own provisioned write capacity is exhausted), DynamoDB throttles the *base table write itself*, even though the base table's own capacity still had room.\\n\\nThat maps cleanly onto what you're seeing:\\n\\n- **GSI `orders-by-status` WriteThrottleEvents in 9 periods (14:05\\u201314:20)** \\u2014 this index's provisioned WCUs are saturated, likely because its partition key (`status`) has low cardinality, so writes concentrate on a small number of partitions regardless of how well-distributed the base table's primary key is.\\n- **Table-level WriteThrottleEvents: none** \\u2014 the base table's own capacity/key distribution is fine in isolation.\\n- **PutItem ThrottledRequests + p99 latency spike (140ms vs 20ms baseline) in the same 8\\u20139 periods** \\u2014 this is the request-level view of the same event. Each `PutItem` call that gets throttled on the GSI side shows up as a throttled `PutItem` at the table's request metrics, and the retries (client-side SDK backoff, or your own retry logic) inflate p99 latency. p50 barely moves because most requests aren't hitting the hot GSI partition \\u2014 only the subset mapping to the saturated `status` value(s) are affected, which is consistent with a skew issue rather than a global capacity shortfall.\\n\\nSo the causal chain is: **GSI hot-partition/WCU exhaustion \\u2192 synchronous propagation requirement \\u2192 base-table write throttled \\u2192 client retries \\u2192 tail latency (p99) rises while table-level throttle metric stays at zero** because CloudWatch attributes the WriteThrottleEvents to the GSI, not the table.\\n\\n**What this points to, if it were real:**\\n- Check `orders-by-status` GSI's write capacity relative to the base table's provisioned WCUs \\u2014 a common cause is the GSI being provisioned far below the base table or the GSI's partition key having a handful of hot values (e.g., `status=PENDING` getting most writes).\\n- If on provisioned mode without auto scaling on the GSI, that's the likely root cause \\u2014 the GSI needs its own adequate (and possibly auto-scaled) write capacity, independent of the base table's.\\n\\nWant me to pull the actual CloudWatch metrics and GSI config for `orders-prod` to confirm this pattern in your account?\"}]}",
+    "createdAt": "2026-10-19T13:12:31.079000-05:00",
+    "recordType": "final_response"
+  }
+]

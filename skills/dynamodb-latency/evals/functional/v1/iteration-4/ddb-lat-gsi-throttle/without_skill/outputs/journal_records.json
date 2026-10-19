@@ -1,0 +1,58 @@
+[
+  {
+    "agentSpaceId": "90e29124-4e1d-4087-9d88-d6c5c8590014",
+    "executionId": "cea69556-0cc7-4c4c-96f6-ee89453e4ec5",
+    "recordId": "970f2b33-30d4-4bd2-90da-ee97104655ef",
+    "content": "{\"id\": \"970f2b33-30d4-4bd2-90da-ee97104655ef\", \"role\": \"user\", \"content\": [{\"text\": \"DynamoDB latency skill, hypothetical \\u2014 do not call AWS. Table orders-prod, provisioned, GSI orders-by-status. 3-hour window. Table-level WriteThrottleEvents: none recorded. WriteThrottleEvents for GSI orders-by-status: recorded in 9 periods 14:05\\u201314:20. PutItem p99 rose to 140 ms vs baseline 20 ms in 8 of those 9 periods; p50 slightly up. ThrottledRequests for PutItem recorded in the same periods. Why are base-table writes slow when the table itself is not throttled?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:12:35.084000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "90e29124-4e1d-4087-9d88-d6c5c8590014",
+    "executionId": "cea69556-0cc7-4c4c-96f6-ee89453e4ec5",
+    "recordId": "33bd119e-03c7-4fe1-85ed-b2bc7be65c20",
+    "content": "{\"id\": \"750833f7-6f29-4e38-9552-3eeaa25b5ea7\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"DynamoDB write latency without table-level throttling\"}]}",
+    "createdAt": "2026-10-19T13:12:36.116000-05:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "90e29124-4e1d-4087-9d88-d6c5c8590014",
+    "executionId": "cea69556-0cc7-4c4c-96f6-ee89453e4ec5",
+    "recordId": "0ef982aa-ead7-4229-91eb-a86446ef1d15",
+    "content": "{\"id\": \"743f1fcc-364f-4581-a521-ea6a1a7514bd\", \"role\": \"assistant\", \"block_type\": \"thinking\", \"content\": [{\"type\": \"text\", \"text\": \"This is a hypothetical question about DynamoDB GSI throttling, so I can answer directly without AWS calls. The key mechanism is that DynamoDB writes propagate synchronously to GSIs as part of the write path, so if a GSI lacks sufficient provisioned capacity, that throttling backs up into the base table's write throughput too.\\n\\nLikely culprit here is a low-cardinality GSI partition key like \\\"status\\\" creating a hot partition that can't absorb writes, causing the whole PutItem operation to throttle even though the base table itself has capacity to spare.\\n\\n\"}]}",
+    "createdAt": "2026-10-19T13:12:45.951000-05:00",
+    "recordType": "thinking"
+  },
+  {
+    "agentSpaceId": "90e29124-4e1d-4087-9d88-d6c5c8590014",
+    "executionId": "cea69556-0cc7-4c4c-96f6-ee89453e4ec5",
+    "recordId": "1cb19c3c-ac8e-4a78-bcea-9847193e84c0",
+    "content": "{\"id\": \"14583d67-fe9f-43c7-8535-8a32a8caa748\", \"role\": \"assistant\", \"block_type\": \"thinking_duration\", \"content\": [{\"type\": \"text\", \"text\": \"7238\"}]}",
+    "createdAt": "2026-10-19T13:12:46.045000-05:00",
+    "recordType": "thinking_duration"
+  },
+  {
+    "agentSpaceId": "90e29124-4e1d-4087-9d88-d6c5c8590014",
+    "executionId": "cea69556-0cc7-4c4c-96f6-ee89453e4ec5",
+    "recordId": "3b175fa5-5462-4bbd-a228-3caefbf57b27",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 3.8, \"compaction_count\": 0}}}",
+    "createdAt": "2026-10-19T13:12:57.454000-05:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "90e29124-4e1d-4087-9d88-d6c5c8590014",
+    "executionId": "cea69556-0cc7-4c4c-96f6-ee89453e4ec5",
+    "recordId": "3bef9d13-5057-43da-9a6c-8a6f63bacd51",
+    "content": "{\"id\": \"3bef9d13-5057-43da-9a6c-8a6f63bacd51\", \"role\": \"assistant\", \"content\": [{\"text\": \"The root cause is architectural: GSI writes are synchronous and atomic with the base-table write, but GSI capacity is a *separate* pool from the base table's.\\n\\n**Mechanism**\\n\\nEvery `PutItem` that touches an attribute projected into `orders-by-status` has to write to the base table **and** the GSI in the same internal transaction before DynamoDB returns success. If the GSI can't absorb the write \\u2014 because its own provisioned write capacity is exhausted \\u2014 the whole operation is throttled, even though the base table had plenty of headroom. That's exactly what `WriteThrottleEvents` being zero at the table level but non-zero on the GSI tells you: the base table never ran out of its own capacity, the GSI did.\\n\\n**Why the GSI ran out**\\n\\nWith a status-based GSI, the partition key is almost certainly `status` (or something similarly low-cardinality \\u2014 \\\"pending\\\", \\\"shipped\\\", \\\"delivered\\\", etc.). A handful of values means all writes for orders currently in a given state pile onto one GSI partition. Provisioned throughput on a GSI is divided across its partitions, so one hot partition can exhaust its share of capacity well before the table's aggregate provisioned WCUs are used up. That's consistent with:\\n- GSI throttling in a tight, repeating 15-minute band (14:05\\u201314:20) rather than a sustained climb \\u2014 suggests a burst of writes landing on the same status value(s), e.g., a batch of orders all transitioning to the same state.\\n- Table-level throttling staying at zero the whole time \\u2014 the base table's own partitions were fine.\\n\\n**Why latency moved the way it did**\\n\\n- `PutItem` p99 jumping to 140 ms in 8 of 9 throttled periods lines up with internal retry/backoff: when the GSI write is rejected, DynamoDB (or the SDK, depending on where retries happen) backs off and retries before the call ultimately succeeds or returns a `ProvisionedThroughputExceededException`, which is what's surfacing as `ThrottledRequests` on PutItem in those same periods.\\n- p50 only \\\"slightly up\\\" fits a hot-partition story: most `PutItem` calls carry status values that *aren't* currently hot and sail through normally, while a minority hitting the congested partition absorb the full retry penalty \\u2014 that's enough to blow out the tail (p99) without moving the median much.\\n- The one throttled period where p99 *didn't* spike is worth a second look \\u2014 possibly the throttling that period was brief enough, or hit few enough requests, to not register in the p99 bucket; worth checking request counts for that specific period if you want to rule out a measurement artifact.\\n\\n**Bottom line:** the base table isn't slow because of its own capacity \\u2014 it's slow because every write that updates `orders-by-status` has to clear that GSI's throughput gate first, and a hot status value is periodically saturating one GSI partition. The fix path (if this weren't hypothetical) would be looking at write-sharding the GSI key (e.g., composite key adding a random suffix or a higher-cardinality attribute) or bumping GSI-specific provisioned write capacity rather than the table's.\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:12:57.538000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "90e29124-4e1d-4087-9d88-d6c5c8590014",
+    "executionId": "cea69556-0cc7-4c4c-96f6-ee89453e4ec5",
+    "recordId": "fcc97385-4d09-4943-946d-d2fd160a0dc7",
+    "content": "{\"id\": \"c31696c3-615d-4bd8-8f7d-06b93d9a0a15\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"The root cause is architectural: GSI writes are synchronous and atomic with the base-table write, but GSI capacity is a *separate* pool from the base table's.\\n\\n**Mechanism**\\n\\nEvery `PutItem` that touches an attribute projected into `orders-by-status` has to write to the base table **and** the GSI in the same internal transaction before DynamoDB returns success. If the GSI can't absorb the write \\u2014 because its own provisioned write capacity is exhausted \\u2014 the whole operation is throttled, even though the base table had plenty of headroom. That's exactly what `WriteThrottleEvents` being zero at the table level but non-zero on the GSI tells you: the base table never ran out of its own capacity, the GSI did.\\n\\n**Why the GSI ran out**\\n\\nWith a status-based GSI, the partition key is almost certainly `status` (or something similarly low-cardinality \\u2014 \\\"pending\\\", \\\"shipped\\\", \\\"delivered\\\", etc.). A handful of values means all writes for orders currently in a given state pile onto one GSI partition. Provisioned throughput on a GSI is divided across its partitions, so one hot partition can exhaust its share of capacity well before the table's aggregate provisioned WCUs are used up. That's consistent with:\\n- GSI throttling in a tight, repeating 15-minute band (14:05\\u201314:20) rather than a sustained climb \\u2014 suggests a burst of writes landing on the same status value(s), e.g., a batch of orders all transitioning to the same state.\\n- Table-level throttling staying at zero the whole time \\u2014 the base table's own partitions were fine.\\n\\n**Why latency moved the way it did**\\n\\n- `PutItem` p99 jumping to 140 ms in 8 of 9 throttled periods lines up with internal retry/backoff: when the GSI write is rejected, DynamoDB (or the SDK, depending on where retries happen) backs off and retries before the call ultimately succeeds or returns a `ProvisionedThroughputExceededException`, which is what's surfacing as `ThrottledRequests` on PutItem in those same periods.\\n- p50 only \\\"slightly up\\\" fits a hot-partition story: most `PutItem` calls carry status values that *aren't* currently hot and sail through normally, while a minority hitting the congested partition absorb the full retry penalty \\u2014 that's enough to blow out the tail (p99) without moving the median much.\\n- The one throttled period where p99 *didn't* spike is worth a second look \\u2014 possibly the throttling that period was brief enough, or hit few enough requests, to not register in the p99 bucket; worth checking request counts for that specific period if you want to rule out a measurement artifact.\\n\\n**Bottom line:** the base table isn't slow because of its own capacity \\u2014 it's slow because every write that updates `orders-by-status` has to clear that GSI's throughput gate first, and a hot status value is periodically saturating one GSI partition. The fix path (if this weren't hypothetical) would be looking at write-sharding the GSI key (e.g., composite key adding a random suffix or a higher-cardinality attribute) or bumping GSI-specific provisioned write capacity rather than the table's.\"}]}",
+    "createdAt": "2026-10-19T13:12:57.618000-05:00",
+    "recordType": "final_response"
+  }
+]

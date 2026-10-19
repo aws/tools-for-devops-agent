@@ -1,0 +1,77 @@
+{
+  "version": "v1",
+  "iteration": 5,
+  "eval_id": "ddb-lat-scan-baseline",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response diverges from the expected output in several important ways.\n\n1. Hypothetical labeling: The agent does not explicitly label the analysis as \"hypothetical\" (it mentions no AWS calls were made implicitly but doesn't use the word \"hypothetical\" as instructed).\n\n2. Classification: The expected output calls for a specific classification code \"LT-03 Typical-latency elevation, sustained\" \u2014 the agent does not reference any such taxonomy or code. It instead invents its own ad-hoc classification (\"workload-scaling latency increase, not a true regression\"), which is a different framework and conclusion. The agent explicitly states it lacks a DynamoDB-specific runbook, which contradicts the premise that it should be using \"the DynamoDB latency skill\" as instructed in the prompt \u2014 this is a significant deviation since the user explicitly asked to classify using that skill.\n\n3. Causal framing: The expected output requires treating ReturnedItemCount rise as a \"leading candidate that coincides with the elevation\" while explicitly stating it is NOT established as the cause. The agent instead treats it as the \"best-supported cause\" and states it accounts for \"essentially the full latency increase\" \u2014 asserting causation rather than correlation, which is the opposite nuance expected.\n\n4. ReturnedItemCount caveat: The expected output explicitly wants the response to note \"ReturnedItemCount counts items returned, not evaluated\" \u2014 this caveat is completely missing from the agent's response.\n\n5. Item size framing: The expected output wants the 148 KB mean item size treated only as background context that cannot explain a change. The agent instead uses it actively in the causal argument (calculating MB transferred, ~3.1x scaling) as supporting evidence for causation, not as neutral background.\n\n6. Remediation levers: The expected output wants specific Scan request-shape levers: Limit, narrower ProjectionExpression, avoiding filter-heavy reads. The agent does not mention any of these; instead it suggests checking ConsumedReadCapacityUnits and TableSizeBytes growth \u2014 different recommendations entirely, and does not mention Limit/ProjectionExpression levers.\n\n7. Data-model changes scope: expected says to leave data-model changes out of scope, but agent speculates \"likely table growth or a change in what the job scans/filters\" which touches on data-model-adjacent causes.\n\nGiven these substantial mismatches \u2014 missing classification code, inverted causal framing (causation vs. correlation), missing specific caveats, missing recommended levers \u2014 the response does not substantively meet the expected criteria.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies as a sustained typical-latency elevation (LT-03) for Scan",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"I don't have a dedicated DynamoDB latency runbook loaded in this agent space... this classification uses standard ratio-based latency analysis\" and \"Classification: workload-scaling latency increase, not a true regression.\" No LT-03 terminology appears anywhere.",
+          "reasoning": "The agent never uses any LT-03 or similar skill-specific classification label. It explicitly states it has no DynamoDB-specific runbook loaded and instead invents its own classification 'workload-scaling latency increase, not a true regression.' There is no mention of 'LT-03' or a 'sustained typical-latency elevation' label.",
+          "confidence": "high"
+        },
+        {
+          "text": "Judges Scan against its own baseline rather than an absolute or single-item threshold",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Scan p50 | 120 ms | 410 ms | 3.42x\" and \"a 3.4x latency jump sitting right alongside a 3.2x jump in items returned is the expected relationship\"",
+          "reasoning": "The agent explicitly computes ratios against the 7-day baseline p50 (120ms vs 410ms = 3.42x) rather than using an absolute threshold, and does not treat it as a single-item latency issue.",
+          "confidence": "high"
+        },
+        {
+          "text": "Presents the increase in items returned per request as a candidate explanation, not a proven cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Increased payload per request (more items \u00d7 large item size) \u2014 best-supported cause, accounting for essentially the full latency increase\" and \"the nightly job slowed down because each Scan is now pulling back ~3x more items\"",
+          "reasoning": "The agent presents the increase in items returned as the 'best-supported cause' and states it accounts for 'essentially the full latency increase', and the bottom line states the job slowed down 'because' of this increase - phrased as a proven/established cause rather than a candidate/hypothesis still to be confirmed.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Treats mean item size as context only, not as the explanation",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"At ~148 KB/item, that's roughly 44.8 MB returned per Scan at baseline vs. ~141 MB now \u2014 about the same ~3.1x scaling. DynamoDB Scan latency tracks data volume read/transferred...\"",
+          "reasoning": "The agent uses mean item size (148 KB) as a direct multiplier in its causal calculation to compute total bytes transferred (44.8MB vs 141MB) and uses this calculation as core evidence for the causal explanation of the slowdown, rather than treating it merely as background context.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Suggests at least one Scan request-shape lever such as Limit or ProjectionExpression",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"If this were real, good next checks would be ConsumedReadCapacityUnits trend... and TableSizeBytes/ItemCount growth over the 14 days to see if the table simply got bigger versus the job's filter logic changing.\" No mention of Limit or ProjectionExpression.",
+          "reasoning": "The agent never mentions Limit, ProjectionExpression, or any other Scan request-shape lever as a remediation or mitigation suggestion. The only 'next steps' mentioned are monitoring ConsumedReadCapacityUnits and TableSizeBytes/ItemCount trends, not request-shape changes.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.2
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "52s",
+    "cost": "$0.43",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}

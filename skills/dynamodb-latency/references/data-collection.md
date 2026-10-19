@@ -52,6 +52,18 @@ computing `0`. Never report `0 KB` mean item size.
 If `DescribeTable` returns `ResourceNotFoundException`, abort: "Table `<name>` does not exist
 in `<region>`, or the role cannot describe it." Do not probe other regions.
 
+**If `DescribeTable` is denied or blocked by the agent's tooling** (some environments gate it
+behind operator approval), say so, then recover what the classification needs from CloudWatch
+instead of skipping it:
+
+- **GSI names** — `cloudwatch:ListMetrics`, namespace `AWS/DynamoDB`, metric
+  `ConsumedWriteCapacityUnits`, dimension filter `TableName=<table>`. Every
+  `GlobalSecondaryIndexName` value in the result is an index that has published metrics; query
+  its throttle events in Step 3. Without this, GSI back-pressure is invisible.
+- **Billing mode** — `ProvisionedWriteCapacityUnits` datapoints in Step 4 mean `PROVISIONED`;
+  none means on-demand or unknown. Say it was inferred.
+- Mean item size, table age, and replicas stay **not determinable**; lower confidence one step.
+
 ### Step 2 — Latency per operation: window and baseline
 
 All queries in this step: namespace `AWS/DynamoDB`, metric `SuccessfulRequestLatency`,
@@ -235,7 +247,7 @@ Render verbatim, substituting real values, then **wait**:
 >    classification may be `LT-00` indeterminate.
 
 The actions this skill needs, all of which are in the `AIDevOpsAgentAccessPolicy` managed
-policy: `dynamodb:DescribeTable`, `cloudwatch:GetMetricData`. If they are denied, the denial
+policy: `dynamodb:DescribeTable`, `cloudwatch:GetMetricData`, `cloudwatch:ListMetrics`. If they are denied, the denial
 is a scoping or boundary policy, not a missing grant — say so.
 
 ### Tooling notice
@@ -342,6 +354,7 @@ data-plane call is a violation of its safety posture rather than an extension of
 | `sts` | `GetCallerIdentity` |
 | `dynamodb` | `DescribeTable` |
 | `cloudwatch` | `GetMetricData` (or `GetMetricStatistics` where the agent's tooling prefers it) |
+| `cloudwatch` | `ListMetrics` — only to discover GSI names when `DescribeTable` is unavailable |
 
 Explicitly **not** in the allowlist, and why:
 

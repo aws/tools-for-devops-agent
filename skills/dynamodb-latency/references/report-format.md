@@ -189,6 +189,10 @@ Check every line before output. Any failure means fix the report, not ship it wi
 14. **Every recommended action names its trigger, its precondition, and who changes it.**
 15. **The window, baseline, region, and period are stated in the header**, and match what was
     actually queried.
+16. **Any conversational summary around the report obeys the same checks.** A closing "in
+    short" paragraph is where attribution drifts — "the time is lost between your app and
+    DynamoDB" is a conclusion about the network the metrics did not establish. Restate the
+    finding as "not inside DynamoDB processing time" and the next measurement.
 
 ## Tone
 

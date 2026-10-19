@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 4,
+  "eval_id": "ddb-lat-remediations",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'dynamodb-latency' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response addresses all four plan items exactly in line with the expected output. (1) Rejects the 50ms socket timeout, correctly citing it as AWS's documented anti-example for client-induced availability issues during latency spikes and recommends hedging over short timeouts. (2) Rejects strongly consistent reads, noting double throughput cost, potentially higher latency, and lack of GSI support. (3) Rejects DAX for the nightly Scan, explaining the query cache is keyed on exact parameters, not invalidated by writes, and that DAX suits repeated read-heavy patterns, not a once-nightly Scan. (4) Questions the keep-alive GetItem, correctly noting that AWS SDK for JavaScript v3 reuses TCP connections by default, making this likely unnecessary, and mentions it consumes RCU (read capacity). All four expected elements are substantively present and accurate.",
+      "evidence": "\"AWS's latency troubleshooting guide uses a 50 ms socket timeout as the example of a timeout low enough to cause client-induced availability issues... The documented preference is hedging...\" / \"Strongly consistent reads can have higher latency... cost double the read throughput, and aren't supported on GSIs at all.\" / \"DAX's query cache keys on the exact Scan/Query parameters and is not invalidated by writes...\" / \"AWS SDK for JavaScript v3 reuses TCP connections by default. So on this stack, you're probably paying for a keep-alive read (it consumes RCU) every 30 seconds...\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Rejects the 50 ms socket timeout and cites availability risk or prefers hedging",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"AWS's latency troubleshooting guide uses a 50 ms socket timeout as the example of a timeout low enough to cause client-induced availability issues... The documented preference is hedging (fire a second request if the first hasn't answered in time) over shortening timeouts\"",
+          "reasoning": "The agent explicitly rejects the 50ms timeout, cites availability risk from client-induced connection errors, and states the documented preference for hedging over shortening timeouts.",
+          "confidence": "high"
+        },
+        {
+          "text": "Rejects strongly consistent reads as a latency fix, mentioning twice the throughput or possibly higher latency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Strongly consistent reads can have *higher* latency than eventually consistent reads (which can be served from a co-located AZ), cost double the read throughput, and aren't supported on GSIs at all.\"",
+          "reasoning": "The agent rejects strong consistency as a latency fix and explicitly mentions both 'double the read throughput' and 'higher latency', satisfying the assertion's requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "Rejects DAX for the Scan job and states at least one DAX consistency or caching trade-off",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"DAX's query cache keys on the exact Scan/Query parameters and is not invalidated by writes \u2014 cached result sets sit until TTL expires even if the underlying items changed... DAX also caches negative results and passes strongly-consistent reads/TransactGetItems straight through uncached\"",
+          "reasoning": "The agent rejects DAX for the nightly Scan use case and cites multiple caching/consistency trade-offs, including staleness risk and cache-miss behavior, well beyond the minimum requirement of one trade-off.",
+          "confidence": "high"
+        },
+        {
+          "text": "States that the AWS SDK for JavaScript v3 reuses connections by default",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"AWS SDK for JavaScript v3 reuses TCP connections by default.\"",
+          "reasoning": "This is a direct, explicit statement matching the assertion verbatim in substance.",
+          "confidence": "high"
+        },
+        {
+          "text": "Notes that a keep-alive GetItem consumes read capacity",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"you're probably paying for a keep-alive read (it consumes RCU) every 30 seconds to maintain something the SDK already does for you.\"",
+          "reasoning": "The agent explicitly notes that the keep-alive GetItem consumes RCU (read capacity units), satisfying the assertion.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "33s",
+    "cost": "$0.28",
+    "context_window": {
+      "utilization": "5.2%",
+      "compaction_count": 0
+    }
+  }
+}

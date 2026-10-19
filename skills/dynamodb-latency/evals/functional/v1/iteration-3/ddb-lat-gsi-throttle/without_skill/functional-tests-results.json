@@ -1,0 +1,76 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "ddb-lat-gsi-throttle",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response correctly explains the GSI back-pressure mechanism (table-level WriteThrottleEvents excludes GSIs, GSI write throttling propagates to base table PutItem latency/throttles), and correctly names the table (orders-prod), GSI (orders-by-status), operation (PutItem), and time window (14:05\u201314:20) \u2014 strong alignment on the core technical explanation.\n\nHowever, several explicit expectation elements are missing or violated:\n1. It never labels the scenario as 'hypothetical' despite the prompt explicitly requesting this framing.\n2. It does not use or reference the classification code 'LT-02 Throttle-induced' \u2014 there's no indication this is a formal classification taxonomy being applied, which the expected output explicitly calls for.\n3. Rather than stopping at a 'handoff' (naming the affected resources without sizing capacity or determining which ceiling was hit), the agent goes further into root-cause speculation, listing specific root cause candidates (under-provisioned WCU, hot key skew, adaptive capacity lag) \u2014 this seeks to diagnose/attribute capacity ceiling causes, which the expected output says the response should NOT do. The expected output explicitly states the response should not itself size capacity or determine which ceiling was hit, yet the agent offers speculative diagnoses of the capacity issue.\n4. The final offer to \"sketch what to check next\" is appropriate as a handoff-style offer, but the body of the response already crossed into root-cause diagnosis territory before that offer.\n\nGiven the explicit requirement to avoid hypothetical labeling omission, missing classification code, and overstepping into root-cause/capacity determination that should have been left as a handoff, this fails key structural expectations despite being technically sound on the core mechanism.",
+      "evidence": "The response never contains the word 'hypothetical' or 'LT-02'. It states: '1. Low/uneven provisioned WCU on the GSI... 2. Hot key/skewed status attribute... 3. Adaptive capacity lag...' \u2014 these are root-cause/capacity-ceiling determinations rather than a pure handoff.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the GSI orders-by-status as the source of the throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'GSI orders-by-status WriteThrottleEvents: present in 9 periods (14:05\u201314:20) \u2014 this is the actual bottleneck.' and 'the GSI is the actual constrained resource'",
+          "reasoning": "The agent explicitly and repeatedly identifies the GSI orders-by-status as the source of throttling.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that GSI write throttling back-pressures writes to the base table",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'DynamoDB writes a PutItem to the base table and updates every GSI synchronously as part of the same write path. An item write is only considered complete once the GSI update also succeeds. If a GSI can't absorb the write... the entire PutItem is throttled or delayed'",
+          "reasoning": "The agent clearly explains the synchronous back-pressure mechanism from GSI throttling to base table writes.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that table-level throttle events do not include GSI throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'the GSI is the actual constrained resource, and because GSI updates are synchronous with the parent write, GSI throttling surfaces as elevated PutItem latency/throttles on the base table's operation metrics \u2014 not as a base-table WriteThrottleEvents event.' Also: 'The base table's own WriteThrottleEvents metric stays at zero (the table's capacity is fine)'",
+          "reasoning": "The agent explains that the table-level WriteThrottleEvents metric does not capture GSI-induced throttling, which is the substance of this assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Hands off the throttling diagnosis with scope and time window instead of sizing capacity",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent lists 'Root cause candidates on the GSI side' including '1. Low/uneven provisioned WCU on the GSI relative to the table' and ends with an offer to 'sketch what to check next (GSI WCU vs. table WCU ratio, status-value cardinality, or whether on-demand/auto-scaling would help)'",
+          "reasoning": "Rather than handing off the diagnosis with just scope and time window, the agent proactively ventures into capacity sizing discussion (WCU ratios, auto-scaling) and offers to go deeper into capacity-related next steps, which contradicts the assertion that it refrains from capacity sizing.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Names the GSI",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'orders-by-status'"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.8%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "version": "v1",
+  "iteration": 5,
+  "eval_id": "ddb-lat-gsi-throttle",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly identifies the GSI as the throttled scope causing base-table write latency (GSI back-pressure), explains that table-level WriteThrottleEvents don't reflect GSI-level throttling, and ties together the specific data points: table orders-prod, GSI orders-by-status, PutItem, and the 14:05\u201314:20 window with 9 periods of GSI throttle events coinciding with p99 elevation in 8 of 9 periods. It explicitly frames this as reasoning rather than execution ('not to execute, just reasoning') and offers to investigate further rather than itself sizing capacity or determining which specific ceiling (WCU provisioning vs hot partition) was hit \u2014 it lists both as candidate causes to confirm, consistent with not committing to a definitive capacity determination. The prompt's 'hypothetical' framing is honored throughout (no AWS calls made, reasoning-based analysis). While the response doesn't use the exact label 'LT-02 Throttle-induced', it substantively classifies the issue as GSI-throttle-induced base table latency, which matches the intent of the expected classification. All core expected elements are present: hypothetical framing, GSI as throttled scope, coincidence of throttle events and p99 elevation, explanation of WriteThrottleEvents metric scope, GSI back-pressure mechanism, and naming of the specific resources and time window.",
+      "evidence": "\"GSI `WriteThrottleEvents`: 9 periods, 14:05\u201314:20 \u2014 this is the actual bottleneck... Table-level `WriteThrottleEvents`: none \u2014 the base table itself has ample provisioned WCUs and never rejects a write for its own capacity reasons... the base table isn't throttled because it has the capacity; the GSI is the actual constraint, and because GSI writes are synchronous with base-table writes, GSI throttling manifests as base-table PutItem throttling and latency\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the GSI orders-by-status as the source of the throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"GSI `WriteThrottleEvents`: 9 periods, 14:05\u201314:20 \u2014 this is the actual bottleneck.\" and \"the GSI is the actual constraint\"",
+          "reasoning": "The agent explicitly identifies orders-by-status GSI as the source of throttling.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that GSI write throttling back-pressures writes to the base table",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"If the GSI doesn't have enough provisioned write capacity to absorb the write... the write is throttled at the GSI layer, and that throttling is surfaced back to the caller as a throttled PutItem on the base table.\"",
+          "reasoning": "This directly explains the back-pressure mechanism from GSI throttling onto base table writes/latency.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that table-level throttle events do not include GSI throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Table-level WriteThrottleEvents: none \u2014 the base table itself has ample provisioned WCUs and never rejects a write for its own capacity reasons.\" combined with the explanation that GSI throttling is separate and surfaces via PutItem throttling rather than table-level WriteThrottleEvents",
+          "reasoning": "The agent implies/explains that table-level WriteThrottleEvents metric doesn't capture GSI-level throttling, since it attributes the clean table-level metric to the table's own capacity while the GSI metric separately shows throttling - effectively explaining these are distinct metrics that don't include each other.",
+          "confidence": "high"
+        },
+        {
+          "text": "Hands off the throttling diagnosis with scope and time window instead of sizing capacity",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Likely root cause to confirm (not to execute, just reasoning): GSI provisioned WCUs too low... Want me to lay out what to check next (GSI WCU provisioning vs. consumed, and status-value cardinality) if you decide to turn this into a real investigation?\"",
+          "reasoning": "The agent frames capacity sizing as a hypothesis to confirm later and offers next steps rather than performing actual capacity sizing calculations, consistent with handing off the diagnosis scoped to GSI and the 14:05-14:20 window instead of doing sizing work itself.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Names the GSI",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'orders-by-status'"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.8%",
+      "compaction_count": 0
+    }
+  }
+}
