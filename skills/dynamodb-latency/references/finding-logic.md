@@ -1,308 +1,492 @@
 # Finding Logic
 
-Two kinds of output:
+Three kinds of output:
 
-1. **One primary classification** — `LT-00` … `LT-05`, chosen by the decision order below.
-   Exactly one. Never two, never none.
-2. **Zero or more contributing factors** — `CF-01` … `CF-09`. These explain or qualify the
-   primary classification; they never replace it.
+1. **One primary outcome** — `LT-00` … `LT-05`, chosen by the selection order below, with a
+   **confidence** of High, Medium, or Low.
+2. **Also observed** — every other outcome condition that also qualified, and every signal
+   that was present but not established as a cause. Nothing that was measured is dropped to
+   make the primary outcome look cleaner.
+3. **Zero or more contributing factors** — `CF-01` … `CF-09`. These explain, qualify, or hand
+   off; they never replace the primary outcome.
 
-Use the body templates verbatim, substituting only the bracketed placeholders.
+Use the body templates verbatim, substituting only the bracketed placeholders. Every template
+separates **Observed** (what the metrics show), **Not established** (what they do not prove),
+and **Next** (the measurement or handoff that would settle it).
+
+## Outcome names — canonical
+
+Use exactly these names everywhere: report, summary, and conversation.
+
+| ID | Name |
+|---|---|
+| `LT-00` | Indeterminate |
+| `LT-01` | Service-side errors |
+| `LT-02` | Throttle-induced |
+| `LT-03` | Typical-latency elevation |
+| `LT-04` | Tail elevation |
+| `LT-05` | No DynamoDB-side elevation |
 
 ## Thresholds, and what they are
 
-Every number below is **this skill's operating heuristic**, chosen so that it agrees with what
-AWS documents: single-digit millisecond `Average` for singleton operations, and explicitly
-variable latency for multi-item ones. DynamoDB publishes no latency SLA. Say "above this
+Every number below is **this skill's operating heuristic**, chosen to agree with what AWS
+documents: single-digit millisecond `Average` for singleton operations, explicitly variable
+latency for multi-item ones, occasional high-percentile spikes as normal, and a persistent rise
+in `Average`/p50 as the actionable signal. DynamoDB publishes no latency SLA. Say "above this
 skill's threshold", never "above the SLA", and never present a threshold breach as a root
 cause on its own.
 
-| Operation class | Sustained threshold (`Average` / p50) | Tail threshold (p99) |
+### Observation window and periods
+
+| Window | Period | Baseline |
 |---|---|---|
-| Singleton — `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem` | 10 ms | 50 ms |
-| Multi-item — `Query`, `Scan`, `Batch*`, `Transact*` | **no absolute threshold** — use the relative test | **no absolute threshold** — use the relative test |
+| ≤ 6 hours (default 3 h, incident) | 60 s | 7 days before the window, one CloudWatch-computed datapoint |
+| > 6 hours (default 14 d, review) | 300 s | 7 days before the window, one CloudWatch-computed datapoint |
 
-**Relative test for multi-item operations.** Compare the operation's p50 in the most recent
-third of the window against its p50 in the earliest third. Flag only at **≥ 2×** with both
-thirds holding ≥ 30 datapoints. If the window is too short to split, or either third is too
-sparse, the operation is **not assessable** — say so rather than applying a singleton
-threshold to a `Scan`.
+### Assessable periods — the `SampleCount` floor
 
-**"Sustained" means ≥ 3 consecutive periods, or ≥ 50% of periods in the window.**
-**"Isolated" means fewer than 3 consecutive periods.** Documented normal variance lives in
-the isolated case; do not report it as degradation.
+Only **assessable** periods enter any elevation test: `SampleCount` ≥ 100 for p99, ≥ 10 for
+p50. An operation with fewer than 10 assessable periods for a statistic, or with fewer than
+half of its periods assessable, is **not assessable** for that statistic.
+
+### The reference value each period is compared against
+
+Chosen per operation, in this order:
+
+| # | Reference | When | Confidence ceiling |
+|---|---|---|---|
+| 1 | **7-day baseline** p50 / p99 | baseline `SampleCount` ≥ 1,000 | High |
+| 2 | **Absolute floor only** — no ratio test | singleton operations without a usable baseline | Medium |
+| 3 | **First third of the window** — one CloudWatch datapoint with `Period` = a third of the window, rounded down to a multiple of 60 s; only the later two-thirds are tested | multi-item or transactional operations without a usable baseline, when the first third holds ≥ 30 assessable periods | Low |
+| 4 | none | otherwise | the operation is **not assessable** |
+
+Reference 3 is contaminated if the problem began before the window. Say so whenever you use it.
+
+### Elevation tests, per assessable period
+
+| Class | p50-elevated when | p99-elevated when |
+|---|---|---|
+| Singleton — `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem` | p50 ≥ 2 × reference **and** p50 ≥ 10 ms. Without a reference: p50 ≥ 10 ms | p99 ≥ 3 × reference **and** p99 ≥ 50 ms. Without a reference: p99 ≥ 50 ms |
+| Multi-item — `Query`, `Scan`, `BatchGetItem`, `BatchWriteItem` | p50 ≥ 2 × reference **and** p50 ≥ reference + 5 ms | p99 ≥ 3 × reference **and** p99 ≥ reference + 20 ms |
+| Transactional — `TransactGetItems`, `TransactWriteItems` | as multi-item | as multi-item |
+
+Multi-item and transactional operations **never** use an absolute threshold. Each operation is
+compared only with its own reference, because no two operations share a meaningful baseline.
+
+If the user states an SLO for an operation and statistic, also record the assessable periods
+that breach it. An SLO breach is reported in its own right; it does not replace the tests
+above. A p50 or `Average` objective is tested by `LT-03`; a p90, p99, or `Maximum` objective by
+`LT-04`. An objective that names no operation applies to every active operation.
+
+### Patterns
+
+Per operation and statistic, from the elevated-period list:
+
+| Pattern | Definition |
+|---|---|
+| `none` | no elevated periods |
+| `isolated` | 1–2 elevated periods, and no run of 3 consecutive |
+| `recurring` | ≥ 3 elevated periods, no run of 3 consecutive, and < 50% of assessable periods |
+| `sustained` | a run of ≥ 3 consecutive elevated periods, **or** ≥ 50% of assessable periods |
+| `not_assessable` | below the `SampleCount` floor, or no usable reference |
+
+With 60-second periods, "3 consecutive" is three minutes; with 300-second periods it is fifteen.
+
+### Coincidence
+
+An event counter **coincides** with an operation's elevation when one of its non-zero periods
+is the same period as, or immediately adjacent to, an elevated period of that operation.
+Count coinciding periods; that count is the evidence the causal outcomes rest on.
 
 ## Severity definitions
 
 | Severity | Meaning |
 |---|---|
 | **High** | Requests are failing or the elevated latency is sustained and service-side |
-| **Medium** | Real and worth acting on, but bounded — a tail problem, or a factor that needs a client-side change |
+| **Medium** | Real and worth acting on, but bounded — a tail problem, a factor that needs a client-side change, or a cause with partial evidence |
 | **Low** | Worth knowing, not urgent |
 | **Info** | Context, or an explicit statement that something could not be evaluated |
 
-## Decision order — apply in this sequence, first match wins
+## Confidence
 
-### LT-00 [Info] · Indeterminate — the data cannot support a classification
+Assign to the primary outcome. Start at the reference's confidence ceiling, then lower one step
+for each that applies:
+
+- coverage ratio of an affected operation below 0.9
+- a causal outcome (`LT-01`, `LT-02`) resting on 1–2 coinciding periods, or on the
+  no-elevation branch
+- a relevant event counter is `NoData` rather than `recorded` / `none_recorded`
+- any affected operation is `not_assessable` for the statistic the outcome rests on
+
+Never below Low. State the reasons in the report, one line each.
+
+## Selection order — evaluate every outcome, then choose
+
+Evaluate **all** of `LT-01` … `LT-04` before choosing. The primary outcome is the first one in
+this order that qualifies; every other one that qualified goes under **Also observed**.
+`LT-00` overrides everything when it fires.
+
+**`LT-05` is the catch-all, so every profile reaches exactly one primary outcome.** When
+neither `LT-00` nor any of `LT-01` … `LT-04` qualifies, the outcome is `LT-05`, and every
+sub-threshold observation — an isolated p50 period, a counter recorded but not causal, an
+operation not assessable — goes under **Also observed** or the relevant `CF` rule.
+
+### LT-00 [Info] · Indeterminate
 
 Fires when **any** of these holds:
 
-- `latency_by_operation` has `NoData` for every operation queried, or
-- `coverage_ratio < 0.5` for every operation with data, and the shortfall is not explained by
-  table age, or
-- `SystemErrors` **or** the throttle metrics are `AccessDenied` or `ToolingFailure` — because
-  `LT-01` and `LT-02` sit above `LT-03`/`LT-04` in this order, and skipping them would
-  mis-rank the answer, or
-- every operation is within threshold — so the only remaining candidate is `LT-05` — **but**
-  `SystemErrors` or a throttle metric returned `NoData`. A nominal verdict requires those to
-  have been *measured* at zero. An absent metric cannot rule out the two causes that outrank
-  it.
+- every operation queried has `NoData` for `SuccessfulRequestLatency` — **unless** organic
+  `SystemErrors` are recorded for an operation, in which case `LT-01` branch (c) applies: no
+  successful latency because requests failed is a finding, not an absence of data, or
+- every operation with data has `coverage_ratio < 0.5`, not explained by table age, or
+- every operation with data is `not_assessable` for both p50 and p99, or
+- `SystemErrors` **or** the throttle counters are `AccessDenied` or `ToolingFailure` for the
+  operations that carry the traffic — because `LT-01` and `LT-02` cannot be evaluated, or
+- no `LT-01` … `LT-04` condition qualifies — so `LT-05` is the only remaining candidate — but a
+  relevant event counter is `NoData` (activity could not be confirmed) rather than
+  `none_recorded`.
 
-This rule is first deliberately. A classification derived from a window with no data is not a
-finding, it is a guess wearing a rule ID.
-
-> **`LT-00` · Latency could not be classified for `[table]`**
+> **`LT-00` · Indeterminate — `[table]`**
 >
-> Between `[start]` and `[end]`, `[what was missing: which metric, which status]`.
+> **Observed:** between `[start]` and `[end]`, `[what was missing: which metric, which status]`.
+> `SuccessfulRequestLatency` covered `[coverage_minutes]` of `[window]` minutes
+> (`[coverage_ratio]`). `[If table age explains it: The table was created [created], so a
+> shorter series is expected.]`
 >
-> `SuccessfulRequestLatency` coverage was `[coverage_minutes]` minutes of the `[window]`-minute
-> window requested (`[coverage_ratio]`). `[If table age explains it: The table was created
-> [created], so a shorter series is expected.]`
+> **Not established:** whether the latency is service-side, throttle-induced, or within
+> normal variance — the signals that separate those were `[unavailable / absent / below the
+> SampleCount floor]`.
 >
-> I have not classified the latency profile, because the signals that distinguish a
-> service-side condition from a throttle-induced one from normal variance were
-> `[unavailable / absent]`. What would settle it: `[the specific call or window]`.
+> **Next:** `[the specific call, permission, or window that would settle it]`.
 
-### LT-01 [High | Medium] · Service-side condition
+### LT-01 [High | Medium] · Service-side errors
 
-Fires when `SystemErrors.total > 0` **measured** (status `ok`, not `NoData`).
+Compute **organic** `SystemErrors` per operation and period as `SystemErrors` minus
+`FaultInjectionServiceInducedErrors` for the same period (treat `none_recorded` FIS as 0).
 
-Severity **High** when non-zero in ≥ 3 consecutive periods or `SystemErrors` exceeds 0.1% of
-summed `SampleCount`; otherwise **Medium** — occasional HTTP 500s are documented as expected in
-a distributed system.
+Qualifies when, for at least one operation, organic `SystemErrors` are **persistent** —
+non-zero in ≥ 3 periods, or totalling more than 0.1% of that operation's `SampleCount` — **and**
+either:
 
-> **`LT-01` · Service-side errors present — `[table]`**
+- **(a) coincidence:** they coincide with that operation's p50- or p99-elevated periods in ≥ 1
+  period, or
+- **(b) retry branch:** no operation is elevated, but the user reports client-observed slowness,
+  timeouts, or errors overlapping the error periods. Most AWS SDKs retry HTTP 500s
+  automatically; a retried 500 adds client-perceived latency that `SuccessfulRequestLatency`
+  does not show, or
+- **(c) total failure:** organic `SystemErrors` are recorded for an operation that has **no**
+  `SuccessfulRequestLatency` datapoints in the same periods — every request to it failed, so
+  there is no successful latency to elevate. This qualifies on persistence alone.
+
+`SystemErrors` that are recorded but not persistent, or do not coincide, **do not qualify** —
+report them as `CF-05`. Errors that are entirely FIS-induced never qualify.
+
+Severity **High** when organic errors are non-zero in ≥ 3 consecutive periods and either
+coincide in ≥ 3 periods or meet branch (c); otherwise **Medium**.
+
+> **`LT-01` · Service-side errors — `[operation]` on `[table]`**
 >
-> `SystemErrors` totalled `[n]` across `[m]` periods between `[first_ts]` and `[last_ts]`,
-> against `[sample_count]` successful requests. HTTP 500 responses are server-side; the
-> affected requests can be retried, and occasional ones are expected in a distributed system.
+> **Observed:** organic `SystemErrors` totalled `[n]` across `[m]` periods between `[first_ts]`
+> and `[last_ts]`, against `[sample_count]` successful `[operation]` requests
+> (`[rate]`%). `[FIS-induced errors in the same periods: [k] | none recorded.]`
+> `[(a): They coincide with [c] elevated-latency periods: [timestamps]. | (b): No elevation in
+> SuccessfulRequestLatency; the errors overlap the slowness you reported at [time]. | (c): No
+> request to [operation] succeeded in those periods — every recorded request failed.]`
+>
+> HTTP 500 responses are server-side. Most AWS SDKs retry them automatically, so a request that
+> eventually succeeds can still have taken longer from the client's point of view.
 > `[If sustained: This is sustained, not occasional — [m] consecutive periods.]`
 >
-> Latency alongside them: `[operation]` `Average` `[x]` ms, p99 `[y]` ms.
+> **Not established:** that these errors are the whole explanation. `[List any other qualifying
+> outcome or signal, or "No other signal was observed."]`
 >
-> Next: correlate the window with AWS Health (Service Health Dashboard and your Personal
-> Health Dashboard), and log request IDs for the slow or failed requests before opening a
-> support case. If the errors persist over a prolonged period, contact AWS Support with those
-> request IDs.
+> **Next:** correlate the window with AWS Health (Service Health Dashboard and your Personal
+> Health Dashboard), and log request IDs for the slow or failed requests. If the errors persist
+> over a prolonged period, contact AWS Support with those request IDs.
 
 ### LT-02 [High | Medium] · Throttle-induced
 
-Fires when a throttle metric is non-zero **and** its non-zero periods intersect the
-`elevated_periods` of at least one operation — or, when no operation is elevated, when
-throttles are non-zero at all and the user reports client-observed slowness.
+Qualifies when a throttle counter — `ThrottledRequests` for an operation, table-level
+`Read`/`WriteThrottleEvents`, or a GSI's `Read`/`WriteThrottleEvents` — is `recorded`, and
+either:
 
-Severity **High** when the intersection covers ≥ 3 periods — or, in the no-elevation branch,
-when the throttle metric is non-zero in ≥ 3 periods; otherwise **Medium**.
+- **(a) coincidence:** its non-zero periods coincide with the p50- or p99-elevated periods of a
+  matching operation (reads with read operations, writes and GSI write throttling with write
+  operations) in ≥ 1 period, or
+- **(b) retry branch:** no operation is elevated, the counter is non-zero in ≥ 3 periods, and the
+  user reports client-observed slowness overlapping those periods.
+
+Severity **High** when coincidence covers ≥ 3 periods, or in branch (b) when the counter is
+non-zero in ≥ 3 consecutive periods; otherwise **Medium**.
 
 This rule exists because of a metric property that misleads reliably: throttled requests are
 **not** in `SuccessfulRequestLatency`. The service-side curve can stay perfectly flat while the
 client sees seconds of added time from SDK retries.
 
-> **`LT-02` · Latency is throttle-induced — `[table]`**
+> **`LT-02` · Throttle-induced — `[table]`**
 >
-> `[ThrottledRequests | ReadThrottleEvents | WriteThrottleEvents]` totalled `[n]` in
-> `[m]` periods, overlapping the elevated-latency periods at `[list of timestamps]`.
+> **Observed:** `[counter and scope: ThrottledRequests for PutItem | WriteThrottleEvents on GSI
+> orders-by-status | …]` totalled `[n]` in `[m]` periods,
+> `[(a): coinciding with elevated [operation] latency at [timestamps] | (b): overlapping the
+> slowness you reported, with SuccessfulRequestLatency flat at [x] ms]`.
 >
-> What this means: the AWS SDKs retry `ProvisionedThroughputExceededException`
-> automatically, so throttled calls usually succeed eventually — and the retry wait is
-> elapsed time your client experiences as latency. Because
-> `SuccessfulRequestLatency` measures only *successful* requests, the service-side curve
-> `[stayed flat at [x] ms | rose to [x] ms]` while the client-observed latency did not.
+> The AWS SDKs retry `ProvisionedThroughputExceededException` automatically, so throttled calls
+> usually succeed eventually — and the retry wait is elapsed time your client experiences as
+> latency. `SuccessfulRequestLatency` measures only *successful* requests, so it does not show
+> that time. `ThrottledRequests` increments once per request however many events inside it were
+> throttled, so `[n]` is a floor. `[If GSI: A GSI without enough write capacity throttles writes
+> to the base table — the throttling here is at the index.]`
 >
-> Note that `ThrottledRequests` increments once per request regardless of how many events
-> inside it were throttled, so `[n]` is a floor, not the full extent.
+> **Not established:** which ceiling was hit — table or index capacity, a partition, an account
+> limit, or an on-demand maximum. That diagnosis is outside this skill; see the handoff in
+> `CF-04`.
 >
-> Next: the fix is capacity or key distribution, not the request path. Establishing which
-> ceiling was hit — table provisioned capacity, a single partition's 1,000 WCU/s or
-> 3,000 RCU/s, an account limit, or an on-demand maximum — is read from the cause-specific
-> throttle metrics and is outside this skill. On the client side, confirm retries use
-> exponential backoff with jitter rather than a fixed interval.
+> **Next:** hand off to throttling diagnosis with the details in `CF-04`. On the client side,
+> check the SDK's existing retry configuration — the SDKs already retry throttling with
+> backoff by default — and confirm the application is not adding its own fixed-interval retries
+> on top.
 
-### LT-03 [High | Medium] · Systemic degradation
+### LT-03 [High | Medium] · Typical-latency elevation
 
-Fires when, for at least one operation, `Average` **or** p50 is above the sustained threshold
-(singleton) or passes the relative test (multi-item).
+Qualifies when, for at least one operation, the p50 pattern is `recurring` or `sustained`, or a
+p50 / `Average` SLO the user stated is breached in ≥ 3 assessable periods.
 
-Severity **High** when the operation is singleton and p50 ≥ 3× the threshold; otherwise
+Severity **High** when the pattern is `sustained`, the operation is singleton, and its p50 in
+the elevated periods is ≥ 3× the reference (or ≥ 30 ms without a reference); otherwise
 **Medium**.
 
-> **`LT-03` · Sustained latency elevation — `[operation]` on `[table]`**
+> **`LT-03` · Typical-latency elevation — `[operation]` on `[table]`**
 >
-> p50 `[x]` ms and `Average` `[y]` ms over `[m]` of `[total]` periods, against this skill's
-> threshold of `[threshold]` ms for `[operation class]` operations.
-> `[Multi-item form: p50 rose from [a] ms in the first third of the window to [b] ms in the
-> last third — [ratio]×.]`
+> **Observed:** `[operation]` p50 was elevated in `[m]` of `[assessable]` assessable periods
+> (`[recurring | sustained]`; `[longest run: [r] consecutive]`) — `[x]` ms against a reference
+> of `[ref]` ms (`[ratio]`×; reference: `[7-day baseline | absolute floor 10 ms | first third of
+> the window]`). `Average` over the elevated periods: `[y]` ms. `[If an SLO was given: p50
+> exceeded your [slo] ms objective in [k] periods.]`
 >
-> A persistent rise in `Average` or p50 — as distinct from a tail spike — is the documented
-> signal of genuine degradation rather than normal variance.
+> `[sustained: A persistent rise in Average or p50 — as distinct from a tail spike — is the
+> signal AWS documents as genuine degradation of DynamoDB processing time, rather than normal
+> variance.]` `[recurring: Typical latency rose repeatedly but not persistently — more than
+> normal variance, less than the persistent rise AWS documents as degradation.]`
 >
-> Contributing factors assessed: `[list the CF rule IDs that fired, or "none identified"]`.
+> **Not established:** *why* processing time rose. Documented possible factors include larger
+> items, larger result sets, and condition or filter expressions; these metrics do not show
+> which applies. `[Any contributing factor that fired, with its own evidence.]`
 >
-> Next: `[the remediation implied by the factors that fired, in the documented order]`. Also
-> check the Service Health Dashboard and Personal Health Dashboard for the window.
+> **Next:** check the Service Health Dashboard and Personal Health Dashboard for the window.
+> `[The measurement implied by the factors that fired.]` If nothing explains it and it
+> persists, open a support case with request IDs from the elevated periods.
 
-### LT-04 [Medium | Low] · Isolated tail spike
+### LT-04 [Medium | Low] · Tail elevation
 
-Fires when p99 or `Maximum` exceeds the tail threshold while `Average` and p50 stay within the
-sustained threshold.
+Qualifies when, for at least one operation, the p99 pattern is `isolated`, `recurring`, or
+`sustained`, or a p90 / p99 / `Maximum` SLO the user stated is breached, while that operation's
+p50 pattern is neither `recurring` nor `sustained`.
 
-Severity **Medium** when the elevated periods are ≥ 3 and non-consecutive but recurring;
-**Low** when fewer than 3.
+Severity:
 
-> **`LT-04` · Tail latency spikes, typical latency normal — `[operation]` on `[table]`**
->
-> p99 reached `[y]` ms in `[m]` of `[total]` periods (`[timestamps]`) while p50 held at
-> `[x]` ms and `Average` at `[z]` ms.
->
-> High p99 with normal p50 indicates sporadic slowness affecting a small share of requests,
-> not degradation of the workload. AWS documents that occasional spikes — particularly in
-> `Maximum` and the high percentiles — are expected, arising from DynamoDB background
-> operations that maintain availability and durability, or transient infrastructure
-> conditions.
->
-> `[If the user reports a slow first call: The "first call slow, later calls fast" pattern is
-> a client-side connection cost, not something this metric can show — see CF-01.]`
->
-> Next: this is only worth engineering effort if the tail matters to your SLO. If it does, the
-> documented lever is request hedging — issue a second equivalent request when the first has
-> not answered in time, and take the first response. For writes, use timestamp-based ordering
-> so the hedged request is treated as occurring at the first attempt's time. Do **not**
-> respond by lowering socket timeouts; see `references/dynamodb-facts.md`.
+| Condition | Severity |
+|---|---|
+| p99 pattern `recurring` or `sustained` | **Medium** |
+| user SLO breached in ≥ 3 assessable periods | **Medium**, whatever the pattern |
+| anything else that qualifies — p99 `isolated`, or an SLO breached in 1–2 periods | **Low** |
 
-### LT-05 [Info] · Nominal
-
-Fires when every operation with data is within threshold, and `SystemErrors` **and** the
-throttle metrics were **measured** at zero — status `ok`, not `NoData`.
-
-If any of those three was `NoData`, this rule must not fire: `LT-00` applies instead.
-
-> **`LT-05` · DynamoDB-internal latency is nominal — `[table]`**
+> **`LT-04` · Tail elevation — `[operation]` on `[table]`**
 >
-> | Operation | `SampleCount` | p50 | p99 | `Average` |
-> |---|---|---|---|---|
-> | `[op]` | `[n]` | `[x]` ms | `[y]` ms | `[z]` ms |
+> **Observed:** p99 reached `[y]` ms in `[m]` of `[assessable]` assessable periods
+> (`[pattern]`; `[timestamps or longest run]`), against a reference of `[ref]` ms
+> `[(reference: …)]`, while p50 held at `[x]` ms. `[Each elevated period had ≥ 100 requests.]`
+> `[If an SLO was given: p99 exceeded your [slo] ms objective in [k] periods.]`
 >
-> `SystemErrors` measured 0 and throttle events measured 0 across the window.
+> This is DynamoDB-side time: client activity and network time are excluded from this metric,
+> so nothing on the client — connection setup included — can produce it.
+> `[isolated: AWS documents occasional high-percentile spikes as expected, from background
+> operations that maintain availability and durability, or transient infrastructure conditions.
+> Two isolated periods fit that description.]`
+> `[recurring or sustained: This is more than the occasional spike AWS describes as normal — it
+> recurs, so it is worth acting on if this operation's tail matters to your application.]`
 >
-> **This does not mean the application is not slow.** `SuccessfulRequestLatency` measures
-> time internal to the DynamoDB service only — client-side activity and network trip times are
-> excluded — and it counts only successful requests. If your users are seeing latency, it is
-> in the client, the SDK, or the network path, and the next measurement belongs there: enable
-> latency metric logging in the AWS SDK, or use distributed tracing on the calling service,
-> then compare end-to-end time against these service-side numbers.
+> **Not established:** the cause of the tail. These metrics cannot see which requests were
+> slow or why.
+>
+> **Next:** `[isolated, no SLO breach: no action unless it breaks an objective.]`
+> `[recurring, sustained, or SLO breach: log request IDs for slow requests from these periods —
+> they are what a support case needs if this persists; and if the tail must be bounded in the
+> application, the documented lever is request hedging — see Recommended Actions for its
+> preconditions.]` Do **not** respond by lowering socket timeouts; see
+> `references/dynamodb-facts.md`.
+
+### LT-05 [Info] · No DynamoDB-side elevation
+
+The catch-all: fires when `LT-00` did not fire and none of `LT-01` … `LT-04` qualified.
+
+That covers profiles with sub-threshold observations — an `isolated` p50 period, an error or
+throttle counter `recorded` but not causal, an operation that was not assessable. Each of those
+appears under **Also observed** or its `CF` rule; none is dropped, and none changes the outcome.
+
+> **`LT-05` · No DynamoDB-side latency elevation — `[table]`**
+>
+> | Operation | `SampleCount` | p50 | p99 | `Average` | Reference p50 / p99 |
+> |---|---|---|---|---|---|
+> | `[op]` | `[n]` | `[x]` ms | `[y]` ms | `[z]` ms | `[a]` / `[b]` ms |
+>
+> **Observed:** no assessable operation showed a recurring or sustained p50 elevation or any
+> p99 elevation against its reference. `[No SystemErrors and no throttle events were recorded
+> for active operations in the window. | Error or throttle events were recorded but did not meet
+> the bar for a cause — see Also observed.]` `[If any operation was not assessable: [op] had too
+> few requests to assess — see CF-08.]`
+>
+> **Not established:** where your users' latency is going. `SuccessfulRequestLatency` measures
+> time inside DynamoDB only — client activity and network time are excluded — and counts only
+> successful requests. A normal value here rules out DynamoDB processing time; it does not
+> identify the client, the SDK, or the network as the cause. That needs a measurement taken on
+> the client side.
+>
+> **Next:** `[If the user reports slowness: see CF-01.]`
+
+## Also observed
+
+Render under the primary outcome, one line each, most significant first:
+
+- every other `LT-01` … `LT-04` condition that qualified, with its own evidence — e.g.
+  "Also qualifies as `LT-02` Throttle-induced: `WriteThrottleEvents` coincide in 4 periods"
+- `CF-05` when `SystemErrors` were recorded but did not qualify for `LT-01`
+- throttle counters recorded but not qualifying for `LT-02` (their evidence is in `CF-04`)
+- p99 elevation on an operation whose p50 drove `LT-03`
+- an `isolated` p50 elevation (1–2 periods) that did not qualify for `LT-03`
+- any SLO breach not already in the primary outcome
+- any operation not assessable (detail in `CF-08`)
+
+If nothing else was observed, write "No other signal was observed."
 
 ## Contributing factors
 
-Report each one that fires, under the primary classification. Several may fire together.
+Report each one that fires, under the primary outcome. Several may fire together.
 
-### CF-01 [Medium] · Client-side residual — connection cost is the leading hypothesis
+### CF-01 [Medium] · Not explained by DynamoDB-side metrics
 
-Fires when the service-side profile is nominal or only tail-elevated **and** the user reports
-slowness, a slow first call, slowness after idle, or timeouts.
+Fires when the user reports slowness, timeouts, a slow first call, or slowness after idle,
+**and** the primary outcome is `LT-05`, or `LT-04` with an `isolated` pattern — i.e. the
+DynamoDB-side signals do not account for what the user describes.
 
-> **`CF-01` · The unexplained time is client-side**
+> **`CF-01` · What you are seeing is not explained by DynamoDB-side metrics**
 >
-> Service-side latency for `[operation]` is `[x]` ms p50 / `[y]` ms p99, which is
-> `[within this skill's threshold]`. The gap between that and what you are observing is not
-> measurable from this metric.
+> **Observed:** `[operation]` service-side latency was `[x]` ms p50 / `[y]` ms p99, with no
+> recurring or sustained elevation. `[No throttling or service errors were recorded. | Throttle
+> or error events were recorded but do not coincide with what you describe — see Also
+> observed.]` You reported `[symptom]` `[at time]`.
 >
-> The documented first cause of a slow first request is connection establishment: DynamoDB
-> requests run over an authenticated HTTPS session, and initiating one takes multiple round
-> trips, so the first request is slower than those reusing the connection. The documented
-> remedy is a keep-alive — send a `GetItem` every 30 seconds when the application is
-> otherwise idle — plus SDK connection-pool reuse across calls.
+> **Not established:** the cause. The time you are seeing is outside what
+> `SuccessfulRequestLatency` measures, so it is not visible here. Candidate places it can be,
+> none of which these metrics can confirm or rule out:
+> - SDK retries of failed attempts, and the client's timeout and retry configuration
+> - connection setup — `[If first-call-after-idle was reported: a slow first request followed
+>   by fast ones is consistent with connection setup cost; whether that applies depends on the
+>   SDK's connection-reuse default, which you can check in references/dynamodb-facts.md.]`
+> - the network path — DNS resolution, VPC endpoint or NAT routing, cross-Region distance
+> - the client process itself — CPU, thread or connection-pool exhaustion, garbage collection
 >
-> I am presenting this as the leading hypothesis, not a measured finding: confirming it needs
-> client-side timing. Enable SDK latency metric logging, or trace one slow request end to end,
-> and compare the total against the `[x]` ms service-side figure above.
+> **Next:** measure the client. Enable latency metric logging in the AWS SDK, or trace one
+> slow request end to end in your application telemetry, and compare its total against the
+> `[x]` ms service-side figure. If DNS or VPC endpoint behaviour is suspected, hand off to the
+> `aws-vpc-dns-investigation` skill.
 
-### CF-02 [Low | Medium] · Item size as a latency factor
+### CF-02 [Info] · Mean item size — background context
 
-Fires when mean item size ≥ 50 KB and status is `ok`. Severity **Medium** at ≥ 100 KB.
+Fires only alongside `LT-03`, when `mean_item_size_bytes.status` is `ok` and the mean is
+≥ 50 KB. Never carries a severity above Info.
 
-Does **not** fire when `mean_item_size_bytes.status` is `stale` — say it could not be evaluated
-instead.
+Does **not** fire when the status is `stale` — say mean item size could not be determined.
 
-> **`CF-02` · Mean item size is a plausible contributor**
+> **`CF-02` · Mean item size — context only**
 >
-> `TableSizeBytes / ItemCount` gives a mean of `[n]` KB per item, from table metadata that
-> refreshes roughly every six hours, so treat it as approximate.
+> **Observed:** `TableSizeBytes / ItemCount` gives a table-wide mean of `[n]` KB per item, from
+> metadata that refreshes roughly every six hours.
 >
-> Item size affects latency — AWS documents that a 1 KB item and a 400 KB item differ — and
-> larger items also reduce items per page, so a paginated read does more round trips for the
-> same result set.
->
-> This is a distribution question and I have only the mean: a small number of very large items
-> can drive a tail while the mean looks unremarkable. Measuring the distribution requires
-> reading items, which this skill does not do.
+> **Not established:** that item size explains the elevation. Item size is a documented
+> latency factor, but this is a static, table-wide mean: it cannot explain a *change* in
+> latency, and it says nothing about the items the slow requests touched.
 
-### CF-03 [Medium] · Multi-item operation dominates the latency
+### CF-03 [Info | Low] · Multi-item operation — result-set evidence
 
-Fires when the elevated operation is `Query`, `Scan`, `Batch*`, or `Transact*`.
+Fires when an operation that qualified for `LT-03` or `LT-04` is `Query`, `Scan`, `Batch*`, or
+`Transact*`.
+
+When `ReturnedItemCount` was collected (`Query`, `Scan`), compare average items returned per
+request in the elevated periods with the baseline value. **Low** when it rose ≥ 1.5×;
+otherwise **Info**.
 
 > **`CF-03` · The elevated operation is multi-item — `[operation]`**
 >
-> `[operation]` p50 `[x]` ms against `[singleton op]` p50 `[y]` ms in the same window.
+> **Observed:** `[ReturnedItemCount: items returned per request averaged [b] in the elevated
+> periods against [a] in the baseline ([ratio]×) | did not change materially ([a] → [b]) | was
+> not collected for this operation.]`
 >
 > Multi-item latency varies with the size of the result set, the complexity of the structures
-> returned, and any condition or filter expressions applied — so an absolute comparison with a
-> single-item operation says nothing. What the numbers here support is that the time scales
-> with how much work each call does.
+> returned, and any condition or filter expressions applied.
 >
-> Request-shape levers, which are client-side and safe to change: bound the page with `Limit`,
-> narrow `ProjectionExpression` to the attributes actually used, and avoid filter expressions
-> that read many items to return few — a filter is applied *after* the read, so the discarded
-> items were already paid for in both latency and capacity.
+> **Not established:** `[If it rose: that the larger result sets caused the elevation — they
+> coincide with it, which makes them the leading candidate. | If unchanged: result-set growth
+> does not explain this; the returned count is flat. Note that ReturnedItemCount counts items
+> returned, not items evaluated, so a filter that discards more items would not show here.]`
 >
-> Whether the access pattern needs a different key schema or a new index is a data-model
-> question, and outside this skill.
+> Request-shape levers — client-side, and specific to the operation:
+> - `Query` / `Scan`: bound the page with `Limit`, narrow `ProjectionExpression` to the
+>   attributes actually used, and avoid filter expressions that read many items to return few —
+>   a filter is applied *after* the read, so discarded items were already paid for in both
+>   latency and capacity.
+> - `BatchGetItem`: narrow `ProjectionExpression`; fewer keys per call returns less per call.
+> - `BatchWriteItem`, `TransactWriteItems`, `TransactGetItems`: the levers are fewer items per
+>   call and smaller items. For transactions, AWS recommends not grouping operations that do not
+>   need to be atomic — simpler transactions are more likely to succeed — and each transactional
+>   item costs two underlying reads or writes.
+>
+> Whether the access pattern needs a different key schema or index is a data-model question,
+> and outside this skill.
 
-### CF-04 [Medium] · On-demand ramp risk
+### CF-04 [Info] · Throttling handoff
 
-Fires when `BillingMode` is `PAY_PER_REQUEST` **and** `LT-02` fired **and** either the table is
-younger than 7 days or consumed capacity in the window more than doubled within any 30-minute
-span.
+Fires whenever any throttle counter is `recorded` — whether or not `LT-02` is the primary
+outcome. It carries the evidence; it does **not** diagnose the ceiling or size capacity.
 
-> **`CF-04` · On-demand ramp is a plausible source of the throttling**
+> **`CF-04` · Throttling detected — handoff for diagnosis**
 >
-> The table is on-demand `[and was created [created], [age] days ago | and consumed capacity
-> rose from [a] to [b] within [n] minutes]`.
+> | Field | Value |
+> |---|---|
+> | Table | `[table]` (`[billing mode]`, created `[created]`) |
+> | Throttled scope | `[base table | GSI [name]]` |
+> | Operation(s) | `[operations with ThrottledRequests recorded]` |
+> | Counters | `[ThrottledRequests n · ReadThrottleEvents n · WriteThrottleEvents n]` |
+> | Non-zero periods | `[first_ts] → [last_ts]`, `[m]` periods |
+> | Coincides with latency | `[yes, [c] periods | no]` |
+> | Capacity in those periods | `[peak consumed [x] units/s vs provisioned [y] units/s ([pct]%) — or on-demand: peak consumed [x] units/s]` |
 >
-> On-demand tables instantly accommodate up to **double the previous peak**; exceeding double
-> the previous peak within 30 minutes can throttle. A new on-demand table starts able to
-> sustain about 4,000 writes and 12,000 reads per second.
+> Convert consumed capacity to a rate before comparing: CloudWatch `Sum` for a period divided by
+> the period length in seconds gives units per second, which is what provisioned capacity is
+> expressed in.
 >
-> The documented preparation is pre-warming — raising the table's warm throughput ahead of a
-> known surge. Pre-warming prepares the table's internal partitioning rather than provisioning
-> capacity in advance. Sizing that change is a capacity decision and outside this skill.
+> Which ceiling was hit — table or index capacity, a single partition, an account limit, or an
+> on-demand maximum — is read from the cause-specific throttle metrics and the throttling
+> exception's reason, and is outside this skill. Use your Agent Space's throttling or quota
+> diagnostic if it has one, with the details above.
 
-### CF-05 [Medium] · Provisioned capacity at its ceiling
+### CF-05 [Info | Low] · Service errors recorded, not established as cause
 
-Fires when `BillingMode` is `PROVISIONED`, `LT-02` fired, and consumed capacity in the
-throttled periods is ≥ 80% of provisioned.
+Fires when `SystemErrors` were `recorded` for any operation but `LT-01` did not qualify — not
+persistent, not coinciding with elevation, or entirely FIS-induced. **Low** when organic errors
+are non-zero in ≥ 2 periods; otherwise **Info**.
 
-> **`CF-05` · Consumed capacity is at the provisioned ceiling**
+> **`CF-05` · `SystemErrors` recorded — not established as the cause**
 >
-> In the throttled periods, consumed `[read|write]` capacity averaged `[x]` against
-> `[y]` provisioned (`[pct]`%).
+> **Observed:** `[n]` `SystemErrors` on `[operation]` in `[m]` periods (`[timestamps]`).
+> `[Of these, [k] were FIS-induced (FaultInjectionServiceInducedErrors) — an experiment was
+> running. | None were FIS-induced.]`
 >
-> Burst capacity retains up to five minutes of unused capacity, but it is best-effort, is not
-> guaranteed, may be consumed by DynamoDB background tasks, and cannot relieve partition-level
-> throttling — so it does not close a sustained gap.
+> **Not established:** that they caused the latency — `[they do not coincide with any elevated
+> period | they are not persistent | they are all experiment-induced]`. Occasional HTTP 500s are
+> expected in a distributed system and are retried by the SDKs.
 >
-> Sizing capacity is outside this skill. What belongs here: until the capacity gap closes, the
-> latency your client sees is retry time, and the client-side mitigation is exponential backoff
-> with jitter.
+> **Next:** `[If organic: keep the request IDs of any failed requests; if errors recur or
+> persist, they are worth a support case.]`
 
 ### CF-06 [Info] · Read-after-write reported — this is consistency, not latency
 
@@ -320,35 +504,38 @@ Fires when the user reports reads that miss a just-written item, or "stale reads
 > can be served from an availability zone co-located with the requester, which is why AWS lists
 > them as a latency *reduction* strategy.
 >
-> So this is a correctness/latency trade, not a fix. Choose it per read path, not globally.
+> So this is a freshness/latency trade, not a fix. Choose it per read path, not globally.
 
 ### CF-07 [Low] · Client-to-endpoint distance
 
-Fires only when the user states where the client runs and it is a different region from the
+Fires only when the user states where the client runs and it is a different Region from the
 table, or when `Replicas[]` is empty and the user describes globally distributed users.
 
-> **`CF-07` · Client and table are in different regions**
+> **`CF-07` · Client and table are in different Regions**
 >
-> You described the client running in `[client region]` while the table is in
-> `[table region]`. Cross-region network time is not in `SuccessfulRequestLatency` at all, so
-> none of the service-side numbers above account for it.
+> **Observed:** you described the client running in `[client region]`; the table is in
+> `[table region]`.
+>
+> **Not established:** how much time that adds — cross-Region network time is not in
+> `SuccessfulRequestLatency` at all. Client-side timing would show it.
 >
 > The documented lever is reducing the distance: Global Tables replicate to Regions you choose,
-> placing a copy closer to users. Note the trade-off — replication is asynchronous, and a
-> replica serves eventually consistent reads.
+> placing a copy closer to users. Replication is asynchronous, and a replica serves eventually
+> consistent reads.
 
-### CF-08 [Info] · Metric coverage shorter than the window
+### CF-08 [Info] · Partial coverage or low volume
 
-Fires when any operation's `coverage_ratio < 0.9` while `LT-00` did not fire.
+Fires when any operation's `coverage_ratio < 0.9`, or any operation has low-volume periods
+excluded by the `SampleCount` floor, while `LT-00` did not fire.
 
-> **`CF-08` · Partial metric coverage — `[operation]`**
+> **`CF-08` · Partial coverage — `[operation]`**
 >
-> Datapoints span `[coverage_minutes]` minutes of the `[window]`-minute window
-> (`[coverage_ratio]`). `[Reason if known: the table was created [created] | the operation was
-> not called for part of the window.]`
+> **Observed:** `[datapoints span [coverage_minutes] of [window] minutes ([coverage_ratio]) |
+> [k] of [total] periods had too few requests to read p99 (fewer than 100) / p50 (fewer than
+> 10) and were excluded]`. `[Reason if known: the table was created [created] | the operation
+> was not called for part of the window.]`
 >
-> The findings above rest on the covered span only. A comparison across the full window would
-> need `[what]`.
+> The findings above rest on the covered, assessable periods only.
 
 ### CF-09 [Info] · Asked but not measurable
 
@@ -359,10 +546,10 @@ answering anyway.
 >
 > `[The specific reason.]` Examples that come up in this analysis:
 > per-index latency — `SuccessfulRequestLatency` has `TableName`, `Operation`, and
-> `StreamLabel` dimensions and no index dimension, so latency cannot be attributed to a GSI or
-> LSI; the share of reads using strong consistency — no metric distinguishes consistent from
-> eventually consistent reads; and which partition key is hot — that needs Contributor Insights
-> traffic analysis, which is outside this skill.
+> `StreamLabel` dimensions and no index dimension; the share of reads using strong consistency
+> — no metric distinguishes consistent from eventually consistent reads; which partition key is
+> hot — that needs Contributor Insights traffic analysis, which is outside this skill; and
+> per-table client errors — `UserErrors` is aggregated across the account and Region.
 >
 > What would answer it: `[the specific measurement]`.
 
@@ -385,10 +572,16 @@ Before rendering, check these pairs. Each has produced a self-contradicting repo
 
 | If … | then … |
 |---|---|
-| `LT-05` fired | no `CF` rule may describe DynamoDB-side degradation, and the report must state what the metric excludes |
-| `LT-02` fired | the report must not attribute the latency to the request path, and must name the `elevated_periods` ∩ `nonzero_periods` overlap |
-| `LT-04` fired | the report must not use the word "degradation" for the tail, and must not recommend lowering timeouts |
-| `CF-01` fired | the report must not state cold start as a measured finding |
-| `CF-06` fired | the report must not present strongly consistent reads as a latency improvement |
-| Any metric is `NoData` | the corresponding conclusion is absent from the report, not asserted as zero |
+| `LT-05` fired | no text states or implies the client, SDK, or network *is* the cause — only that DynamoDB processing time was not elevated |
+| `CF-01` fired | the report names a client-side measurement as the next step, and presents every candidate as unconfirmed |
+| `LT-04` fired | no client-side mechanism (cold start, connection setup, idle connection) is offered as the cause of the tail, no timeout reduction is recommended, and `isolated` is not called degradation |
+| `LT-01` fired | the coinciding periods or the reported-slowness overlap are named; FIS errors are excluded from the count |
+| `SystemErrors` recorded and `LT-01` did not fire | `CF-05` appears; the errors are not described as the cause |
+| `LT-02` fired | the report does not attribute the latency to the request path, names the coinciding periods or the overlap, and includes `CF-04` |
+| Any throttle counter recorded | `CF-04` appears, even when `LT-02` is not primary |
+| More than one `LT` condition qualified | all but the primary appear under **Also observed** |
+| A counter is `NoData` | no conclusion that depends on it is asserted, and it is not written as "0" or "none recorded" |
+| A counter is `none_recorded` | it is written as "no … recorded", never "measured 0" |
+| `CF-06` fired | strongly consistent reads are not presented as a latency improvement |
 | Mean item size is `stale` | `CF-02` did not fire, and mean item size is reported as not determinable |
+| `UserErrors` appears anywhere | it is labelled account-wide, not attributed to the table |

@@ -16,6 +16,9 @@ Never ask the user for credentials, access keys, or a profile name.
 | `region` | the agent's default region; state which one you used |
 | `window` | 3 hours for an active incident, 14 days for a review or trend question |
 | `period_seconds` | 60 for windows ≤ 6 hours, 300 for longer windows |
+| `baseline` | the **7 days immediately before** the window start, per operation |
+| `slo` | optional — a latency objective the user states, e.g. "p99 under 25 ms for GetItem" |
+| `reported_window` | optional — when the user says their client saw slowness, if different from the analysis window |
 
 `SuccessfulRequestLatency` aggregates at one-minute granularity, so a 60-second period is the
 finest useful resolution. Do not request a period below 60.
@@ -34,11 +37,11 @@ Record, and carry into the report:
 | Field | From | Used for |
 |---|---|---|
 | `TableStatus` | `Table.TableStatus` | abort unless `ACTIVE` or `UPDATING` |
-| `CreationDateTime` | `Table.CreationDateTime` | data-sufficiency guard, on-demand ramp check |
+| `CreationDateTime` | `Table.CreationDateTime` | coverage guard, baseline span |
 | `BillingModeSummary.BillingMode` | `Table` | whether provisioned metrics apply |
-| `ProvisionedThroughput` | `Table` | capacity context for throttling |
+| `ProvisionedThroughput` | `Table` | capacity context for the throttling handoff |
 | `ItemCount`, `TableSizeBytes` | `Table` | mean item size — **see the staleness rule below** |
-| `GlobalSecondaryIndexes[].IndexName` | `Table` | to state plainly that per-index latency is not measurable |
+| `GlobalSecondaryIndexes[].IndexName` | `Table` | GSI throttle queries in Step 3; stating that per-index latency is not measurable |
 | `Replicas[]` | `Table` | whether Global Tables already place data closer to callers |
 
 **`ItemCount` and `TableSizeBytes` refresh only about every six hours.** Treat a mean item
@@ -49,71 +52,151 @@ computing `0`. Never report `0 KB` mean item size.
 If `DescribeTable` returns `ResourceNotFoundException`, abort: "Table `<name>` does not exist
 in `<region>`, or the role cannot describe it." Do not probe other regions.
 
-### Step 2 — Latency, per operation
+### Step 2 — Latency per operation: window and baseline
 
-One `cloudwatch:GetMetricData` request, namespace `AWS/DynamoDB`, metric
-`SuccessfulRequestLatency`, dimensions `TableName=<table>` **and** `Operation=<op>`, for every
-operation the workload uses. Request these statistics for each operation:
+All queries in this step: namespace `AWS/DynamoDB`, metric `SuccessfulRequestLatency`,
+dimensions `TableName=<table>` **and** `Operation=<op>`.
 
-`Average`, `p50`, `p90`, `p99`, `Maximum`, `SampleCount`
-
-Operations to query — omit none, and record which returned `NoData`:
+Operations to query — omit none, and record which returned no datapoints:
 
 | Class | Operations |
 |---|---|
 | Singleton | `GetItem`, `PutItem`, `UpdateItem`, `DeleteItem` |
-| Multi-item | `Query`, `Scan`, `BatchGetItem`, `BatchWriteItem`, `TransactGetItems`, `TransactWriteItems` |
+| Multi-item | `Query`, `Scan`, `BatchGetItem`, `BatchWriteItem` |
+| Transactional | `TransactGetItems`, `TransactWriteItems` |
 
-An operation with no datapoints means the workload did not call it in the window. That is
-information, not an error: record `NoData`, and do not include the operation in the profile
-table beyond noting it was not exercised.
+**2a — Window series.** For every operation, over the window at `period_seconds`:
+`Average`, `p50`, `p90`, `p99`, `Maximum`, `SampleCount`.
+
+**2b — Baseline.** For every operation that has window datapoints, one query per statistic
+over the 7 days ending at the window start, with **`Period` = 604800** so CloudWatch returns a
+single datapoint computed over every request in that span: `p50`, `p99`, `SampleCount`.
+
+Do not compute a baseline by averaging or taking the median of datapoints yourself — that is
+error-prone in context and statistically wrong for percentiles. Let CloudWatch compute it.
+
+The baseline is **usable** when its `SampleCount` is ≥ 1,000. Otherwise record
+`baseline.status = "insufficient"` and say why (table younger than the baseline span, the
+operation was rarely called, or no datapoints). A baseline that includes an earlier incident
+is still a baseline; if the user mentions one in that week, say the baseline may be inflated.
+
+**2c — In-window fallback reference.** Only for a multi-item or transactional operation whose
+baseline is `insufficient`: query `p50`, `p99`, and `SampleCount` over the window with `Period`
+= one third of the window, rounded down to a multiple of 60 seconds. The first datapoint is the
+fallback reference. `references/finding-logic.md` caps its confidence at Low, because a problem
+that began before the window contaminates it.
+
+An operation with no window datapoints was not called in the window. That is information, not
+an error: record `NoData` and list it as not exercised.
 
 **Do not fall back to the table-wide `SuccessfulRequestLatency`** (no `Operation` dimension)
 as the basis for classification. It blends operation classes whose documented expectations
-differ by an order of magnitude. Collect it only if you want a single trend line for the
-report header, and label it as blended.
+differ by an order of magnitude.
 
 ### Step 3 — Errors and throttles
 
-One `cloudwatch:GetMetricData` request, namespace `AWS/DynamoDB`, dimension
-`TableName=<table>`, statistic `Sum`, same window and period:
+Same window and period, statistic `Sum`. **Mind the dimensions — querying a metric on a
+dimension set DynamoDB does not publish returns an empty series that looks exactly like "no
+errors".**
 
-`SystemErrors`, `UserErrors`, `ThrottledRequests`, `ReadThrottleEvents`, `WriteThrottleEvents`
+| Metric | Dimensions | Query |
+|---|---|---|
+| `SystemErrors` | `TableName` + `Operation` | **every** operation in the Step 2 list — including ones with no latency datapoints, because an operation whose every request failed has no successful latency at all. **Never on `TableName` alone** — DynamoDB does not publish it there |
+| `FaultInjectionServiceInducedErrors` | `TableName` + `Operation` | every operation for which `SystemErrors` is recorded |
+| `ThrottledRequests` | `TableName` + `Operation` | **every** operation in the Step 2 list — a fully throttled operation also has no successful latency |
+| `ReadThrottleEvents`, `WriteThrottleEvents` | `TableName` | table level — excludes GSIs |
+| `ReadThrottleEvents`, `WriteThrottleEvents` | `TableName` + `GlobalSecondaryIndexName` | once per GSI from Step 1 |
 
-For each, record the total, the per-period series, and the **timestamps of non-zero periods** —
-the overlap between those timestamps and the latency rise is what `LT-02` tests. A total alone
-cannot establish coincidence.
+For each series record the total, the per-period values, and the **timestamps of non-zero
+periods** — the overlap between those timestamps and the latency rise is what `LT-01` and
+`LT-02` test. A total alone cannot establish coincidence.
+
+`UserErrors` is **not a table metric** — it aggregates HTTP 400s for the whole account and
+Region. Do not collect it as evidence about this table. If you report it at all, label it
+"account-wide, all tables".
 
 ### Step 4 — Capacity context
 
-One `cloudwatch:GetMetricData` request, statistic `Sum` for consumed, `Average` for
-provisioned:
+One request, same window and period, statistic `Sum` for consumed, `Average` for provisioned:
 
-`ConsumedReadCapacityUnits`, `ConsumedWriteCapacityUnits`
+`ConsumedReadCapacityUnits`, `ConsumedWriteCapacityUnits` (dimension `TableName`)
 
 and, only when `BillingMode` is `PROVISIONED`:
 
 `ProvisionedReadCapacityUnits`, `ProvisionedWriteCapacityUnits`
 
-On a `PAY_PER_REQUEST` table the provisioned metrics do not exist. Their absence is expected —
-record `NotApplicable`, never `NoData`, and never present it as a gap.
+If Step 3 recorded GSI throttling, add the same consumed (and, if provisioned, provisioned)
+metrics for that index with `TableName` + `GlobalSecondaryIndexName`.
 
-## Computing `metric_coverage_minutes` — do not skip this
+Keep the **per-period** consumed series, not just the total: the throttling handoff (`CF-04`)
+reports capacity in the throttled periods. Convert a period's `Sum` to units per second by
+dividing by `period_seconds` before comparing it with provisioned capacity, which is already a
+per-second rate.
 
-For each metric, the coverage is the span between its first and last datapoint, **not** the
-window you requested. Compute it, and compare it with the window:
+On a `PAY_PER_REQUEST` table the provisioned metrics do not exist. Record `NotApplicable`,
+never `NoData`, and never present it as a gap.
+
+### Step 5 — Result-set size (multi-item operations only)
+
+For every `Query` and `Scan` with window datapoints: `ReturnedItemCount`, dimensions
+`TableName` + `Operation`, statistic `Average` (items returned per request) — at
+`period_seconds` over the window, and as one `Period` = 604800 datapoint over the baseline
+span.
+
+`ReturnedItemCount` counts items *returned*, not items *evaluated*: a `Scan` whose filter
+discards most of what it reads looks small here. Treat it as supporting evidence only.
+
+## Statuses — compute these before applying any rule
+
+### Event counters: `recorded`, `none_recorded`, or unknown
+
+`SystemErrors`, `FaultInjectionServiceInducedErrors`, `ThrottledRequests`, and the throttle-event
+metrics publish datapoints **only when an event occurs** (see
+[`dynamodb-facts.md`](dynamodb-facts.md)). An empty series is the normal shape of a healthy
+table — but only if you can show the table was active and the query was correct. Assign:
+
+| Status | Condition |
+|---|---|
+| `recorded` | the series has datapoints; carry the total and the non-zero period timestamps |
+| `none_recorded` | the call succeeded, used the dimensions in the Step 3 table, returned no datapoints, **and** `SuccessfulRequestLatency` for the same operation (for table- or index-level throttle events: for any operation) has datapoints in the window. Treat as zero events |
+| `not_exercised` | the call succeeded and returned nothing for an operation that also has no `SuccessfulRequestLatency` datapoints — the operation was not called. Not relevant to the classification, and does **not** block `LT-05` |
+| `NoData` | the call succeeded and returned nothing, but activity cannot be confirmed for a counter the classification depends on — e.g. a table-level throttle counter when no operation has latency datapoints. Unknown, not zero |
+| `AccessDenied` / `ToolingFailure` | see Error classification |
+
+Say "no `SystemErrors` recorded", never "`SystemErrors` measured 0".
+
+### Per-period assessability (the `SampleCount` floor)
+
+A percentile over a handful of requests is noise. For each operation and period:
+
+- the period is **p99-assessable** when `SampleCount` ≥ 100
+- the period is **p50-assessable** when `SampleCount` ≥ 10
+
+Periods below the floor are counted as **low volume** and excluded from elevation tests. An
+operation whose assessable periods are fewer than 10, or fewer than half its periods with
+data, is **not assessable** for that statistic — say so; do not classify it.
+
+### Coverage
+
+For each operation, the coverage is the span between its first and last datapoint, **not** the
+window you requested:
 
 ```
 coverage_minutes = (last_datapoint_ts - first_datapoint_ts) in minutes
 coverage_ratio   = coverage_minutes / window_minutes
 ```
 
-Two guards depend on it:
+- `coverage_ratio < 0.5` for every operation with data → `LT-00` indeterminate unless the
+  shortfall is explained by table age.
+- A table younger than the window cannot have full coverage. State the table age and the
+  actual coverage. Never describe a young table's short series as a regression.
 
-- `coverage_ratio < 0.5` for `SuccessfulRequestLatency` → the classification is `LT-00`
-  indeterminate unless the shortfall is explained by table age.
-- A table younger than the window cannot have full coverage. State the table age and say what
-  the coverage actually was. Never describe a young table's short series as a regression.
+### Elevated periods
+
+`references/finding-logic.md` defines when a period counts as **p50-elevated** or
+**p99-elevated** for each operation class, with and without a usable baseline. Compute both
+lists per operation, from assessable periods only, and carry them in the output object. Every
+correlation rule intersects these lists with the non-zero period lists from Step 3.
 
 ## Error classification
 
@@ -123,15 +206,10 @@ Classify every failed call into exactly one bucket, and carry the bucket into th
 |---|---|---|
 | `AccessDenied` | `AccessDeniedException`, `UnauthorizedOperation`, or an explicit IAM denial | present the permissions audit and wait |
 | `NotFound` | `ResourceNotFoundException` on `DescribeTable` | abort with the not-found message |
-| `NoData` | the call succeeded and returned an empty series | a measurable absence — record it, never coerce to `0` |
+| `NoData` | the call succeeded, returned an empty series, and the empty series cannot be read as `none_recorded` | a measurable absence — record it, never coerce to `0` |
 | `NotApplicable` | the metric cannot exist for this configuration | expected, not a gap |
 | `Throttled` | `ThrottlingException` from CloudWatch or DynamoDB | retry once with backoff, then treat as `ToolingFailure` |
 | `ToolingFailure` | anything else — malformed response, timeout, tool error | present the tooling notice and wait |
-
-`NoData` and `NotApplicable` are the two buckets most often mishandled. `NoData` on
-`SystemErrors` does **not** mean zero errors; it means the metric published nothing, and a
-service-side cause cannot be ruled out. `NotApplicable` on `ProvisionedReadCapacityUnits` for
-an on-demand table is simply the shape of the configuration.
 
 ## Pre-flight prompts
 
@@ -186,8 +264,6 @@ Phase A produces one object per table. Every leaf carries a `status`.
     "billing_mode": "PROVISIONED",
     "created": "2025-03-04T11:02:00Z",
     "age_days": 560,
-    "item_count": 4820113,
-    "table_size_bytes": 39122334455,
     "mean_item_size_bytes": {"value": 8116, "status": "ok"},
     "gsi_names": ["orders-by-status"],
     "replica_regions": [],
@@ -199,46 +275,60 @@ Phase A produces one object per table. Every leaf carries a `status`.
     "minutes": 180,
     "period_seconds": 60
   },
+  "baseline_span": {"start": "2026-09-12T09:00:00Z", "end": "2026-09-19T09:00:00Z"},
+  "user_context": {"slo": null, "reported_window": null, "reported_symptom": "p99 alarm fired twice"},
   "latency_by_operation": {
     "GetItem": {
+      "class": "singleton",
       "sample_count": 1841233,
-      "average_ms": 4.1,
-      "p50_ms": 3.6,
-      "p90_ms": 7.2,
-      "p99_ms": 68.4,
-      "maximum_ms": 412.0,
-      "elevated_periods": ["2026-09-19T10:14:00Z", "2026-09-19T11:31:00Z"],
+      "average_ms": 4.1, "p50_ms": 3.6, "p90_ms": 7.2, "p99_ms": 68.4, "maximum_ms": 412.0,
+      "assessable_periods": {"p50": 180, "p99": 180, "low_volume": 0},
+      "baseline": {"p50_ms": 3.4, "p99_ms": 14.9, "sample_count": 98213004, "status": "ok"},
+      "p50_elevated_periods": [],
+      "p99_elevated_periods": ["2026-09-19T10:14:00Z", "2026-09-19T11:31:00Z"],
+      "p50_pattern": "none",
+      "p99_pattern": "isolated",
       "coverage_minutes": 180,
       "coverage_ratio": 1.0,
       "status": "ok"
     },
     "Scan": {"status": "NoData"}
   },
-  "errors": {
-    "system_errors": {"total": 0, "nonzero_periods": [], "status": "ok"},
-    "user_errors": {"total": 14, "nonzero_periods": ["..."], "status": "ok"}
+  "errors_by_operation": {
+    "GetItem": {
+      "system_errors": {"status": "none_recorded"},
+      "fis_errors": {"status": "none_recorded"}
+    }
   },
   "throttles": {
-    "throttled_requests": {"total": 0, "nonzero_periods": [], "status": "ok"},
-    "read_throttle_events": {"total": 0, "nonzero_periods": [], "status": "ok"},
-    "write_throttle_events": {"total": 0, "nonzero_periods": [], "status": "ok"}
+    "throttled_requests_by_operation": {"GetItem": {"status": "none_recorded"}},
+    "table_read_throttle_events": {"status": "none_recorded"},
+    "table_write_throttle_events": {"status": "none_recorded"},
+    "gsi": {
+      "orders-by-status": {
+        "read_throttle_events": {"status": "none_recorded"},
+        "write_throttle_events": {"status": "none_recorded"}
+      }
+    }
   },
   "capacity": {
-    "consumed_read": {"total": 812334, "status": "ok"},
-    "consumed_write": {"total": 91233, "status": "ok"},
+    "consumed_read": {"total": 812334, "peak_units_per_second": 214.0, "series": "per period", "status": "ok"},
+    "consumed_write": {"total": 91233, "peak_units_per_second": 31.5, "series": "per period", "status": "ok"},
     "provisioned_read": {"average": 1200, "status": "ok"},
     "provisioned_write": {"average": 400, "status": "ok"}
-  }
+  },
+  "returned_item_count": {}
 }
 ```
 
+A `recorded` counter carries `{"total": n, "nonzero_periods": [...], "status": "recorded"}`.
+
 Rules on the schema:
 
-- A `status` of `NoData` means the field's numeric value is **absent**, not zero. Do not
-  populate `total: 0` alongside `status: "NoData"`.
-- `elevated_periods` is the list of period timestamps whose p99 exceeded the operation's
-  threshold. `LT-02` intersects this list with `nonzero_periods` from the throttle metrics;
-  without both lists the coincidence cannot be established and the rule must not fire.
+- `NoData`, `none_recorded`, and `not_exercised` carry **no** numeric value. Never write
+  `total: 0` beside any of them.
+- `p50_pattern` / `p99_pattern` take one of `none`, `isolated`, `recurring`, `sustained`, or
+  `not_assessable`, as defined in `references/finding-logic.md`.
 - `mean_item_size_bytes.status` is `stale` when `ItemCount` or `TableSizeBytes` is `0` while
   consumed write capacity is non-zero in the window.
 
@@ -258,21 +348,22 @@ Explicitly **not** in the allowlist, and why:
 | Operation | Why not |
 |---|---|
 | `dynamodb:Scan`, `Query`, `GetItem`, `BatchGetItem` | This skill never reads item data. Mean item size comes from metadata |
-| `dynamodb:DescribeContributorInsights`, `cloudwatch:GetInsightRuleReport` | Hot-key identification is out of scope |
-| `cloudwatch:DescribeAlarms`, `PutMetricAlarm` | Alarm audit and creation are out of scope; alarm advice is given as prose, not derived from state |
+| `dynamodb:DescribeContributorInsights`, `cloudwatch:GetInsightRuleReport` | Hot-key identification is out of scope, and contributor reports contain key values |
+| `cloudwatch:DescribeAlarms`, `PutMetricAlarm` | Alarm audit and creation are out of scope |
 | `application-autoscaling:*` | Capacity sizing is out of scope |
 | `servicequotas:*`, `support:*` | Quota increases are out of scope |
 | Any `Put*`, `Update*`, `Delete*`, `Create*` | Read-only skill |
 
 ## Critical rules
 
-- **Collect per operation.** A table-wide latency average is not a valid basis for
-  classification.
-- **Keep the timestamps.** Totals cannot establish that throttling and the latency rise
+- **Collect per operation**, including `SystemErrors` and `ThrottledRequests` — both are
+  published per `Operation`, and `SystemErrors` *only* per `Operation`.
+- **Let CloudWatch compute aggregates.** Baselines come from a single long-period datapoint,
+  not from your own arithmetic over a series.
+- **Keep the timestamps.** Totals cannot establish that an event and the latency rise
   coincided; period lists can.
-- **`NoData` is not zero, and `NotApplicable` is not a gap.** Three of the classification
-  rules turn on that distinction.
-- **Compute coverage before applying any threshold.** A short series on a young table is not
-  a regression.
+- **`none_recorded` requires proof of activity; `NoData` is unknown; `NotApplicable` is not a
+  gap.** The classification turns on that distinction.
+- **Apply the `SampleCount` floor and compute coverage before any threshold.**
 - **Never add a data-plane call.** If a question needs item-level evidence, say that it does
   and name the skill or method that provides it.

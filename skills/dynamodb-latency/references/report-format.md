@@ -9,36 +9,49 @@ drop a section because it would be short — a short "Not Assessed" section is i
 # DynamoDB Latency Analysis — `<table>`
 
 **Region:** <region> · **Account:** <account> · **Window:** <start> → <end> (<duration>, <period>s periods)
-**Capacity mode:** <PROVISIONED | PAY_PER_REQUEST> · **Table age:** <n> days
-**Classification:** `<LT-xx>` <name>
+**Baseline:** <baseline start> → <baseline end> (7 days, per operation) · **Capacity mode:** <PROVISIONED | PAY_PER_REQUEST> · **Table age:** <n> days
+**Primary outcome:** `<LT-xx>` <canonical name> · **Confidence:** <High | Medium | Low>
 
-<One paragraph: what the data shows, in plain language, and what it does not cover.>
+<One paragraph: what the data shows, in plain language, what it does not establish, and what
+it does not cover. Observations first, then the limits.>
 
 ## Latency Profile
 
-| Operation | Requests | p50 | p90 | p99 | Max | Average | Coverage |
-|---|---|---|---|---|---|---|---|
-| `GetItem` | 1,841,233 | 3.6 ms | 7.2 ms | 68.4 ms | 412 ms | 4.1 ms | 100% |
-| `Query` | 42,109 | 18.4 ms | 44.1 ms | 96.0 ms | 388 ms | 22.7 ms | 100% |
-| `Scan` | — | — | — | — | — | — | not called in window |
+| Operation | Requests | p50 | p99 | Max | Average | Baseline p50 / p99 | p50 pattern | p99 pattern | Coverage |
+|---|---|---|---|---|---|---|---|---|---|
+| `GetItem` | 1,841,233 | 3.6 ms | 68.4 ms | 412 ms | 4.1 ms | 3.4 / 14.9 ms | none | isolated (2) | 100% |
+| `Query` | 42,109 | 18.4 ms | 96.0 ms | 388 ms | 22.7 ms | 17.9 / 91.0 ms | none | none | 100% |
+| `Scan` | — | — | — | — | — | — | — | — | not called in window |
 
 Statistic source: `SuccessfulRequestLatency`, per `Operation` dimension. This metric measures
 time internal to DynamoDB only — client-side activity and network trip times are excluded — and
-counts successful requests only.
+counts successful requests only. Baselines are computed by CloudWatch over the 7 days before the
+window. Periods with fewer than 100 requests (p99) or 10 requests (p50) are excluded.
 
 ## Errors and Throttling
 
-| Signal | Total | Non-zero periods | Status |
-|---|---|---|---|
-| `SystemErrors` | 0 | — | measured |
-| `UserErrors` | 14 | 2 | measured |
-| `ThrottledRequests` | 0 | — | measured |
-| `ReadThrottleEvents` | 0 | — | measured |
-| `WriteThrottleEvents` | 0 | — | measured |
+| Signal | Scope | Total | Non-zero periods | Status |
+|---|---|---|---|---|
+| `SystemErrors` | `GetItem` | — | — | none recorded |
+| `FaultInjectionServiceInducedErrors` | `GetItem` | — | — | none recorded |
+| `ThrottledRequests` | `GetItem` | — | — | none recorded |
+| `ReadThrottleEvents` | table | — | — | none recorded |
+| `WriteThrottleEvents` | GSI `orders-by-status` | — | — | none recorded |
 
-## Classification
+Status is one of: `recorded`, `none recorded` (no events published while the operation was
+active), `not exercised` (the operation was not called — omit the row unless it was recorded),
+`no data` (activity could not be confirmed — unknown), `unable to verify`.
 
-`<LT-xx>` — <name>. <The verbatim template body from finding-logic.md.>
+## Primary Outcome
+
+`<LT-xx>` — <canonical name>. Confidence <level>: <one line per reason>.
+
+<The verbatim template body from finding-logic.md.>
+
+## Also Observed
+
+<Each other qualifying outcome and each present-but-not-causal signal, one line each, per
+finding-logic.md. If none: "No other signal was observed.">
 
 ## Contributing Factors
 
@@ -51,14 +64,15 @@ fired, write: "None identified from the collected metrics.">
 |---|---|
 | Item size distribution | Requires reading items; outside this skill |
 | Which partition key is hot | Requires Contributor Insights traffic analysis; outside this skill |
-| Which throttle ceiling was hit | Read from the cause-specific throttle metrics; outside this skill |
+| Which throttle ceiling was hit | Read from the cause-specific throttle metrics; handed off (`CF-04`) |
 | Per-index latency | No index dimension exists on `SuccessfulRequestLatency` |
 | End-to-end client latency | Not measured by any DynamoDB metric; needs SDK latency logging or tracing |
+| Client errors for this table | `UserErrors` is aggregated across the account and Region |
 
 ## Recommended Actions
 
-<Ordered as in finding-logic.md and dynamodb-facts.md. Each item: the action, the reason, and
-who must make the change.>
+<Ordered as in the table below. Each item: the action, the evidence that triggered it, its
+precondition or trade-off, and who must make the change.>
 
 ## Not Recommended
 
@@ -69,11 +83,10 @@ advice that AWS documentation contradicts — see references/dynamodb-facts.md.>
 
 - Troubleshooting latency issues in Amazon DynamoDB — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TroubleshootingLatency.html
 - DynamoDB metrics and dimensions — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/metrics-dimensions.html
-- Monitoring DynamoDB with CloudWatch — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Monitoring-metrics-with-Amazon-CloudWatch.html
 - DynamoDB read consistency — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html
 - CloudWatch throttling metrics — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TroubleshootingThrottling-cloudwatch.html
-- On-demand capacity mode — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/on-demand-capacity-mode.html
-- In-memory acceleration with DAX — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.html
+- GSI write throttling and back-pressure — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html
+- DAX and DynamoDB consistency models — https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.consistency.html
 ```
 
 ## The "Not Recommended" section
@@ -94,79 +107,93 @@ them leaves the user likely to apply them anyway.
 > requester, which is why they appear in AWS's latency-reduction guidance. Use strong
 > consistency only when the requirement is reading a just-written item.
 
-## Recommended Actions — ordering
+## Recommended Actions — ordering and preconditions
 
-Order by the documented sequence, filtered to what the classification supports. Never list an
-action whose triggering factor did not fire.
+Order by the documented sequence, filtered to what the evidence supports. **Never list an
+action whose trigger did not fire, and always state its precondition.**
 
-| Order | Action | Fires when |
-|---|---|---|
-| 1 | Reuse connections; keep-alive `GetItem` every 30 s when idle | `CF-01`, or any tail-spike classification |
-| 2 | Retries with exponential backoff and jitter | `LT-02`, `CF-05` |
-| 3 | Request hedging for tail protection | `LT-04` where the tail matters to an SLO |
-| 4 | Review timeout and retry configuration — with the warning above | `LT-04`, `CF-01` |
-| 5 | Reduce client-to-endpoint distance (Global Tables) | `CF-07` |
-| 6 | Caching — DAX, or ElastiCache cache-aside | read-heavy repeat access, `LT-03` with `CF-03` |
-| 7 | Bound page size, narrow projections, avoid filter-heavy reads | `CF-03` |
-| 8 | Pre-warm via warm throughput | `CF-04` |
-| 9 | Capacity or key-distribution work, handed off | `LT-02`, `CF-04`, `CF-05` |
+| Order | Action | Fires when | Precondition / trade-off to state |
+|---|---|---|---|
+| 1 | Measure the client: SDK latency metric logging, or end-to-end tracing of a slow request | `CF-01`, `CF-07`, or any outcome at Low confidence | — |
+| 2 | Hand off throttling diagnosis with the `CF-04` evidence | `CF-04` | — |
+| 3 | Review the SDK's retry configuration: backoff with jitter, attempt count, and whether the application adds its own retries on top | `LT-02`, or `LT-01` branch (b) | The SDKs already retry throttling and HTTP 500s by default — do not stack application retries on SDK retries; retry only operations safe to repeat; total retry time must fit the application's latency objective |
+| 4 | Check connection reuse for the caller's SDK | `CF-01` with a first-call-after-idle or after-deploy symptom | SDK-specific — several current SDKs reuse connections by default (see `dynamodb-facts.md`); a keep-alive `GetItem` every 30 s consumes read capacity |
+| 5 | Request hedging for tail protection | `LT-04` recurring, sustained, or SLO breach | Reads, or idempotent/conditional writes with timestamp ordering; costs extra requests |
+| 6 | Review attempt and total-call timeouts — with the warning in Not Recommended | `LT-04` recurring or sustained, `CF-01` | Size them from the application's latency objective, not from DynamoDB's typical latency |
+| 7 | Bound page size, narrow projections, avoid filter-heavy reads | `CF-03` | Client-side; safe to change |
+| 8 | Reduce client-to-endpoint distance (Global Tables) | `CF-07` | Asynchronous replication; replicas serve eventually consistent reads |
+| 9 | Caching — DAX, or ElastiCache cache-aside | **only** when the user describes a read-heavy workload of repeated reads that can tolerate eventually consistent results, alongside `LT-03` or `LT-04` on a read operation | State every DAX trade-off in `dynamodb-facts.md`; not for `Scan`-heavy, write-heavy, or strongly consistent reads |
+| 10 | AWS Health check, request IDs from the affected periods, support case if persistent | `LT-01`, `LT-03`, or `LT-04` recurring, sustained, or SLO breach | — |
 
-Each item states **who changes it**. Items 1–7 are changes in the caller's code or
-configuration; 8 and 9 are table-side and outside this skill's remit to size.
+Each item states **who changes it**. Items 3–9 are changes in the caller's code or
+configuration. This skill does not size capacity, pre-warm tables, or change indexes.
 
 ## Health rating
 
-One rating per table, from the classification and the factors:
+One rating per table, describing the **DynamoDB-internal request path only**:
 
 | Rating | Criteria |
 |---|---|
-| **Healthy** | `LT-05`, with `SystemErrors` and throttles measured at zero |
-| **Low concern** | `LT-04` with fewer than 3 elevated periods, or `LT-05` with `CF` factors that are client-side only |
-| **Medium concern** | `LT-03` at Medium, `LT-04` recurring, `LT-02` at Medium, or any run that continued past a permissions or tooling gap |
-| **High concern** | `LT-01`, or `LT-03`/`LT-02` at High |
 | **Not rated** | `LT-00` |
+| **High concern** | any outcome or factor at High severity |
+| **Medium concern** | any outcome or factor at Medium severity, or any run that continued past a permissions or tooling gap |
+| **Low concern** | any outcome or factor at Low severity — e.g. `LT-04` isolated, or `LT-05` with `CF-05` at Low |
+| **No DynamoDB-side concern** | `LT-05` with nothing above Info |
+
+Apply the first row that matches, top to bottom. Rate from **severity**, not from the outcome
+name — an `LT-01` at Medium is Medium concern. `CF-01` is excluded from the rating: it describes
+time outside DynamoDB, which this rating does not cover.
 
 ### Caps
 
 - A run that continued past an `AccessDenied` or `ToolingFailure` is capped at **Medium
   concern** — you cannot certify what you could not read.
-- `LT-00` is never rated. Do not substitute "Healthy" for "could not measure".
-- A rating describes the **DynamoDB-internal** request path. If the user reports slowness and
-  the rating is Healthy, the report must say that the rating does not cover client-side or
-  network time.
+- `LT-00` is never rated.
+- If the user reports slowness and the rating is "No DynamoDB-side concern" or "Low concern",
+  the report must say that the rating does not cover client-side or network time.
 
 ## Multi-table reports
 
-One section per table, in the order the user listed them, each with its own classification and
-rating. Then a short comparison table: table, classification, rating, headline number. No
-cross-table inference — two tables sharing a client and a symptom is a hypothesis for the
-client, not a finding about either table.
+One section per table, in the order the user listed them, each with its own outcome,
+confidence, and rating. Then a short comparison table: table, outcome, confidence, rating,
+headline number. No cross-table inference — two tables sharing a client and a symptom is a
+hypothesis for the client, not a finding about either table.
 
 ## Pre-render validation
 
 Check every line before output. Any failure means fix the report, not ship it with a caveat.
 
-1. **Exactly one `LT-` classification appears.** Not zero, not two.
-2. **No `NoData` metric is reported as `0`.** Search the draft for every `0` in the errors and
-   throttling table and confirm each came from a measured zero.
-3. **No threshold is described as an SLA or an AWS commitment.** Every threshold mention says
-   "this skill's threshold".
-4. **If the classification is `LT-05` or any nominal-leaning outcome**, the report states what
-   `SuccessfulRequestLatency` excludes. A bare "nominal" is the single most misleading output
-   this skill can produce.
-5. **No multi-item operation is judged against a singleton threshold.** `Query`, `Scan`,
-   `Batch*` and `Transact*` are assessed relatively or marked not assessable.
-6. **`Not Recommended` is present** whenever latency is the presenting problem.
-7. **Every rule ID cited corresponds to a rule that actually fired** on collected data.
-8. **No hot key is named, no item is quoted, no index is blamed for latency.**
-9. **Every recommended action names who changes it**, and no action appears whose triggering
-   factor did not fire.
-10. **The window, region, and period are stated in the header**, and the window matches what
-    was actually queried.
+1. **Exactly one primary outcome, with a confidence and its reasons.** Every other qualifying
+   condition is under Also Observed — none silently dropped.
+2. **No counter is written as "0" or "measured zero".** `none_recorded` reads "none recorded";
+   `NoData` reads "no data" and supports no conclusion.
+3. **No threshold is described as an SLA or an AWS commitment.**
+4. **No sentence concludes that the client, SDK, or network *is* the cause.** Search the draft
+   for "is client-side", "is in the client", "client-side cause", "network is the cause". The
+   allowed form is "not explained by DynamoDB-side metrics", followed by a measurement.
+5. **No client-side mechanism is attached to a DynamoDB-side elevation.** Connection setup,
+   cold start, and idle connections are never offered as the cause of an elevated
+   `SuccessfulRequestLatency` percentile.
+6. **Every causal outcome names its evidence of coincidence** — the overlapping timestamps, or
+   the reported-slowness overlap for a retry branch.
+7. **Every template keeps Observed and Not established separate.** No possible factor is stated
+   as a finding.
+8. **No multi-item or transactional operation is judged against an absolute threshold.**
+9. **`SystemErrors` and `ThrottledRequests` come from per-`Operation` queries.** A table-only
+   `SystemErrors` query is invalid — DynamoDB does not publish it there.
+10. **`UserErrors`, if mentioned, is labelled account-wide.**
+11. **`Not Recommended` is present** whenever latency is the presenting problem.
+12. **Every rule ID cited corresponds to a rule that actually fired** on collected data.
+13. **No hot key is named, no item is quoted, no index is blamed for latency.** A GSI may be
+    named only as the scope of recorded throttle events.
+14. **Every recommended action names its trigger, its precondition, and who changes it.**
+15. **The window, baseline, region, and period are stated in the header**, and match what was
+    actually queried.
 
 ## Tone
 
-Report what the metrics show, then say plainly what they cannot show. The most valuable
-sentence this skill produces is often "the DynamoDB-internal portion is normal, so the time
-your users are seeing is somewhere this metric does not reach" — do not bury it, and do not
-dress up a nominal result as a clean bill of health.
+Report what the metrics show, then say plainly what they do not establish. The most valuable
+sentence this skill produces is often "DynamoDB processing time was not elevated, so the time
+your users are seeing is outside what this metric measures — here is how to measure it". Do not
+bury it, do not turn it into a claim about the client, and do not dress a clean result up as a
+clean bill of health.
