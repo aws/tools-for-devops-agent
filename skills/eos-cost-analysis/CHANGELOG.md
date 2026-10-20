@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.4 (2026-10-20)
+
+Edge case found during end-to-end testing against live resources.
+
+- Handle the case where a resource's Year 3 Extended Support usagetype is not yet
+  published in the Pricing API (Year 3 window starts in the future). The skill now
+  states this is expected, not a `PRICING_UNAVAILABLE` failure: use the Year 1-2 rate
+  for current cost and derive the Year 3 projection from the documented escalation
+  (RDS/ElastiCache 2×; EKS/OpenSearch flat), clearly labeled as derived.
+- (No behavioral regression; the live run otherwise confirmed the RDS region-prefix
+  fix end-to-end — ap-south-1 correctly resolved to the APS3- prefixed usagetype.)
+
 ## 1.0.3 (2026-10-20)
 
 Triggering fix — strengthen the description so the agent loads the skill instead of

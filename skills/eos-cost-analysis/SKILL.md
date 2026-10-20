@@ -14,7 +14,7 @@ description: Use this skill whenever a user asks about End of Standard Support (
   not upgrade execution — for EKS upgrade planning/readiness use eks-upgrade-readiness.
 metadata:
   author: rajatgoy
-  version: "1.0.3"
+  version: "1.0.4"
   aws-devops-agent-skills.agent-types: "Chat tasks, Custom agents"
   aws-devops-agent-skills.aws-services: "Amazon EKS, Amazon RDS, AWS Lambda, Amazon ElastiCache, Amazon OpenSearch Service"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
@@ -340,6 +340,8 @@ Tier behavior by service (rates themselves come from the Pricing API; see the [v
 - **OpenSearch**: single tier — no escalation
 
 **Use the exact rate returned by the Pricing API for the resource's tier (Step 3.2). Query the Yr3 usagetype pattern for resources 24+ months past EOS.**
+
+**When the Year 3 usagetype is not yet published:** for a resource whose Year 3 window starts in the future (e.g. it is currently in Year 1-2 but will cross 24 months later), the Yr3 usagetype may not exist in the Pricing API yet and will return empty. This is expected, not a lookup failure — do NOT mark it `PRICING_UNAVAILABLE`. Use the current Year 1-2 rate for the current cost, and for the Year 3 *projection* derive it from the service's documented escalation (RDS and ElastiCache: 2× the Year 1-2 rate; EKS and OpenSearch: no escalation, so Year 3 = Year 1-2). Clearly label such a projected Year 3 figure as derived (not API-returned) and note the date the Year 3 rate begins.
 
 ### Step 4.2 — Calculate per-resource monthly cost
 
