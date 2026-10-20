@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.3 (2026-10-20)
+
+Triggering fix — strengthen the description so the agent loads the skill instead of
+handling EOS cost analysis ad hoc.
+
+- Rewrote the `description` with imperative, intent-focused phrasing per the Agent
+  Skills optimizing-descriptions guidance ("Use this skill whenever…", "read and
+  follow this runbook", concrete example prompts). In the DevOps Agent web app the
+  previous descriptive wording let the agent enumerate/price resources itself rather
+  than activating the skill.
+- Kept the EOS cost/inventory scope and the eks-upgrade-readiness boundary (no
+  regression on trigger overlap). Description is 1004/1024 chars.
+- Trigger eval re-run: 7/7 should_trigger:false queries still correct (no
+  over-triggering), including "Plan my EKS 1.30 to 1.31 upgrade".
+
 ## 1.0.2 (2026-10-19)
 
 Maintainer PR review round 2 — docs build, trigger scoping, and an RDS pricing correctness fix.

@@ -1,16 +1,20 @@
 ---
 name: eos-cost-analysis
-description: Discovers AWS resources approaching or past End of Standard Support and
-  calculates the Extended Support cost impact. Use when a user asks about end-of-support
-  cost exposure, Extended Support charges, version-deprecation cost, or an EOS cost or
-  inventory report for EKS, RDS, Lambda, ElastiCache, or OpenSearch. This skill enumerates
-  resources via AWS APIs, classifies their EOS status, retrieves live Extended Support
-  pricing from the AWS Pricing API, and produces a cost-impact report with a per-resource
-  breakdown. It is about EOS cost and inventory, not upgrade execution — for EKS upgrade
-  planning and readiness use eks-upgrade-readiness instead.
+description: Use this skill whenever a user asks about End of Standard Support (EOS)
+  or Extended Support (ES) cost, exposure, or inventory for EKS, RDS/Aurora, Lambda,
+  ElastiCache, or OpenSearch — for example "what's my EOS cost exposure", "which
+  resources are in Extended Support and what does it cost", "EOS cost report across
+  all accounts", or "extended support charges". Follow this skill directly rather than
+  enumerating resources or pricing ad hoc: it defines the correct discovery APIs,
+  per-version EOS date verification, and the AWS Pricing API usagetype rules (including
+  region-prefix handling) needed to get the numbers right. Do not hand-roll this with raw
+  API calls and do not delegate it — read and follow this runbook. It enumerates resources
+  across all associated accounts and regions, classifies EOS status, retrieves live ES
+  pricing, and produces a per-resource cost-impact report. Scope is EOS cost and inventory,
+  not upgrade execution — for EKS upgrade planning/readiness use eks-upgrade-readiness.
 metadata:
   author: rajatgoy
-  version: "1.0.2"
+  version: "1.0.3"
   aws-devops-agent-skills.agent-types: "Chat tasks, Custom agents"
   aws-devops-agent-skills.aws-services: "Amazon EKS, Amazon RDS, AWS Lambda, Amazon ElastiCache, Amazon OpenSearch Service"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
