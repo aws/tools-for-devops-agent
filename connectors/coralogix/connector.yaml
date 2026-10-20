@@ -1,0 +1,58 @@
+schema_version: 1
+# Equals the directory name. Permanent.
+name: coralogix
+# Strict MAJOR.MINOR.PATCH. First submission starts at 1.0.0.
+version: 1.0.0
+title: Coralogix
+vendor: Coralogix
+description: Query Coralogix logs, metrics and traces during investigations.
+category: telemetry
+tier: partner-managed
+type: mcp
+mcp:
+  # One entry per Coralogix region. The MCP endpoint is always
+  # https://api.<domain>.coralogix.com/mgmt/api/v1/mcp.
+  # EU1 (Ireland) is the documented exception: its canonical API host is the
+  # bare api.coralogix.com (the api.eu1.coralogix.com alias can return 403).
+  # Each host answers an unauthenticated MCP initialize with 401/403.
+  endpoints:
+    - { label: EU1, endpoint: "https://api.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: EU2, endpoint: "https://api.eu2.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: US1, endpoint: "https://api.cx498.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: US2, endpoint: "https://api.cx590.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: AP1, endpoint: "https://api.app.coralogix.in/mgmt/api/v1/mcp" }
+    - { label: AP2, endpoint: "https://api.coralogixsg.com/mgmt/api/v1/mcp" }
+    - { label: AP3, endpoint: "https://api.ap3.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: GOV1, endpoint: "https://api.gov1.coralogix.com/mgmt/api/v1/mcp"}
+  auth:
+    # Coralogix MCP supports only API-key auth for DevOps Agent; its OAuth
+    # server uses dynamic client registration and single-use refresh tokens,
+    # which the DevOps Agent OAuth/DCR flows cannot complete.
+    # Use a dedicated personal API key scoped read-only (ReadData on log,
+    # metric and span data) — not an ingestion key.
+    type: api_key
+    headers:
+      - { header: Authorization, label: Personal API key, prefix: "Bearer " }
+skills: [coralogix-investigation]
+triggers:
+  # Coralogix cannot compute the per-request HMAC-SHA256 signature, so the
+  # customer authenticates the webhook with a static bearer API key.
+  auth: api_key
+  # Values are written in Coralogix Notification Center preset (Jinja) syntax,
+  # using the Alert entity type where alert.* / alertDef.* variables exist.
+  incident:
+    # Combine the alert definition id with the firing timestamp so each firing
+    # opens its own investigation (a repeated id is deduplicated and dropped).
+    incidentId: '"{{ alertDef.id }}-{{ alert.timestamp }}"'
+    title: '{{ alertDef.name | json_encode }}'
+    # Map Coralogix P1–P5 to the DevOps Agent priority set.
+    priority: '"{% if alertDef.priority == ''P1'' %}CRITICAL{% elif alertDef.priority == ''P2'' %}HIGH{% elif alertDef.priority == ''P3'' %}MEDIUM{% elif alertDef.priority == ''P4'' %}LOW{% else %}MINIMAL{% endif %}"'
+    timestamp: '"{{ alert.timestamp }}"'
+    description: '{{ alertDef.description | default(value='''') | json_encode }}'
+    service: '{{ alertDef.name | json_encode }}'
+    # Carry a deep link back to the alert and context to make the investigation
+    # actionable.
+    data: '{ "metadata": { "source": "coralogix", "alertUrl": "{{ alert.alertDataUrl | default(value='''') }}", "alertType": "{{ alertDef.type }}", "priority": "{{ alertDef.priority }}", "status": "{{ alert.status }}" } }'
+docs_url: https://coralogix.com/docs/user-guides/mcp-server/aws-devops-agent/
+support_url: https://coralogix.com/docs/support/
+maintainers: [coralogix]
