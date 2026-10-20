@@ -1,40 +1,16 @@
 # Changelog
 
-## 1.0.4 (2026-10-20)
+## 1.0.2 (2026-10-20)
 
-Edge case found during end-to-end testing against live resources.
+Maintainer PR review round 2 — docs build, trigger scoping, and an RDS pricing correctness fix — plus triggering and edge-case improvements found while testing end-to-end against live resources.
 
-- Handle the case where a resource's Year 3 Extended Support usagetype is not yet
-  published in the Pricing API (Year 3 window starts in the future). The skill now
-  states this is expected, not a `PRICING_UNAVAILABLE` failure: use the Year 1-2 rate
-  for current cost and derive the Year 3 projection from the documented escalation
-  (RDS/ElastiCache 2×; EKS/OpenSearch flat), clearly labeled as derived.
-- (No behavioral regression; the live run otherwise confirmed the RDS region-prefix
-  fix end-to-end — ap-south-1 correctly resolved to the APS3- prefixed usagetype.)
-
-## 1.0.3 (2026-10-20)
-
-Triggering fix — strengthen the description so the agent loads the skill instead of
-handling EOS cost analysis ad hoc.
-
-- Rewrote the `description` with imperative, intent-focused phrasing per the Agent
-  Skills optimizing-descriptions guidance ("Use this skill whenever…", "read and
-  follow this runbook", concrete example prompts). In the DevOps Agent web app the
-  previous descriptive wording let the agent enumerate/price resources itself rather
-  than activating the skill.
-- Kept the EOS cost/inventory scope and the eks-upgrade-readiness boundary (no
-  regression on trigger overlap). Description is 1004/1024 chars.
-- Trigger eval re-run: 7/7 should_trigger:false queries still correct (no
-  over-triggering), including "Plan my EKS 1.30 to 1.31 upgrade".
-
-## 1.0.2 (2026-10-19)
-
-Maintainer PR review round 2 — docs build, trigger scoping, and an RDS pricing correctness fix.
-
-- **RDS region-prefix fix (behavioral):** corrected the Pricing API guidance. RDS ExtendedSupport usagetypes are prefix-free ONLY in us-east-1; every other region carries a prefix (e.g. `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2`). The previous "RDS never has a prefix" rule caused `PRICING_UNAVAILABLE`/$0 for RDS and Aurora outside us-east-1. RDS now uses the same `pricing:GetAttributeValues` prefix resolution as the other services. Verified live against `AmazonRDS` in us-west-2. Supersedes the "region-prefix-free" note in 1.0.0.
+- **RDS region-prefix fix (behavioral):** corrected the Pricing API guidance. RDS ExtendedSupport usagetypes are prefix-free ONLY in us-east-1; every other region carries a prefix (e.g. `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2`). The previous "RDS never has a prefix" rule caused `PRICING_UNAVAILABLE`/$0 for RDS and Aurora outside us-east-1. RDS now uses the same `pricing:GetAttributeValues` prefix resolution as the other services. Verified live against `AmazonRDS` (us-west-2, and ap-south-1 → `APS3-` end-to-end in the agent). Supersedes the "region-prefix-free" note in 1.0.0.
+- **Year 3 usagetype not yet published:** when a resource's Year 3 window starts in the future, the Yr3 Pricing API usagetype doesn't exist yet and returns empty. The skill now treats this as expected (not `PRICING_UNAVAILABLE`): use the Year 1-2 rate for current cost and derive the Year 3 projection from the documented escalation (RDS/ElastiCache 2×; EKS/OpenSearch flat), labeled as derived.
+- **Triggering:** rewrote the `description` with imperative, intent-focused phrasing per the Agent Skills optimizing-descriptions guidance, so the DevOps Agent loads and follows the skill instead of enumerating/pricing ad hoc. Kept the EOS cost/inventory scope and the `eks-upgrade-readiness` boundary; trigger eval still 7/7 (no over-triggering). 1004/1024 chars.
 - Fixed docs links for `mkdocs build --strict`: both READMEs now use absolute GitHub URLs for the cloudformation template and cross-skill/custom-agent references.
 - Scoped the skill description to EOS cost and inventory (removed "upgrade planning") to avoid trigger overlap with `eks-upgrade-readiness`; added a disambiguation note and a `should_trigger: false` eval query ("Plan my EKS 1.30 to 1.31 upgrade").
-- Updated the `rds-usagetype-*` functional eval to assert the correct region-prefix behavior.
+- Updated the `rds-usagetype-*` functional eval to assert the correct region-prefix behavior; re-ran `skill-eval report` against live resources (root passed, overall A, functional 18/18, trigger 7/7).
+- Custom agent: hardened the system prompt to load the skill and not delegate; README now selects `use_aws`/`verify_aws_claim` in the create-agent form (chat as fallback).
 
 ## 1.0.1 (2026-10-19)
 

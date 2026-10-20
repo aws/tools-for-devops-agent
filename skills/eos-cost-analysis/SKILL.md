@@ -14,7 +14,7 @@ description: Use this skill whenever a user asks about End of Standard Support (
   not upgrade execution — for EKS upgrade planning/readiness use eks-upgrade-readiness.
 metadata:
   author: rajatgoy
-  version: "1.0.4"
+  version: "1.0.2"
   aws-devops-agent-skills.agent-types: "Chat tasks, Custom agents"
   aws-devops-agent-skills.aws-services: "Amazon EKS, Amazon RDS, AWS Lambda, Amazon ElastiCache, Amazon OpenSearch Service"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
