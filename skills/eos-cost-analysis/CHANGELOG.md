@@ -60,7 +60,7 @@ Classification & pricing:
 - Per-version EOS date verification from AWS documentation (no guessing, no date-bleed across versions/engines)
 - OpenSearch Elasticsearch vs OpenSearch engine families verified independently (separate EOS calendars)
 - Live pricing from the AWS Pricing API (`pricing:GetProducts`); never hardcoded
-- Region prefix resolved via `pricing:GetAttributeValues`; RDS ExtendedSupport usagetype is region-prefix-free (regionCode filter only)
+- Region prefix resolved via `pricing:GetAttributeValues` (RDS prefix handling corrected in 1.0.2 — see below)
 - OpenSearch NIH derived from instance type x count; small/micro sizes doc-verified, never extrapolated
 - Year 1/2 vs Year 3 tiered pricing (boundary at >= 24 months); Multi-AZ cost doubling for RDS
 - `jmespath_filter` guidance to avoid dumping large PriceList payloads
