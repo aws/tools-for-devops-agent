@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2 (2026-10-19)
+
+Maintainer PR review round 2 — docs build, trigger scoping, and an RDS pricing correctness fix.
+
+- **RDS region-prefix fix (behavioral):** corrected the Pricing API guidance. RDS ExtendedSupport usagetypes are prefix-free ONLY in us-east-1; every other region carries a prefix (e.g. `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2`). The previous "RDS never has a prefix" rule caused `PRICING_UNAVAILABLE`/$0 for RDS and Aurora outside us-east-1. RDS now uses the same `pricing:GetAttributeValues` prefix resolution as the other services. Verified live against `AmazonRDS` in us-west-2. Supersedes the "region-prefix-free" note in 1.0.0.
+- Fixed docs links for `mkdocs build --strict`: both READMEs now use absolute GitHub URLs for the cloudformation template and cross-skill/custom-agent references.
+- Scoped the skill description to EOS cost and inventory (removed "upgrade planning") to avoid trigger overlap with `eks-upgrade-readiness`; added a disambiguation note and a `should_trigger: false` eval query ("Plan my EKS 1.30 to 1.31 upgrade").
+- Updated the `rds-usagetype-*` functional eval to assert the correct region-prefix behavior.
+
 ## 1.0.1 (2026-10-19)
 
 Maintainer PR review round 1 — repo conventions, mergeability, and correctness. No behavioral change to the discovery/pricing/reporting logic.
