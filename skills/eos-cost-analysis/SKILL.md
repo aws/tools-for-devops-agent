@@ -1,14 +1,16 @@
 ---
 name: eos-cost-analysis
 description: Discovers AWS resources approaching or past End of Standard Support and
-  calculates Extended Support cost impact. Use when a user asks about end of support,
-  extended support costs, version deprecation, EOS analysis, or upgrade planning for
-  EKS, RDS, Lambda, ElastiCache, or OpenSearch. This skill enumerates resources via
-  AWS APIs, classifies their EOS status, retrieves live Extended Support pricing from
-  the AWS Pricing API, and produces a cost-impact report with per-resource breakdown.
+  calculates the Extended Support cost impact. Use when a user asks about end-of-support
+  cost exposure, Extended Support charges, version-deprecation cost, or an EOS cost or
+  inventory report for EKS, RDS, Lambda, ElastiCache, or OpenSearch. This skill enumerates
+  resources via AWS APIs, classifies their EOS status, retrieves live Extended Support
+  pricing from the AWS Pricing API, and produces a cost-impact report with a per-resource
+  breakdown. It is about EOS cost and inventory, not upgrade execution — for EKS upgrade
+  planning and readiness use eks-upgrade-readiness instead.
 metadata:
   author: rajatgoy
-  version: "1.0.1"
+  version: "1.0.2"
   aws-devops-agent-skills.agent-types: "Chat tasks, Custom agents"
   aws-devops-agent-skills.aws-services: "Amazon EKS, Amazon RDS, AWS Lambda, Amazon ElastiCache, Amazon OpenSearch Service"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
@@ -22,11 +24,13 @@ Support charges, and generate an actionable cost-impact report.
 
 ## When to Use This Skill
 
-- User asks about End of Support, Extended Support costs, or version deprecation
+- User asks about End of Support cost exposure, Extended Support charges, or version-deprecation cost
 - User wants to know which resources are incurring or will incur Extended Support charges
-- User asks for upgrade planning or EOS posture assessment
+- User wants an EOS cost or inventory report / posture assessment across accounts
 - User wants a cost-impact report for deprecated service versions
 - Proactive scheduled checks for EOS posture across the organization
+
+> This skill scopes the EOS **cost and inventory** picture. It is not an upgrade-execution skill — for EKS pre-upgrade readiness and upgrade planning, use [eks-upgrade-readiness](https://github.com/aws/tools-for-devops-agent/tree/main/skills/eks-upgrade-readiness); for OpenSearch domain health beyond version lifecycle, use [analytics-opensearch-expertise](https://github.com/aws/tools-for-devops-agent/tree/main/skills/analytics-opensearch-expertise).
 
 ## Supported Services (Phase 1 — Extended Support Charges)
 
@@ -255,19 +259,19 @@ If documentation search returns no result for a specific version:
 | Service | ServiceCode | Usage Type Pattern | Region Prefix | Billing Unit | Year 3 |
 |---------|-------------|-------------------|---------------|--------------|--------|
 | EKS | `AmazonEKS` | `{PREFIX}-AmazonEKS-Hours:extendedSupport` | Yes (USE1, USW2...) | per cluster/hour | Flat (no escalation) |
-| RDS | `AmazonRDS` | `ExtendedSupport:Yr1-Yr2:{Engine}` / `ExtendedSupport:Yr3:{Engine}` | **NONE — no prefix; regionCode filter only** | per vCPU/hour | 2× Yr1-2 |
+| RDS | `AmazonRDS` | `{PREFIX}ExtendedSupport:Yr1-Yr2:{Engine}` / `{PREFIX}ExtendedSupport:Yr3:{Engine}` | Yes — **empty in us-east-1**, prefixed elsewhere (USW2-, EU-, APS3-...) | per vCPU/hour | 2× Yr1-2 |
 | ElastiCache | `AmazonElastiCache` | `{PREFIX}-ExtendedSupportYr1_Yr2-NodeUsage:{nodeType}` / `{PREFIX}-ExtendedSupportYr3-NodeUsage:{nodeType}` | Yes | per node/hour | 2× Yr1-2 |
 | OpenSearch | `AmazonES` | `{PREFIX}-OpenSearchExtendedSupport` | Yes | per NIH/hour | Single tier (no escalation) |
 | Lambda | — | No Extended Support charge | — | — | — |
 
-**RDS is the exception — its ExtendedSupport usagetype has NO region prefix.** Do NOT prepend `USE1-`/`EU-`/etc. to RDS usagetypes. The correct RDS pattern is exactly `ExtendedSupport:Yr1-Yr2:{Engine}` / `ExtendedSupport:Yr3:{Engine}` (e.g. `ExtendedSupport:Yr1-Yr2:AuroraMySQL2`, `ExtendedSupport:Yr3:PostgreSQL`) with the target region supplied ONLY via the `regionCode` filter. Constructing `USE1-ExtendedSupport...` returns null and causes wasted retry loops — for RDS, skip the prefix entirely. (EKS, ElastiCache, and OpenSearch DO use a region prefix; RDS does not.)
+**RDS has a region prefix like every other service — the prefix is just EMPTY in us-east-1.** This is the one that trips people up: in `us-east-1` the usagetype is exactly `ExtendedSupport:Yr1-Yr2:{Engine}` (no prefix), but in every OTHER region it is `{PREFIX}-ExtendedSupport:Yr1-Yr2:{Engine}` — e.g. `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2` in us-west-2, `EU-ExtendedSupport:Yr3:PostgreSQL` in eu-west-1. Do NOT assume RDS never has a prefix: outside us-east-1 the bare `ExtendedSupport:...` form returns 0 products, which would silently make the resource `PRICING_UNAVAILABLE` or $0. Resolve the RDS prefix exactly the way you do for the other services (below): no prefix for us-east-1, and `pricing:GetAttributeValues` to read the real prefix for any other region.
 
-**Region prefix mapping** (for services that use a prefix — EKS, ElastiCache, OpenSearch; NOT RDS):
+**Region prefix mapping** (applies to ALL priced services — EKS, RDS, ElastiCache, OpenSearch):
 
-The AUTHORITATIVE way to get the region prefix is the Pricing API — do NOT rely on a hardcoded prefix for any region you are not certain about. For ANY region outside the common set below, call `pricing:GetAttributeValues` on the `usagetype` attribute (filtered by ServiceCode) and match the prefix for your target `regionCode`. This is the DEFAULT method, not a fallback.
+The AUTHORITATIVE way to get the region prefix is the Pricing API — do NOT rely on a hardcoded prefix for any region you are not certain about. For `us-east-1` the prefix is empty (no prefix segment). For ANY region outside the common set below, call `pricing:GetAttributeValues` on the `usagetype` attribute (filtered by ServiceCode) and match the prefix for your target `regionCode`. This is the DEFAULT method, not a fallback, and it applies to RDS too.
 
-Common prefixes (safe to use directly; still verify via API if a lookup returns empty):
-- us-east-1 → `USE1` | us-east-2 → `USE2` | us-west-1 → `USW1` | us-west-2 → `USW2`
+Common prefixes (safe to use directly; still verify via API if a lookup returns empty). NOTE: for RDS specifically, us-east-1 uses NO prefix at all (the `USE1-` form is for EKS/ElastiCache/OpenSearch; RDS in us-east-1 is the bare `ExtendedSupport:...`). Every other region prefixes RDS the same as the other services:
+- us-east-1 → `USE1` (RDS: no prefix) | us-east-2 → `USE2` | us-west-1 → `USW1` | us-west-2 → `USW2`
 - eu-west-1 → `EU` (or `EUW1`) | eu-west-2 → `EUW2` | eu-central-1 → `EUC1`
 - ap-northeast-1 → `APN1` | ap-southeast-1 → `APS1` | ap-southeast-2 → `APS2`
 - ca-central-1 → `CAN1` | sa-east-1 → `SAE1`
@@ -276,7 +280,7 @@ Regions you MUST resolve via the API (prefixes vary / are not reliably guessable
 
 **Lookup procedure per affected resource:**
 
-1. Build the usagetype string using the pattern + region prefix + resource attribute (engine/nodeType as applicable)
+1. Build the usagetype string using the pattern + region prefix + resource attribute (engine/nodeType as applicable). For the region prefix: use no prefix for us-east-1, and for any other region resolve it via `pricing:GetAttributeValues` (do not guess). This applies to RDS as well — e.g. `ExtendedSupport:Yr1-Yr2:AuroraMySQL2` in us-east-1 but `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2` in us-west-2.
 2. Call `pricing:GetProducts`:
    ```
    use_aws: pricing:GetProducts (
