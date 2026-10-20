@@ -29,10 +29,11 @@ A dedicated custom agent that discovers AWS resources approaching or past End of
 2. Click "Create agent" (on the right side), then click "Form" (the left-most option)
 3. In the "Name" field, use "eos-cost-analysis"
 4. Copy the content of the `SYSTEM_PROMPT.md` file from this directory, and paste it into the "System prompt" field
-5. In the "Skills" drop-down list, select the "eos-cost-analysis" skill, and click "Create agent"
-6. Add the `use_aws` tool — in the custom agent's window, click "Edit", select "Chat", and type "Add the use_aws tool to this custom agent"
-7. Add the `verify_aws_claim` tool — type "Also add the verify_aws_claim tool"
-8. Verify both tools appear under "Tools" for this custom agent
+5. In the "Skills" drop-down list, select the "eos-cost-analysis" skill
+6. In the "Tools" section of the same form, select the `use_aws` and `verify_aws_claim` tools, then click "Create agent". (Both are built-in, non-MCP tools, so they can be chosen directly in the form.)
+7. Verify both tools appear under "Tools" on the agent's page
+
+> **If the form doesn't offer a Tools selector** (older UI), create the agent first, then add the tools through Chat: on the new agent's page click "Edit" → "Chat", wait for DevOps Agent to finish loading, and type "Add the use_aws and verify_aws_claim tools to this custom agent". Confirm both appear under "Tools" afterward.
 
 ## Executing the Agent
 
