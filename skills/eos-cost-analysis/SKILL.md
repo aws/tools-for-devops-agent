@@ -5,7 +5,7 @@ description: Use this skill whenever a user asks about End of Standard Support (
   ElastiCache, or OpenSearch — for example "what's my EOS cost exposure", "which
   resources are in Extended Support and what does it cost", "EOS cost report across
   all accounts", or "extended support charges". Follow this skill directly rather than
-  enumerating resources or pricing ad hoc: it defines the correct discovery APIs,
+  enumerating resources or pricing ad hoc; it defines the correct discovery APIs,
   per-version EOS date verification, and the AWS Pricing API usagetype rules (including
   region-prefix handling) needed to get the numbers right. Do not hand-roll this with raw
   API calls and do not delegate it — read and follow this runbook. It enumerates resources
