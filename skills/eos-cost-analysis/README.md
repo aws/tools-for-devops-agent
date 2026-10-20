@@ -17,7 +17,7 @@ Discovers AWS resources approaching or past End of Standard Support and calculat
 
 - AWS DevOps Agent space with the `use_aws` and `verify_aws_claim` tools available
 - Resource discovery permissions (EKS, RDS, Lambda, ElastiCache, OpenSearch read-only `List`/`Describe` calls) are already covered by the `AIDevOpsAgentAccessPolicy` managed policy — no extra IAM is required for discovery
-- For live Extended Support pricing, grant the AWS Pricing API actions (`pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`) by setting `EnableEosCostAnalysis` in [`cloudformation/devops-agent-skill-policies.yaml`](../../cloudformation/devops-agent-skill-policies.yaml)
+- For live Extended Support pricing, grant the AWS Pricing API actions (`pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`) by setting `EnableEosCostAnalysis` in [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml)
 - For multi-account analysis: associate secondary accounts in DevOps Agent settings
 - AWS Support plan: Business, Enterprise On-Ramp, or Enterprise (required for DevOps Agent)
 
@@ -36,7 +36,7 @@ Discovers AWS resources approaching or past End of Standard Support and calculat
 This skill is used by the following agent types:
 
 - **Chat tasks** — conversational, ad-hoc EOS cost queries and analysis
-- **Custom agents** — scheduled/automated EOS posture reports (see the [eos-cost-analysis custom agent](../../custom-agents/eos-cost-analysis/))
+- **Custom agents** — scheduled/automated EOS posture reports (see the [eos-cost-analysis custom agent](https://github.com/aws/tools-for-devops-agent/tree/main/custom-agents/eos-cost-analysis))
 
 ## Uploading to AWS DevOps Agent
 
@@ -76,16 +76,16 @@ Upload the skill and ask EOS-related questions directly in the built-in DevOps A
 
 ### Custom agent (scheduled/automated)
 
-Create a dedicated custom agent for recurring runs that produce reports on a weekly or monthly cadence — no human prompt needed. See the [eos-cost-analysis custom agent](../../custom-agents/eos-cost-analysis/) for setup, then:
+Create a dedicated custom agent for recurring runs that produce reports on a weekly or monthly cadence — no human prompt needed. See the [eos-cost-analysis custom agent](https://github.com/aws/tools-for-devops-agent/tree/main/custom-agents/eos-cost-analysis) for setup, then:
 
 - Configure a weekly or monthly schedule under the agent's settings
 - Each run produces a new artifact version, so you can track EOS cost drift week over week
 
 ## Related
 
-- [eos-cost-analysis custom agent](../../custom-agents/eos-cost-analysis/) — system prompt and setup guide for the dedicated agent
-- [eks-upgrade-readiness skill](../eks-upgrade-readiness/) — for EKS upgrade execution and pre-upgrade readiness checks once this skill has flagged a cluster's EOS cost exposure
-- [analytics-opensearch-expertise skill](../analytics-opensearch-expertise/) — for OpenSearch domain health assessments beyond version lifecycle and EOS cost
+- [eos-cost-analysis custom agent](https://github.com/aws/tools-for-devops-agent/tree/main/custom-agents/eos-cost-analysis) — system prompt and setup guide for the dedicated agent
+- [eks-upgrade-readiness skill](https://github.com/aws/tools-for-devops-agent/tree/main/skills/eks-upgrade-readiness) — for EKS upgrade execution and pre-upgrade readiness checks once this skill has flagged a cluster's EOS cost exposure
+- [analytics-opensearch-expertise skill](https://github.com/aws/tools-for-devops-agent/tree/main/skills/analytics-opensearch-expertise) — for OpenSearch domain health assessments beyond version lifecycle and EOS cost
 - [Amazon RDS Extended Support](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/extended-support.html)
 - [Amazon ElastiCache Extended Support](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/extended-support-versions.html)
 - [Amazon OpenSearch Service version support](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/what-is.html#choosing-version)
