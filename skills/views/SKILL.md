@@ -4,9 +4,6 @@ description: Manage Coralogix saved views and saved-view folders. Load when the 
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Manage Coralogix saved views and saved-view folders. Load when the user asks to create, update, delete, inspect, organize, or list saved log views.
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Saved Views

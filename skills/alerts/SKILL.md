@@ -4,9 +4,6 @@ description: Alert and case terminology, alert definitions, alert events, cases,
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Alert and case terminology, alert definitions, alert events, cases, IDs, alert types, and skill routing. Load whenever working with alerts or cases to understand shared terminology.
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Alerts & Cases Guidance

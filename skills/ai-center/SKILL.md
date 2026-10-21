@@ -4,9 +4,6 @@ description: Coralogix AI Center — observe, evaluate, and guard GenAI/LLM appl
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Coralogix AI Center — observe, evaluate, and guard GenAI/LLM applications and agents. Use for questions or actions about the user's AI/GenAI applications or agents — their behavior, prompts/responses,
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # AI Center — analyzing GenAI interactions, quality & platform health

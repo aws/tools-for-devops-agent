@@ -4,9 +4,6 @@ description: Query Coralogix logs, traces and metrics for evidence during incide
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Query Coralogix logs, traces and metrics for evidence during incident triage, root cause analysis and troubleshooting chats. Use this skill whenever the Coralogix MCP server is connected and the quest
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Coralogix Investigation

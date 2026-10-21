@@ -4,9 +4,6 @@ description: Use when the user asks to "query RUM", "cx_rum", "real user monitor
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Use when the user asks to "query RUM", "cx_rum", "real user monitoring", "frontend errors", "browser errors", "mobile app crashes", "Web Vitals", "slow page load", "LCP", "CLS", "browser network failu
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Coralogix RUM (`rum.events`)

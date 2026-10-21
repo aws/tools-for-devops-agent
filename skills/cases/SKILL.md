@@ -4,9 +4,6 @@ description: Triage and manage Coralogix Cases. Load when a user wants to inspec
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Triage and manage Coralogix Cases. Load when a user wants to inspect a case, update it, add a comment, assign or acknowledge it, resolve or close it, change its priority, inspect its events, or inspec
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Cases Management

@@ -4,9 +4,6 @@ description: Deep single-case investigation. Load when the user asks about one s
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Deep single-case investigation. Load when the user asks about one specific case by ID (UUID or readable id like "CASE-123") — e.g. summarize comments, explain who was notified where, judge whether the
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Case Investigation Skill — Drill into a single Case

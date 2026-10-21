@@ -4,9 +4,6 @@ description: Dataset discovery and source-selection guidance for DataPrime syste
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Dataset discovery and source-selection guidance for DataPrime system and user-defined datasets. Load when the user asks what datasets exist, how to use `list_datasets`, how to query `system/...` or `d
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Datasets Skill - Discovering system and user-defined datasets

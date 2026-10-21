@@ -4,9 +4,6 @@ description: Data usage, billing units, plan consumption, quota metrics, anomaly
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Data usage, billing units, plan consumption, quota metrics, anomaly detection, and time-series analysis concepts and query workflow. Load when the user asks about data usage, ingestion volumes, billin
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Data Usage Guidance

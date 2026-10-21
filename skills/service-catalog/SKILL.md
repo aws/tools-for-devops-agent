@@ -4,9 +4,6 @@ description: The fast, authoritative path for APM/RED data — error rate, laten
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: The fast, authoritative path for APM/RED data — error rate, latency percentiles (p50-p99), throughput, health status, resource saturation (CPU/memory/OOMKilled for k8s-pod, heap/thread/GC for jvm), an
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Service Catalog Skill

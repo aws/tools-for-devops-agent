@@ -4,9 +4,6 @@ description: Dashboard analysis and editing workflow and rules for using dashboa
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Dashboard analysis and editing workflow and rules for using dashboard JSON, filters, variables, and time ranges. Load when the user provides dashboard context (for example a dashboard link) or asks to
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Dashboards Skill - Analyzing and building Coralogix dashboards

@@ -4,9 +4,6 @@ description: Span-specific concepts, fields, duration handling, and investigatio
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Span-specific concepts, fields, duration handling, and investigation patterns. Load when you need to explore spans in your investigation or to answer a question about spans. For service-level error ra
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Spans Skill - Analyzing spans via Coralogix

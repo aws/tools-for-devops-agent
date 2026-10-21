@@ -4,9 +4,6 @@ description: Search and read official Coralogix platform documentation using **`
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Search and read official Coralogix platform documentation using **`search_docs`** and **`fetch_doc`**. Use when the user asks how Coralogix features work, how to configure or use the UI, set up integr
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Coralogix docs (`search_docs`, `fetch_doc`)

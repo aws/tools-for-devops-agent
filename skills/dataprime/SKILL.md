@@ -4,9 +4,6 @@ description: DataPrime query language for logs/spans/custom datasets (shared syn
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: DataPrime query language for logs/spans/custom datasets (shared syntax, patterns, and rules). Load when you need to write a DataPrime query to explore logs or spans. Also load in case the user asks fo
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # DataPrime Skill - Shared Query Language

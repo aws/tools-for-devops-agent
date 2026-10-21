@@ -4,9 +4,6 @@ description: PromQL fundamentals and metric discovery/query workflow. Load when 
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: PromQL fundamentals and metric discovery/query workflow. Load when you need to explore metrics in your investigation or to answer a question about metrics. For service-level RED metrics (error rate, l
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Metrics Skill - Analyzing metrics via Coralogix/PromQL

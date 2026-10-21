@@ -4,9 +4,6 @@ description: Create and change Coralogix Cases — open a case, comment, re-prio
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Create and change Coralogix Cases — open a case, comment, re-prioritise, assign, acknowledge, retitle, resolve, close, mute, link and unlink. Load when the user asks to "open a case", "create a case f
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Case Management Skill — open, triage, resolve and link cases

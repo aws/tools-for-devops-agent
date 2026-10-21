@@ -4,9 +4,6 @@ description: 'Find and inspect infrastructure resources: monitored resource type
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: 'Find and inspect infrastructure resources: monitored resource types, resource inventory, health history, raw source data, and configuration changes. Load when the user asks to "show resource types", "'
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Infrastructure Resources Skill

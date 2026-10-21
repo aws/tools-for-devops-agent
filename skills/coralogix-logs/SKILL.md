@@ -4,9 +4,6 @@ description: Log-specific concepts, fields, field discovery usage, and troublesh
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Log-specific concepts, fields, field discovery usage, and troubleshooting patterns. The `dataprime` skill should be loaded alongside this skill. Load when you need to explore logs in your investigatio
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Logs Skill - Analyzing logs via Coralogix

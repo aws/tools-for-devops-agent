@@ -4,9 +4,6 @@ description: Fleet/aggregate analytics across many cases via the `system/labs.ca
 metadata:
   author: coralogix
   version: 1.0.0
-  summary: Fleet/aggregate analytics across many cases via the `system/labs.cases.state_updates` DataPrime dataset. Load when the user asks counts, trends, distributions or rates across cases — e.g. "MTTR last w
-  tier: partner-managed
-  agent_types: GENERIC
 ---
 
 # Case Analytics Skill — Fleet-level DataPrime queries over cases
