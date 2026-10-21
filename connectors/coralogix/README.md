@@ -1,6 +1,6 @@
 # Set up Coralogix
 
-Before you connect, find your Coralogix region and create a personal API key. If you want Coralogix alerts to open investigations, also do step 3 after you connect.
+Before you connect, find your Coralogix region and choose either OAuth sign-in or a personal API key. If you want Coralogix alerts to open investigations, also do step 3 after you connect.
 
 ## 1. Find your region
 
@@ -17,7 +17,15 @@ Your Coralogix sign-in address shows your region. Select the matching label when
 | `<team>.app.ap2.coralogix.com` | AP2 | AWS ap-southeast-1 (Singapore) |
 | `<team>.app.ap3.coralogix.com` | AP3 | AWS ap-southeast-3 (Jakarta) |
 
-## 2. Create a personal API key
+## 2. Choose how to authenticate
+
+### OAuth sign-in
+
+Select **OAuth** in the DevOps Agent connection form, then sign in to Coralogix for the region you selected and approve the requested access. DevOps Agent completes the OAuth flow; you do not need to create or paste an OAuth client secret.
+
+The Coralogix user who signs in needs access to the applications and subsystems the agent should investigate. Use a least-privilege, read-only role such as **DataQuerying**. Do not use a shared administrator account.
+
+### Personal API key
 
 1. In Coralogix, go to **Settings** > **Users and Teams** > **API Keys**.
 2. Under **Personal keys**, select **+ Key** and name the key, for example `aws-devops-agent`.
