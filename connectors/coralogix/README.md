@@ -11,10 +11,10 @@ Your Coralogix sign-in address shows your region. Select the matching label when
 | `<team>.coralogix.com` | EU1 | AWS eu-west-1 (Ireland) |
 | `<team>.app.eu2.coralogix.com` | EU2 | AWS eu-north-1 (Stockholm) |
 | `<team>.app.coralogix.us` | US1 | AWS us-east-2 (Ohio) |
-| `<team>.app.cx498.coralogix.com` | US2 | AWS us-west-2 (Oregon) |
+| `<team>.app.us2.coralogix.com` | US2 | AWS us-west-2 (Oregon) |
 | `<team>.app.us3.coralogix.com` | US3 | Google Cloud us-central1 (Iowa) |
-| `<team>.app.coralogix.in` | AP1 | AWS ap-south-1 (Mumbai) |
-| `<team>.app.coralogixsg.com` | AP2 | AWS ap-southeast-1 (Singapore) |
+| `<team>.app.ap1.coralogix.in` | AP1 | AWS ap-south-1 (Mumbai) |
+| `<team>.app.ap2.coralogix.com` | AP2 | AWS ap-southeast-1 (Singapore) |
 | `<team>.app.ap3.coralogix.com` | AP3 | AWS ap-southeast-3 (Jakarta) |
 
 ## 2. Create a personal API key
