@@ -1,0 +1,100 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "no-credentials-offer-file-fallback",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires DynamoDB RCU/WCU costs to be calculated using the paid (beyond-free-tier) dimension at the StartingRange of 18600, meaning full provisioned capacity (20 RCU, 20 WCU) should use the $0.00015 and $0.00075 rates respectively, yielding RCU cost = 0.00015 x 730 x 20 = $2.19 and WCU cost = 0.00075 x 730 x 20 = $10.95, for a total net impact of \u2248$81.54. Instead, the agent incorrectly treated the 20 RCU/20 WCU provisioned capacity as falling under the free-tier threshold (since 20 < 25 units), computed RCU-hrs and WCU-hrs as 14,600 (20 x 730) and compared that to the 18,600 unit-hour free-tier threshold, concluding DynamoDB costs are $0.00. This is a misinterpretation: the free-tier free-tier threshold of 18,600 unit-hours applies cumulatively per table per month (25 units x 744 hrs \u2248 18,600), but the question says to use the paid dimension specifically, implying the free tier should not be applied (the free-tier rows should be skipped). The agent's final total of $68.40 significantly differs from the expected \u2248$81.54. Additionally, the expected output requires explicit mention of a 'Price source: offer files 4 lines', no \u26d4 banner, trace rows showing the offer-file URL/publication date/SKU, status of topology check, which are largely absent in the agent's response. The core cost calculation differs substantially from the expected result, which is the central content of this task.",
+      "evidence": "\"LedgerIndex (DynamoDB) | Provisioned, 20 RCU / 20 WCU | $0.00015/RCU-hr, $0.00075/WCU-hr beyond free tier | 20\u00d7730 = 14,600 RCU-hrs and 14,600 WCU-hrs \u2014 both under the 18,600-unit-hr free tier threshold (\u224825 units/mo) | $0.00\" vs expected \"LedgerIndex read capacity uses the paid dimension (StartingRange 18600) 0.00015 x 730 x 20 = $2.19, write capacity 0.00075 x 730 x 20 = $10.95... Net \u2248 +$81.54\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Response reports a net monthly change of about +$81.54 (accept $81.00-$82.00).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Total monthly cost impact: \u2248 $68.40",
+          "reasoning": "The agent's total is $68.40, not within the $81.00-$82.00 range asserted.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response prices from the public Price List offer files and says so (in the Price source line or the Pricing trace), with the file URL or the 2026-10-15 publication date shown.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Used the On-Demand/Shared-tenancy/Linux rate rows from the price list CSVs you fetched\" and the table cites rates like $0.090/hr, $0.090/GB-mo matching the pasted CSV with Publication Date 2026-10-15 mentioned in the prompt data; the agent explicitly references 'the pricing lookups you pulled for eu-west-1' and the CSV rows",
+          "reasoning": "The agent explicitly states it priced from the CSV price list rows provided (which are the public Price List offer files), referencing On-Demand rows specifically, though it does not explicitly restate the 2026-10-15 publication date or URL in its own text - it refers to 'the price list CSVs you fetched'. This is a partial match - it says 'price list CSVs' but doesn't quote the URL or date directly in its response.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Response does NOT say pricing is unavailable and does NOT show the \u26d4 'Pricing not available' banner.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'Pricing not available' or a \u26d4 banner anywhere in the response; agent provides concrete dollar figures throughout.",
+          "reasoning": "The response does not claim pricing is unavailable; it computes and presents a cost estimate.",
+          "confidence": "high"
+        },
+        {
+          "text": "ReconcilerInstance is priced at $65.70 from the OnDemand row, not $0.00 from the Reserved row.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"ReconcilerInstance` (EC2) | m6g.large, On-Demand, Linux | $0.090/hr | 730 hrs | **$65.70**\" and \"not the Reserved row (that one's $0.00 only because it reflects an already-purchased RI, not relevant for a net-new branch)\"",
+          "reasoning": "The agent explicitly priced the EC2 instance at $65.70 from the OnDemand row and explicitly rejected using the Reserved $0.00 row.",
+          "confidence": "high"
+        },
+        {
+          "text": "LedgerIndex read and write capacity are priced from the paid dimension ($2.19 and $10.95), not as $0.00 from the free-tier rows.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"LedgerIndex` (DynamoDB) | Provisioned, 20 RCU / 20 WCU | ... | 20\u00d7730 = 14,600 RCU-hrs and 14,600 WCU-hrs \u2014 both under the 18,600-unit-hr free tier threshold ... | **$0.00**\"",
+          "reasoning": "The agent priced DynamoDB capacity at $0.00 using the free-tier interpretation, not the paid dimension values of $2.19 and $10.95 asserted. This is the opposite of what the assertion requires.",
+          "confidence": "high"
+        },
+        {
+          "text": "The topology check is reported either as not needed (new template, no stack name, no explicit names) or as skipped with the credential error quoted or paraphrased, and it causes no adjustment to the total.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not mention any topology check, stack name verification, or credential error related to describe-stacks in the context of a topology check; it only mentions describe-stacks failing for pricing API access reasons ('Since I couldn't hit `describe-stacks` or the Pricing API directly (no credentials in this sandbox)')",
+          "reasoning": "While the agent does mention describe-stacks failed due to credentials, it does not frame this as a 'topology check' being skipped or not needed, nor does it clarify this causes no adjustment to the total in an explicit way tied to a topology check concept. The assertion's specific framing about a topology check is not addressed.",
+          "confidence": "low"
+        },
+        {
+          "text": "Response does not ask the user for AWS credentials before giving the estimate.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent directly provides the full cost breakdown and total without requesting credentials at any point; it only notes 'Since I couldn't hit describe-stacks or the Pricing API directly (no credentials in this sandbox), this is built entirely from the static price list rows you pasted.'",
+          "reasoning": "The agent proceeds to give the estimate using the provided fixture data instead of asking the user to supply credentials first.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response names the offer-file host",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 8,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "4.0%",
+      "compaction_count": 0
+    }
+  }
+}

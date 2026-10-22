@@ -1,0 +1,91 @@
+{
+  "skill_name": "estimate-new-resource-costs",
+  "description": "Functional evals for the estimate-new-resource-costs skill. Each positive eval is a realistic request about a pull request plus the raw material the repository integration and AWS tools returned for it (template diffs, read-only describe results, and raw pricing rows as get-products or the public offer files return them, including reservation, surcharge and free-tier rows that must be filtered out). No AWS credentials or repository access are needed. Resource names, account results, SKUs and prices are synthetic fixtures; the prices intentionally differ from real AWS list prices, so a remembered price is detectable. Expected figures use 730 hours per month and round each line to cents. Two should_trigger=false evals are near-miss negatives for the trigger test. Run each prompt with and without the skill to measure lift.",
+  "evals": [
+    {
+      "id": "new-stack-create",
+      "task_type": "chat",
+      "should_trigger": true,
+      "category": "CREATE of a new stack in a repo with no pipeline: all Added, Region from the deploy workflow, multi-part pricing, surcharge SKUs to discard, usage split",
+      "prompt": "We're about to merge PR #14 in acme/payments-infra. It's the first infrastructure PR in that repo, there's no pipeline review set up, and finance wants to know what this stack is going to add to the AWS bill every month before we approve it. Can you work that out from the PR?\n\nThe attached material is what the repository integration and the AWS tools returned for this change. It is a synthetic test fixture: resource names, account results, SKUs and rates are made up, and the rates intentionally differ from real AWS list prices, so treat the rows below as the live lookup results for this run.\n\n--- PR #14 (feature/ledger -> main) ---\nBase branch main: no cloudformation/ directory.\nFiles added: cloudformation/payments-ledger.yaml, .github/workflows/deploy.yml\n\n--- .github/workflows/deploy.yml (excerpt) ---\nenv:\n  AWS_REGION: eu-west-1\n  STACK_NAME: payments-ledger\nrun: aws cloudformation deploy --stack-name payments-ledger --template-file cloudformation/payments-ledger.yaml --region eu-west-1\n\n--- cloudformation/payments-ledger.yaml (Resources; Parameters hold only VPC and subnet IDs) ---\n  LedgerDbSubnetGroup: {Type: AWS::RDS::DBSubnetGroup, Properties: {SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]}}\n  LedgerDb:\n    Type: AWS::RDS::DBInstance\n    Properties: {Engine: postgres, DBInstanceClass: db.r6g.large, MultiAZ: true, AllocatedStorage: \"200\", StorageType: gp3, DBSubnetGroupName: !Ref LedgerDbSubnetGroup}\n  ReconcilerNatEip: {Type: AWS::EC2::EIP, Properties: {Domain: vpc}}\n  ReconcilerNatGateway: {Type: AWS::EC2::NatGateway, Properties: {AllocationId: !GetAtt ReconcilerNatEip.AllocationId, SubnetId: !Ref PublicSubnetA}}\n  AlbSecurityGroup: {Type: AWS::EC2::SecurityGroup}\n  ApiLoadBalancer:\n    Type: AWS::ElasticLoadBalancingV2::LoadBalancer\n    Properties: {Type: application, Scheme: internet-facing, Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB], SecurityGroups: [!Ref AlbSecurityGroup]}\n  ArchiveBucket: {Type: AWS::S3::Bucket, Properties: {VersioningConfiguration: {Status: Enabled}}}\n  ReconcilerRole: {Type: AWS::IAM::Role}\n  ReconcilerFunction: {Type: AWS::Lambda::Function, Properties: {Runtime: python3.12, Architectures: [arm64], MemorySize: 512, Role: !GetAtt ReconcilerRole.Arn}}\n\n--- AWS (read-only), eu-west-1 ---\ncloudformation describe-stacks --stack-name payments-ledger\n  -> ValidationError: Stack with id payments-ledger does not exist\n\n--- pricing get-products (endpoint us-east-1, filter regionCode=eu-west-1), OnDemand terms only ---\nAmazonRDS  SKU FX-RDS-01  usagetype EU-Multi-AZUsage:db.r6g.large   databaseEngine=PostgreSQL deploymentOption=Multi-AZ   0.500 USD per Hrs\nAmazonRDS  SKU FX-RDS-09  usagetype EU-UnusedBox:db.r6g.large       databaseEngine=PostgreSQL deploymentOption=Multi-AZ   0.000 USD per Hrs   \"unused capacity reservation hour\"\nAmazonRDS  SKU FX-RDS-02  usagetype EU-RDS:Multi-AZ-GP3-Storage     volumeType=General Purpose-GP3 databaseEngine=PostgreSQL   0.250 USD per GB-Mo\nAmazonEC2  SKU FX-NAT-01  usagetype EU-NatGateway-Hours             productFamily=NAT Gateway   0.050 USD per Hrs\nAmazonEC2  SKU FX-NAT-02  usagetype EU-NatGateway-Bytes             productFamily=NAT Gateway   0.050 USD per GB\nAmazonVPC  SKU FX-IP-01   usagetype EU-PublicIPv4:InUseAddress                                  0.005 USD per Hrs\nAWSELB     SKU FX-ALB-01  usagetype EU-LoadBalancerUsage            productFamily=Load Balancer-Application   0.025 USD per Hrs\nAWSELB     SKU FX-ALB-03  usagetype EU-TS-LoadBalancerUsage         productFamily=Load Balancer-Application   0.006 USD per Hrs   \"trust store unit-hour\"\nAWSELB     SKU FX-ALB-02  usagetype EU-LCUUsage                     productFamily=Load Balancer-Application   0.008 USD per LCU-Hrs",
+      "expected_output": "The cost dashboard (assets/output-template.md layout) for acme/payments-infra PR #14, priced for eu-west-1 because the deploy workflow sets AWS_REGION. The base branch has no template, so every resource is Added; Removed and Resized are _None._. The topology check runs because this is a new template whose stack name (payments-ledger) is known; the stack doesn't exist, so the adjustment is $0.00. Price lines: LedgerDb instance 0.500 x 730 = $365.00 (the 0.000 UnusedBox row is a reservation SKU and is discarded); LedgerDb storage 0.250 x 200 GB = $50.00; NAT gateway hours 0.050 x 730 = $36.50; NAT EIP public IPv4 0.005 x 730 = $3.65; ALB hours 0.025 x 730 = $18.25 (the TS- trust-store row is discarded); ALB public IPv4 x 2 subnets = $7.30. Net monthly change ≈ +$480.70. Usage-dependent with no figure: ArchiveBucket, ReconcilerFunction, NAT data processing (EU-NatGateway-Bytes), ALB LCU-hours. The subnet group, security group and IAM role have no charge.",
+      "assertions": [
+        "Response reports a net monthly change of about +$480.70 (accept $480.00-$481.50).",
+        "Response states that the pricing Region eu-west-1 was taken from the deploy workflow (AWS_REGION), and does not ask the user which Region to use.",
+        "Every resource is classified as Added, and the Removed and Resized sections are present but empty.",
+        "LedgerDb is priced as two lines, instance $365.00 and storage $50.00, using the 0.500 Multi-AZUsage row and not the 0.000 UnusedBox row.",
+        "The load balancer is priced at $18.25 using the LoadBalancerUsage row (not the TS- trust-store row), plus $7.30 for two public IPv4 addresses (one per subnet).",
+        "ArchiveBucket, ReconcilerFunction, NAT gateway data processing and load balancer LCU-hours are listed as usage-dependent with no dollar figure.",
+        "Response does not introduce any rate other than the fixture rates (for example it does not show $0.504/hr or $367.92 for the database).",
+        "Every dollar amount in the Added table references a Pricing trace row that names the SKU (FX-...).",
+        {
+          "text": "Response uses the cost dashboard layout: a Summary table, an Added resources table and a Pricing trace section, in that order",
+          "evaluator": "regex",
+          "pattern": "(?s)Summary.*Added resources.*Pricing trace"
+        }
+      ]
+    },
+    {
+      "id": "no-credentials-offer-file-fallback",
+      "task_type": "chat",
+      "should_trigger": true,
+      "category": "pricing fallback with no AWS credentials: raw offer-file CSV rows, TermType filter, free-tier dimension skipped",
+      "prompt": "Can you give the monthly cost impact of branch feature/reconciler in acme/ledger-tools (vs main)? The stack goes to eu-west-1. Heads up: the sandbox I'm in has no AWS credentials, so anything that needs them fails.\n\nThe attached material is what the repository integration and the AWS tools returned for this change. It is a synthetic test fixture: resource names, account results, SKUs and rates are made up, and the rates intentionally differ from real AWS list prices, so treat the rows below as the live lookup results for this run.\n\n--- cloudformation/reconciler.yaml: absent on main, added on feature/reconciler (Resources) ---\n  ReconcilerInstance:\n    Type: AWS::EC2::Instance\n    Properties: {InstanceType: m6g.large, ImageId: ami-0fixture0000000001, BlockDeviceMappings: [{DeviceName: /dev/xvda, Ebs: {VolumeSize: 30, VolumeType: gp3}}]}\n  LedgerIndex:\n    Type: AWS::DynamoDB::Table\n    Properties: {BillingMode: PROVISIONED, ProvisionedThroughput: {ReadCapacityUnits: 20, WriteCapacityUnits: 20}, KeySchema: [{AttributeName: pk, KeyType: HASH}], AttributeDefinitions: [{AttributeName: pk, AttributeType: S}]}\n\n--- what I already tried ---\nverify_aws_claim: tool not available in this environment.\naws pricing describe-services --service-code AmazonEC2 --region us-east-1\n  -> Unable to locate credentials (credential endpoint returned HTTP 500). Same error for eu-central-1 and ap-south-1.\naws cloudformation describe-stacks --region eu-west-1 -> same credential error.\n\n--- curl -s https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/eu-west-1/index.csv (first lines + matching rows) ---\n\"FormatVersion\",\"v1.0\"\n\"Disclaimer\",\"This pricing list is for informational purposes only...\"\n\"Publication Date\",\"2026-10-15T19:13:16Z\"\n\"Version\",\"20261015191316\"\n\"OfferCode\",\"AmazonEC2\"\n\"SKU\",\"OfferTermCode\",\"RateCode\",\"TermType\",\"PriceDescription\",\"EffectiveDate\",\"StartingRange\",\"EndingRange\",\"Unit\",\"PricePerUnit\",\"Currency\",...,\"Instance Type\",...,\"Tenancy\",...,\"Operating System\",...,\"usageType\",\"operation\",...,\"CapacityStatus\",...,\"Pre Installed S/W\",...\n\"FX-OF-EC2\",\"JRTCKXETXF\",\"FX-OF-EC2.JRTCKXETXF.6YS6EN2CT7\",\"OnDemand\",\"$0.090 per On Demand Linux m6g.large Instance Hour\",\"2026-10-01\",\"0\",\"Inf\",\"Hrs\",\"0.0900000000\",\"USD\",...,\"m6g.large\",...,\"Shared\",...,\"Linux\",...,\"EU-BoxUsage:m6g.large\",\"RunInstances\",...,\"Used\",...,\"NA\",...\n\"FX-OF-EC2\",\"4NA7Y494T4\",\"FX-OF-EC2.4NA7Y494T4.6YS6EN2CT7\",\"Reserved\",\"Linux/UNIX (Amazon VPC), m6g.large reserved instance applied\",\"2026-10-01\",\"0\",\"Inf\",\"Hrs\",\"0.0000000000\",\"USD\",...,\"m6g.large\",...,\"Shared\",...,\"Linux\",...,\"EU-BoxUsage:m6g.large\",\"RunInstances\",...,\"Used\",...,\"NA\",...\n\"FX-OF-EBS\",\"JRTCKXETXF\",\"FX-OF-EBS.JRTCKXETXF.6YS6EN2CT7\",\"OnDemand\",\"$0.090 per GB-month of General Purpose (gp3) provisioned storage - EU (Ireland)\",\"2026-10-01\",\"0\",\"Inf\",\"GB-Mo\",\"0.0900000000\",\"USD\",...,\"EU-EBS:VolumeUsage.gp3\",\"\",...\n\n--- curl -s https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/current/eu-west-1/index.csv (matching rows; same header layout, Publication Date 2026-10-15) ---\n\"FX-OF-RCU\",\"JRTCKXETXF\",\"FX-OF-RCU.JRTCKXETXF.ABCDE11111\",\"OnDemand\",\"$0.00 per hour for 25 units of read capacity for a month (free tier)\",\"2026-10-01\",\"0\",\"18600\",\"ReadCapacityUnit-Hrs\",\"0.0000000000\",\"USD\",...,\"EU-ReadCapacityUnit-Hrs\",...\n\"FX-OF-RCU\",\"JRTCKXETXF\",\"FX-OF-RCU.JRTCKXETXF.ABCDE22222\",\"OnDemand\",\"$0.00015 per hour for units of read capacity beyond the free tier\",\"2026-10-01\",\"18600\",\"Inf\",\"ReadCapacityUnit-Hrs\",\"0.0001500000\",\"USD\",...,\"EU-ReadCapacityUnit-Hrs\",...\n\"FX-OF-WCU\",\"JRTCKXETXF\",\"FX-OF-WCU.JRTCKXETXF.FGHIJ11111\",\"OnDemand\",\"$0.00 per hour for 25 units of write capacity for a month (free tier)\",\"2026-10-01\",\"0\",\"18600\",\"WriteCapacityUnit-Hrs\",\"0.0000000000\",\"USD\",...,\"EU-WriteCapacityUnit-Hrs\",...\n\"FX-OF-WCU\",\"JRTCKXETXF\",\"FX-OF-WCU.JRTCKXETXF.FGHIJ22222\",\"OnDemand\",\"$0.00075 per hour for units of write capacity beyond the free tier\",\"2026-10-01\",\"18600\",\"Inf\",\"WriteCapacityUnit-Hrs\",\"0.0007500000\",\"USD\",...,\"EU-WriteCapacityUnit-Hrs\",...",
+      "expected_output": "The dashboard priced from the public offer files (Price source: offer files 4 lines), with the docs and API failures recorded and no ⛔ banner, because pricing succeeded without credentials. Both resources are Added. ReconcilerInstance uses the OnDemand row (0.090 x 730 = $65.70), not the Reserved 0.000 row; its 30 GB gp3 root volume is 0.090 x 30 = $2.70; LedgerIndex read capacity uses the paid dimension (StartingRange 18600) 0.00015 x 730 x 20 = $2.19, write capacity 0.00075 x 730 x 20 = $10.95; the $0.00 free-tier dimensions are skipped. Net ≈ +$81.54. The topology check is not needed (new template, no stack name in the repo, no explicit resource names) or is reported as skipped with the credential error; either way no adjustment. Trace rows show the offer-file URL, the 2026-10-15 publication date and the SKU.",
+      "assertions": [
+        "Response reports a net monthly change of about +$81.54 (accept $81.00-$82.00).",
+        "Response prices from the public Price List offer files and says so (in the Price source line or the Pricing trace), with the file URL or the 2026-10-15 publication date shown.",
+        "Response does NOT say pricing is unavailable and does NOT show the ⛔ 'Pricing not available' banner.",
+        "ReconcilerInstance is priced at $65.70 from the OnDemand row, not $0.00 from the Reserved row.",
+        "LedgerIndex read and write capacity are priced from the paid dimension ($2.19 and $10.95), not as $0.00 from the free-tier rows.",
+        "The topology check is reported either as not needed (new template, no stack name, no explicit names) or as skipped with the credential error quoted or paraphrased, and it causes no adjustment to the total.",
+        "Response does not ask the user for AWS credentials before giving the estimate.",
+        {
+          "text": "Response names the offer-file host",
+          "evaluator": "regex",
+          "pattern": "pricing\\.us-east-1\\.amazonaws\\.com"
+        }
+      ]
+    },
+    {
+      "id": "pr-without-iac-nothing-to-price",
+      "task_type": "chat",
+      "should_trigger": true,
+      "category": "boundary: PR touches only application code; skill says nothing to price and does not infer resources",
+      "prompt": "Before we merge PR #42 in acme/payments-api, what does it add to the monthly AWS bill?\n\nThe attached material is what the repository integration and the AWS tools returned for this change. It is a synthetic test fixture: resource names, account results, SKUs and rates are made up, and the rates intentionally differ from real AWS list prices, so treat the rows below as the live lookup results for this run.\n\n--- PR #42 (fix/retry-backoff -> main), files changed ---\nsrc/payments/client.py        (+41 -12)   adds exponential backoff to the DynamoDB client\nsrc/payments/settings.py      (+3 -1)     new RETRY_MAX_ATTEMPTS = 5\ntests/test_client.py          (+88 -0)\nREADME.md                     (+6 -0)\nNo files under cloudformation/, cdk.out/, template.yaml, or *.tf changed.",
+      "expected_output": "A short answer saying the PR touches no infrastructure-as-code files, so there is nothing to price and the monthly fixed cost does not change. It does not infer or invent AWS resources from the Python changes (for example it does not price the DynamoDB table the client talks to), and it does not produce dollar figures.",
+      "assertions": [
+        "Response states that the PR changes no infrastructure-as-code files and therefore there is nothing to price.",
+        "Response does not list or price any AWS resource inferred from the application code (no DynamoDB, Lambda or EC2 line items).",
+        "Response contains no dollar amount other than, at most, an explicit $0 / no change statement.",
+        "Response does not ask the user to provide a template or a Region."
+      ]
+    },
+    {
+      "id": "neg-past-spend-cost-explorer",
+      "task_type": "chat",
+      "should_trigger": false,
+      "category": "negative trigger: past/current spend analysis is Cost Explorer territory, not an IaC change estimate",
+      "prompt": "Our AWS bill for September was about 18% higher than August. Can you break down where the increase came from by service and account? We use Cost Explorer and have CUR enabled.",
+      "expected_output": "A spend-analysis answer (Cost Explorer / CUR queries, grouping by service and account). The estimate-new-resource-costs skill must not activate: there is no pull request, no infrastructure-as-code diff, and the question is about past spend, which the skill's description explicitly excludes. NOTE: this is a negative eval; the runner grades only whether the skill triggered.",
+      "assertions": [
+        "Response does not produce the IaC cost dashboard (no '💰 IaC cost impact' heading, no Added/Removed/Resized tables).",
+        "Response does not ask for a pull request, branch or CloudFormation template.",
+        "Response addresses past spend analysis (Cost Explorer, CUR, grouping by service/account)."
+      ]
+    },
+    {
+      "id": "neg-rightsizing-running-fleet",
+      "task_type": "chat",
+      "should_trigger": false,
+      "category": "negative trigger: rightsizing already-running resources is not an IaC change estimate",
+      "prompt": "We have about 40 m5.2xlarge instances in us-east-1 that CloudWatch shows averaging 9% CPU over the last month. What would we save per month by rightsizing them, and what sizes would you move them to?",
+      "expected_output": "A rightsizing recommendation based on utilization (Compute Optimizer / CloudWatch data), with savings estimates for the running fleet. The estimate-new-resource-costs skill must not activate: no pull request or template is involved, and rightsizing running resources is explicitly out of the skill's scope. NOTE: this is a negative eval; the runner grades only whether the skill triggered.",
+      "assertions": [
+        "Response does not produce the IaC cost dashboard (no '💰 IaC cost impact' heading, no Added/Removed/Resized tables).",
+        "Response does not ask for a pull request, branch or CloudFormation template.",
+        "Response addresses rightsizing of the existing instances (utilization data, candidate instance sizes, savings)."
+      ]
+    }
+  ]
+}
