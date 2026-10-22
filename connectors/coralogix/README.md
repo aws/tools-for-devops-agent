@@ -38,4 +38,15 @@ Use a personal key, not a Send-Your-Data (ingestion) key. The key works within t
 
 Ensure the personal API key has the permissions required by the tools you want to use. For example, to use the Alerts tools, select **Alerts** in **Role Presets**.
 
-More in the Coralogix docs: [API keys](https://coralogix.com/docs/user-guides/account-management/api-keys/api-keys/), [Coralogix domain](https://coralogix.com/docs/user-guides/account-management/account-settings/coralogix-domain/), and [MCP server permissions](https://coralogix.com/docs/user-guides/mcp-server/permissions/).
+## 3. Trigger investigations from alerts
+
+To automatically start an AWS DevOps Agent investigation when a Coralogix alert fires, use the webhook URL, API key, and request body that AWS DevOps Agent provides for your Agent Space.
+
+Configure one Coralogix delivery path:
+
+- **Notification Center (recommended):** Go to **Integrations** > **Notification Center** > **Connectors** and create a **Generic HTTPS** connector that sends a `POST` request to the Agent Space webhook URL. Add `Content-Type: application/json` and `Authorization: Bearer <Webhook-API-Key>` headers. Then go to **Integrations** > **Notification Center** > **Presets**, select **Alert**, and create a preset with the AWS DevOps Agent request body.
+- **Legacy outbound webhook:** Go to **Integrations** > **Outbound Webhooks** and create a **Generic** outbound webhook with the same URL, headers, and request body if Notification Center is not available for your account.
+
+For the alert, open its **Response** step, set **Notify on** to **Alerts**, then select the connector and preset, or the outbound webhook. Use the request body unchanged so it follows the AWS DevOps Agent webhook format.
+
+More in the Coralogix docs: [AWS DevOps Agent](https://coralogix.com/docs/user-guides/mcp-server/aws-devops-agent/), [API keys](https://coralogix.com/docs/user-guides/account-management/api-keys/api-keys/), [Coralogix domain](https://coralogix.com/docs/user-guides/account-management/account-settings/coralogix-domain/), and [MCP server permissions](https://coralogix.com/docs/user-guides/mcp-server/permissions/).
