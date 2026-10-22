@@ -3,7 +3,7 @@ name: "iac-change-cost-preview"
 description: "Use this skill whenever a pull request, merge request, branch, or diff changes infrastructure-as-code: CloudFormation, SAM, CDK-synthesized templates, or Terraform. Run it automatically in every Release Readiness Review that touches those files, even if nobody asks about cost, and load it before writing the cost section of a review. Also use it when someone asks what a change adds or removes and what it will do to the AWS bill, even without saying cost (for example 'what does this PR spin up?'), including repos with no CI/CD pipeline. Don't use it for past or current spend, invoices, Cost Explorer, budgets, or rightsizing running resources."
 metadata:
   author: inesttia
-  version: "1.0.0"
+  version: "1.1.0"
   summary: "Estimates the monthly cost change of an IaC pull request with live AWS Price List rates, in Release Readiness Reviews or on request."
   aws-devops-agent-skills.agent-types: "RELEASE_READINESS_REVIEW, CHAT"
   aws-devops-agent-skills.aws-services: "Amazon EC2, Amazon RDS, Amazon VPC, Amazon S3, Amazon CloudWatch"
