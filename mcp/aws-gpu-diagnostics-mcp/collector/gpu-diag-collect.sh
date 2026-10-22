@@ -22,6 +22,7 @@ done
 outdir="$(mktemp -d /tmp/gpu-diag.XXXXXX)"
 trap 'rm -rf "$outdir"' EXIT
 summary="$outdir/summary.txt"
+capture_failures=()
 
 run_capture() {
   local name="$1"
@@ -33,6 +34,7 @@ run_capture() {
   else
     status=$?
     echo "FAILED (exit=$status)" | tee -a "$summary"
+    capture_failures+=("$name")
   fi
 }
 
@@ -46,6 +48,7 @@ run_shell_capture() {
   else
     status=$?
     echo "FAILED (exit=$status)" | tee -a "$summary"
+    capture_failures+=("$name")
   fi
 }
 
@@ -70,7 +73,7 @@ run_shell_capture "kernel-xid" "$outdir/kernel-xid.txt" "journalctl -k -b 2>/dev
 run_shell_capture "kernel-nvidia" "$outdir/kernel-nvidia.txt" "journalctl -k -b 2>/dev/null | grep -i nvidia || true"
 run_shell_capture "fabric-manager" "$outdir/fabricmanager-status.txt" "systemctl status nvidia-fabricmanager 2>&1 || true"
 run_shell_capture "fabric-manager-log" "$outdir/fabricmanager-log.txt" "journalctl -u nvidia-fabricmanager -b 2>/dev/null | tail -1000 || true"
-run_capture "firmware" "$outdir/firmware-inventory.txt" nvidia-smi --query-gpu=index,name,uuid,vbios_version,driver_version,gsp.firmware.version --format=csv
+run_capture "firmware" "$outdir/firmware-inventory.txt" nvidia-smi --query-gpu=index,name,uuid,vbios_version,driver_version,gsp.mode.current,gsp.mode.default --format=csv
 run_shell_capture "os-info" "$outdir/os-info.txt" "uname -a; cat /etc/os-release; uptime"
 
 if [[ "$profile" == "extended" ]]; then
@@ -80,14 +83,17 @@ if [[ "$profile" == "extended" ]]; then
   run_capture "pcie-link" "$outdir/pcie-link.txt" nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.current,pcie.link.width.current,pcie.link.gen.max,pcie.link.width.max --format=csv
 fi
 
+CAPTURE_FAILURES="$(IFS=,; printf '%s' "${capture_failures[*]}")" \
 OUTDIR="$outdir" PROFILE="$profile" PREFIX="$prefix" python3 - <<'PY'
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 
 outdir = Path(os.environ["OUTDIR"])
 findings = []
+failed_captures = [name for name in os.environ["CAPTURE_FAILURES"].split(",") if name]
 nvlink_error_counters = (
     "malformed packet errors",
     "buffer overrun errors",
@@ -106,11 +112,15 @@ def has_nonzero_counter(line):
 
 
 def add_finding(severity, filename, line_number, line):
+    evidence = "".join(
+        character for character in line
+        if not unicodedata.category(character).startswith("C")
+    )
     findings.append({
         "severity": severity,
         "artifactKey": f"{os.environ['PREFIX']}/{filename}",
         "line": line_number,
-        "evidence": line[:500],
+        "evidence": evidence[:500],
     })
 
 
@@ -133,7 +143,8 @@ for filename in ("kernel-xid.txt", "nvidia-ecc.txt", "nvlink-errors.txt", "fabri
         elif filename == "fabricmanager-status.txt" and ("failed" in lowered or "inactive" in lowered):
             add_finding("high", filename, number, line)
 manifest = {
-    "collectionComplete": True,
+    "collectionComplete": not failed_captures,
+    "failedCaptures": failed_captures,
     "profile": os.environ["PROFILE"],
     "expectedFiles": ["summary.txt", "nvidia-smi.txt", "nvidia-smi-query.txt", "kernel-xid.txt", "nvidia-ecc.txt", "nvlink-errors.txt"],
     "artifacts": [

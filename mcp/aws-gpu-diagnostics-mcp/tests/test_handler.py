@@ -73,6 +73,70 @@ def test_collect_requires_diagnostics_opt_in_tag():
             )
 
 
+def test_collection_status_requires_gpu_diagnostics_document():
+    ssm = MagicMock()
+    ssm.get_automation_execution.return_value = {
+        "AutomationExecution": {"DocumentName": "different-document"}
+    }
+    with patch.object(handler.boto3, "client", return_value=ssm):
+        with pytest.raises(ValueError, match="does not belong"):
+            handler.collection_status(
+                {
+                    "executionId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "region": "us-west-2",
+                }
+            )
+
+
+def test_collection_status_returns_matching_document_execution():
+    ssm = MagicMock()
+    ssm.get_automation_execution.return_value = {
+        "AutomationExecution": {
+            "DocumentName": "test-document",
+            "AutomationExecutionStatus": "Success",
+            "StepExecutions": [],
+        }
+    }
+    with patch.object(handler.boto3, "client", return_value=ssm):
+        response = handler.collection_status(
+            {
+                "executionId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "region": "us-west-2",
+            }
+        )
+    assert response["status"] == "Success"
+
+
+def test_validate_bundle_reports_failed_captures_as_incomplete():
+    manifest = {
+        "collectionComplete": False,
+        "failedCaptures": ["nvlink-errors"],
+        "expectedFiles": ["nvlink-errors.txt"],
+        "artifacts": [{
+            "key": (
+                "collections/i-0123456789abcdef0/"
+                "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/nvlink-errors.txt"
+            )
+        }],
+    }
+    with patch.object(handler, "_read_json", return_value=manifest):
+        response = handler.validate_gpu_bundle(
+            {
+                "instanceId": "i-0123456789abcdef0",
+                "collectionId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            }
+        )
+    assert response["complete"] is False
+    assert response["failedCaptures"] == ["nvlink-errors"]
+
+
+def test_findings_evidence_strips_control_characters():
+    findings = handler._sanitize_findings([
+        {"severity": "high", "evidence": "Xid\x00 alert\x1b[31m\u202ereversed"},
+    ])
+    assert findings == [{"severity": "high", "evidence": "Xid alert[31mreversed"}]
+
+
 def test_gateway_rejects_unknown_tool():
     context = SimpleNamespace(
         client_context=SimpleNamespace(custom={"bedrockAgentCoreToolName": "target___nope"})

@@ -91,7 +91,7 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: GpuDiagnosticsMcpStackProps) {
     super(scope, id, {
       ...props,
-      description: 'Approval-gated GPU diagnostics MCP server for AWS DevOps Agent.',
+      description: 'Controlled GPU diagnostics MCP server for AWS DevOps Agent.',
     });
 
     if (props.requireHumanApproval && !props.approvalApproverArns?.length) {
@@ -121,8 +121,13 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
       const principal = new iam.ArnPrincipal(roleArn);
       artifactsBucket.addToResourcePolicy(new iam.PolicyStatement({
         principals: [principal],
-        actions: ['s3:GetObject', 's3:PutObject', 's3:AbortMultipartUpload', 's3:ListMultipartUploadParts'],
-        resources: [artifactsBucket.arnForObjects('collector/*'), artifactsBucket.arnForObjects('collections/*')],
+        actions: ['s3:GetObject'],
+        resources: [artifactsBucket.arnForObjects('collector/*')],
+      }));
+      artifactsBucket.addToResourcePolicy(new iam.PolicyStatement({
+        principals: [principal],
+        actions: ['s3:PutObject', 's3:AbortMultipartUpload', 's3:ListMultipartUploadParts'],
+        resources: [artifactsBucket.arnForObjects('collections/*')],
       }));
       artifactsBucket.addToResourcePolicy(new iam.PolicyStatement({
         principals: [principal],
@@ -180,7 +185,10 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
         assumeRole: automationRole.roleArn,
         parameters: {
           InstanceId: { type: 'String' },
-          CollectionPrefix: { type: 'String' },
+          CollectionPrefix: {
+            type: 'String',
+            allowedPattern: '^collections/i-[0-9a-f]{8,17}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+          },
           Profile: { type: 'String', allowedValues: ['standard', 'extended'], default: 'standard' },
         },
         mainSteps: [
@@ -216,9 +224,28 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')],
     });
     functionRole.addToPolicy(new iam.PolicyStatement({
-      actions: ['ec2:DescribeInstances', 'ssm:StartAutomationExecution', 'ssm:GetAutomationExecution'],
+      actions: ['ec2:DescribeInstances'],
       resources: ['*'],
       conditions: { StringEquals: { 'aws:RequestedRegion': allowedRegions } },
+    }));
+    functionRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['ssm:StartAutomationExecution'],
+      resources: allowedRegions.flatMap(region => [
+        `arn:${this.partition}:ssm:${region}:${this.account}:document/${document.ref}`,
+        `arn:${this.partition}:ssm:${region}:${this.account}:automation-definition/${document.ref}:$DEFAULT`,
+        `arn:${this.partition}:ssm:${region}:${this.account}:automation-execution/*`,
+      ]),
+    }));
+    functionRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['iam:PassRole'],
+      resources: [automationRole.roleArn],
+      conditions: { StringEquals: { 'iam:PassedToService': 'ssm.amazonaws.com' } },
+    }));
+    functionRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['ssm:GetAutomationExecution'],
+      resources: allowedRegions.map(
+        region => `arn:${this.partition}:ssm:${region}:${this.account}:automation-execution/*`
+      ),
     }));
     artifactsBucket.grantRead(functionRole);
 
@@ -228,6 +255,7 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     const handler = new lambda.Function(this, 'McpHandler', {
+      description: 'Validates targets and serves bounded GPU diagnostics MCP tools.',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'handler.lambda_handler',
       code: lambda.Code.fromAsset(path.join(__dirname, 'lambda')),
@@ -303,7 +331,7 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
       properties: {
         GatewayIdentifier: gateway.ref,
         Name: 'GpuDiagnostics',
-        Description: 'Approval-gated GPU diagnostics collection and analysis',
+        Description: 'Controlled GPU diagnostics collection and analysis',
         TargetConfiguration: {
           Mcp: {
             Lambda: {

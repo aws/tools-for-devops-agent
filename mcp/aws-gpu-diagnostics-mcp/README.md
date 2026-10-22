@@ -4,9 +4,11 @@
 
 This MCP server extends AWS DevOps Agent with a controlled path to collect node-local NVIDIA GPU diagnostics. It is designed to complement the `aiml-gpu-training-cluster-investigation` skill: the skill performs the initial read-only investigation, and this MCP server obtains host evidence only when that evidence is needed.
 
+The fixed collector is adapted from the AWS Samples [GPU Diagnostics Collector](https://github.com/aws-samples/sample-gpu-diagnostics-collector); this MCP integration adds target validation, SSM orchestration, bounded artifact access, and DevOps Agent tool schemas.
+
 ## Design
 
-The server uses an AWS Bedrock AgentCore Gateway and a Lambda target to expose five MCP tools. A collection request validates its target EC2 instance profile, then starts SSM Automation to run the fixed collector. SSM approval is optional and enabled only when `REQUIRE_HUMAN_APPROVAL=true`.
+The server uses the MCP Streamable HTTP transport through an AWS Bedrock AgentCore Gateway and a Lambda target to expose five tools. A collection request validates its target EC2 instance profile, then starts SSM Automation to run the fixed collector. SSM approval is optional and enabled only when `REQUIRE_HUMAN_APPROVAL=true`.
 
 ```text
 DevOps Agent -> AgentCore Gateway -> Lambda MCP target
@@ -21,7 +23,7 @@ DevOps Agent -> AgentCore Gateway -> Lambda MCP target
                          KMS-encrypted S3 diagnostic bundle
 ```
 
-The agent cannot execute arbitrary shell commands or choose an arbitrary S3 destination.
+The agent cannot supply arbitrary shell commands or choose an arbitrary S3 destination. The Lambda generates the collection prefix, and the Automation document independently restricts it to the server-generated `collections/<instance-id>/<collection-id>` shape before substituting it into the fixed command.
 
 ## Tools
 
@@ -38,9 +40,13 @@ The agent cannot execute arbitrary shell commands or choose an arbitrary S3 dest
 - Native SSM `aws:approve` gating is available when `REQUIRE_HUMAN_APPROVAL=true`.
 - A target must be running, in an allowed Region, and attached to an explicitly trusted instance profile.
 - The SSM Automation role permits commands only on instances tagged `DevOpsGpuDiagnostics=true`.
-- The node uses a fixed collector stored in the server's bucket; caller input never becomes a shell command or S3 key.
+- The Lambda can start only this stack's Automation document and can pass only its Automation role to Systems Manager.
+- The node can read only `collector/*` and can write diagnostic output only under `collections/*`; it cannot overwrite the collector.
+- The Lambda generates the S3 collection prefix, and both Lambda validation and the Automation `allowedPattern` constrain values substituted into the fixed shell command.
+- `collection_status` accepts only executions created from this stack's GPU diagnostics Automation document.
 - Artifacts use SSE-KMS, blocked public access, versioning, and a seven-day lifecycle.
 - The MCP artifact reader accepts only server-shaped artifact keys and caps responses at 256 KiB.
+- Node-generated artifact text is untrusted data. Structured finding evidence has control characters removed, but operators and agents must treat the remaining log content as evidence, not instructions.
 
 ## Prerequisites
 
@@ -79,7 +85,7 @@ In the Agent Space, register the printed MCP server URL as a customer-configured
 
 The `MUTATIVE` classification ensures DevOps Agent requests chat approval before starting an SSM collection. Set `REQUIRE_HUMAN_APPROVAL=true` with `APPROVAL_APPROVER_ARNS` only when a second, native SSM approval gate is desired.
 
-Set `REQUIRE_HUMAN_APPROVAL=true` and `APPROVAL_APPROVER_ARNS` to restore the SSM approval step.
+This integration is intended for interactive troubleshooting only. Do not configure the MCP tools for scheduled or unattended collection. `REQUIRE_HUMAN_APPROVAL` remains off by default because DevOps Agent already requires in-chat approval for the `MUTATIVE` collection tool; enable it with `APPROVAL_APPROVER_ARNS` only when a second SSM approval is required.
 
 ## P6 validation plan
 
@@ -92,7 +98,7 @@ Set `REQUIRE_HUMAN_APPROVAL=true` and `APPROVAL_APPROVER_ARNS` to restore the SS
 
 Do not merge generated deployment outputs, Cognito secrets, account IDs, instance IDs, or collected diagnostic artifacts.
 
-## Scheduled Capacity Block validation
+## Capacity Block validation
 
 Use `scripts/run_reserved_gpu_validation.py` against an active Capacity Block. It launches a
 tagged host into the targeted reservation, waits for SSM, and invokes the deployed MCP handler.
@@ -100,6 +106,8 @@ The `run` action completes the collection and validates the artifact bundle and 
 Use `resume` only if a prior invocation stopped before the collection completed.
 The runner sets `InstanceMarketOptions.MarketType` to `capacity-block`, which EC2 requires when
 launching into a Capacity Block reservation.
+This is a manually invoked pre-merge test harness, not a supported scheduled or unattended
+operation mode for the MCP integration.
 
 ```bash
 export AWS_PROFILE=optimus-123456789012

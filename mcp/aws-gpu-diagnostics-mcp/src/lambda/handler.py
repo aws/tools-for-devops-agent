@@ -1,9 +1,11 @@
 """AWS DevOps Agent Gateway target for GPU diagnostics."""
 
 import json
+import logging
 import os
 import re
 import time
+import unicodedata
 import uuid
 from typing import Any
 
@@ -25,6 +27,7 @@ ARTIFACT_KEY_PATTERN = re.compile(
 )
 MAX_READ_BYTES = 262_144
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+LOGGER = logging.getLogger(__name__)
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -49,6 +52,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         response["durationMs"] = round((time.time() - started_at) * 1000)
         return _success(response)
     except ClientError as error:
+        LOGGER.error(
+            "AWS service call failed: operation=%s code=%s message=%s",
+            error.operation_name,
+            error.response["Error"].get("Code", "Unknown"),
+            error.response["Error"].get("Message", "Unknown"),
+        )
         return _error(
             502,
             "AWS service call failed.",
@@ -112,6 +121,8 @@ def collection_status(arguments: dict[str, Any]) -> dict[str, Any]:
         AutomationExecutionId=execution_id
     )
     execution = response["AutomationExecution"]
+    if execution.get("DocumentName") != COLLECTION_DOCUMENT:
+        raise ValueError("executionId does not belong to the GPU diagnostics document.")
     steps = [
         {
             "name": step.get("StepName"),
@@ -148,6 +159,7 @@ def validate_gpu_bundle(arguments: dict[str, Any]) -> dict[str, Any]:
         "profile": manifest.get("profile"),
         "artifactCount": len(artifacts),
         "missingExpectedFiles": missing,
+        "failedCaptures": manifest.get("failedCaptures", []),
         "artifacts": manifest.get("artifacts", []),
     }
 
@@ -160,7 +172,7 @@ def get_gpu_findings(arguments: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("severity must be critical, high, medium, low, or info.")
 
     findings_key = f"{_collection_prefix(instance_id, collection_id)}/findings.json"
-    findings = _read_json(findings_key).get("findings", [])
+    findings = _sanitize_findings(_read_json(findings_key).get("findings", []))
     if minimum_severity:
         threshold = SEVERITY_ORDER[minimum_severity]
         findings = [
@@ -225,6 +237,27 @@ def _read_json(key: str) -> dict[str, Any]:
             raise ValueError("Collection artifact is not available yet.") from error
         raise
     return json.loads(response["Body"].read().decode("utf-8"))
+
+
+def _sanitize_findings(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    sanitized = []
+    for finding in value:
+        if not isinstance(finding, dict):
+            continue
+        item = dict(finding)
+        evidence = item.get("evidence")
+        if isinstance(evidence, str):
+            item["evidence"] = "".join(
+                character for character in evidence if not _is_control_character(character)
+            )[:500]
+        sanitized.append(item)
+    return sanitized
+
+
+def _is_control_character(character: str) -> bool:
+    return unicodedata.category(character).startswith("C")
 
 
 def _get_tool_name(context: Any) -> str:
