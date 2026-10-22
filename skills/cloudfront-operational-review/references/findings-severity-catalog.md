@@ -1,8 +1,13 @@
 # CloudFront Findings & Severity Catalog
 
-Organized by AWS Well-Architected pillar. Maps directly to the checks in `SKILL.md` Step 9.
-Each row: the check, the condition that raises it, and the assigned severity. Severities are
-starting points — escalate for tier-1 / regulated (PCI, HIPAA) workloads.
+Organized by AWS Well-Architected pillar. Maps to `SKILL.md` Step 11. Each row gives the
+check, the condition, the **evidence required** before the severity applies, and the
+severity. Severities are starting points — escalate for tier-1 or regulated (PCI, HIPAA)
+workloads.
+
+If the required evidence cannot be collected (`AccessDenied`, unreadable bucket, origin in
+another account), report the check as **UNKNOWN — manual verification required**, naming the
+API and error. Do not substitute a CloudFront-config inference for missing origin evidence.
 
 ## Severity Definitions
 
@@ -13,107 +18,121 @@ starting points — escalate for tier-1 / regulated (PCI, HIPAA) workloads.
 | MEDIUM | Notable improvement opportunity | 30 days |
 | LOW | Minor optimization or hardening | When convenient |
 | INFO | Observation, no action required | N/A |
+| UNKNOWN | Evidence could not be collected | Manual verification |
 
 ## Security
 
-| Check | Condition | Severity |
-|---|---|---|
-| WAF web ACL attached | `WebACLId` empty on internet-facing distribution | HIGH (CRITICAL for auth'd/sensitive apps) |
-| Public S3 origin | S3 origin with no OAC/OAI and public bucket policy | CRITICAL |
-| Origin Access Control | S3 origin using legacy OAI instead of OAC | MEDIUM |
-| TLS minimum protocol | `MinimumProtocolVersion` ≤ `TLSv1.1_2016` | HIGH |
-| TLS minimum protocol | `MinimumProtocolVersion` = `TLSv1.2_2018/2019` (not 2021) | LOW |
-| Viewer protocol policy | `allow-all` (plain HTTP permitted) | HIGH |
-| Custom SSL certificate | Custom CNAME served on default `*.cloudfront.net` cert | MEDIUM |
-| Field-level encryption | Sensitive form fields (PII/PCI) without FLE | MEDIUM |
-| Signed URLs / cookies | Private content without `TrustedKeyGroups` | MEDIUM |
-| Geo restriction | Geo/regulatory-locked content with `RestrictionType=none` | LOW–MEDIUM |
-| Security response headers | No response headers policy (HSTS, X-Content-Type-Options) | LOW |
-| Lambda@Edge / Functions | Untracked edge functions altering security behavior | INFO–LOW |
+| Check | Condition | Evidence required | Severity |
+|---|---|---|---|
+| WAF web ACL attached | `WebACLId` empty on an internet-facing distribution | `GetDistributionConfig.WebACLId` | HIGH (CRITICAL for auth'd/sensitive apps) |
+| S3 REST origin publicly readable | REST origin (`S3OriginConfig`) with no OAC/OAI **and** `GetBucketPolicyStatus.IsPublic=true` | `s3.GetBucketPolicyStatus`, `s3.GetPublicAccessBlock` | CRITICAL |
+| S3 REST origin without OAC/OAI, bucket not public | No OAC/OAI and bucket not public — CloudFront cannot authenticate, so requests likely fail with 403 | Same as above | HIGH (availability) — confirm with 403ErrorRate or logs |
+| S3 REST origin without OAC/OAI, bucket status unreadable | Bucket calls return `AccessDenied` | Error from the bucket calls | UNKNOWN |
+| S3 website endpoint origin | Custom origin with an `s3-website` domain | Origin type | INFO — OAC/OAI cannot be used with website endpoints by design; the bucket must allow public reads. Recommend a REST origin with OAC only if website features (redirects, index documents) are not needed |
+| Origin Access Control | REST origin using legacy OAI instead of OAC | Origin config | MEDIUM |
+| OAC signing disabled | OAC attached with `SigningBehavior=never` | `ListOriginAccessControls` | MEDIUM |
+| TLS minimum protocol | `MinimumProtocolVersion` ≤ `TLSv1.1_2016` on a custom certificate | Viewer certificate | HIGH |
+| TLS minimum protocol | `MinimumProtocolVersion` = `TLSv1.2_2018/2019` (not 2021) | Viewer certificate | LOW |
+| Viewer protocol policy | `allow-all` (plain HTTP permitted) | Cache behaviors | HIGH |
+| Custom SSL certificate | Custom CNAME served on the default `*.cloudfront.net` certificate | Aliases + viewer certificate | MEDIUM |
+| Field-level encryption | Sensitive form fields (PII/PCI) without FLE | User-confirmed data classification | MEDIUM, else INFO |
+| Signed URLs / cookies | Private content without `TrustedKeyGroups` | User-confirmed private content | MEDIUM, else INFO |
+| Geo restriction | Geo/regulatory-locked content with `RestrictionType=none` | User-confirmed requirement | LOW–MEDIUM, else INFO |
+| Security response headers | No response headers policy (HSTS, X-Content-Type-Options) | Cache behaviors | LOW |
+| Lambda@Edge / Functions | Untracked edge functions altering security behavior | Function associations | INFO–LOW |
 
 ## Reliability
 
-| Check | Condition | Severity |
-|---|---|---|
-| Origin failover | Critical distribution, single origin, no origin group | MEDIUM (HIGH for tier-1) |
-| Origin error trend | Custom-origin 502/503/504 rising over 7 days | HIGH |
-| 5xx error rate | `5xxErrorRate` 7-day avg > 1% | HIGH |
-| 5xx error rate | `5xxErrorRate` 7-day avg > 5% | CRITICAL |
-| VPC origin backing health | Backing ALB/NLB unhealthy or single-AZ | HIGH |
-| Connection settings | `ConnectionAttempts=1` with no failover | MEDIUM |
-| Origin timeouts | Default timeouts unsuited to a slow origin | MEDIUM |
-| Distribution status | Stuck `InProgress` well beyond deploy window | MEDIUM |
+| Check | Condition | Evidence required | Severity |
+|---|---|---|---|
+| Origin failover absent | Critical distribution, single origin, no origin group | Origins + origin groups | MEDIUM (HIGH for tier-1) |
+| Failover status codes | Origin group omits 500/502/503/504 from `FailoverCriteria.StatusCodes` | Origin group config | MEDIUM |
+| Failover vs allowed methods | Behavior targeting an origin group allows POST/PUT/PATCH/DELETE — those requests never fail over | `AllowedMethods` on the behavior | MEDIUM for write-heavy/API behaviors; INFO otherwise. Never report failover as a full reliability pass for such behaviors |
+| OPTIONS failover | `AllowedMethods` includes OPTIONS but `CachedMethods` excludes it — OPTIONS will not fail over | `CachedMethods` | LOW |
+| Origin error trend | Custom-origin 502/503/504 rising over 7 days | Additional metrics or logs | HIGH |
+| 5xx error rate | `5xxErrorRate` 7-day avg > 1% | Default metric | HIGH |
+| 5xx error rate | `5xxErrorRate` 7-day avg > 5% | Default metric | CRITICAL |
+| VPC origin backing health | Backing ALB/NLB has unhealthy targets, or load balancer is not `active` | `elbv2.DescribeLoadBalancers`, `DescribeTargetHealth` in the backing region | HIGH |
+| VPC origin single-AZ | Backing load balancer spans one Availability Zone | `DescribeLoadBalancers.AvailabilityZones` | MEDIUM |
+| VPC origin EC2 health | Backing EC2 instance status checks impaired | `ec2.DescribeInstanceStatus` | HIGH |
+| VPC origin evidence unavailable | Backing resource could not be described | Error from ELB/EC2 calls | UNKNOWN — `GetVpcOrigin` alone identifies the resource but not its health |
+| Connection settings | `ConnectionAttempts=1` with no failover | Origin config | MEDIUM |
+| Origin timeouts | Default timeouts unsuited to a slow origin (p95 OriginLatency near `OriginReadTimeout`) | Origin config + p95 OriginLatency | MEDIUM |
+| Distribution status | Stuck `InProgress` well beyond the deploy window | `GetDistribution.Status` | MEDIUM |
 
 ## Performance
 
-| Check | Condition | Severity |
-|---|---|---|
-| Cache hit ratio | `CacheHitRate` 7-day avg < 90% | MEDIUM |
-| Cache hit ratio | `CacheHitRate` 7-day avg < 80% | HIGH |
-| Compression | `Compress=false` on text/JSON/HTML behaviors | MEDIUM |
-| HTTP version | `HttpVersion` not `http2and3` (no HTTP/3) | LOW |
-| HTTP version | HTTP/1.1 only | MEDIUM |
-| Origin Shield | High-traffic distribution without Origin Shield | LOW–MEDIUM |
-| Origin latency | `OriginLatency` 7-day avg > 250 ms | MEDIUM |
-| Origin latency | `OriginLatency` 7-day avg > 1000 ms | HIGH |
-| Cache key hygiene | Cache policy forwards unnecessary headers/cookies/query strings | MEDIUM |
+| Check | Condition | Evidence required | Severity |
+|---|---|---|---|
+| Cache hit ratio | `CacheHitRate` 7-day avg < 90% | Additional metric, or labeled log-derived approximation | MEDIUM |
+| Cache hit ratio | `CacheHitRate` 7-day avg < 80% | Same | HIGH |
+| Compression | `Compress=false` on text/JSON/HTML behaviors | Cache behaviors | MEDIUM |
+| HTTP version | `HttpVersion` not `http2and3` (no HTTP/3) | Distribution config | LOW |
+| HTTP version | HTTP/1.1 only | Distribution config | MEDIUM |
+| Origin Shield | High-traffic distribution without Origin Shield | Origins + Requests | LOW–MEDIUM |
+| Origin latency | p95 `OriginLatency` > 500 ms | Additional metric (p95) | MEDIUM |
+| Origin latency | p95 `OriginLatency` > 1500 ms | Additional metric (p95) | HIGH |
+| Cache key hygiene | Cache policy forwards unnecessary headers/cookies/query strings | Cache policies | MEDIUM |
 
 ## Cost Optimization
 
-| Check | Condition | Severity |
-|---|---|---|
-| Price class | `PriceClass_All` for region-limited audience | MEDIUM |
-| Cache hit ratio → cost | `CacheHitRate` < 90% raising origin/data-transfer cost | MEDIUM |
-| Unused distribution | `Enabled=false` or `Requests` 7-day sum ≈ 0 | MEDIUM |
-| Additional metrics on idle | Monitoring subscription on near-zero-traffic distribution | LOW |
-| Cost-allocation tags | Missing `Environment`, `Owner`, `CostCenter`, `Application` | LOW |
+Report account-level cost plus per-distribution usage drivers. Do not compute a per-distribution
+dollar figure unless resource-level billing data (`GetCostAndUsageWithResources` or the usage
+report's `Resource` column) provides it.
+
+| Check | Condition | Evidence required | Severity |
+|---|---|---|---|
+| Price class | `PriceClass_All` for a region-limited audience (pay-as-you-go only) | Price class + user-confirmed audience | MEDIUM |
+| Cache hit ratio → cost | Low cache hit ratio raising origin fetch and data transfer | Cache hit ratio | MEDIUM |
+| Unused distribution | `Enabled=false` or `Requests` 7-day sum ≈ 0 | Default metric | MEDIUM |
+| Additional metrics on idle | Monitoring subscription on a near-zero-traffic distribution | Monitoring subscription + Requests | LOW |
+| Cost-allocation tags | Missing `Environment`, `Owner`, `CostCenter`, `Application` | Tags | LOW |
+| Flat-rate plan fit | Distribution in a flat-rate plan with usage far above or below the tier allowance | `pricingplanmanager.ListSubscriptions` + Requests/BytesDownloaded | INFO–LOW. Do not present per-GB or per-request savings for flat-rate distributions |
 
 ## Operational Excellence
 
-| Check | Condition | Severity |
-|---|---|---|
-| CloudWatch alarms | Missing alarm on `5xxErrorRate` / `TotalErrorRate` | MEDIUM |
-| CloudWatch alarms | Missing alarm on `OriginLatency` / `CacheHitRate` | MEDIUM |
-| Standard logging | `Logging.Enabled=false` (no access logs) | MEDIUM |
-| Additional metrics | `GetMonitoringSubscription` disabled | LOW–MEDIUM |
-| Real-time logs | Absent for high-value distribution needing sub-minute visibility | LOW |
-| Default root object | Not set on a website distribution | LOW |
-| Operational tags | Missing `Environment`, `Owner`, `Runbook`, `OnCall` | LOW |
+| Check | Condition | Evidence required | Severity |
+|---|---|---|---|
+| CloudWatch alarms | No metric, metric-math, or composite alarm covers `5xxErrorRate` / `TotalErrorRate` | `DescribeAlarms` (Metric + Composite) | MEDIUM |
+| CloudWatch alarms | No alarm covers p95 `OriginLatency` / `CacheHitRate` — **only when additional metrics are enabled** | `DescribeAlarms` + monitoring subscription | MEDIUM |
+| Standard logging | Legacy `Logging.Enabled=false` **and** no v2 delivery source/delivery for the distribution | `GetDistributionConfig.Logging` + `logs.DescribeDeliverySources` / `DescribeDeliveries` | MEDIUM |
+| Standard logging, v2 unreadable | Legacy logging off and delivery-source calls return `AccessDenied` | Error from logs calls | UNKNOWN |
+| Additional metrics | `GetMonitoringSubscription` disabled | Monitoring subscription | LOW–MEDIUM |
+| Real-time logs | Absent for a high-value distribution needing sub-minute visibility (Kinesis Data Streams) | `RealtimeLogConfigArn` + `ListRealtimeLogConfigs` | LOW |
+| Default root object | Not set on a website distribution | Distribution config | LOW |
+| Operational tags | Missing `Environment`, `Owner`, `Runbook`, `OnCall` | Tags | LOW |
 
 ## Best-Practices Checklist (quick pass/fail)
 
 ### Security
-- [ ] WAF web ACL attached to internet-facing distributions
+- [ ] WAF web ACL attached to internet-facing distributions (`WebACLId`)
 - [ ] `MinimumProtocolVersion` ≥ `TLSv1.2_2021`
 - [ ] `ViewerProtocolPolicy` = `redirect-to-https` or `https-only`
-- [ ] S3 origins locked down with **OAC** (no public bucket access; OAI only as legacy)
+- [ ] S3 REST origins use **OAC** with signing enabled; bucket not public (verified with S3 APIs)
+- [ ] S3 website origins identified as such (OAC not applicable)
 - [ ] Custom domains use an ACM certificate (not the default cert)
-- [ ] Field-level encryption for sensitive fields where applicable
-- [ ] Signed URLs/cookies (key groups) for private content
-- [ ] Geo restriction configured where required
 - [ ] Response headers policy adds HSTS + security headers
 
 ### Reliability
-- [ ] Origin groups configured for automatic failover on critical distributions
-- [ ] VPC origin backing target healthy and multi-AZ
+- [ ] Origin groups configured for critical distributions, with 5xx failover codes
+- [ ] Failover-dependent behaviors serve GET/HEAD/OPTIONS (POST/PUT never fail over)
+- [ ] VPC origin backing target healthy and multi-AZ (verified with ELB/EC2 APIs)
 - [ ] `5xxErrorRate` within error budget (< 1%)
-- [ ] Sensible `ConnectionAttempts` / timeouts for the origin type
 
 ### Performance
 - [ ] `CacheHitRate` ≥ 95%
 - [ ] Compression enabled on compressible content types
 - [ ] `HttpVersion` = `http2and3`
-- [ ] Origin Shield enabled for high-traffic / cache-consolidation needs
-- [ ] Cache key scoped to only necessary headers/cookies/query strings
+- [ ] p95 `OriginLatency` within the origin's expected range
 
 ### Cost Optimization
-- [ ] Price class matches audience geography
-- [ ] Cache hit ratio high enough to minimize origin fetch cost
+- [ ] Price class matches audience geography (pay-as-you-go)
+- [ ] Flat-rate plan tier matches observed usage
 - [ ] No enabled-but-idle distributions
 - [ ] Cost-allocation tags applied
 
 ### Operational Excellence
-- [ ] Alarms on `5xxErrorRate`, `TotalErrorRate`, `OriginLatency`, `CacheHitRate`
-- [ ] Standard access logging enabled
-- [ ] Monitoring subscription (additional metrics) enabled
-- [ ] Operational tags present (`Environment`, `Owner`, `Runbook`, `OnCall`)
+- [ ] Alarms (metric, metric-math, or composite) on `5xxErrorRate` and `TotalErrorRate`
+- [ ] Standard logging enabled (legacy or v2)
+- [ ] Monitoring subscription enabled where cache/latency visibility is needed
+- [ ] Operational tags present

@@ -10,32 +10,50 @@ validated by hand in a DevOps Agent Space. Account IDs and distribution IDs are 
 |-----------|--------|
 | `structure` | ✅ PASSED — 12/12 static checks (100%) |
 | `best-practices` | ✅ PASSED — 17/17 checks, all 3 iterations, 100% consistency (Bedrock-judged) |
-| `functional` | ✅ Trigger PASS on all evals; with-skill clearly beats the no-skill baseline on expected output |
+| `functional` | ✅ Trigger 3/3 on every positive eval, negative control never fires; with-skill meets or beats the no-skill baseline on every graded run |
 
-**Functional detail** — 3 evals × 3 iterations, each run with and without the skill against a
-live CloudFront distribution:
+**Functional detail** — run v8, same skill content as committed. 3 iterations per eval,
+each run with and without the skill, 0 failed runs. The `det-*` evals pass captured API
+responses in the prompt and tell the agent not to call AWS, so their inputs are fixed and
+repeatable.
 
-| Eval | Trigger | Expected output (with → without) |
-|------|---------|----------------------------------|
-| `cloudfront-review-best-practices` (broad review) | 3/3 fires | 3/3 (100%) → 0/3 (0%) |
-| `cloudfront-security-review` (WAF/TLS/origin-access) | 3/3 fires | 3/3 (100%, high conf) → 0/3 (0%) |
-| `unrelated-question` (ALB-vs-NLB control) | 3/3 correctly does **not** fire | n/a (should_trigger: false) |
+| Eval | Trigger | Expected output (with → without) | Skill-specific assertion (with → without) |
+|------|---------|----------------------------------|-------------------------------------------|
+| `cloudfront-review-best-practices` (broad review) | 3/3 | 1/3 → 0/3 (graded: 1/1 → 0/3) ¹ | — |
+| `cloudfront-security-review` (WAF/TLS/origin access) | 3/3 | 2/3 → 3/3 (graded: 2/2 → 3/3) ¹ | — |
+| `det-waf-and-alarm-coverage` (WAF on/off, metric-math and composite alarms, additional metrics off) | 3/3 | 3/3 → 2/3 | metric-math alarm counted: 3/3 → 1/3 |
+| `det-standard-logging-v2` (v2 delivery, legacy block disabled) | 3/3 | 3/3 → 3/3 | — |
+| `det-origin-evidence` (S3 website vs OAC, partial `AccessDenied`, VPC origin evidence unavailable) | 3/3 | 3/3 → 2/3 | denied checks labeled UNKNOWN: 3/3 → 0/3 |
+| `det-flat-rate-cost` (flat-rate vs pay-as-you-go, no resource-level cost data) | 3/3 | 3/3 → 3/3 | cost kept account-level: 3/3 → 1/3 |
+| `unrelated-question` (ALB-vs-NLB control) | 3/3 correctly does **not** fire | n/a | n/a |
 
-- **Trigger** is the key reliability signal: both review prompts activate the skill every
-  time, and the unrelated networking question never does.
-- **Expected output** is the clearest enrichment signal: with the skill, the agent meets the
-  full expectation on every run (3/3) for both review types; without the skill it meets it on
-  none (0/3).
-- **Per-assertion** checks mostly pass with the skill. A capable base agent (with CloudFront
-  read access) already satisfies several individual assertions, so they do not isolate the
-  skill on their own — the enrichment shows up in the holistic expected-output measure and in
-  the guaranteed completeness/structure of the review. Two security assertions scored low
-  (WAF-absence wording — the test distribution has a WAF attached, so there is no absence to
-  flag; and per-gap severity in the final summary); these are assertion-phrasing artifacts,
-  not skill gaps.
-- **Cost/runtime:** a with-skill broad review runs the full methodology, so it is longer and
-  costlier than a bare answer (≈3m / ≈$1.7 vs ≈30s / ≈$0.25 per run) — expected for a
-  thorough operational review.
+¹ Three with-skill runs (broad review iterations 1–2, security review iteration 3) wrote the
+complete review and then ended the turn with the agent's `ask_user` follow-up prompt
+("Want me to open an investigation into that error burst…?"). A turn that ends that way emits
+no `FinalResponse` event. The tool grades only `FinalResponse`, so it scored those runs as
+failed without judging their content. The tool's assertion grader treats the same
+condition as errored, not failed. No-skill runs hit the same thing in earlier eval rounds.
+Every with-skill live run that produced a `FinalResponse` passed.
+
+- **Trigger timing.** The stock tool opens the chat about one second after uploading the
+  skill, which can be before the agent's skill catalog includes it. Earlier runs scored
+  1–2/3 on trigger with an unchanged description for that reason: in follow-up questions
+  the agent said in 9 of 10 non-loading chats that the skill wasn't in its list, and a
+  fresh chat in the same spaces later loaded it 6/6. v8 used a local patch to the tool that
+  waits 90 s after upload before opening the chat. In a probe, the skill was in the
+  catalog within 30 s of upload in 3/3 spaces. The timing issue has been reported to the
+  tool maintainers.
+- **Where the skill adds value.** A capable base agent already makes many of these decisions
+  when the evidence is handed to it, so several deterministic assertions pass without the
+  skill too. The skill consistently adds explicit UNKNOWN labeling for denied checks,
+  counts metric-math alarms as coverage, keeps cost at account level when there's no
+  resource-level data, and produces a prioritized review that the no-skill agent didn't
+  (broad review content: 0/3 without the skill).
+- `det-waf-and-alarm-coverage` sometimes answers without tools because all its data is in the
+  prompt.
+- **Cost/runtime:** a with-skill live review runs the full methodology, so it costs more than
+  a bare answer. Broad review: about 5–8 min / $2.50–$4.05 with the skill vs about 1 min /
+  $0.50–$0.70 without. Security review: about 2.5 min / $1.20–$1.40 vs under 1 min / $0.30–$0.50.
 
 Reproducing the functional eval:
 

@@ -331,16 +331,41 @@ Resources:
               - cloudfront:ListRealtimeLogConfigs
               - cloudfront:ListTagsForResource
             Resource: '*'
+          # WAF association comes from GetDistributionConfig.WebACLId; GetWebACL reads
+          # the rules of that ACL (Scope=CLOUDFRONT, us-east-1). GetWebACLForResource
+          # does not support CloudFront and is intentionally not granted.
           - Sid: CloudFrontWafAcmRead
             Effect: Allow
             Action:
-              - wafv2:GetWebACLForResource
+              - wafv2:GetWebACL
               - acm:DescribeCertificate
             Resource: '*'
-          - Sid: CloudFrontCloudWatchLogsGetEvents
+          # Standard logging v2 detection (CloudWatch Logs delivery APIs, us-east-1).
+          - Sid: CloudFrontLoggingRead
             Effect: Allow
             Action:
+              - logs:DescribeDeliverySources
+              - logs:DescribeDeliveries
+              - logs:DescribeDeliveryDestinations
               - logs:GetLogEvents
+            Resource: '*'
+          # Origin evidence: S3 public status, VPC-origin backing resource health.
+          - Sid: CloudFrontOriginEvidenceRead
+            Effect: Allow
+            Action:
+              - s3:GetBucketPolicyStatus
+              - s3:GetBucketPublicAccessBlock
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetHealth
+              - ec2:DescribeInstanceStatus
+            Resource: '*'
+          # Cost: flat-rate plan detection and optional resource-level cost data.
+          - Sid: CloudFrontCostRead
+            Effect: Allow
+            Action:
+              - pricingplanmanager:ListSubscriptions
+              - ce:GetCostAndUsageWithResources
             Resource: '*'
 
   # ecs-operation-review: adds compute-optimizer:GetECSServiceRecommendations (PERF8 rightsizing);
@@ -671,7 +696,7 @@ Outputs:
         - aws-health-events: ${EnableAwsHealthEvents} (health:DescribeEventTypes)
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
-        - cloudfront-operational-review: ${EnableCloudFrontOperationalReview} (cloudfront:List*/Get* read, wafv2:GetWebACLForResource, acm:DescribeCertificate, logs:GetLogEvents)
+        - cloudfront-operational-review: ${EnableCloudFrontOperationalReview} (cloudfront:List*/Get* read, wafv2:GetWebACL, acm:DescribeCertificate, logs delivery describes, s3 bucket public status, elbv2/ec2 health describes, pricingplanmanager:ListSubscriptions, ce:GetCostAndUsageWithResources)
         - ecs-operation-review: ${EnableEcsOperationReview} (compute-optimizer:GetECSServiceRecommendations)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
         - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)

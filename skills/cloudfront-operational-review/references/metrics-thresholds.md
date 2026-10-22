@@ -20,13 +20,18 @@ Always available for every distribution at no additional charge.
 ## Additional Metrics (require a monitoring subscription; dimensions `DistributionId` + `Region=Global`)
 
 Only populated when `cloudfront.GetMonitoringSubscription` shows additional metrics enabled
-(these incur CloudWatch charges). If disabled, this is an Operational Excellence finding and
-cache hit ratio must be derived from standard access logs.
+(these incur CloudWatch charges). If disabled, record that as an Operational Excellence
+finding, skip every row below, and approximate cache hit ratio from logs (see Notes).
+
+`OriginLatency` supports only percentile statistics — request `p95` in `GetMetricData`
+(`ExtendedStatistics` in `GetMetricStatistics`) and label the value "p95". The thresholds
+below are calibrated to p95, are heuristic starting points, and should be tuned to the
+origin's expected latency (for example, a dynamic API origin versus a static S3 origin).
 
 | Metric | Stat | Normal | Warning | Critical | Finding |
 |---|---|---|---|---|---|
 | CacheHitRate | Average | > 95% | < 90% | < 80% | Low cache efficiency — review cache policy TTLs & cache key |
-| OriginLatency | Average | < 100 ms | > 250 ms | > 1000 ms | Slow origin — check origin scaling, Origin Shield, region |
+| OriginLatency | p95 (percentile only) | < 250 ms | > 500 ms | > 1500 ms | Slow origin at the tail — check origin scaling, Origin Shield, origin region |
 | 401ErrorRate | Average | ≈ 0 | > 1% | > 5% | Auth failures at viewer |
 | 403ErrorRate | Average | < 1% | > 2% | > 10% | Access denied — OAC/OAI, signed URL, WAF blocks, S3 perms |
 | 404ErrorRate | Average | < 2% | > 5% | > 15% | Missing objects — default root object, routing, cache key |
@@ -55,22 +60,37 @@ cache hit ratio must be derived from standard access logs.
 
 ## Alarm Coverage Expectations
 
-The skill flags any of these as **MEDIUM** when missing
-(`cloudwatch.DescribeAlarmsForMetric` in `us-east-1` returns nothing for the distribution +
-metric):
+Collect alarms with `cloudwatch.DescribeAlarms` in `us-east-1` (`AlarmTypes` =
+`MetricAlarm`, `CompositeAlarm`; paginate). A metric counts as covered for a distribution when
+any of these references namespace `AWS/CloudFront` with that `DistributionId`:
 
-| Metric | Threshold (suggested) |
-|---|---|
-| 5xxErrorRate | > 1% for 5 minutes |
-| TotalErrorRate | > 3% for 5 minutes |
-| OriginLatency | > 1000 ms for 5 minutes (requires additional metrics) |
-| CacheHitRate | < 80% for 15 minutes (requires additional metrics) |
+- a metric alarm's `MetricName` + `Dimensions`;
+- any `Metrics[].MetricStat.Metric` inside a metric-math alarm;
+- a composite alarm whose `AlarmRule` names one of the alarms above.
+
+`DescribeAlarmsForMetric` returns only standard single-metric alarms and omits metric-math and
+composite alarms, so an empty result from it does not prove a gap. If you could only use
+`DescribeAlarmsForMetric`, label the finding "limited to direct single-metric alarms".
+
+Flag a missing alarm as **MEDIUM**:
+
+| Metric | Threshold (suggested) | Applies when |
+|---|---|---|
+| 5xxErrorRate | > 1% for 5 minutes | always |
+| TotalErrorRate | > 3% for 5 minutes | always |
+| OriginLatency (p95) | > 1500 ms for 5 minutes | additional metrics enabled |
+| CacheHitRate | < 80% for 15 minutes | additional metrics enabled |
+
+When additional metrics are disabled, do not flag or recommend OriginLatency or CacheHitRate
+alarms; recommend enabling additional metrics first if the workload needs them.
 
 ## Notes
 
-- Cache hit ratio, when computed from access logs, ≈ `Hit / (Hit + Miss + RefreshHit)` from
-  `x-edge-result-type`. `RefreshHit` counts as a partial hit (revalidated at origin but not
-  a full download).
+- Log-derived cache hit ratio approximates `CacheHitRate`, which counts only cacheable
+  requests (POST, PUT, and errors are excluded). Filter first: keep rows whose `cs-method` is
+  GET, HEAD, or OPTIONS and whose `x-edge-result-type` is not `Error`. Then compute
+  `(Hit + RefreshHit) / (Hit + RefreshHit + Miss)`. Label the result "log-derived (approx.)";
+  it is not directly comparable to the CloudWatch metric.
 - Error-rate metrics are percentages of total requests, already averaged by CloudFront — use
   `Average` stat, not `Sum`.
 - Zero-traffic windows can make error-rate `Average` misleading; always read error rates

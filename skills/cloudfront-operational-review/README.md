@@ -21,15 +21,17 @@ your environment.
 When activated via Chat, this skill instructs the DevOps Agent to:
 
 1. Discover CloudFront distributions in the account (CloudFront is a global service — no per-region loop).
-2. Collect distribution config, origins, cache behaviors, policies, OAC/OAI, WAF association, ACM certificate, CloudFront Functions / Lambda@Edge, VPC origins, and tags.
-3. Collect 7-day historical CloudWatch metrics (from `us-east-1`), standard access-log signals, and configuration-change notes.
-4. Pull 3-month Cost Explorer data and proportionally estimate per-distribution monthly cost.
-5. Analyze against the Well-Architected pillars (Security, Reliability, Performance, Cost Optimization, Operational Excellence).
-6. Generate a shareable report artifact per distribution, named `cloudfront-review-<distribution-id>-<YYYY-MM-DD>.md`.
+2. Collect distribution config, origins, cache behaviors, policies, OAC/OAI, WAF association (`WebACLId`), ACM certificate, CloudFront Functions / Lambda@Edge, VPC origins, and tags.
+3. Collect origin-side evidence (S3 bucket public status, VPC-origin load balancer / target / instance health) before reporting origin security or availability findings; checks it cannot verify are reported as UNKNOWN.
+4. Collect 7-day historical CloudWatch metrics (from `us-east-1`), alarm coverage (metric, metric-math, and composite alarms), standard logging (legacy and v2) and real-time log configuration, access-log signals, and configuration-change notes.
+5. Report account-level Cost Explorer data and per-distribution usage drivers, detect flat-rate pricing plans, and show per-distribution dollars only when resource-level billing data provides them.
+6. Analyze against the Well-Architected pillars (Security, Reliability, Performance, Cost Optimization, Operational Excellence).
+7. Generate a shareable report artifact per distribution, named `cloudfront-review-<distribution-id>-<YYYY-MM-DD>.md`.
 
 All data is gathered through native, read-only AWS APIs (`cloudfront`, `cloudwatch`, `logs`,
-`wafv2`, `acm`, `ce`). The skill does **not** use internal tooling, custom scripts, or
-non-AWS MCP servers.
+`wafv2`, `acm`, `ce`, `pricingplanmanager`, plus `s3`, `elasticloadbalancing`, and `ec2`
+describe/get calls for origin evidence). The skill does **not** use internal tooling, custom
+scripts, or non-AWS MCP servers.
 
 ## Agent Types
 
@@ -58,16 +60,23 @@ AWS managed policy [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/dev
 - `cloudfront:ListVpcOrigins`, `cloudfront:GetVpcOrigin`
 - `cloudfront:GetMonitoringSubscription`, `cloudfront:ListRealtimeLogConfigs`
 - `cloudfront:ListTagsForResource`
-- `wafv2:GetWebACLForResource` (Scope=CLOUDFRONT, called in `us-east-1`)
+- `wafv2:GetWebACL` (`Scope=CLOUDFRONT`, `us-east-1`) — only to read the rules of the ACL named in `WebACLId`. WAF association itself comes from `GetDistributionConfig`; `GetWebACLForResource` does not support CloudFront.
 - `acm:DescribeCertificate` (called in `us-east-1`)
 - `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics`, `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmsForMetric`
-- `logs:DescribeLogGroups`, `logs:FilterLogEvents`, `logs:GetLogEvents` (if real-time/CloudWatch logs are used)
-- `s3:GetObject`, `s3:ListBucket` (only if you want the agent to read standard access logs from the S3 log bucket)
-- `ce:GetCostAndUsage`
+- `logs:DescribeDeliverySources`, `logs:DescribeDeliveries`, `logs:DescribeDeliveryDestinations` (`us-east-1`) — detect standard logging v2
+- `logs:DescribeLogGroups`, `logs:FilterLogEvents`, `logs:GetLogEvents` (only when a v2 delivery writes to CloudWatch Logs)
+- `s3:GetBucketPolicyStatus`, `s3:GetBucketPublicAccessBlock` — verify whether an S3 REST origin without OAC/OAI is public
+- `elasticloadbalancing:DescribeLoadBalancers`, `elasticloadbalancing:DescribeTargetGroups`, `elasticloadbalancing:DescribeTargetHealth`, `ec2:DescribeInstanceStatus` — VPC-origin backing-resource health
+- `s3:GetObject`, `s3:ListBucket` (optional — only if you want the agent to read access logs from an S3 log bucket)
+- `ce:GetCostAndUsage`; optional `ce:GetCostAndUsageWithResources` (per-distribution dollars; requires resource-level data enabled in Cost Explorer, last 14 days)
+- `pricingplanmanager:ListSubscriptions` (`us-east-1`) — detect flat-rate pricing plans
 - `tag:GetResources` (optional — cross-service tag reporting)
 
+Without the origin-evidence permissions the review still runs, and the affected checks are
+reported as **UNKNOWN — manual verification required** instead of guessed.
+
 The skill operates entirely in **read-only** mode: it never calls `Create*`, `Update*`,
-`Delete*`, `Associate*`, `CreateInvalidation`, or `Tag*` CloudFront APIs.
+`Delete*`, `Put*`, `Associate*`, `CreateInvalidation`, or `Tag*` APIs.
 
 ### 3. Additional CloudWatch metrics (recommended)
 

@@ -7,7 +7,7 @@ Price Class: <PriceClass_*> | HTTP: <http2and3> | WAF: <yes/no>
 ## Executive Summary
 
 - Health: ✅ HEALTHY / ⚠️ WARNINGS / ❌ CRITICAL
-- Finding counts by severity: CRITICAL <n> · HIGH <n> · MEDIUM <n> · LOW <n> · INFO <n>
+- Finding counts by severity: CRITICAL <n> · HIGH <n> · MEDIUM <n> · LOW <n> · INFO <n> · UNKNOWN <n>
 - Top 3 critical/high items: <list>
 
 ## Configuration Snapshot
@@ -15,13 +15,13 @@ Price Class: <PriceClass_*> | HTTP: <http2and3> | WAF: <yes/no>
 | Item | Value |
 |------|-------|
 | Origins | domain(s), type (S3 / custom / VPC), OAC or OAI, protocol policy, timeouts |
-| Origin groups | failover configured? members |
+| Origin groups | members, failover status codes, allowed/cached methods of behaviors that use them |
 | Cache behaviors | count, viewer protocol policy, cache policy, compression |
 | Security | WAF web ACL, TLS min version, viewer protocol, cert (ACM / default), FLE |
 | Access control | signed URLs/cookies (key groups), geo restriction |
 | Edge compute | CloudFront Functions, Lambda@Edge associations |
 | Delivery | price class, HTTP version, IPv6, Origin Shield |
-| Observability | standard logging, monitoring subscription, real-time logs, alarms |
+| Observability | legacy standard logging, standard logging v2 (destination type), real-time logs (Kinesis), monitoring subscription, alarms (metric / metric-math / composite) |
 
 ## Findings by Pillar
 
@@ -52,8 +52,20 @@ Include the 504 / origin-connection-failure breakdown (timeout vs refused vs TLS
 
 ## Cost Summary
 
-- Latest-month estimated cost for this distribution (proportional split, marked "estimated")
-- Top 3 cost-optimization opportunities (linked to findings)
+- Pricing model: pay-as-you-go, or flat-rate plan `<tier>` (from `pricingplanmanager.ListSubscriptions`)
+- Account-level CloudFront cost, latest full month, with the top usage types (Cost Explorer)
+- This distribution's usage drivers: 7-day BytesDownloaded, Requests, price class, cache hit ratio
+- Per-distribution cost: only if resource-level billing data was available — cite the source
+  (`GetCostAndUsageWithResources` or the usage report's `Resource` column); otherwise state
+  "not available without resource-level billing data". Never split account cost proportionally.
+- Top 3 cost-optimization opportunities (linked to findings; none priced per GB or per request
+  for a flat-rate distribution)
+
+## Limitations and Unknowns
+
+| Check | API attempted | Error / reason | Status |
+|-------|---------------|----------------|--------|
+|       |               |                | UNKNOWN — manual verification required |
 
 ## Priority Matrix
 
