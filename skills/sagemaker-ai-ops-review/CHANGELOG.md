@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.1.4] - 2026-10-22
+- Updated the link to the skill IAM policies template, which moved to `cloudformation/devops-agent-skill-policies/`.
+
 ## [1.1.3] - 2026-10-21
 - Agent types now use the API values in `metadata.aws-devops-agent-skills.agent-types` (`CHAT`, `INCIDENT_RCA`, `INCIDENT_TRIAGE`), the field that sets which agents load the skill.
 

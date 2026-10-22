@@ -53,7 +53,7 @@ Three of these are **global** APIs with no regional endpoints — `health`, `ce`
 
 ```bash
 aws cloudformation deploy \
-  --template-file cloudformation/devops-agent-skill-policies.yaml \
+  --template-file cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml \
   --stack-name devops-agent-skill-policies \
   --parameter-overrides ExistingRoleName=<YOUR-DEVOPS-AGENT-ROLE-NAME> EnableSageMakerAIOpsReview=true \
   --capabilities CAPABILITY_NAMED_IAM

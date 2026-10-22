@@ -20,7 +20,8 @@ tools-for-devops-agent/
 ├── llms.txt                  # Structured repo overview for AI tools
 ├── .gitignore                # Root-level ignores
 ├── cloudformation/
-│   └── devops-agent-skill-policies.yaml  # IAM policies skills require
+│   ├── devops-agent-skill-policies/        # IAM policies skills require
+│   └── devops-agent-alarm-investigations/  # CloudWatch alarm → DevOps Agent webhook
 ├── docs/                     # GitHub Pages (mkdocs) documentation site
 ├── skills/
 │   ├── .gitignore            # Allowlist for DevOps Agent supported extensions only
@@ -252,14 +253,14 @@ These come up repeatedly in pull request reviews. Check them before opening a PR
 
 The docs site renders each skill's and custom agent's `README.md` as a page one level below the site root, so relative links that work on GitHub may not work on the site.
 
-- Link to anything outside `skills/` and `custom-agents/` (for example `cloudformation/devops-agent-skill-policies.yaml`) with an absolute `https://github.com/aws/tools-for-devops-agent/blob/main/...` URL. A relative link there fails `mkdocs build --strict`.
+- Link to anything outside `skills/` and `custom-agents/` (for example `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`) with an absolute `https://github.com/aws/tools-for-devops-agent/blob/main/...` URL. A relative link there fails `mkdocs build --strict`.
 - In a custom agent README, link required skills in the Prerequisites section as `../../skills/<skill-name>/`. `docs/hooks/agents_catalog.py` reads skill tags for the agent card from that relative form only, so an absolute URL drops the tag.
 - The agent card lists only tools named `use_*` in backticks in the "Creating the Agent" section. Other tools (for example `verify_aws_claim`) don't appear on the card.
 - A skill's display name comes from its folder name: each hyphenated word is capitalized unless it is in `acronyms` in `docs/hooks/skills_catalog.py`, so `eos-cost-analysis` shows as "Eos Cost Analysis" until `eos` is added. Add a new acronym there in the same PR if the name needs one. A custom agent's display name is its README title, minus any " — Custom Agent" suffix.
 
 ### IAM permissions
 
-- Before adding a statement to `cloudformation/devops-agent-skill-policies.yaml`, check the current `AIDevOpsAgentAccessPolicy` managed policy and add only the actions it doesn't grant. If the managed policy covers everything, list the skill under "Skills covered by AIDevOpsAgentAccessPolicy" instead.
+- Before adding a statement to `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`, check the current `AIDevOpsAgentAccessPolicy` managed policy and add only the actions it doesn't grant. If the managed policy covers everything, list the skill under "Skills covered by AIDevOpsAgentAccessPolicy" instead.
 - Use IAM action prefixes in permission lists, not API client names. They differ for some services, for example OpenSearch Service is `opensearch` as an API client but `es:` in IAM.
 - In README prerequisites, state which permissions the managed policy covers and point to the template parameter for the rest, rather than restating every action, so the two can't drift apart.
 
@@ -302,7 +303,7 @@ Fix every error, and the warnings for the skill you touched. Pull requests from 
 6. Test the skill with DevOps Agent before submitting, and run the checks under "Before opening or updating a PR".
 7. No root `README.md` change is needed: the docs-site catalog and the skill's page are generated from `SKILL.md` and `README.md` at build time. Check how they render with `mkdocs build --strict` (see Common Review Findings).
 7. Update the `llms.txt` file at the repo root — add the new skill to the "Available Skills" section following the existing format: `- [Skill Name](skills/<name>/SKILL.md): One-line description`.
-8. If the skill requires IAM permissions beyond the `AIDevOpsAgentAccessPolicy` managed policy, add a new parameter, condition, and inline policy resource to `cloudformation/devops-agent-skill-policies.yaml`, and update the `SkillPolicySummary` output.
+8. If the skill requires IAM permissions beyond the `AIDevOpsAgentAccessPolicy` managed policy, add a new parameter, condition, and inline policy resource to `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`, and update the `SkillPolicySummary` output.
 
 ## Maintaining llms.txt
 

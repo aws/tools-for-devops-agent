@@ -42,7 +42,7 @@ This repository provides open-source tools that extend [AWS DevOps Agent](https:
 - **Skills** — Structured instruction sets that teach the agent how to investigate specific operational scenarios. Skills follow the open [Agent Skills specification](https://agentskills.io/home) and the [DevOps Agent skills](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html) guidance, and can be uploaded to your Agent Space.
 - **Custom Agents** — Pre-built agent configurations with system prompts and tool assignments for specific operational workflows (e.g., generating periodic health reports). Custom agents follow the [AGENTS.md specification](https://agents.md/) and the [DevOps Agent custom agents guidance](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-custom-agents-index.html).
 - **MCP Servers** — Deployable [Model Context Protocol](https://modelcontextprotocol.io) servers that extend DevOps Agent with custom tools for infrastructure diagnostics, database health checks, and more. Each server is deployed to your AWS account and registered with your Agent Space.
-- **CloudFormation Templates** — Infrastructure-as-code for provisioning IAM permissions and resources that skills require.
+- **CloudFormation Templates** — Infrastructure-as-code for provisioning IAM permissions and resources that skills require, and for forwarding CloudWatch alarms to DevOps Agent investigations.
 
 ### What Can Skills Do?
 

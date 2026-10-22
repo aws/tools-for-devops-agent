@@ -15,7 +15,7 @@ description: AWS Backup coverage and data protection posture review. Determines
   automated backups and snapshots taken outside AWS Backup.
 metadata:
   author: vediyappan-kk
-  version: "1.0.1"
+  version: "1.0.2"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "AWS Backup"
   aws-devops-agent-skills.technical-domains: "Storage, Operations"

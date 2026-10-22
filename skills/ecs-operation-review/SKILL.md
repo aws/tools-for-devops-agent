@@ -12,7 +12,7 @@ description: >
   for a workload".
 metadata:
   author: shyamkulkarni
-  version: "2.5.1"
+  version: "2.5.2"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon ECS"
 ---

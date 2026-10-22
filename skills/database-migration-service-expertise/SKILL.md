@@ -8,7 +8,7 @@ description: AWS Database Migration Service (DMS) operational review and trouble
   "CDC latency issue", or "DMS task failure".
 metadata:
   author: tabhiman
-  version: "1.0.1"
+  version: "1.0.2"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "AWS Database Migration Service"
   aws-devops-agent-skills.technical-domains: "Database"

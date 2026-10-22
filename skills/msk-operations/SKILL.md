@@ -15,7 +15,7 @@ description: Amazon MSK Provisioned operations, troubleshooting, and health
   Kinesis, Lambda, EC2) unless MSK is explicitly named.
 metadata:
   author: kjjanaki
-  version: "1.0.3"
+  version: "1.0.4"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon MSK"
   aws-devops-agent-skills.technical-domains: "Analytics"
