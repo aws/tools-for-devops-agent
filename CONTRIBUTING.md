@@ -262,6 +262,67 @@ If an issue lands with you, verify the skill against the checklist in it. When i
 
 Test relevant scenarios with and without the custom agent, multiple times. Focus on quality and consistency of the output, compared to asking DevOps Agent the same question using chat. When checking consistency, the output doesn't have to be the same verbatim - focus on the substance
 
+## Domain SME Sign-Off
+
+**Every tool contribution needs a named subject-matter expert, other than the
+author, to review it for technical correctness and say so in the pull request.**
+It is the one required item a maintainer cannot do for you, and the template
+calls it required rather than optional for that reason.
+
+Maintainers review what is reviewable from the repository: layout, the publishing
+rules, the eval evidence, whether the content is safe to publish, and whether the
+tool fits the catalog. What they cannot do, across every AWS service this
+repository covers, is tell you that an OpenSearch shard-count threshold is right,
+that an EKS upgrade order is safe, or that an RDS failover procedure matches how
+the service actually behaves. A skill that is well-formed and confidently wrong is
+worse than no skill, because the agent will act on it during an incident. The SME
+is the only check on that, which is why a PR waits for one.
+
+### Who qualifies
+
+Someone with hands-on operational experience of the service or domain the tool
+covers, who did not write it. They do not need to be a maintainer of this
+repository, and they do not need to be an AWS employee. A colleague who runs the
+service in production, the service team itself, or a specialist from your own
+organisation all count.
+
+What does not count: the author, a reviewer who checked only spelling and
+structure, or an unnamed group. "Reviewed internally" is not a sign-off, because a
+future maintainer reading the PR cannot tell what was checked or by whom.
+
+### How to record it
+
+The SME needs to leave something in the pull request that names what they
+verified. Either is fine:
+
+- A **GitHub review** on the PR, approving it, with a line on what they checked.
+- A **comment** on the PR saying they reviewed it and what they looked at —
+  useful when the SME has no write access to the repository.
+
+Then tick the box. The box is what the checklist check reads; a note beside an
+unticked box does not clear it, so a PR whose description says "SME review
+pending" stays on hold whatever the prose says.
+
+**An SME sign-off is not the same as the approving review the branch requires.**
+`main` requires one approving review from a maintainer before a PR can merge.
+That is a separate gate, about whether the change should land in this repository
+at all. An SME who is not a maintainer satisfies the checklist item without
+satisfying branch protection, and a maintainer approving on structure does not
+satisfy the checklist item. A PR usually needs both, from different people.
+
+### If you cannot find one
+
+Say so, and ask — do not tick the box and do not leave it pending indefinitely.
+Raise it in your [tool request issue](https://github.com/aws/tools-for-devops-agent/issues/new?template=community-request.yml),
+or comment on the PR asking a maintainer to help route it. Maintainers can often
+reach the relevant service team or an internal specialist. A PR held up on a
+sign-off nobody has been asked for is the most common reason a good contribution
+stalls.
+
+This item cannot be waived with the `n/a:` escape described under "The Pull
+Request Checklist". There is no tool contribution for which domain correctness is
+genuinely not applicable.
+
 ## Redacting AWS Identifiers
 
 **Redact your own AWS identifiers before you commit.** This repository is public, and a commit is permanent: once an account ID, an ARN or an instance ID is on `main` it is in the history for good, and deleting it in a later commit does not remove it. Redacting is yours to do. Two pieces of tooling help — the skill evaluation tool's redaction pass, and the pull request check described in the next section — and neither covers everything.
@@ -376,6 +437,105 @@ The exit code tells the two failure modes apart: `1` means identifiers were foun
 A failing check puts a `needs-id-redact` label on the pull request, which is removed automatically once the check passes. That label is written only by automation and only reflects the last result — it isn't something to add or remove by hand.
 
 NOTE: a red check does not block merging on its own. An admin must add the job's name (`scan-aws-identifiers`) to the required status checks for `main` in branch protection. Until then this check is advisory.
+
+## The Pull Request Checklist
+
+The pull request template carries a set of required items, and a check
+([`.github/workflows/validate-pr-checklist.yml`](.github/workflows/validate-pr-checklist.yml))
+reads your PR description and fails when a required box is unchecked. A failing
+check puts a `needs-checklist` label on the PR and a comment listing what is
+outstanding. A PR carrying that label is on hold and is not reviewed until it
+clears.
+
+Nothing about this check judges your tool. It checks that the work the template
+asks for has been done and said to have been done.
+
+### Which items apply to your PR
+
+Scope comes from the **files the PR changes**, not from the "Type of change"
+boxes — those are for a human reader, and "Update to an existing skill, agent, or
+MCP server" names three types at once, so they cannot decide it.
+
+| Your PR changes | Items enforced |
+| --- | --- |
+| Nothing under `skills/`, `mcp/` or `custom-agents/` | Only the two items that apply to every contribution, wherever they sit: no internal-only content, and the licence confirmation |
+| Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
+| Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
+| Anything under `custom-agents/` | The same, with the Custom agents section |
+
+So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
+a CHANGELOG or an SME sign-off, because none of it means anything for that change.
+A PR touching more than one tool directory is held to each of their sections.
+
+Eval evidence is **not** re-checked here. `validate-skill-evals` already gates
+that, and the two checks are independent — the checklist item is about whether you
+included the evidence, and the eval check is about whether the evidence is there
+and well-formed.
+
+### When an item genuinely does not apply
+
+Inside a tool contribution an individual item can still be moot — an MCP server
+with no IAM to scope, say. Write `n/a:` and a reason on the item instead of
+ticking it:
+
+```markdown
+- [ ] **Least-privilege IAM** — n/a: this server calls no AWS APIs, only the vendor's HTTPS endpoint with a customer-supplied token.
+```
+
+The item is then treated as met, and the reason stays in the description where a
+reviewer can judge it.
+
+Two things about the form. A bare `n/a` with no reason does not count — the reason
+is the part being judged. And **it has to be on the same line as the checkbox**:
+the check reads line by line, so a reason wrapped onto the next line leaves the
+box looking plainly unchecked. Keep the item on one line however long it gets.
+
+Three items can never be waived this way:
+
+- the **domain SME sign-off**, for the reason given in its own section above
+- **no internal-only or proprietary content**, because this repository is public
+  and the claim is about every file in the PR
+- the **licence confirmation**, which is a statement only you can make
+
+Use the escape rather than either of the alternatives. Ticking something untrue is
+caught at review and sends the PR back. Deleting the line is worse: the check
+treats a missing required section as unmet and names it, precisely so that
+removing an inconvenient item is not a way past it.
+
+### The labels
+
+| Label | Who sets it | Meaning |
+| --- | --- | --- |
+| `needs-checklist` | automation only | The last run found required items unmet. Removed automatically when the check passes. Not something to add or remove by hand |
+| `enforce-checklist` | a maintainer | Requires the checklist on a pull request that would otherwise be exempt because it predates the check. Stays once applied, so the requirement does not lapse on the next push |
+
+### What is not enforced
+
+Three cases report their findings in the check's step summary and pass:
+
+- **A draft pull request.** A draft is not submitted for review, which is what the
+  checklist gates. Marking it ready for review re-runs the check and enforces it
+  from then on, so nothing is lost by the check staying quiet until you say ready.
+- **A pull request opened by a bot.** Dependabot and similar write their own
+  description and never carry the template.
+- **A pull request opened before this check existed**, meaning before
+  `2026-10-13T07:33:08Z`, when the template's review gates reached `main`. Those
+  authors contributed against the template as it stood at the time, so the check
+  reports warnings rather than failing. The cutoff is the moment the gated
+  template became visible to contributors rather than the day this check merged,
+  so a PR opened in between is enforced — its author had the checklist in front of
+  them. A maintainer can hold one of these to the full requirement with
+  `enforce-checklist`.
+
+### Seeing the result
+
+The check's summary on the workflow run page lists every item it found unmet,
+which applied and why, and anything you marked `n/a:` with its reason — including
+for the cases above that pass. The comment on the PR carries the same list.
+
+The check runs on the PR being opened, edited, pushed to, reopened, marked ready
+for review, and labelled. Ticking a box edits the description, so the check
+re-runs and clears on its own; there is nothing to ask a maintainer to re-trigger.
 
 ## Reporting Bugs/Feature Requests
 

@@ -1,0 +1,306 @@
+name: Validate PR checklist
+# Gates pull requests on the required checkboxes in the PR description being
+# checked. Reads the PR body from the event payload, works out which checklists
+# apply from the FILES the PR changes (not from a checkbox, which is ambiguous —
+# the repo's "Update to an existing skill, agent, or MCP server" option names more
+# than one type), finds unchecked required items, writes the outcome to an
+# artifact, and fails the job when anything required is missing. A companion
+# workflow (label-pr-checklist-result.yml) then applies or removes the
+# `needs-checklist` label and posts the comment.
+#
+# Why split into two workflows: for pull_request events from a fork, GITHUB_TOKEN
+# is read-only regardless of the `permissions:` block, and most contributions to
+# this repo come from forks. So this job cannot label or comment on its own PR.
+# It records the result in an artifact; the workflow_run companion runs in the
+# base repository's context with write access and acts on it. This mirrors the
+# validate-skill-evals.yml / label-skill-evals-result.yml pair.
+#
+# Scope: this check owns the checklist only. Eval evidence is NOT re-checked here
+# — validate-skill-evals.yml already gates that. The two checks are independent.
+#
+# Two things keep the gate from blocking work it was never meant to judge:
+#
+#   1. Scope by what the PR touches. Most of "Required before review" describes a
+#      tool contribution — layout, SME sign-off, eval evidence, README, CHANGELOG
+#      and a named owner. None of it means anything on a PR that only edits
+#      CONTRIBUTING.md or a workflow. On a PR that touches no tool directory, only
+#      the items that apply to every contribution are enforced (no internal-only
+#      content, and the licence confirmation). A tool PR is held to all of them.
+#
+#   2. An explicit not-applicable escape. Inside a tool PR an individual item can
+#      still be genuinely moot — an MCP server with no IAM to scope, say. Write
+#      `n/a: <reason>` on the item and it is treated as met, with the reason
+#      visible in the description for a reviewer to judge. Three items can never
+#      be waived this way: the domain SME sign-off (the template calls it
+#      "Required, not optional"), the internal-content item, and the licence.
+#      Without the escape the only ways out are to tick something untrue or to
+#      delete the line, and deleting it is worse: a deleted item is invisible.
+#
+# NOTE: a red check does not block merge on its own. An admin must add this job's
+# name ("validate-pr-checklist") to the required status checks for `main` in
+# branch protection. Until then this workflow is advisory.
+on:
+  pull_request:
+    # `edited` is required: ticking a box edits the body and must re-run the check.
+    # `labeled` lets a maintainer force a run on an already-open PR, which
+    # otherwise reports no status at all and sits blocked without a log, and makes
+    # `enforce-checklist` take effect the moment it is applied. Note that a label
+    # applied by GITHUB_TOKEN raises no `labeled` event, so the companion workflow
+    # cannot re-trigger this one.
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled]
+    # Not filtered with paths: a required status check that never runs is reported
+    # as pending forever, which would permanently block PRs. The job always runs.
+# Read-only: the job only reads the event payload and the PR's file list via the
+# API, so fork PRs work without elevated permissions. All labeling and commenting
+# happens in the companion.
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: validate-pr-checklist-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  # The job id and its display name are kept identical, because the display name
+  # is the status check context that branch protection matches on.
+  validate-pr-checklist:
+    name: validate-pr-checklist
+    runs-on: ubuntu-latest
+    # No `if:` guard on the job, on purpose. Skipping it would report the required
+    # check as "skipped", which branch protection can treat as satisfied — so a
+    # guard keyed on a label would let anyone unblock a failing PR by labeling it.
+    # Labels are read by the script instead, where they can only make the check
+    # stricter and the job still reports a real status.
+    steps:
+      - name: Check the required checklist items
+        id: check
+        # Never fails the step: the outcome is recorded and published for the
+        # labeling workflow, and only then turned into a job failure. Without this
+        # the artifact would not upload on failure — the case that needs a label.
+        continue-on-error: true
+        uses: actions/github-script@v7
+        # Every value from the event payload is passed through the environment
+        # rather than interpolated into the script. A PR body is wholly
+        # attacker-controlled, and label names are attacker-controllable in
+        # principle, so neither is ever spliced into code.
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          # A bot cannot fill in a template, and a draft is not submitted for
+          # review yet. Both are reported but not enforced; see EXEMPT below.
+          PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+        with:
+          script: |
+            const fs = require("fs");
+
+            // Pull requests opened before this check existed cannot have used the
+            // template it enforces, so enforcing it on them would fail every open
+            // PR at once with nothing the author did wrong. They report their
+            // findings as warnings and pass. This is the same accommodation
+            // validate_skill_evals.py makes with its PRS_PREDATING_CHECK list, but
+            // keyed on the PR's creation time rather than a list of numbers, so
+            // there is nothing to maintain and nothing to forget to remove.
+            //
+            // This is the moment the gated PR template reached `main`, in commit
+            // 49f31c1 by way of PR #135 — not the day this check merges. The rule
+            // the check enforces is the template's, so it applies from when the
+            // template became available to contributors, and a PR opened after
+            // that had the checklist in front of its author.
+            //
+            // Deliberately earlier than this check's own merge date, so PRs opened
+            // in the interval are enforced rather than grandfathered. Note the
+            // commit is dated 2026-10-12 but only merged the following morning;
+            // the merge time is what a contributor could actually see, so that is
+            // the cutoff. No currently-open PR falls between the two.
+            //
+            // A PR opened before this reports its findings as warnings and passes,
+            // unless a maintainer applies the `enforce-checklist` label.
+            const CHECK_INTRODUCED = "2026-10-13T07:33:08Z";
+            const ENFORCE_LABEL = "enforce-checklist";
+
+            // Directories that hold a contributed tool. A PR touching none of them
+            // is not a tool contribution, and the tool-specific items do not apply.
+            const TOOL_PREFIXES = ["skills/", "mcp/", "custom-agents/"];
+
+            // Items that apply to every contribution, whatever it changes. Matched
+            // on a stable phrase rather than the full line, so rewording the
+            // template's prose does not silently drop the item from the gate.
+            const UNIVERSAL_ITEMS = [
+              /internal[-\s]only or proprietary/i,
+              /Apache License 2\.0/i,
+            ];
+
+            // Items that may never be waived with `n/a:`.
+            const NO_WAIVER = [
+              /domain SME|subject[-\s]matter expert/i,
+              /internal[-\s]only or proprietary/i,
+              /Apache License 2\.0/i,
+            ];
+
+            // `n/a:` followed by a reason. A bare "n/a" is not enough — the reason
+            // is the part a reviewer judges.
+            const NA_WITH_REASON = /\bn\/a\s*:\s*\S/i;
+
+            const body = process.env.PR_BODY || "";
+            const number = parseInt(process.env.PR_NUMBER, 10);
+            const createdAt = process.env.PR_CREATED_AT || "";
+
+            // Two kinds of PR are reported but never failed or labeled.
+            //
+            //   A bot author. Dependabot and friends write their own description
+            //   and will never carry the template, so enforcing it would put a
+            //   `needs-checklist` label and a "complete the checklist" comment on
+            //   every dependency bump, forever, with no one able to act on it.
+            //
+            //   A draft. A draft is explicitly not submitted for review, which is
+            //   what the checklist gates. Marking it ready raises
+            //   `ready_for_review`, this check re-runs, and it is enforced then —
+            //   so nothing is lost by staying quiet until the author says ready.
+            //
+            // Both still write their findings to the step summary, and both report
+            // `pass`, so the companion clears a label left over from an earlier run
+            // (a PR converted back to draft, for instance).
+            const isBot = (process.env.PR_AUTHOR_TYPE || "") === "Bot";
+            const isDraft = (process.env.PR_DRAFT || "") === "true";
+            let labels = [];
+            try { labels = JSON.parse(process.env.PR_LABELS || "[]"); } catch { labels = []; }
+            const { owner, repo } = context.repo;
+
+            const isUnchecked = (line) => /^\s*-\s*\[\s*\]/.test(line);
+            const matchesAny = (text, patterns) => patterns.some((p) => p.test(text));
+
+            // Split the body into sections keyed by "## Heading".
+            const sections = {};
+            let current = "_preamble";
+            for (const line of body.split(/\r?\n/)) {
+              const h = line.match(/^##\s+(.*)$/);
+              if (h) { current = h[1].trim(); sections[current] = []; continue; }
+              (sections[current] ||= []).push(line);
+            }
+
+            // Which checklists apply is decided by the FILES the PR touches, not by
+            // a checkbox. This matches how validate-skill-evals scopes itself, and
+            // cannot be fooled by the combined "Update to an existing skill, agent,
+            // or MCP server" option.
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: number, per_page: 100,
+            });
+            const paths = files.map((f) => f.filename);
+            const touches = (prefix) => paths.some((p) => p.startsWith(prefix));
+            const wantsSkill = touches("skills/");
+            const wantsMcp   = touches("mcp/");
+            const wantsAgent = touches("custom-agents/");
+            const isToolPr   = TOOL_PREFIXES.some((p) => touches(p));
+
+            // Sections every PR must carry. On a non-tool PR only the universal
+            // items inside them are enforced; the rest are out of scope.
+            const required = ["Required before review", "License confirmation"];
+            // Sections that only mean something for a contributed tool.
+            if (isToolPr) required.push("Security and safety");
+            if (wantsSkill) required.push("Skills — complete if this PR adds or changes a skill");
+            if (wantsMcp)   required.push("MCP servers — complete if this PR adds or changes an MCP server");
+            if (wantsAgent) required.push("Custom agents — complete if this PR adds or changes a custom agent");
+
+            const missing = [];
+            const waived = [];
+            for (const name of required) {
+              const sec = sections[name];
+              if (!sec) {
+                // A section the files say must apply, but the author removed it from
+                // the description. Treat as unmet rather than skipping, so deleting
+                // a required section cannot bypass the gate.
+                missing.push(`- **${name}** → section is required for the files this PR changes but is missing from the PR description. Restore it and complete it.`);
+                continue;
+              }
+              for (const line of sec) {
+                if (!isUnchecked(line)) continue;
+                const label = line.replace(/^\s*-\s*\[\s*\]\s*/, "").replace(/\*\*/g, "").trim();
+                if (!label) continue;
+                // Out of scope: a tool-specific item on a PR that touches no tool.
+                if (!isToolPr && !matchesAny(label, UNIVERSAL_ITEMS)) continue;
+                // Waived with a stated reason, where waiving is allowed.
+                if (NA_WITH_REASON.test(label)) {
+                  if (matchesAny(label, NO_WAIVER)) {
+                    missing.push(`- **${name}** → ${label}  ← this item cannot be marked n/a`);
+                  } else {
+                    waived.push(`- **${name}** → ${label}`);
+                  }
+                  continue;
+                }
+                missing.push(`- **${name}** → ${label}`);
+              }
+            }
+
+            // Grandfathering. A PR opened before the check existed reports its
+            // findings and passes, unless a maintainer has asked for enforcement.
+            const enforced = labels.includes(ENFORCE_LABEL);
+            const predating = createdAt !== "" && createdAt < CHECK_INTRODUCED && !enforced;
+
+            // A bot or a draft is never enforced, and unlike grandfathering the
+            // `enforce-checklist` label does not override it: labeling a draft
+            // would nag an author who has already said they are not finished.
+            const exempt = isBot || isDraft;
+
+            const failing = missing.length > 0 && !predating && !exempt;
+            const outcome = failing ? "fail" : "pass";
+
+            // Why it passed, not just that it did. The companion posts the comment
+            // and cannot see any of this, so without a reason it would tell the
+            // author of a draft or a grandfathered PR "checklist complete" while
+            // items are still unmet — the one message that must never be wrong.
+            const reason = missing.length === 0 ? "complete"
+              : isBot ? "bot"
+              : isDraft ? "draft"
+              : predating ? "predating"
+              : "incomplete";
+
+            fs.mkdirSync("checklist-result", { recursive: true });
+            fs.writeFileSync("checklist-result/pr-number", String(number) + "\n");
+            fs.writeFileSync("checklist-result/outcome", outcome + "\n");
+            fs.writeFileSync("checklist-result/reason", reason + "\n");
+            fs.writeFileSync("checklist-result/missing.md", missing.join("\n") + "\n");
+
+            // Step summary, so a predating PR's findings are visible somewhere even
+            // though nothing is labeled or commented on.
+            const summary = [];
+            summary.push("## PR checklist");
+            summary.push("");
+            summary.push(isToolPr
+              ? "This PR touches a tool directory, so every required item applies."
+              : "This PR touches no tool directory, so only the items that apply to every contribution are enforced (internal content, licence).");
+            if (waived.length) {
+              summary.push("", "Marked not applicable, with a reason:", "", ...waived);
+            }
+            if (missing.length) {
+              let why = "Unmet required items:";
+              if (isBot) why = "Opened by a bot, so the checklist is not enforced. Reported only:";
+              else if (isDraft) why = "Still a draft, so the checklist is not enforced. It is enforced when you mark the PR ready for review. Reported only:";
+              else if (predating) why = `Opened before this check existed (${createdAt}), so these are warnings and the check passes. Apply the \`${ENFORCE_LABEL}\` label to require them.`;
+              summary.push("", why, "", ...missing);
+            } else {
+              summary.push("", "All applicable required items are met.");
+            }
+            await core.summary.addRaw(summary.join("\n")).write();
+
+            if (exempt && missing.length) {
+              core.info(`PR #${number} is ${isBot ? "bot-authored" : "a draft"}; ${missing.length} item(s) reported, not enforced.`);
+            } else if (predating && missing.length) {
+              for (const m of missing) core.warning(m.replace(/^- /, ""));
+              core.info(`PR #${number} predates this check; ${missing.length} item(s) reported as warnings.`);
+            } else if (failing) {
+              core.setFailed(`Checklist incomplete: ${missing.length} required item(s) unmet.`);
+            } else {
+              core.info("All applicable required checklist items are met.");
+            }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checklist-check-result
+          path: checklist-result/
+          retention-days: 1
+      - name: Fail the job when the checklist is incomplete
+        if: steps.check.outcome != 'success'
+        run: |
+          echo "::error::PR checklist incomplete — see the comment on the PR."
+          exit 1
