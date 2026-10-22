@@ -49,4 +49,4 @@ Configure one Coralogix delivery path:
 
 For the alert, open its **Response** step, set **Notify on** to **Alerts**, then select the connector and preset, or the outbound webhook. Use the request body unchanged so it follows the AWS DevOps Agent webhook format.
 
-More in the Coralogix docs: [AWS DevOps Agent](https://coralogix.com/docs/user-guides/mcp-server/aws-devops-agent/), [API keys](https://coralogix.com/docs/user-guides/account-management/api-keys/api-keys/), [Coralogix domain](https://coralogix.com/docs/user-guides/account-management/account-settings/coralogix-domain/), and [MCP server permissions](https://coralogix.com/docs/user-guides/mcp-server/permissions/).
+More in the Coralogix docs: [AWS DevOps Agent](https://coralogix.com/docs/user-guides/mcp-server/aws-devops-agent/), [OAuth](https://coralogix.com/docs/user-guides/mcp-server/oauth/), [API keys](https://coralogix.com/docs/user-guides/account-management/api-keys/api-keys/), [Coralogix domain](https://coralogix.com/docs/user-guides/account-management/account-settings/coralogix-domain/), and [MCP server permissions](https://coralogix.com/docs/user-guides/mcp-server/permissions/).
