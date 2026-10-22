@@ -1,6 +1,6 @@
 ---
 name: coralogix-logs
-description: Log-specific concepts, fields, field discovery usage, and troubleshooting patterns. The `dataprime` skill should be loaded alongside this skill. Load when you need to explore logs in your investigation or to answer a question about logs.
+description: Log-specific concepts, fields, field discovery usage, and troubleshooting patterns. The `coralogix-dataprime` skill should be loaded alongside this skill. Load when you need to explore logs in your investigation or to answer a question about logs.
 metadata:
   author: coralogix
   version: 1.0.0
@@ -83,7 +83,7 @@ Before ending the investigation loop, make sure you have:
 
 - **`search_for_fields`**: Batch search for log fields by description and/or value. Supports up to 5 searches at once. Use this to discover field names for your DataPrime log queries.
 
-For complete DataPrime syntax and patterns, load the `dataprime` skill if it wasn't already loaded.
+For complete DataPrime syntax and patterns, load the `coralogix-dataprime` skill if it wasn't already loaded.
 
 ## Field Discovery Methods
 
@@ -125,7 +125,7 @@ Each search item can be one of:
 **Additional discovery methods**:
 The `search_for_fields` tool only has access to the most common fields. Sometimes data resides in unstructured fields requiring regex extraction. In such cases, filter by specific services or severity to retrieve sample logs, then scan them to discover extraction patterns.
 
-> **`~` (text match):** `~` is a **case-insensitive, token-based** match — `~ 'timeout'` also matches `TIMEOUT`/`Timeout`, and it matches whole tokens (words), not arbitrary substrings. For a **case-sensitive raw substring** match, use `contains()` instead. See the operator reference in the `dataprime` skill.
+> **`~` (text match):** `~` is a **case-insensitive, token-based** match — `~ 'timeout'` also matches `TIMEOUT`/`Timeout`, and it matches whole tokens (words), not arbitrary substrings. For a **case-sensitive raw substring** match, use `contains()` instead. See the operator reference in the `coralogix-dataprime` skill.
 
 > **Avoid "schema-agnostic" approaches as a first choice**: `wildfind` searches ALL fields and can return irrelevant data. Always try `search_for_fields` first. Only use `wildfind` as a fallback when field discovery fails.
 
@@ -161,7 +161,7 @@ If you get 0 results, change **one thing at a time**. Keep the query window as *
 ## Related Skills
 
 - If the question is about a specific service/pod/entity's RED metrics, health, or resource
-  saturation, load the `service-catalog` skill first — it's a faster, curated path than raw log
+  saturation, load the `coralogix-service-catalog` skill first — it's a faster, curated path than raw log
   queries for that data. Come back here to correlate a catalog signal (e.g. elevated error rate)
   with the underlying log events.
 

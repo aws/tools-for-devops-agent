@@ -30,10 +30,10 @@ Use **`search_docs`** + **`fetch_doc`** when the user wants:
 |-----------|-------------|
 | **Query live logs** | **`query_dataprime`** with `source logs` — [coralogix-logs](skill://coralogix-logs/SKILL.md) |
 | **Query live spans/traces** | **`query_dataprime`** with `source spans` — [coralogix-spans](skill://coralogix-spans/SKILL.md) |
-| **DataPrime syntax / commands** | [dataprime](skill://dataprime/SKILL.md) — **`list_dataprime_commands`**, **`show_dataprime_command_details`**, **`list_dataprime_constructs`**, **`describe_dataprime_construct`** |
+| **DataPrime syntax / commands** | [dataprime](skill://coralogix-dataprime/SKILL.md) — **`list_dataprime_commands`**, **`show_dataprime_command_details`**, **`list_dataprime_constructs`**, **`describe_dataprime_construct`** |
 | **RUM SDK install & API** | **`read_rum_sdk_docs`** — [coralogix-rum](skill://coralogix-rum/SKILL.md) |
-| **Alerts or incidents in the tenant** | **`olly_ask`** — [olly](skill://olly/SKILL.md) |
-| **Metrics (PromQL)** | [metrics-query](skill://metrics-query/SKILL.md) |
+| **Alerts or incidents in the tenant** | **`olly_ask`** — [olly](skill://coralogix-olly/SKILL.md) |
+| **Metrics (PromQL)** | [metrics-query](skill://coralogix-metrics-query/SKILL.md) |
 | **Discover field paths in tenant data** | **`search_for_fields`** |
 
 ## Tool reference
@@ -101,7 +101,7 @@ User: "How do I send OpenTelemetry traces to Coralogix?"
 **Avoid**
 
 - `"how do I fix my slow checkout service"` → query **live spans** with **`query_dataprime`**, not docs.
-- `"filter syntax for groupby"` → use **`dataprime`** skill / command catalog, not general docs search (unless catalog is insufficient).
+- `"filter syntax for groupby"` → use **`coralogix-dataprime`** skill / command catalog, not general docs search (unless catalog is insufficient).
 - `"install @coralogix/browser"` → use **`read_rum_sdk_docs`** with topic `BROWSER_SDK`.
 
 ## Troubleshooting
@@ -116,6 +116,6 @@ User: "How do I send OpenTelemetry traces to Coralogix?"
 
 - **Logs queries:** [coralogix-logs](skill://coralogix-logs/SKILL.md)
 - **Traces / spans queries:** [coralogix-spans](skill://coralogix-spans/SKILL.md)
-- **DataPrime language:** [dataprime](skill://dataprime/SKILL.md)
+- **DataPrime language:** [dataprime](skill://coralogix-dataprime/SKILL.md)
 - **RUM SDK docs:** [coralogix-rum](skill://coralogix-rum/SKILL.md)
-- **Investigation (alerts, incidents):** [olly](skill://olly/SKILL.md)
+- **Investigation (alerts, incidents):** [olly](skill://coralogix-olly/SKILL.md)

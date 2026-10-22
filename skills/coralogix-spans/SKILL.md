@@ -1,6 +1,6 @@
 ---
 name: coralogix-spans
-description: Span-specific concepts, fields, duration handling, and investigation patterns. Load when you need to explore spans in your investigation or to answer a question about spans. For service-level error rate, latency percentiles, throughput, or health, load the `service-catalog` skill instead — it is the pre-aggregated path for those; use this skill when you need individual traces, span attributes, or span-level detail the catalog does not expose. Always load the `dataprime` skill together with this one before writing any query.
+description: Span-specific concepts, fields, duration handling, and investigation patterns. Load when you need to explore spans in your investigation or to answer a question about spans. For service-level error rate, latency percentiles, throughput, or health, load the `coralogix-service-catalog` skill instead — it is the pre-aggregated path for those; use this skill when you need individual traces, span attributes, or span-level detail the catalog does not expose. Always load the `coralogix-dataprime` skill together with this one before writing any query.
 metadata:
   author: coralogix
   version: 1.0.0
@@ -74,7 +74,7 @@ Before ending the investigation loop, make sure you have:
 - **`search_for_fields`**: Batch search for span fields by description and/or value. Supports up to 5 searches at once. Use this to discover field names for your DataPrime span queries.
 - **`get_service_map_relations_graph`**: Gets information about interactions and relationships between services.
 
-For complete DataPrime syntax and patterns, load the `dataprime` skill if it wasn't already loaded.
+For complete DataPrime syntax and patterns, load the `coralogix-dataprime` skill if it wasn't already loaded.
 
 ## Field Discovery Methods
 
@@ -134,7 +134,7 @@ If you get 0 results, consider:
 ## Related Skills
 
 - If the question is about a specific service/pod/entity's RED metrics, health, or resource
-  saturation, load the `service-catalog` skill first — it's a faster, curated path than raw span
+  saturation, load the `coralogix-service-catalog` skill first — it's a faster, curated path than raw span
   queries for that data. Come back here to correlate a catalog signal (e.g. elevated latency) with
   the underlying spans/traces.
 

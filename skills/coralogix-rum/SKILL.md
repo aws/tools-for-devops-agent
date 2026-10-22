@@ -22,7 +22,7 @@ metadata:
 
 In Coralogix, RUM is stored in its own **`rum.events`** dataset. You query it with **`query_dataprime`** and **`source rum.events`**, and read structured fields flat under **`$d.*`**. Unlike ordinary logs, RUM reflects **user-visible** experience on the device. Do **not** query `source logs` or filter by `$l.subsystemname` for RUM — the `rum.events` dataset has no subsystem label. **Never fall back to `source logs` or `cx_rum`** — if `source rum.events` returns no rows for the time range, report that no RUM data was found (optionally suggest widening the range); do not re-query logs.
 
-**Workflow and DataPrime basics** (DataPrime commands, tool order, `$d` / `$l` / `$m`, severity): **`dataprime`** — `skill://dataprime/SKILL.md`;
+**Workflow and DataPrime basics** (DataPrime commands, tool order, `$d` / `$l` / `$m`, severity): **`coralogix-dataprime`** — `skill://coralogix-dataprime/SKILL.md`;
 
 **Discovering RUM field paths**: most fields are listed in **Key Fields** below. `search_for_fields` does **not** work for RUM — it supports only logs and spans. For a field that is not listed:
 - **You have a literal value** (e.g. an app name or label value the user quoted) — run `source rum.events | wildfind '<literal>'`, then read the matching `$d.*` keypath off a returned record and use that path in the real query.
@@ -190,6 +190,6 @@ When asked about user interactions (clicks, inputs, etc.) on a page:
 
 ## Related
 
-- **DataPrime basics** — `skill://dataprime/SKILL.md`
-- **DataPrime (pipelines + command catalog tools)** — `skill://dataprime/SKILL.md`
+- **DataPrime basics** — `skill://coralogix-dataprime/SKILL.md`
+- **DataPrime (pipelines + command catalog tools)** — `skill://coralogix-dataprime/SKILL.md`
 - **Coralogix logs (`query_dataprime`)** — `skill://coralogix-logs/SKILL.md`
