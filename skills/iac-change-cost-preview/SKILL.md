@@ -5,7 +5,7 @@ metadata:
   author: inesttia
   version: "1.0.0"
   summary: "Estimates the monthly cost change of an IaC pull request with live AWS Price List rates, in Release Readiness Reviews or on request."
-  aws-devops-agent-skills.agent-types: "RELEASE_READINESS_REVIEW, RELEASE_TESTING, CHAT"
+  aws-devops-agent-skills.agent-types: "RELEASE_READINESS_REVIEW, CHAT"
   aws-devops-agent-skills.aws-services: "Amazon EC2, Amazon RDS, Amazon VPC, Amazon S3, Amazon CloudWatch"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
 ---
