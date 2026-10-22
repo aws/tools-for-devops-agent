@@ -1,0 +1,86 @@
+schema_version: 1
+# Equals the directory name. Permanent.
+name: coralogix
+# Strict MAJOR.MINOR.PATCH. First submission starts at 1.0.0.
+version: 1.0.0
+title: Coralogix
+vendor: Coralogix
+description: Query Coralogix logs, metrics and traces during investigations.
+categories: [telemetry]
+tier: partner-managed
+type: mcp
+mcp:
+  # Named public Coralogix regions only. BYOC and staging sites are excluded.
+  # EU1 uses the bare api.coralogix.com host because api.eu1.coralogix.com
+  # can return 403. Each host answers an unauthenticated MCP initialize with
+  # 401 or 403.
+  endpoints:
+    - { label: EU1, endpoint: "https://api.eu1.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: EU2, endpoint: "https://api.eu2.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: US1, endpoint: "https://api.us1.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: US2, endpoint: "https://api.us2.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: US3, endpoint: "https://api.us3.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: AP1, endpoint: "https://api.ap1.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: AP2, endpoint: "https://api.ap2.coralogix.com/mgmt/api/v1/mcp" }
+    - { label: AP3, endpoint: "https://api.ap3.coralogix.com/mgmt/api/v1/mcp" }
+  auth:
+    # Customers can choose either a dedicated personal API key or OAuth.
+    - type: dynamic_client_registration
+      # The OAuth issuer is regional and must match the authorization server
+      # listed by each MCP endpoint's protected-resource metadata.
+      authorization_server:
+        EU1: "https://api.coralogix.com/mgmt/api/v1/mcp_oauth"
+        EU2: "https://api.eu2.coralogix.com/mgmt/api/v1/mcp_oauth"
+        US1: "https://api.coralogix.us/mgmt/api/v1/mcp_oauth"
+        US2: "https://api.us2.coralogix.com/mgmt/api/v1/mcp_oauth"
+        US3: "https://api.us3.coralogix.com/mgmt/api/v1/mcp_oauth"
+        AP1: "https://api.ap1.coralogix.in/mgmt/api/v1/mcp_oauth"
+        AP2: "https://api.ap2.coralogix.com/mgmt/api/v1/mcp_oauth"
+        AP3: "https://api.ap3.coralogix.com/mgmt/api/v1/mcp_oauth"
+    - type: api_key
+      # Use a dedicated personal API key scoped read-only (ReadData on log,
+      # metric and span data) — not an ingestion key.
+      headers:
+        - { header: Authorization, label: Personal API key, prefix: "Bearer " }
+skills:
+  - coralogix-alerts
+  - coralogix-ai-center
+  - coralogix-case-analytics
+  - coralogix-case-management
+  - coralogix-cases
+  - coralogix-docs
+  - coralogix-logs
+  - coralogix-rum
+  - coralogix-spans
+  - coralogix-dashboards
+  - coralogix-dataprime
+  - coralogix-data-usage
+  - coralogix-datasets
+  - coralogix-infrastructure
+  - coralogix-metrics-query
+  - coralogix-olly
+  - coralogix-service-catalog
+  - coralogix-single-case
+  - coralogix-views
+triggers:
+  # Coralogix cannot compute the per-request HMAC-SHA256 signature, so the
+  # customer authenticates the webhook with a static bearer API key.
+  auth: api_key
+  # Values are written in Coralogix Notification Center preset (Jinja) syntax,
+  # using the Alert entity type where alert.* / alertDef.* variables exist.
+  incident:
+    # Combine the alert definition id with the firing timestamp so each firing
+    # opens its own investigation (a repeated id is deduplicated and dropped).
+    incidentId: '"{{ alertDef.id }}-{{ alert.timestamp }}"'
+    title: '{{ alertDef.name | json_encode }}'
+    # Map Coralogix P1–P5 to the DevOps Agent priority set.
+    priority: '"{% if alertDef.priority == ''P1'' %}CRITICAL{% elif alertDef.priority == ''P2'' %}HIGH{% elif alertDef.priority == ''P3'' %}MEDIUM{% elif alertDef.priority == ''P4'' %}LOW{% else %}MINIMAL{% endif %}"'
+    timestamp: '"{{ alert.timestamp }}"'
+    description: '{{ alertDef.description | default(value='''') | json_encode }}'
+    service: '{{ alertDef.name | json_encode }}'
+    # Carry a deep link back to the alert and context to make the investigation
+    # actionable.
+    data: '{ "metadata": { "source": "coralogix", "alertUrl": "{{ alert.alertDataUrl | default(value='''') }}", "alertType": "{{ alertDef.type }}", "priority": "{{ alertDef.priority }}", "status": "{{ alert.status }}" } }'
+docs_url: https://coralogix.com/docs/user-guides/mcp-server/aws-devops-agent/
+support_url: https://coralogix.com/support/
+maintainers: [menachembadichi-blip]
