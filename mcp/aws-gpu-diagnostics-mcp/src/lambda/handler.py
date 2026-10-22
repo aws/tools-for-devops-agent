@@ -214,7 +214,7 @@ def read_gpu_artifact(arguments: dict[str, Any]) -> dict[str, Any]:
         "artifactKey": artifact_key,
         "startByte": start_byte,
         "bytesReturned": len(body),
-        "content": body.decode("utf-8", errors="replace"),
+        "content": _sanitize_text(body.decode("utf-8", errors="replace"), MAX_READ_BYTES),
         "contentRange": response.get("ContentRange"),
     }
 
@@ -249,11 +249,15 @@ def _sanitize_findings(value: Any) -> list[dict[str, Any]]:
         item = dict(finding)
         evidence = item.get("evidence")
         if isinstance(evidence, str):
-            item["evidence"] = "".join(
-                character for character in evidence if not _is_control_character(character)
-            )[:500]
+            item["evidence"] = _sanitize_text(evidence, 500)
         sanitized.append(item)
     return sanitized
+
+
+def _sanitize_text(value: str, limit: int) -> str:
+    return "".join(
+        character for character in value if not _is_control_character(character)
+    )[:limit]
 
 
 def _is_control_character(character: str) -> bool:

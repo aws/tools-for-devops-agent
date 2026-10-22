@@ -176,7 +176,7 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
 
     const document = new ssm.CfnDocument(this, 'GpuCollectionDocument', {
       documentType: 'Automation',
-      name: `${this.stackName}-gpu-collection-${props.requireHumanApproval ? 'approval' : 'automated'}-v2`,
+      name: `${this.stackName}-gpu-collection-${props.requireHumanApproval ? 'approval' : 'automated'}-v3`,
       content: {
         schemaVersion: '0.3',
         description: props.requireHumanApproval
@@ -184,7 +184,10 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
           : 'Automated GPU diagnostics collector.',
         assumeRole: automationRole.roleArn,
         parameters: {
-          InstanceId: { type: 'String' },
+          InstanceId: {
+            type: 'String',
+            allowedPattern: '^i-[0-9a-f]{8,17}$',
+          },
           CollectionPrefix: {
             type: 'String',
             allowedPattern: '^collections/i-[0-9a-f]{8,17}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
