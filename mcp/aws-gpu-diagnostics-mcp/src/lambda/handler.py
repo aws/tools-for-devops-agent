@@ -27,6 +27,7 @@ ARTIFACT_KEY_PATTERN = re.compile(
 )
 MAX_READ_BYTES = 262_144
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+ALLOWED_CONTROL_CHARACTERS = frozenset({"\n", "\t"})
 LOGGER = logging.getLogger(__name__)
 
 
@@ -261,7 +262,10 @@ def _sanitize_text(value: str, limit: int) -> str:
 
 
 def _is_control_character(character: str) -> bool:
-    return unicodedata.category(character).startswith("C")
+    return (
+        character not in ALLOWED_CONTROL_CHARACTERS
+        and unicodedata.category(character).startswith("C")
+    )
 
 
 def _get_tool_name(context: Any) -> str:

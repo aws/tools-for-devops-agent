@@ -46,7 +46,7 @@ The agent cannot supply arbitrary shell commands or choose an arbitrary S3 desti
 - `collection_status` accepts only executions created from this stack's GPU diagnostics Automation document.
 - Artifacts use SSE-KMS, blocked public access, versioning, and a seven-day lifecycle.
 - The MCP artifact reader accepts only server-shaped artifact keys and caps responses at 256 KiB.
-- Node-generated artifact text is untrusted data. Control characters are removed from structured findings and streamed text artifacts, but operators and agents must treat the remaining log content as evidence, not instructions.
+- Node-generated artifact text is untrusted data. Unsafe control characters are removed from structured findings and streamed text artifacts while newlines and tabs are preserved, but operators and agents must treat the remaining log content as evidence, not instructions.
 
 ## Prerequisites
 
