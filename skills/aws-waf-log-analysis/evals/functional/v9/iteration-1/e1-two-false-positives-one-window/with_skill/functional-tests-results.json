@@ -1,0 +1,89 @@
+{
+  "version": "v9",
+  "iteration": 1,
+  "eval_id": "e1-two-false-positives-one-window",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-waf-log-analysis' was triggered as expected",
+      "skill_loads_found": 4,
+      "warning": "Skill 'aws-waf-log-analysis' was triggered 4 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's root cause finding precisely matches the expected root cause: AWS WAF Core Rule Set (CommonRuleSet) sub-rules SizeRestrictions_BODY and NoUserAgent_HEADER, running at default Block action, caused false-positive blocks on legitimate traffic. The details align closely: SizeRestrictions_BODY blocked ~1,200 POST /checkout requests from one client (198.51.100.80) roughly 17:32-17:52 UTC due to body size exceeding 8KB (bodies up to 10,185 bytes); NoUserAgent_HEADER blocked ~599 GET requests to /home and /catalog from one client (198.51.100.70) with missing User-Agent, roughly 18:05-18:25 UTC. The investigation also explicitly confirms no WAF/edge configuration change preceded the blocks (CloudTrail showed no change at onset), matching the expected root cause's assertion that no configuration change preceded the blocks. Both are confirmed as false positives, not attacks, matching exactly.",
+      "evidence": "\"The Web ACL `CreatedByCloudFront-a1b2c3d4` ... runs the AWS Managed Rules Common Rule Set with ALL sub-rules at the default Block action ... SizeRestrictions_BODY rejects legitimate checkout POSTs larger than the CRS 8 KB body limit (bodies reach 10,185 B), and NoUserAgent_HEADER rejects legitimate automated clients that omit a User-Agent... There was NO attack and NO configuration change: CloudTrail shows no WAF/edge change at onset\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Names both sub-rules, SizeRestrictions_BODY and NoUserAgent_HEADER (any casing)",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'SizeRestrictions_BODY (false positive)\\n**Description:** Legitimate checkout form submissions blocked (HTTP 403) by AWS-AWSManagedRulesCommonRuleSet sub-rule SizeRestrictions_BODY. Single client 54.212\u2026'"
+        },
+        {
+          "text": "The Findings contain two separate Cause records, one per sub-rule: one Cause for SizeRestrictions_BODY (about 1,200 blocked POST /checkout requests, about 17:32 to 17:52 UTC) and a different Cause for NoUserAgent_HEADER (about 600 blocked GET requests with no User-Agent, about 18:05 to 18:26 UTC), each giving its own count and time window. A single Cause record that names both sub-rules together does not pass",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The Root Cause finding states: 'Two sub-rules are over-broad for this application's legitimate traffic: SizeRestrictions_BODY rejects legitimate checkout POSTs... and NoUserAgent_HEADER rejects legitimate automated clients...' combining both in one record. Separate entries exist only as 'Hypothesis' not 'Cause': 'Hypothesis: CRS SizeRestrictions_BODY false-positive on /checkout' and 'Hypothesis: CRS NoUserAgent_HEADER false-positive on API client'.",
+          "reasoning": "The investigation summary has one combined Root Cause finding naming both sub-rules together, plus two separate 'Hypothesis' entries (not 'Cause' records) for each sub-rule. The assertion requires two separate Cause records with counts and time windows. While each hypothesis does have distinct counts/windows (1,200 at 17:32-17:52 for SizeRestrictions_BODY, 599 at 18:05-18:25 for NoUserAgent_HEADER - note 599 not ~600 but close), these are labeled 'Hypothesis' not 'Cause', and the Root Cause section explicitly combines both sub-rules into one record. The assertion explicitly says 'A single Cause record that names both sub-rules together does not pass' - and indeed the Root Cause record here does name both sub-rules together, which fails that criterion even though separate Hypothesis entries exist.",
+          "confidence": "high"
+        },
+        {
+          "text": "A Cause or Root Cause finding classifies both sub-rule matches as false positives on legitimate traffic, not as an attack",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The Root Cause states: 'There was NO attack and NO configuration change... When those two legitimate patterns appeared... each produced a 403 episode.' Both symptoms are labeled 'Confirmed FALSE POSITIVE.'",
+          "reasoning": "The Root Cause finding and both symptom descriptions explicitly classify the matches as false positives on legitimate traffic, not attacks.",
+          "confidence": "high"
+        },
+        {
+          "text": "A Root Cause finding states that no WAF configuration change (Web ACL, managed rule group or version, or distribution association) preceded the blocks, and does not name a rule update or configuration change as the root cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'There was NO attack and NO configuration change: CloudTrail shows no WAF/edge change at onset'",
+          "reasoning": "The Root Cause finding explicitly states no WAF configuration change preceded the blocks and does not name a rule update as root cause; instead it attributes root cause to the default Block action with no overrides, which is a standing misconfiguration, not a change.",
+          "confidence": "high"
+        },
+        {
+          "text": "Supporting Observations cite log or metric evidence for each cause (per-sub-rule blocked counts, the client IP or URI involved)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Single client 198.51.100.80 (US, Chrome 141 browser), POST /checkout, 1,200 blocked requests 17:32\u201317:52 UTC... bodies reached up to 10,185 bytes' and 'Single client 198.51.100.70 (US), empty User-Agent header, GET /home (300) and GET /catalog (299), 599 blocked requests 18:05\u201318:25 UTC, 0 allowed.'",
+          "reasoning": "Each symptom description cites specific blocked counts, client IPs, and URIs: SizeRestrictions_BODY cites client 198.51.100.80, POST /checkout, 1,200 blocked requests, body sizes up to 10,185 bytes; NoUserAgent_HEADER cites client 198.51.100.70, GET /home and /catalog, 599 blocked requests.",
+          "confidence": "high"
+        },
+        {
+          "text": "A Root Cause finding, its Supporting Observations, or a Gaps entry states that the managed rule group version did not change before the blocks (no managed rule set version update, for example CRS version stable or no version-related CloudTrail event), as well as no Web ACL or association change. A summary that leaves an AWS-side managed rule version update open as a possible trigger does not pass",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The only relevant statement is: 'There was NO attack and NO configuration change: CloudTrail shows no WAF/edge change at onset; SQLi, Known Bad Inputs, IP Reputation and Anti-DDoS all did nothing (0 blocks / 0 challenges)...' This does not explicitly mention CRS/managed rule group version stability or absence of a version-related CloudTrail event.",
+          "reasoning": "The Root Cause finding states CloudTrail shows no WAF/edge change at onset, which covers Web ACL and association changes, but it does not explicitly state that the managed rule group version did not change (no CRS version update). The summary does not explicitly rule out a managed rule group version update as a possible trigger; it only says 'no WAF/edge change at onset' generically without specifically addressing managed rule group versioning, leaving this open per the assertion's strict requirement.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "12m46s",
+    "cost": "$6.36",
+    "context_window": {
+      "utilization": "11.0%",
+      "compaction_count": 0
+    }
+  }
+}
