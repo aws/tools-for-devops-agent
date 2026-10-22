@@ -2,8 +2,10 @@
 name: coralogix-cases
 description: Triage and manage Coralogix Cases. Load when a user wants to inspect a case, update it, add a comment, assign or acknowledge it, resolve or close it, change its priority, inspect its events, or inspect notification deliveries.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
 ---
 
 # Cases Management

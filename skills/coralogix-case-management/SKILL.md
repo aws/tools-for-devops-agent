@@ -2,8 +2,10 @@
 name: coralogix-case-management
 description: Create and change Coralogix Cases — open a case, comment, re-prioritise, assign, acknowledge, retitle, resolve, close, mute, link and unlink. Load when the user asks to "open a case", "create a case for this", "raise a case for X", "comment on CASE-123", "make CASE-123 a P1", "change the priority", "assign this case to …", "acknowledge CASE-123", "resolve CASE-123", "close this case", "mute this case", "stop this case notifying", "link CASE-390 under CASE-383", "make this a child of", or to find a case they described in words rather than by ID. The `coralogix-alerts` skill must be loaded alongside this skill for terminology. This skill performs mutations; for read-only investigation of one case use `coralogix-single-case`, and for counts, trends and fleet questions use `coralogix-case-analytics`.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_MITIGATION,INCIDENT_UI"
 ---
 
 # Case Management Skill — open, triage, resolve and link cases

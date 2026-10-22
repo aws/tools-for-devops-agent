@@ -2,8 +2,10 @@
 name: coralogix-single-case
 description: Deep single-case investigation. Load when the user asks about one specific case by ID (UUID or readable id like "CASE-123") — e.g. summarize comments, explain who was notified where, judge whether the trigger reflects a real incident, walk the lifecycle. The `coralogix-alerts` skill should be loaded alongside this skill.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
 ---
 
 # Case Investigation Skill — Drill into a single Case

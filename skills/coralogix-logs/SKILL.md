@@ -2,8 +2,10 @@
 name: coralogix-logs
 description: Log-specific concepts, fields, field discovery usage, and troubleshooting patterns. The `coralogix-dataprime` skill should be loaded alongside this skill. Load when you need to explore logs in your investigation or to answer a question about logs.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
 ---
 
 # Logs Skill - Analyzing logs via Coralogix

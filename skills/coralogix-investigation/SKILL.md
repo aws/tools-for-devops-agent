@@ -2,8 +2,10 @@
 name: coralogix-investigation
 description: Query Coralogix logs, traces and metrics for evidence during incident triage, root cause analysis and troubleshooting chats. Use this skill whenever the Coralogix MCP server is connected and the question involves errors or exceptions, latency, failing requests or dependencies, traffic changes, resource saturation, or a Coralogix alert that opened the investigation. It maps each question to the right Coralogix tool (query_dataprime for logs and spans, query_promql_range and query_promql_instant for metrics), shows how to write small aggregated DataPrime and PromQL queries, how to find field, label and metric names in an unfamiliar account, how to compare the incident window with a healthy baseline, and how to avoid pitfalls such as zero results caused by a misspelled field name. The skill only reads data and never changes anything in Coralogix.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
 ---
 
 # Coralogix Investigation

@@ -2,8 +2,10 @@
 name: coralogix-spans
 description: Span-specific concepts, fields, duration handling, and investigation patterns. Load when you need to explore spans in your investigation or to answer a question about spans. For service-level error rate, latency percentiles, throughput, or health, load the `coralogix-service-catalog` skill instead — it is the pre-aggregated path for those; use this skill when you need individual traces, span attributes, or span-level detail the catalog does not expose. Always load the `coralogix-dataprime` skill together with this one before writing any query.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
 ---
 
 # Spans Skill - Analyzing spans via Coralogix

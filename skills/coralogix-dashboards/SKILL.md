@@ -2,8 +2,10 @@
 name: coralogix-dashboards
 description: Dashboard analysis and editing workflow and rules for using dashboard JSON, filters, variables, and time ranges. Load when the user provides dashboard context (for example a dashboard link) or asks to create or change a dashboard.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_UI"
 ---
 
 # Dashboards Skill - Analyzing and building Coralogix dashboards

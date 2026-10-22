@@ -2,8 +2,10 @@
 name: coralogix-docs
 description: Search and read official Coralogix platform documentation using **`search_docs`** and **`fetch_doc`**. Use when the user asks how Coralogix features work, how to configure or use the UI, set up integrations (OpenTelemetry, agents, collectors, webhooks), manage API keys, explore spans/traces/logs in the product, configure alerts/SLOs/dashboards, or needs authoritative product docs — not live tenant telemetry.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
 ---
 
 # Coralogix docs (`search_docs`, `fetch_doc`)

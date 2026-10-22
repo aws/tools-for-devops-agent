@@ -2,8 +2,10 @@
 name: coralogix-case-analytics
 description: Fleet/aggregate analytics across many cases via the `system/labs.cases.state_updates` DataPrime dataset. Load when the user asks counts, trends, distributions or rates across cases — e.g. "MTTR last week", "how many P1 cases today", "active case count per team", "list active cases", "how long until activation on average". Do NOT load for one specific case ID — use alert tools for single-case investigation. Load the `coralogix-dataprime` skill alongside this skill.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
 ---
 
 # Case Analytics Skill — Fleet-level DataPrime queries over cases

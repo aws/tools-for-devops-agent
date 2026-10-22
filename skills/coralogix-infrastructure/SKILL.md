@@ -2,8 +2,10 @@
 name: coralogix-infrastructure
 description: 'Find and inspect infrastructure resources: monitored resource types, resource inventory, health history, raw source data, and configuration changes. Load when the user asks to "show resource types", "list infrastructure resources", "what resources of this kind are monitored", "is this resource healthy", "resource health history", "when did this resource go critical", "get raw resource data", "what changed on this host", "which resources changed configuration", "infrastructure inventory", "find resources by name", "filter resources by service or environment", or wants to explore infrastructure resources and their data.'
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
 ---
 
 # Infrastructure Resources Skill

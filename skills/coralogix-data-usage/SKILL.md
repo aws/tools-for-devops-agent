@@ -2,8 +2,10 @@
 name: coralogix-data-usage
 description: Data usage, billing units, plan consumption, quota metrics, anomaly detection, and time-series analysis concepts and query workflow. Load when the user asks about data usage, ingestion volumes, billing, plan limits, overage, quota attribution, usage anomalies, or usage trends over time.
 metadata:
-  author: coralogix
-  version: 1.0.0
+  author: "coralogix"
+  version: "1.0.0"
+  tier: "partner-managed"
+  agent_types: "CHAT"
 ---
 
 # Data Usage Guidance
