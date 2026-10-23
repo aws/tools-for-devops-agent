@@ -52,14 +52,35 @@ upload payload.
 | best-practices | 92% / 91% / 82%, consistency 94% | one accepted deviation (BP-04) and one harness defect, both below |
 | functional | serial: 22/22 skill loaded, 83/83 assertions | run it serially; one parallel invocation loaded the skill in only 13/22 |
 
-### 1.10.0 overlay evals — not yet run
+### 1.10.0 results (2026-10-23, devops-agent 0.1.0, judge `us.anthropic.claude-sonnet-5`, us-east-1)
 
-Version 1.10.0 adds seven `eks-overlay-*` cases (compliance derivation, CIS 5.4.2 public endpoint,
-delta classification, delta identity mismatch, no invented CVEs, fleet drift, overlay not
-requested) and three trigger queries. They have **not** been run. The results above predate them
-and cover the 22 original cases only. Run them serially and record the results here before
-claiming coverage. The cases were added to `evals.json` by hand, so port them into
-`convert-evals.py` before the next regeneration, or they will be dropped.
+The results committed under `evals/structure/`, `evals/best-practices/v1/`, and `evals/functional/v1/` come from these runs.
+
+| Tier | Result | Notes |
+|---|---|---|
+| structure | 12/12 (100%) | `structure-tests-results-v1.json` |
+| best-practices | 90% / 92% / 83%, consistency 88% | Same profile as 1.9.x. The only failure is BP-04, the accepted deviation below. BP-12 errored once on a `warning` verdict, the known harness defect below. Iteration 1 also gave BP-02/BP-11 warnings. |
+| functional (7 `eks-overlay-*` cases × 3 iterations, one invocation) | 38/42 iterations ran; 4 `without_skill` iterations hit service read timeouts | See the per-case table |
+
+Functional results for the overlay cases only (the 22 original cases were not re-run):
+
+| Case | Skill loaded | Expected output (with / without) | Assertions (with / without) |
+|---|---|---|---|
+| `eks-overlay-compliance-derivation` | 1/3 | 1/3 / 0/3 | 5/15 / 0/15 |
+| `eks-overlay-cis-542-public-endpoint` | 3/3 | 3/3 / 1/3 | 12/12 / 9/12 |
+| `eks-overlay-delta-classification` | 3/3 | 2/3 / 0/3 | 9/12 / 0/8 |
+| `eks-overlay-delta-identity-mismatch` | 1/3 | 1/3 / 3/3 | 3/3 / 7/9 |
+| `eks-overlay-vuln-no-invented-cve` | 3/3 | 3/3 / 0/2 | 11/12 / 2/8 |
+| `eks-overlay-fleet-drift` | 3/3 | 3/3 / 0/1 | 15/15 / — |
+| `eks-overlay-not-requested` | 3/3 | 3/3 / 0/2 | 9/9 / 0/6 |
+
+How to read this:
+
+- **Activation is the weak point, not overlay behaviour.** When the skill loaded, every case met its expected output except one delta-classification iteration. `compliance-derivation` loaded 3/3 in an earlier run with the identical prompt (15/15 assertions with the skill, 3/15 without), so its 1/3 here matches the parallel-run activation race described below. `delta-identity-mismatch` loaded 1/3 in both runs. Without the skill, any model refuses a mismatched-identity diff, so that case barely separates the two sides.
+- **An earlier run of the same seven cases exposed eval defects, which are fixed in this version.** The vulnerability prompt never loaded the skill (0/3), so its prompt now frames an EKS operations review. The fleet-drift prompt never asked about access, so the cross-account assertion always failed; the prompt now asks it. Several delta, identity, and vulnerability assertions passed without the skill; they were replaced with skill-specific ones. That earlier run is not committed.
+- **Assertions still flagged `always_passes`:** `cis-542` [0], [1], [3], `delta-identity-mismatch` [0], and `vuln-no-invented-cve` [0]. A capable model answers them from the prompt. Tighten them before the next run.
+- **Before trusting a full-suite number, re-run serially.** These cases were added to `evals.json` by hand, so port them into `convert-evals.py` before its next regeneration, or they will be dropped.
+- Real account identifiers in the recorded agent output were redacted to `123456789012`.
 
 ### Serial run — the trustworthy path
 
