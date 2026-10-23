@@ -302,6 +302,98 @@
       ],
       "task_type": "chat",
       "should_trigger": true
+    },
+    {
+      "id": "eks-overlay-compliance-derivation",
+      "prompt": "An EKS review just completed with these exact ledger verdicts: S10 PASS, S11 FAIL, AX10 N/A (AWS API denied), SM2 N/A, Op16 PASS. The user asked for a CIS EKS Benchmark mapping. Using the compliance crosswalk derivation rules, give the status of CIS 4.1.1, 4.1.3, 2.1.1, 4.1.5, and 4.1.4. No cluster access required.",
+      "expected_output": "4.1.1 PASS (S10), 4.1.3 FAIL (S11), 2.1.1 Not assessed because its mapped IDs are N/A, 4.1.5 PASS (Op16), 4.1.4 Not covered because no canonical row maps to it. No verdict changes; mapping is not an attestation.",
+      "assertions": [
+        "The response gives CIS 4.1.1 as PASS and CIS 4.1.3 as FAIL",
+        "The response gives CIS 2.1.1 as Not assessed (not PASS) because AX10/SM2 are N/A",
+        "The response gives CIS 4.1.4 as Not covered rather than PASS or FAIL",
+        "The response does not change any check verdict as a result of the mapping",
+        "The response states the mapping is not a certification, audit, or attestation"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-overlay-cis-542-public-endpoint",
+      "prompt": "AX12 graded PASS: private endpoint access is on and endpointPublicAccess=true with publicAccessCidrs restricted to 203.0.113.0/24. The user wants a CIS EKS v1.8.0 view. What are CIS 5.4.1 and 5.4.2, and does AX12's verdict change? No cluster access required.",
+      "expected_output": "CIS 5.4.1 PASS; CIS 5.4.2 FAIL because public access is still enabled, using the endpointPublicAccess value already recorded as AX12 evidence; AX12 remains PASS.",
+      "assertions": [
+        "The response reports CIS 5.4.1 as PASS",
+        "The response reports CIS 5.4.2 as FAIL because endpointPublicAccess is true",
+        "The response states AX12 remains PASS and is not regraded",
+        "The response does not issue or require a new AWS API read to decide 5.4.2"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-overlay-delta-classification",
+      "prompt": "The user pasted a previous aws-eks-operations-review report for the same account, region, and cluster. Previous verdicts: S1 FAIL, S2 FAIL, R6 PASS, O12 FAIL; AX5 was not in the previous report. Current verdicts: S1 PASS, S2 FAIL, R6 FAIL, O12 N/A, AX5 FAIL. Classify each for the historical delta overlay. No cluster access required.",
+      "expected_output": "S1 Resolved, S2 Persisting, R6 Regressed, O12 Unverified (FAIL to N/A is never Resolved), AX5 New. Matching uses fingerprints or check_id plus canonical_resource_id, never fuzzy titles; the prior report is used only from the conversation, never saved to a file.",
+      "assertions": [
+        "The response classifies S1 as Resolved and S2 as Persisting",
+        "The response classifies R6 as Regressed",
+        "The response classifies O12 as Unverified and explicitly not Resolved",
+        "The response classifies AX5 as New",
+        "The response does not propose saving the previous or current report to a file or Amazon S3"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-overlay-delta-identity-mismatch",
+      "prompt": "I'm reviewing cluster prod-a in account $accountid us-east-1. Here is last month's report to diff against; its header says cluster prod-b, us-west-2. Produce the change-since-previous-review section. No cluster access required.",
+      "expected_output": "Refuses to compute a delta because the prior report's identity (prod-b, us-west-2) does not match the current cluster, and renders the overlay as Not available with that reason.",
+      "assertions": [
+        "The response does not compute New/Resolved/Regressed classes between prod-a and prod-b",
+        "The response explains that the previous report is for a different cluster/region",
+        "The response marks the delta as not available or asks for the correct prior report"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-overlay-vuln-no-invented-cve",
+      "prompt": "For the vulnerability posture overlay: AX5 shows vpc-cni is 3 minor versions behind the latest compatible version and coredns is current. S38 found Inspector enabled with zero CRITICAL/HIGH findings for images running in the cluster. Write the vulnerability posture summary. No cluster access required.",
+      "expected_output": "Reports vpc-cni as a version gap (3 minors behind), not as vulnerable; cites no CVE IDs; notes Inspector found no CRITICAL/HIGH image findings; notes AWS-hosted add-on images are not covered by customer Inspector findings and points to add-on release notes / AWS security bulletins.",
+      "assertions": [
+        "The response labels the vpc-cni lag as a version gap rather than a confirmed vulnerability",
+        "The response does not cite any CVE identifier (no CVE-YYYY-NNNN string)",
+        "The response states customer Inspector findings do not cover AWS-hosted add-on images",
+        "The response does not change Op7 or AX5 verdicts or severity"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-overlay-fleet-drift",
+      "prompt": "Compare dev-cluster (account $devaccount) and prod-cluster (account $prodaccount) for drift. Assume both full reviews completed with QA PASS. Parity verdicts: AX11 dev PASS / prod FAIL; S15 dev FAIL / prod FAIL; S28 dev FAIL / prod PASS; AX10 dev PASS / prod N/A. Describe how the skill delivers this and classify each. No cluster access required.",
+      "expected_output": "Each cluster keeps its own complete report; the comparison is a separate EKS Fleet Comparison deliverable. AX11 Production-only gap, S15 Systemic, S28 Lower-environment gap, AX10 Not comparable. Drift classes never change per-cluster severity. Cross-account access comes from each account's Agent Space cloud source and an EKS access entry, never local credentials or ad-hoc role assumption.",
+      "assertions": [
+        "The response classifies AX11 as a production-only gap",
+        "The response classifies S15 as systemic and S28 as a lower-environment gap",
+        "The response classifies AX10 as not comparable because prod is N/A",
+        "The response states the comparison is a separate deliverable and each cluster keeps its own complete review",
+        "The response states cross-account access relies on Agent Space cloud sources and EKS access entries, not local AWS credentials"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-overlay-not-requested",
+      "prompt": "For a plain full EKS operations review where the user never mentioned compliance, CVEs, prior reports, or other clusters, does the skill load the overlays reference or add a compliance section? No cluster access required.",
+      "expected_output": "No. The ledger records overlays: none, overlays.md and compliance-crosswalk.md are not loaded, and the report contains only the eight mandatory sections without overlay subsections.",
+      "assertions": [
+        "The response states overlays.md is not loaded when no overlay is requested",
+        "The response states no compliance crosswalk subsection is rendered",
+        "The response states the eight mandatory report sections are unchanged"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
     }
   ]
 }

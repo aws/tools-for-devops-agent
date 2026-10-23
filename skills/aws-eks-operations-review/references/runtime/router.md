@@ -23,6 +23,10 @@ Load only in S5. Discovery always attempts all 49 areas; routing selects grading
 - Windows only when `windows_nodes > 0`; Hybrid only when `hybrid_nodes > 0`; AI/ML only when `gpu_nodes > 0 || neuron_nodes > 0`.
 - Evaluate [`cluster-gates.md`](cluster-gates.md) for Auto Mode, IPv6, Fargate, CNI, mixed OS, and EKS Anywhere. Gates change applicability, not membership.
 
+## Overlays
+
+Load [`overlays.md`](overlays.md) only when the user explicitly asks for a compliance mapping, vulnerability posture, a delta against a supplied prior report, a cluster or environment comparison, drift, or a multi-account fleet view. Otherwise record `overlays: none`. Overlays are derived views and never change unit selection, membership, gates, or verdicts. A fleet or comparison request still runs one complete review per cluster.
+
 ## Shared grading references
 
 Load [`grading-guards.md`](grading-guards.md) once in S6. Load [`common-checks-coverage.md`](common-checks-coverage.md) only for a full review/CWR or S7 QA. Human material under `../docs/` is not normal runtime authority; `../docs/minimum-rbac.md` is allowed only for an access-policy question/denial. Do not load remediation or decision trees in S5.

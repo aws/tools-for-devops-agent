@@ -24,13 +24,30 @@ Read-only EKS best-practices review for AWS DevOps Agent. It uses the MCP tool `
 
 Canonical coverage: 49 discovery areas; 288 core checks (41 Operations, 26 Resilience, 46 Security, 30 Scalability, 19 Performance, 26 Observability, 33 Networking, 33 Cost, 20 Control Plane, 14 AWS API); 81 gated checks (35 Upgrade, 18 Windows, 12 Hybrid, 16 AI/ML). Control Plane scorecard IDs are CP1–CP11, CP-M1–CP-M6, and CPM1–CPM3; CP1–CP25 in query shards are query IDs only; Cluster Insights is AX1.
 
+## Optional overlays
+
+These views run only when the user asks for them. They are derived from the graded ledger and never add checks, change verdicts or severity, or alter the eight-section report. Activation, inputs, and rules live in `references/runtime/overlays.md`.
+
+| Overlay | Ask for it with | Output |
+|---|---|---|
+| Compliance crosswalk | "map this to CIS EKS / NIST 800-53 / PCI DSS / SOC 2 / HIPAA" | Per-control PASS / FAIL / Not assessed / Not covered in §5, derived from canonical IDs via `references/compliance-crosswalk.md`. CIS EKS v1.8.0 control IDs, plus Security Hub-published NIST/PCI requirements for EKS.1/2/8. Other mappings are labelled indicative. This is not an attestation. |
+| Vulnerability posture | "which add-ons or images have CVEs" | §2 summary of add-on version gaps (AX5/Op7/N2), Inspector image findings (S38), and node AMI age (Op29). It never names a CVE that a retrieved finding or bulletin does not contain. |
+| Historical delta | Paste a previous report from this skill and ask "what changed" | §1 New / Regressed / Persisting / Resolved / Unverified, matched by finding fingerprint. The prior report is used from the conversation only. |
+| Comparison, drift, fleet | "compare dev and prod", "review clusters across accounts" | One complete review per cluster, then a separate `EKS Fleet Comparison` with drift classes on parity checks. Each account must be a cloud source in the Agent Space, and each cluster needs the access entry described above. Up to three live reviews run per conversation; larger fleets compare supplied reports. |
+
+Example prompts:
+
+- "Run a full EKS operations review of `prod-cluster` in us-east-1 and include a CIS EKS Benchmark and PCI DSS crosswalk."
+- "Here is last month's review of `prod-cluster`. Re-run the review and show what changed."
+- "Review `dev-cluster` (account `<dev-account-id>`) and `prod-cluster` (account `<prod-account-id>`), then compare them for configuration drift."
+
 ## Package layout
 
 ```text
 aws-eks-operations-review/
 ├── SKILL.md
 └── references/
-    ├── runtime/                 # manifests, gates, guards, QA, report contract
+    ├── runtime/                 # manifests, gates, guards, QA, report contract, overlays
     ├── pillars/                 # nine canonical pillar definitions
     ├── remediations/            # generated FAIL-only index and size-capped (≤12 KiB) shards
     ├── control-plane-health/    # source detection, four query shards, thresholds/playbooks
@@ -38,7 +55,8 @@ aws-eks-operations-review/
     ├── docs/                    # JIT background; consolidated operator-guides.md
     ├── kubectl-discovery-commands*.md
     └── aws-api-checks.md, upgrade-readiness.md, windows-workloads.md,
-        hybrid-nodes.md, aiml-workloads.md, k8s-deprecated-apis.md
+        hybrid-nodes.md, aiml-workloads.md, k8s-deprecated-apis.md,
+        compliance-crosswalk.md
 ```
 
 ## Maintainer-only validation and packaging
@@ -67,7 +85,7 @@ zip -r aws-eks-operations-review.zip aws-eks-operations-review/ \
      '*/README.md' '*/EKS_SKILL_OPTIMIZATION_REPORT.md' '*.DS_Store'
 ```
 
-Upload constraints: root entry `aws-eks-operations-review/SKILL.md`, ZIP ≤6 MB and ≤100 regular files, no `scripts/`, eval files, README, changelog, optimization report, `.DS_Store`, TSV, or runtime sidecars. The intended payload currently contains 74 files (26 below the limit); `check-consistency.sh` prints the remaining headroom. In the Agent Space Operator Web App choose **Skills → Add skill → Upload skill**, select **Chat tasks** (or **All agents** to apply the skill to all agent types), review validation, and upload. The shared `operations-review-report-format` skill is optional; `references/runtime/report-contract.md` is the complete EKS fallback/adapter.
+Upload constraints: root entry `aws-eks-operations-review/SKILL.md`, ZIP ≤6 MB and ≤100 regular files, no `scripts/`, eval files, README, changelog, optimization report, `.DS_Store`, TSV, or runtime sidecars. The intended payload currently contains 76 files (24 below the limit); `check-consistency.sh` prints the remaining headroom. In the Agent Space Operator Web App choose **Skills → Add skill → Upload skill**, select **Chat tasks** (or **All agents** to apply the skill to all agent types), review validation, and upload. The shared `operations-review-report-format` skill is optional; `references/runtime/report-contract.md` is the complete EKS fallback/adapter.
 
 ## Contributing a check
 
