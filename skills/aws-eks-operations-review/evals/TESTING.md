@@ -52,6 +52,15 @@ upload payload.
 | best-practices | 92% / 91% / 82%, consistency 94% | one accepted deviation (BP-04) and one harness defect, both below |
 | functional | serial: 22/22 skill loaded, 83/83 assertions | run it serially; one parallel invocation loaded the skill in only 13/22 |
 
+### 1.10.0 overlay evals — not yet run
+
+Version 1.10.0 adds seven `eks-overlay-*` cases (compliance derivation, CIS 5.4.2 public endpoint,
+delta classification, delta identity mismatch, no invented CVEs, fleet drift, overlay not
+requested) and three trigger queries. They have **not** been run. The results above predate them
+and cover the 22 original cases only. Run them serially and record the results here before
+claiming coverage. The cases were added to `evals.json` by hand, so port them into
+`convert-evals.py` before the next regeneration, or they will be dropped.
+
 ### Serial run — the trustworthy path
 
 Use the driver rather than one big invocation:
@@ -184,8 +193,9 @@ The service rejects a skill zip containing more than **100 files**, counting wha
 `CHANGELOG.md`, `.skilleval.yaml`, `evals/`, `scripts/`, and `.claude/`. Note it does **not**
 exclude other root-level documents.
 
-This package sits at 74 files (`SKILL.md` plus 73 references) after consolidating the remediation
-shards by size instead of ID count, leaving 26 files of headroom. It previously sat at exactly 100,
+This package sits at 76 files (`SKILL.md` plus 75 references) after consolidating the remediation
+shards by size instead of ID count and adding the two overlay references in 1.10.0, leaving 24
+files of headroom. It previously sat at exactly 100,
 where a stray root-level report pushed it to 101 and every upload failed with
 `Zip validation failed: Zip contains 101 files`, while `check-consistency.sh` reported a compliant
 payload because its exclusion list did not match the uploader's. That check now mirrors the uploader

@@ -61,6 +61,16 @@ Discovery window: {UTC range}   Context source: {DevOps Agent topology/investiga
 
 Minimum substance per section: §1 is 2–4 sentences plus the severity and PASS/FAIL/N/A count lines plus one line per graded unit; §2 populates the snapshot fields below; §3 has exactly one row per FAIL; §4 has exactly one block per FAIL; §5 has one table per graded unit whose rows equal that unit's selected IDs; §6 lists alarms with existing/missing status or one explicit skipped line; §7 lists every N/A ID; §8 holds the audit, gates, and QA PASS.
 
+## Requested overlays
+
+Overlays from [`overlays.md`](overlays.md) render only when the ledger records them as requested. Each one is a `###` subsection inside an existing section, never a new top-level section:
+
+- Delta: `### Change since previous review` at the end of §1.
+- Vulnerability posture: `### Vulnerability posture` at the end of §2.
+- Compliance crosswalk: `### Compliance crosswalk` at the end of §5, with uncovered controls in §7.
+
+A comparison, drift, or fleet view is a separate `# EKS Fleet Comparison` deliverable. It is emitted only after every per-cluster review has been delivered complete, and it is never folded into a cluster report. Overlays never alter section order, verdicts, severity, or counts.
+
 ## Severity model
 
 Use descriptive customer-facing tiers only:
