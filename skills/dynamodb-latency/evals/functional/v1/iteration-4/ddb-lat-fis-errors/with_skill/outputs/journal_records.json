@@ -1,0 +1,42 @@
+[
+  {
+    "agentSpaceId": "8fa3b0eb-d815-48e9-af7d-f86b4d6b1c1b",
+    "executionId": "bafcde23-20c0-4597-81a3-b208b9907d6f",
+    "recordId": "219450e7-f185-4e76-bf25-1eb41f49a5f8",
+    "content": "{\"id\": \"219450e7-f185-4e76-bf25-1eb41f49a5f8\", \"role\": \"user\", \"content\": [{\"text\": \"Hypothetical for the DynamoDB latency skill \\u2014 no AWS calls. Table catalog-test, 3-hour window. Query shows SystemErrors of 240 across 12 consecutive periods 13:00\\u201313:11, and FaultInjectionServiceInducedErrors for Query is exactly 240 in the same periods. Query p99 rose to 130 ms against its 7-day baseline of 30 ms in those periods, with thousands of requests per period; p50 stayed at baseline. Our SystemErrors alarm fired. Is DynamoDB having a service problem?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:09:29.050000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "8fa3b0eb-d815-48e9-af7d-f86b4d6b1c1b",
+    "executionId": "bafcde23-20c0-4597-81a3-b208b9907d6f",
+    "recordId": "d0d08f26-9514-4ef2-ba4a-dfe769af5774",
+    "content": "{\"id\": \"6cf90297-b221-4afc-8458-bdaad7d139c9\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"DynamoDB latency skill service problem diagnosis\"}]}",
+    "createdAt": "2026-10-19T13:09:30.269000-05:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "8fa3b0eb-d815-48e9-af7d-f86b4d6b1c1b",
+    "executionId": "bafcde23-20c0-4597-81a3-b208b9907d6f",
+    "recordId": "bb2b193c-7a2b-444e-962e-2d219c078b12",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 3.8, \"compaction_count\": 0}}}",
+    "createdAt": "2026-10-19T13:09:38.776000-05:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "8fa3b0eb-d815-48e9-af7d-f86b4d6b1c1b",
+    "executionId": "bafcde23-20c0-4597-81a3-b208b9907d6f",
+    "recordId": "37625547-5593-4bf9-8482-e6d8c4622517",
+    "content": "{\"id\": \"37625547-5593-4bf9-8482-e6d8c4622517\", \"role\": \"assistant\", \"content\": [{\"text\": \"No \\u2014 this looks like a self-inflicted condition, not a DynamoDB service-side problem.\\n\\nThe key signal is that `FaultInjectionServiceInducedErrors` for Query is exactly 240 in the same 12 periods as `SystemErrors` (240). When fault-injection-induced errors account for the entirety of the `SystemErrors` count, those \\\"errors\\\" are from the **Fault Injection Simulator (FIS)** deliberately injecting server-side errors against the table (or a chaos-engineering/resilience test using that same mechanism) \\u2014 not an actual DynamoDB outage or degradation. DynamoDB's own health is not implicated; the errors are synthetic and expected under a fault-injection test.\\n\\nThat also explains the rest of the pattern cleanly:\\n- **p99 rose to 130 ms vs. a 30 ms baseline, while p50 stayed flat at baseline.** Fault injection on a sampled subset of requests drags the tail (retries/errors push some requests' effective latency up) without touching the bulk of traffic \\u2014 classic \\\"tail elevation driven by injected faults,\\\" not a broad latency regression.\\n- **Thousands of requests per period** with only 240 affected per period is consistent with a bounded, intentional injection rate rather than an uncontrolled service issue.\\n- **The SystemErrors alarm firing** is expected \\u2014 the alarm doesn't distinguish \\\"real\\\" SystemErrors from fault-injected ones, so it will trip during an active FIS experiment even though DynamoDB itself is healthy.\\n\\nNet: this maps to the skill's \\\"fault-injection/test-induced\\\" explanation rather than \\\"service-side errors\\\" or genuine \\\"tail elevation.\\\" The practical move is to correlate the 13:00\\u201313:11 window with any active FIS experiment template/run against catalog-test \\u2014 if one was running, this is the test working as intended, and the alarm is a false positive for real customer impact (though you may still want it to page so someone confirms the experiment is bounded and rolled back on schedule).\\n\\nIf you want, I can walk through how this would differ if the FaultInjectionServiceInducedErrors count were only a fraction of total SystemErrors instead of matching it exactly.\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:09:38.856000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "8fa3b0eb-d815-48e9-af7d-f86b4d6b1c1b",
+    "executionId": "bafcde23-20c0-4597-81a3-b208b9907d6f",
+    "recordId": "c2287059-2a3d-4ac4-9caa-a8d5e5663272",
+    "content": "{\"id\": \"b54ab72d-3319-414a-8a76-64fc6df76c81\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"No \\u2014 this looks like a self-inflicted condition, not a DynamoDB service-side problem.\\n\\nThe key signal is that `FaultInjectionServiceInducedErrors` for Query is exactly 240 in the same 12 periods as `SystemErrors` (240). When fault-injection-induced errors account for the entirety of the `SystemErrors` count, those \\\"errors\\\" are from the **Fault Injection Simulator (FIS)** deliberately injecting server-side errors against the table (or a chaos-engineering/resilience test using that same mechanism) \\u2014 not an actual DynamoDB outage or degradation. DynamoDB's own health is not implicated; the errors are synthetic and expected under a fault-injection test.\\n\\nThat also explains the rest of the pattern cleanly:\\n- **p99 rose to 130 ms vs. a 30 ms baseline, while p50 stayed flat at baseline.** Fault injection on a sampled subset of requests drags the tail (retries/errors push some requests' effective latency up) without touching the bulk of traffic \\u2014 classic \\\"tail elevation driven by injected faults,\\\" not a broad latency regression.\\n- **Thousands of requests per period** with only 240 affected per period is consistent with a bounded, intentional injection rate rather than an uncontrolled service issue.\\n- **The SystemErrors alarm firing** is expected \\u2014 the alarm doesn't distinguish \\\"real\\\" SystemErrors from fault-injected ones, so it will trip during an active FIS experiment even though DynamoDB itself is healthy.\\n\\nNet: this maps to the skill's \\\"fault-injection/test-induced\\\" explanation rather than \\\"service-side errors\\\" or genuine \\\"tail elevation.\\\" The practical move is to correlate the 13:00\\u201313:11 window with any active FIS experiment template/run against catalog-test \\u2014 if one was running, this is the test working as intended, and the alarm is a false positive for real customer impact (though you may still want it to page so someone confirms the experiment is bounded and rolled back on schedule).\\n\\nIf you want, I can walk through how this would differ if the FaultInjectionServiceInducedErrors count were only a fraction of total SystemErrors instead of matching it exactly.\"}]}",
+    "createdAt": "2026-10-19T13:09:38.941000-05:00",
+    "recordType": "final_response"
+  }
+]

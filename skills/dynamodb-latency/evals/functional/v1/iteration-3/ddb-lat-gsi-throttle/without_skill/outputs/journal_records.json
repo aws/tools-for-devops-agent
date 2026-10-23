@@ -1,0 +1,42 @@
+[
+  {
+    "agentSpaceId": "62f77b74-40af-47e9-91ac-30a22c1e3035",
+    "executionId": "ef4d47e6-689c-45a9-ae98-a209a4ece2fc",
+    "recordId": "94cbb90c-f939-4b3f-bed5-adcf537f343a",
+    "content": "{\"id\": \"94cbb90c-f939-4b3f-bed5-adcf537f343a\", \"role\": \"user\", \"content\": [{\"text\": \"DynamoDB latency skill, hypothetical \\u2014 do not call AWS. Table orders-prod, provisioned, GSI orders-by-status. 3-hour window. Table-level WriteThrottleEvents: none recorded. WriteThrottleEvents for GSI orders-by-status: recorded in 9 periods 14:05\\u201314:20. PutItem p99 rose to 140 ms vs baseline 20 ms in 8 of those 9 periods; p50 slightly up. ThrottledRequests for PutItem recorded in the same periods. Why are base-table writes slow when the table itself is not throttled?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:12:26.542000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "62f77b74-40af-47e9-91ac-30a22c1e3035",
+    "executionId": "ef4d47e6-689c-45a9-ae98-a209a4ece2fc",
+    "recordId": "f5a1b2be-7599-461c-b72d-91d76a6ceba3",
+    "content": "{\"id\": \"20ba291c-346c-4897-86d1-d403a190aa4d\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"DynamoDB GSI write throttling delays base table PutItem\"}]}",
+    "createdAt": "2026-10-19T13:12:27.634000-05:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "62f77b74-40af-47e9-91ac-30a22c1e3035",
+    "executionId": "ef4d47e6-689c-45a9-ae98-a209a4ece2fc",
+    "recordId": "fbd24bb3-1ef7-4199-a195-51f107ebf4b8",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 3.8, \"compaction_count\": 0}}}",
+    "createdAt": "2026-10-19T13:12:39.927000-05:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "62f77b74-40af-47e9-91ac-30a22c1e3035",
+    "executionId": "ef4d47e6-689c-45a9-ae98-a209a4ece2fc",
+    "recordId": "3a467111-4bdf-4e75-a287-4ac5efcbd8dd",
+    "content": "{\"id\": \"3a467111-4bdf-4e75-a287-4ac5efcbd8dd\", \"role\": \"assistant\", \"content\": [{\"text\": \"This is the classic DynamoDB GSI write-throttle propagation pattern. Here's the mechanism:\\n\\n**Why base-table writes slow down even though the table itself isn't throttled**\\n\\nDynamoDB writes a `PutItem` to the base table and updates every GSI *synchronously* as part of the same write path. An item write is only considered complete once the GSI update also succeeds. If a GSI can't absorb the write \\u2014 because its own provisioned throughput is exceeded \\u2014 the entire `PutItem` is throttled or delayed, even though:\\n\\n- The base table's own `WriteThrottleEvents` metric stays at zero (the table's capacity is fine), and\\n- The item itself could easily have been written to the base table alone.\\n\\nThat matches your signals exactly:\\n- **GSI `orders-by-status` WriteThrottleEvents**: present in 9 periods (14:05\\u201314:20) \\u2014 this is the actual bottleneck.\\n- **Table-level WriteThrottleEvents**: none \\u2014 confirming the base table's own capacity wasn't exceeded.\\n- **PutItem ThrottledRequests**: recorded in the same 9 periods \\u2014 these are writes rejected/retried because of the GSI, surfaced on the PutItem operation metric, not a base-table-capacity metric.\\n- **PutItem p99 jump to 140ms in 8 of 9 periods**: consistent with the internal retry/backoff DynamoDB does when a GSI update can't keep up \\u2014 the client-facing latency absorbs that retry cost. p50 barely moves because most writes still land immediately; only the tail (p99) catches the GSI contention.\\n\\n**Root cause candidates on the GSI side** (not table side):\\n1. **Low/uneven provisioned WCU on the GSI** relative to the table \\u2014 GSIs have their own provisioned throughput, separate from the base table, and are commonly under-provisioned if nobody scaled them in lockstep with the table.\\n2. **Hot key/skewed `status` attribute** \\u2014 if most items funnel into a few status values (e.g., `\\\"PENDING\\\"`), writes concentrate on a small number of GSI partitions, exceeding per-partition throughput even if aggregate GSI WCU looks sufficient.\\n3. **Adaptive capacity lag** \\u2014 a sudden shift in status-value distribution (e.g., a batch job flipping many orders to one status) can outpace adaptive capacity's rebalancing, producing a transient throttle window like your 14:05\\u201314:20 cluster.\\n\\n**Bottom line:** the base table reports healthy because its own capacity is fine; the GSI is the actual constrained resource, and because GSI updates are synchronous with the parent write, GSI throttling surfaces as elevated `PutItem` latency/throttles on the base table's operation metrics \\u2014 not as a base-table `WriteThrottleEvents` event.\\n\\nWant me to go further and sketch what to check next (GSI WCU vs. table WCU ratio, status-value cardinality, or whether on-demand/auto-scaling would help)?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:12:40.022000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "62f77b74-40af-47e9-91ac-30a22c1e3035",
+    "executionId": "ef4d47e6-689c-45a9-ae98-a209a4ece2fc",
+    "recordId": "d87ddfd3-5a46-40ea-b19a-438d3debbc05",
+    "content": "{\"id\": \"2a537d15-1871-43f3-aff8-03e952a87b6e\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"This is the classic DynamoDB GSI write-throttle propagation pattern. Here's the mechanism:\\n\\n**Why base-table writes slow down even though the table itself isn't throttled**\\n\\nDynamoDB writes a `PutItem` to the base table and updates every GSI *synchronously* as part of the same write path. An item write is only considered complete once the GSI update also succeeds. If a GSI can't absorb the write \\u2014 because its own provisioned throughput is exceeded \\u2014 the entire `PutItem` is throttled or delayed, even though:\\n\\n- The base table's own `WriteThrottleEvents` metric stays at zero (the table's capacity is fine), and\\n- The item itself could easily have been written to the base table alone.\\n\\nThat matches your signals exactly:\\n- **GSI `orders-by-status` WriteThrottleEvents**: present in 9 periods (14:05\\u201314:20) \\u2014 this is the actual bottleneck.\\n- **Table-level WriteThrottleEvents**: none \\u2014 confirming the base table's own capacity wasn't exceeded.\\n- **PutItem ThrottledRequests**: recorded in the same 9 periods \\u2014 these are writes rejected/retried because of the GSI, surfaced on the PutItem operation metric, not a base-table-capacity metric.\\n- **PutItem p99 jump to 140ms in 8 of 9 periods**: consistent with the internal retry/backoff DynamoDB does when a GSI update can't keep up \\u2014 the client-facing latency absorbs that retry cost. p50 barely moves because most writes still land immediately; only the tail (p99) catches the GSI contention.\\n\\n**Root cause candidates on the GSI side** (not table side):\\n1. **Low/uneven provisioned WCU on the GSI** relative to the table \\u2014 GSIs have their own provisioned throughput, separate from the base table, and are commonly under-provisioned if nobody scaled them in lockstep with the table.\\n2. **Hot key/skewed `status` attribute** \\u2014 if most items funnel into a few status values (e.g., `\\\"PENDING\\\"`), writes concentrate on a small number of GSI partitions, exceeding per-partition throughput even if aggregate GSI WCU looks sufficient.\\n3. **Adaptive capacity lag** \\u2014 a sudden shift in status-value distribution (e.g., a batch job flipping many orders to one status) can outpace adaptive capacity's rebalancing, producing a transient throttle window like your 14:05\\u201314:20 cluster.\\n\\n**Bottom line:** the base table reports healthy because its own capacity is fine; the GSI is the actual constrained resource, and because GSI updates are synchronous with the parent write, GSI throttling surfaces as elevated `PutItem` latency/throttles on the base table's operation metrics \\u2014 not as a base-table `WriteThrottleEvents` event.\\n\\nWant me to go further and sketch what to check next (GSI WCU vs. table WCU ratio, status-value cardinality, or whether on-demand/auto-scaling would help)?\"}]}",
+    "createdAt": "2026-10-19T13:12:40.131000-05:00",
+    "recordType": "final_response"
+  }
+]

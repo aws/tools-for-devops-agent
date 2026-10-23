@@ -1,0 +1,84 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "ddb-lat-throttle-flat-curve",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response correctly identifies the core mechanism (SuccessfulRequestLatency excludes throttled requests, SDK retry/backoff causes client-observed latency, throttle counters overlap the reported slowness window, no SystemErrors rules out internal fault) and does name the table, PutItem, the counters (1,103/1,842), and the 09:22\u201311:48 window. However, it misses several specific required elements:\n\n1. It does not label the answer as a 'hypothetical classification' explicitly, nor use the specific label 'LT-02 Throttle-induced' terminology the skill expects.\n2. It does not note that ThrottledRequests counts once per request so it is a floor (an explicit required point) \u2014 this nuance is absent.\n3. Instead of avoiding diagnosis of which capacity ceiling was hit, the agent explicitly speculates it's 'write-capacity exhaustion on checkout-prod' and suggests 'hot partition or burst exceeding provisioned WCU' \u2014 this directly contradicts the requirement that the response 'does not itself diagnose which capacity ceiling was hit.'\n4. It does not recommend reviewing the SDK's existing retry configuration; instead it ends by offering to look into on-demand vs provisioned WCU adjustments, which is a different recommendation than the expected 'review SDK's existing retry configuration rather than adding more retries.'\n\nGiven the omission of the 'floor' nuance, the explicit diagnosis of capacity ceiling (violating a specific constraint), and the missing retry-configuration recommendation, the response does not fully satisfy the expected output criteria despite being largely correct on the core narrative.",
+      "evidence": "\"likely a hot partition or burst exceeding provisioned WCU\" (violates 'does not itself diagnose which capacity ceiling was hit'); no mention of ThrottledRequests being a 'floor' metric; ends with offer to discuss 'switching to on-demand or adjusting provisioned WCU' rather than recommending review of SDK retry configuration; does not explicitly label the output as 'hypothetical classification' or use 'LT-02' terminology.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies the profile as throttle-induced (LT-02)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'I'd classify it as **throttling-induced hidden latency**' explicitly classifying the profile as throttle-induced.",
+          "reasoning": "The agent directly names the classification as throttling-induced, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that throttled requests are not included in SuccessfulRequestLatency, which is why the curve is flat",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'SuccessfulRequestLatency only measures requests that succeeded. A ProvisionedThroughputExceededException never gets timed into that metric \u2014 it's excluded by definition. So a table can be throttling heavily while SuccessfulRequestLatency p50/p99 stay perfectly flat...'",
+          "reasoning": "The agent explicitly explains that throttled requests are excluded from SuccessfulRequestLatency, which directly explains why the curve stays flat despite throttling.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that SDK automatic retries of throttled requests add client-observed latency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The 3\u20136 second user-perceived latency is classic SDK retry/backoff time. When a write is throttled, the SDK retries with exponential backoff; the request eventually succeeds and that final successful attempt is what gets recorded in SuccessfulRequestLatency \u2014 fast, because it's just the last try.'",
+          "reasoning": "The agent explicitly explains that SDK automatic retries with backoff are the source of the client-observed multi-second latency, directly matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provides a handoff with the table, operation, counters and time window rather than diagnosing which capacity ceiling was hit",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent states: 'No SystemErrors rules out an internal DynamoDB fault \u2014 this points to capacity-exceeded throttling (write capacity exhausted, likely a hot partition or burst exceeding provisioned WCU), not a service outage.' and offers 'look at whether this table would benefit from switching to on-demand or adjusting provisioned WCU'",
+          "reasoning": "The assertion wants a handoff that merely packages the table, operation, counters, and time window without diagnosing which specific capacity ceiling (e.g., hot partition vs. overall WCU exhaustion) was hit. However, the agent explicitly speculates on the specific cause ('likely a hot partition or burst exceeding provisioned WCU') and offers to dig into WCU adjustments, which goes beyond a neutral handoff and ventures into diagnosing the specific capacity ceiling. This fails the assertion's requirement to avoid diagnosing which ceiling was hit.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Does not recommend adding application-level retries on top of the SDK's retries",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent's response contains no mention or recommendation of adding application-level retries; instead it discusses on-demand mode or adjusting provisioned WCU as potential next steps: 'I can look at whether this table would benefit from switching to on-demand or adjusting provisioned WCU'",
+          "reasoning": "There is no recommendation anywhere in the output to add application-level retries on top of SDK retries. The only forward-looking suggestions are about capacity mode/WCU, not retry logic, satisfying the assertion that such a recommendation is absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites the throttle-induced rule ID",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.8%",
+      "compaction_count": 0
+    }
+  }
+}

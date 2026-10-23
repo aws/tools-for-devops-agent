@@ -1,0 +1,42 @@
+[
+  {
+    "agentSpaceId": "bf37e0c7-e650-4c9c-9724-4ce62ff370f7",
+    "executionId": "c52a186c-e7db-4c78-9e55-2c6a6e1b8533",
+    "recordId": "97286891-c4b4-4c54-b136-b73a637713cb",
+    "content": "{\"id\": \"97286891-c4b4-4c54-b136-b73a637713cb\", \"role\": \"user\", \"content\": [{\"text\": \"DynamoDB latency skill, hypothetical \\u2014 do not call AWS. Table orders-prod, provisioned, GSI orders-by-status. 3-hour window. Table-level WriteThrottleEvents: none recorded. WriteThrottleEvents for GSI orders-by-status: recorded in 9 periods 14:05\\u201314:20. PutItem p99 rose to 140 ms vs baseline 20 ms in 8 of those 9 periods; p50 slightly up. ThrottledRequests for PutItem recorded in the same periods. Why are base-table writes slow when the table itself is not throttled?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:12:51.331000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "bf37e0c7-e650-4c9c-9724-4ce62ff370f7",
+    "executionId": "c52a186c-e7db-4c78-9e55-2c6a6e1b8533",
+    "recordId": "6086e8f9-78ac-4072-bf22-47e7317bf5e5",
+    "content": "{\"id\": \"9c0260d9-0bb6-4cb0-8148-8896af3aff25\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"DynamoDB GSI write throttling impacts base table latency\"}]}",
+    "createdAt": "2026-10-19T13:12:52.496000-05:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "bf37e0c7-e650-4c9c-9724-4ce62ff370f7",
+    "executionId": "c52a186c-e7db-4c78-9e55-2c6a6e1b8533",
+    "recordId": "2e7cc607-fbf1-4e2d-aa18-a47185c3b268",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 3.8, \"compaction_count\": 0}}}",
+    "createdAt": "2026-10-19T13:13:03.611000-05:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "bf37e0c7-e650-4c9c-9724-4ce62ff370f7",
+    "executionId": "c52a186c-e7db-4c78-9e55-2c6a6e1b8533",
+    "recordId": "d0cfbb2e-2710-41f2-a758-20abd315f56e",
+    "content": "{\"id\": \"d0cfbb2e-2710-41f2-a758-20abd315f56e\", \"role\": \"assistant\", \"content\": [{\"text\": \"This is classic GSI write throttling bleeding back onto the base table \\u2014 a well-documented DynamoDB behavior, not a contradiction.\\n\\n**Why it happens:**\\n\\nEvery `PutItem` on `orders-prod` that writes an item with attributes projected into `orders-by-status` must synchronously propagate that write to the GSI as part of the same internal write path. DynamoDB does **not** let a base-table write succeed while leaving its GSI write pending \\u2014 the two are atomic from the item's perspective. If the GSI doesn't have enough provisioned write capacity to absorb the write (because its WCU allocation or key/partition distribution is undersized relative to the traffic), the write is throttled **at the GSI layer**, and that throttling is surfaced back to the caller as a throttled `PutItem` on the base table.\\n\\nThis explains every data point you listed:\\n\\n- **Table-level `WriteThrottleEvents`: none** \\u2014 the base table itself has ample provisioned WCUs and never rejects a write for its own capacity reasons.\\n- **GSI `WriteThrottleEvents`: 9 periods, 14:05\\u201314:20** \\u2014 this is the actual bottleneck. The index's provisioned (or effective, if a hot partition is involved) write capacity is insufficient.\\n- **`PutItem` `ThrottledRequests` in the same 9 periods** \\u2014 these are the client-visible throttles caused by the GSI rejecting the propagated write, not the base table.\\n- **p99 latency jump to 140 ms (8 of 9 periods), p50 only slightly up** \\u2014 consistent with retry/backoff behavior: most requests sail through (p50 barely moves), but a tail of requests hit the GSI throttle, get an internal retry or backoff before succeeding, and that retry cost shows up as p99 inflation. The one period without the p99 spike but with a GSI throttle event could mean the throttle was brief/light enough in that period not to push tail latency, or it landed on requests that don't touch the throttled partition.\\n\\n**Likely root cause to confirm (not to execute, just reasoning):**\\n- GSI provisioned WCUs too low for current traffic, or\\n- Uneven key distribution on `orders-by-status` (e.g., low-cardinality status values like \\\"pending\\\"/\\\"shipped\\\" causing hot partitions on the index) so a few partitions exceed their share of the provisioned throughput even if aggregate GSI capacity looks fine.\\n\\n**Bottom line:** the base table isn't throttled because it has the capacity; the GSI is the actual constraint, and because GSI writes are synchronous with base-table writes, GSI throttling manifests as base-table `PutItem` throttling and latency \\u2014 even though the base table's own metrics look clean.\\n\\nWant me to lay out what to check next (GSI WCU provisioning vs. consumed, and status-value cardinality) if you decide to turn this into a real investigation?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-10-19T13:13:03.696000-05:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "bf37e0c7-e650-4c9c-9724-4ce62ff370f7",
+    "executionId": "c52a186c-e7db-4c78-9e55-2c6a6e1b8533",
+    "recordId": "e65503f0-d03d-431e-b553-2310665dc569",
+    "content": "{\"id\": \"5a56ed08-c846-41b7-9972-e4385dcd0d5d\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"This is classic GSI write throttling bleeding back onto the base table \\u2014 a well-documented DynamoDB behavior, not a contradiction.\\n\\n**Why it happens:**\\n\\nEvery `PutItem` on `orders-prod` that writes an item with attributes projected into `orders-by-status` must synchronously propagate that write to the GSI as part of the same internal write path. DynamoDB does **not** let a base-table write succeed while leaving its GSI write pending \\u2014 the two are atomic from the item's perspective. If the GSI doesn't have enough provisioned write capacity to absorb the write (because its WCU allocation or key/partition distribution is undersized relative to the traffic), the write is throttled **at the GSI layer**, and that throttling is surfaced back to the caller as a throttled `PutItem` on the base table.\\n\\nThis explains every data point you listed:\\n\\n- **Table-level `WriteThrottleEvents`: none** \\u2014 the base table itself has ample provisioned WCUs and never rejects a write for its own capacity reasons.\\n- **GSI `WriteThrottleEvents`: 9 periods, 14:05\\u201314:20** \\u2014 this is the actual bottleneck. The index's provisioned (or effective, if a hot partition is involved) write capacity is insufficient.\\n- **`PutItem` `ThrottledRequests` in the same 9 periods** \\u2014 these are the client-visible throttles caused by the GSI rejecting the propagated write, not the base table.\\n- **p99 latency jump to 140 ms (8 of 9 periods), p50 only slightly up** \\u2014 consistent with retry/backoff behavior: most requests sail through (p50 barely moves), but a tail of requests hit the GSI throttle, get an internal retry or backoff before succeeding, and that retry cost shows up as p99 inflation. The one period without the p99 spike but with a GSI throttle event could mean the throttle was brief/light enough in that period not to push tail latency, or it landed on requests that don't touch the throttled partition.\\n\\n**Likely root cause to confirm (not to execute, just reasoning):**\\n- GSI provisioned WCUs too low for current traffic, or\\n- Uneven key distribution on `orders-by-status` (e.g., low-cardinality status values like \\\"pending\\\"/\\\"shipped\\\" causing hot partitions on the index) so a few partitions exceed their share of the provisioned throughput even if aggregate GSI capacity looks fine.\\n\\n**Bottom line:** the base table isn't throttled because it has the capacity; the GSI is the actual constraint, and because GSI writes are synchronous with base-table writes, GSI throttling manifests as base-table `PutItem` throttling and latency \\u2014 even though the base table's own metrics look clean.\\n\\nWant me to lay out what to check next (GSI WCU provisioning vs. consumed, and status-value cardinality) if you decide to turn this into a real investigation?\"}]}",
+    "createdAt": "2026-10-19T13:13:03.793000-05:00",
+    "recordType": "final_response"
+  }
+]

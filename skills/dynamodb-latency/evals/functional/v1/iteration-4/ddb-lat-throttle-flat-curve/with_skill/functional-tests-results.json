@@ -1,0 +1,88 @@
+{
+  "version": "v1",
+  "iteration": 4,
+  "eval_id": "ddb-lat-throttle-flat-curve",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'dynamodb-latency' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response meets most of the expected criteria well: it explicitly labels the output as hypothetical (\"Hypothetical classification of the profile you described \u2014 not an analysis of a live table\"), correctly classifies as LT-02 Throttle-induced via the retry branch, explains that SuccessfulRequestLatency only measures successful requests and that SDKs auto-retry ProvisionedThroughputExceededException so retry wait shows up as client-observed latency but not in the dashboard, and includes a contributing-factor/throttling handoff (CF-04) naming the table, PutItem, the counters (ThrottledRequests and WriteThrottleEvents), and the 09:22\u201311:48 window, explicitly stating it does not diagnose which capacity ceiling was hit.\n\nHowever, two specific expected elements are missing:\n1. The note that \"ThrottledRequests counts once per request so it is a floor\" \u2014 this specific floor/undercounting caveat is absent from the response. The agent discusses WriteThrottleEvents > ThrottledRequests[PutItem] suggesting other write activity, but never states the floor/once-per-request counting caveat for ThrottledRequests itself.\n2. The recommendation to \"review the SDK's existing retry configuration rather than adding more retries\" is completely absent \u2014 the response ends with \"Not established\" items about capacity ceiling and scope, but never makes this specific recommendation about reviewing retry configuration.\n\nSince two distinct, specific expected elements are missing (the floor/once-per-request note and the retry-configuration-review recommendation), the response does not fully satisfy the expected output.",
+      "evidence": "\"Severity: Medium... you gave 19 non-zero periods across the window but not their consecutiveness\" / \"Not established: the specific capacity ceiling causing the throttling, and whether it's isolated to PutItem or affects writes table-wide\" \u2014 no mention of ThrottledRequests being a floor (once-per-request counting) nor any recommendation to review SDK retry configuration.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies the profile as throttle-induced (LT-02)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Primary outcome: `LT-02` \u00b7 Throttle-induced` (checkout-prod)\"",
+          "reasoning": "The agent explicitly classifies the profile as LT-02 throttle-induced.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that throttled requests are not included in SuccessfulRequestLatency, which is why the curve is flat",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"that metric only covers *successful* requests\" and \"A perfectly flat PutItem curve is fully consistent with 3\u20136 second checkout writes during a throttling episode; it does not rule throttling out.\"",
+          "reasoning": "The agent explains that SuccessfulRequestLatency only measures successful requests, which is why throttled requests do not appear and the curve stays flat.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that SDK automatic retries of throttled requests add client-observed latency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"AWS SDKs retry `ProvisionedThroughputExceededException` automatically, so a throttled `PutItem` usually succeeds on retry \u2014 but the retry wait is real elapsed time on the client that `SuccessfulRequestLatency` never sees\"",
+          "reasoning": "The agent explicitly explains that SDK automatic retries add real client-side elapsed time not reflected in the latency metric, which is the retry-induced latency explanation requested.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provides a handoff with the table, operation, counters and time window rather than diagnosing which capacity ceiling was hit",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Contributing factor \u2014 `CF-04` (throttling handoff): Both `ThrottledRequests` and `WriteThrottleEvents` being recorded triggers this regardless of primary outcome. This skill doesn't diagnose *which* ceiling was hit... that's a throttling/capacity diagnostic's job, using the counters above as its input.\" Also 'Not established: the specific capacity ceiling causing the throttling...'",
+          "reasoning": "The agent provides table (checkout-prod), operation (PutItem), counters (ThrottledRequests 1,103, WriteThrottleEvents 1,842), and time window (09:22-11:48), while explicitly deferring the capacity-ceiling diagnosis to another process.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not recommend adding application-level retries on top of the SDK's retries",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention anywhere in the output of recommending application-level retries; the agent only discusses SDK automatic retries causing latency, not a recommendation to add more retries.",
+          "reasoning": "The output contains no recommendation to add application-level retries on top of SDK retries; it only explains the retry mechanism as a diagnostic explanation, not a prescriptive recommendation. Since the assertion is about absence of a recommendation, and none is present, this passes, though confidence is medium since the absence of a statement is harder to definitively confirm as intentional avoidance versus simple omission.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Cites the throttle-induced rule ID",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'LT-02'"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "53s",
+    "cost": "$0.44",
+    "context_window": {
+      "utilization": "5.7%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "version": "v1",
+  "iteration": 4,
+  "eval_id": "ddb-lat-gsi-throttle",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "failed",
+      "message": "Skill 'dynamodb-latency' was NOT triggered (no skills were loaded)",
+      "skill_loads_found": 0
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response correctly identifies the GSI back-pressure throttling mechanism, explains that table-level WriteThrottleEvents exclude GSI-level throttling, and ties the GSI throttle events to the PutItem p99 elevation in the correct window (14:05-14:20). It names the table, GSI, PutItem, and the time window as expected.\n\nHowever, several expected elements are missing or contradicted:\n1. The response never explicitly labels the scenario as 'hypothetical' despite the user explicitly stating 'hypothetical \u2014 do not call AWS.' The agent doesn't acknowledge this framing at all.\n2. It does not use the specific classification label 'LT-02 Throttle-induced' that the expected output calls for \u2014 this specific taxonomy/labeling is absent.\n3. Critically, the expected output states the agent 'does not itself size capacity or determine which ceiling was hit' \u2014 i.e., it should hand off the throttling investigation rather than attempt to size capacity itself. However, the agent explicitly goes further and recommends specific remediation steps including 'raise GSI write capacity to match or exceed the base table' and suggests specific fixes like sharding suffixes \u2014 this goes beyond a clean handoff and ventures into capacity sizing/remediation recommendations, which violates the expected constraint that the agent should not size capacity or determine which ceiling was hit.\n\nGiven the mismatch on the specific LT-02 label, missing explicit 'hypothetical' acknowledgment, and the violation of not sizing capacity, this response does not fully meet the expected output criteria despite capturing the core causal mechanism correctly.",
+      "evidence": "\"the likely cause is `IndexWriteProvisionedThroughputExceeded`... raise GSI write capacity to match or exceed the base table, or match auto-scaling settings\" \u2014 this is capacity sizing guidance, and the response never says 'hypothetical' or uses 'LT-02' labeling.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the GSI orders-by-status as the source of the throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"this is classic **GSI back-pressure throttling**\" and \"GSI `orders-by-status` under-provisioned for writes \u2192 GSI write capacity exceeded \u2192 back-pressure throttling applied to base-table `PutItem`\"",
+          "reasoning": "The agent explicitly and repeatedly identifies the GSI orders-by-status as the source of the throttling causing the latency symptoms.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that GSI write throttling back-pressures writes to the base table",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"If the GSI doesn't have enough write capacity to absorb that propagation, DynamoDB throttles the *base table operation itself*... But PutItem requests that need to update that GSI get rejected/retried via back-pressure, which shows up as ThrottledRequests for the PutItem operation and as elevated PutItem p99 latency (retries + backoff inflate the client-observed latency)\"",
+          "reasoning": "The agent clearly explains the back-pressure mechanism linking GSI write throttling to base-table PutItem throttling/latency.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that table-level throttle events do not include GSI throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The base table's WriteThrottleEvents metric stays at zero \u2014 the base table was never short on its own provisioned capacity, so from the table's perspective nothing was throttled.\" and \"it doesn't throttle the GSI update separately\" implying GSI throttle events are a separate metric not reflected at table level",
+          "reasoning": "The agent explains that the table-level WriteThrottleEvents metric does not capture the GSI-level throttling, which is recorded separately on the GSI's own metric.",
+          "confidence": "high"
+        },
+        {
+          "text": "Hands off the throttling diagnosis with scope and time window instead of sizing capacity",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response ends with: 'Compare GSI provisioned WCU vs. base table provisioned WCU \u2014 if GSI WCU < base table WCU, that's the straightforward fix (raise GSI write capacity to match or exceed the base table, or match auto-scaling settings).' and 'Want me to look at the actual provisioned WCU settings and Contributor Insights data for orders-by-status to narrow this down further?'",
+          "reasoning": "Rather than simply handing off the diagnosis with scope and time window, the agent proceeds to recommend specific capacity-sizing fixes (raising GSI WCU) and hot-partition remediation (sharding suffix), going beyond a scoped handoff into prescriptive sizing advice. While it does end with a question offering to look further, it already provides concrete sizing recommendations, which conflicts with the assertion that it hands off scope without sizing capacity.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Names the GSI",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'orders-by-status'"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "11s",
+    "cost": "$0.10",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}
