@@ -9,8 +9,9 @@ if [[ "${REQUIRE_HUMAN_APPROVAL:-false}" == "true" ]]; then
 fi
 
 export ALLOWED_REGIONS="${ALLOWED_REGIONS:-$AWS_REGION}"
+export CDK_DEFAULT_REGION="$AWS_REGION"
 
 npm install
 npm run build
-npx cdk synth --region "$AWS_REGION"
-npx cdk deploy AwsGpuDiagnosticsMcpStack --region "$AWS_REGION" --require-approval broadening
+npx cdk synth
+npx cdk deploy AwsGpuDiagnosticsMcpStack --require-approval broadening

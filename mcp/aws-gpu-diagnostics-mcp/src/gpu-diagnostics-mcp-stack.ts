@@ -306,7 +306,7 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
       },
     });
     client.node.addDependency(resourceServer);
-    const userPoolDomainPrefix = `${this.stackName.toLowerCase()}-${this.account}`;
+    const userPoolDomainPrefix = `gpu-diag-${this.account}`;
     const userPoolDomain = new cognito.UserPoolDomain(this, 'UserPoolDomain', {
       userPool,
       cognitoDomain: { domainPrefix: userPoolDomainPrefix },
