@@ -1,4 +1,36 @@
 # Changelog
+## [1.10.0] - 2026-10-23
+Optional overlays, contributed from the `eks-guardian` proposal (PR #85) instead of adding a
+fourth EKS review skill. All overlays are opt-in derived views: they add no check, discovery area,
+or report section, and never change membership, verdicts, severity, or gates.
+- New `references/runtime/overlays.md`: activation triggers and rules for compliance crosswalk,
+  vulnerability posture, historical delta, and comparison/drift/fleet. It is loaded in S5/S8 only
+  when the user requests an overlay; otherwise the ledger records `overlays: none`.
+- New `references/compliance-crosswalk.md`: maps canonical IDs to CIS Amazon EKS Benchmark v1.8.0
+  (IDs and titles per the `kube-bench` `eks-1.8.0` profile), NIST SP 800-53 Rev. 5 and PCI DSS v4.0.1
+  (Security Hub EKS.1/EKS.2/EKS.8 related requirements, otherwise indicative), SOC 2 TSC 2017, and
+  the HIPAA Security Rule (indicative). It defines PASS / PASS (partial coverage) / FAIL /
+  Not assessed / Not covered derivation; N/A never becomes PASS. It lists node-host CIS sections
+  (3.x) and ungraded CIS controls as Not covered.
+- Historical delta matches by the existing finding fingerprint (fallback `check_id` +
+  `canonical_resource_id`, never fuzzy titles). Classes are New / Regressed / Persisting /
+  Resolved / Unverified, and FAIL→N/A is never Resolved. The prior report must be supplied in
+  conversation; nothing is persisted.
+- Comparison/fleet runs one complete review per cluster (own QA PASS and report), keeps a compact
+  comparison record, and emits a separate `# EKS Fleet Comparison` deliverable with drift classes
+  (Production-only gap, Lower-environment gap, Systemic, Consistent, Not comparable) over parity
+  IDs. Cross-account access uses Agent Space cloud sources and EKS access entries only. Live
+  reviews are capped at three per conversation.
+- Vulnerability posture reuses AX5/Op7/N2/S38/Op29 evidence and never cites a CVE that a
+  retrieved Inspector finding or AWS bulletin does not contain.
+- `router.md` overlay routing, `report-contract.md` placement (subsections of §1/§2/§5, uncovered
+  controls in §7), and `qa-checklist.md` §8a overlay gate.
+- `SKILL.md`: description mentions the overlays, and S5 points at the router. Redundant wording
+  was trimmed to stay within the 12 KiB bound (12289 → 12271 bytes); the CP19–CP25 just-in-time
+  bullet was removed because Step 7's Control Plane sub-state already states it.
+- Evals: seven `eks-overlay-*` functional cases and three trigger queries (not yet run; see
+  `evals/TESTING.md`). Payload is 76 files.
+
 ## [1.9.6] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 
