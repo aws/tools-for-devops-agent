@@ -29,6 +29,13 @@ explicit list of conclusions not to draw.
 Not targeted at `INCIDENT_TRIAGE` — correlation behaviour is a separate concern, covered by
 the companion `aws-batch-incident-correlation` skill.
 
+## Example prompts
+
+- "Jobs on `my-queue` have been RUNNABLE for 20 minutes. Why aren't instances launching?"
+- "A Batch job reports SUCCEEDED with exit code 0, but its output is missing. Did it actually finish?"
+- "The order-1 compute environment can't launch Spot instances. Will Batch use the On-Demand environment at order 2?"
+- Incident RCA: an alarm on a custom `JobsOomSilent` or `UnfulfilledvCpus` metric for a job queue.
+
 ## Prerequisites
 
 Attach `references/iam-policy.json` to the IAM role associated with your Agent Space,

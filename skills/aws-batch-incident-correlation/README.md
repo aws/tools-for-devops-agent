@@ -55,6 +55,11 @@ version) in case a future eval shows a way to make any of it pull its weight.
 `INCIDENT_TRIAGE` only. Targeting it narrowly keeps it out of RCA and on-demand context,
 where it would consume tokens without being relevant.
 
+## Example prompts
+
+- Incident triage: a Batch alarm dimensioned on `JobQueue=queue-a` fires while an investigation is open for `queue-b` in the same account.
+- "Two Batch alarms fired a minute apart on `orders-queue` and `billing-queue`, which share compute environments. Is this one incident?"
+
 ## Prerequisites
 
 None beyond the agent's default read access — the rule reasons over the `JobQueue` dimension
