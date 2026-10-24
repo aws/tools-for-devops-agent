@@ -1,0 +1,62 @@
+{
+  "version": "v4",
+  "iteration": 2,
+  "eval_id": "batch-fairshare-single-snapshot",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent correctly concludes that a single snapshot is insufficient to determine misconfiguration, which matches the core expectation. It also correctly notes that fair-share allocation only applies among shares with jobs to run, and that usage relative to weight should be tracked over time.\n\nHowever, there's a factual issue: the expected output states weightFactor controls \"which share runs first and the instantaneous split under contention rather than total allocation\" \u2014 this is roughly consistent with AWS Batch's actual behavior (higher weightFactor = lower priority, since priority is usage/weightFactor, and shares with lower weight get scheduled more). The agent's explanation is broadly consistent with this (\"higher weightFactor actually reduces a share's priority\").\n\nThe critical missing piece is the specific recommendation to compare **cumulative share-minutes (usage) across the whole contention window** \u2014 the expected output explicitly calls for this metric. The agent's \"what to compare instead\" section mentions \"usage-vs-weight ratio over time,\" \"pull several snapshots... across a decay window,\" and checking whether \"each share's allocation trends toward its weighted fair share as usage accumulates\" \u2014 this is conceptually similar to comparing cumulative share-minutes over the window, though it doesn't use the exact term \"share-minutes.\" It also doesn't explicitly say \"usage tends to equalize over a full run\" in those exact terms, though it implies a similar idea via \"allocation trends toward its weighted fair share as usage accumulates.\"\n\nSo the response captures most of the substance: snapshot insufficiency, weightFactor's role in instantaneous scheduling priority rather than total allocation, and monitoring usage/allocation over time relative to weight \u2014 though it uses different terminology than \"cumulative share-minutes\" and doesn't explicitly state equalization over a full run in those terms. It's a near-miss but covers the substantive reasoning quite well, using different but compatible framing.\n\nGiven the strong alignment on the \"not sufficient\" claim and the emphasis on comparing usage-over-time relative to weight (which functionally maps to comparing cumulative usage across the contention window), I lean toward this passing, though the exact phrase \"share-minutes\" and \"equalize over a full run\" are not used, weakening a strict match.</reasoning>\n<parameter name=\"result\">passed",
+      "evidence": "\"No, a single snapshot like that isn't enough to conclude misconfiguration... Weight factor is inverted-priority, not a target percentage... Usage-vs-weight ratio over time, not just running-job counts \u2014 pull several snapshots... across a decay window and check whether each share's allocation trends toward its weighted fair share as usage accumulates.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response explains that weightFactor governs ordering and the instantaneous split under contention rather than total allocation",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Weight factor is inverted-priority, not a target percentage... AWS Batch computes priority based on the share's resource usage relative to its weight \u2013 lower weight means higher effective priority for the same usage\" and \"confirm the two 'highest-weightFactor' shares don't just have disproportionately low weights relative to intended share, since lower weight = higher scheduling priority.\"",
+          "reasoning": "The response explains weightFactor's role in priority/ordering (inverted priority) and how it affects the instantaneous split under contention (which shares get scheduled first when there's competition for resources), rather than being a fixed total allocation target.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response notes that fair-share usage tends to equalise over a full run",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"pull several snapshots... across a decay window and check whether each share's allocation trends toward its weighted fair share as usage accumulates\" - this implies convergence but doesn't explicitly state usage 'tends to equalise over a full run' as a general principle.",
+          "reasoning": "The response discusses time-dependent factors like shareDecaySeconds and recommends comparing usage-vs-weight ratio over time and checking if allocation 'trends toward its weighted fair share', but it does not explicitly state that fair-share usage tends to equalise over a full run. It focuses more on recommending comparisons rather than asserting the general tendency toward equalization.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response warns that a single snapshot can show the opposite of the run's overall allocation pattern, rather than merely being incomplete",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Why one snapshot is misleading\" section discusses various reasons (weight inversion, no submissions, bursts, decay) but frames these as reasons the snapshot doesn't capture the full picture, not that it specifically shows the 'opposite' of the true pattern. The closest is 'A snapshot right after two teams submitted 20 jobs each will legitimately show exactly this pattern even with a perfectly balanced policy' - this addresses incompleteness, not necessarily an opposite-pattern warning.",
+          "reasoning": "The response frames the snapshot issue as being incomplete/misleading due to being a point-in-time view, rather than explicitly warning that the snapshot could show the opposite of the overall run pattern. It says the snapshot is 'misleading' and lists reasons like bursts and decay windows, but does not explicitly state that the snapshot could show an inverted/opposite pattern from the true overall allocation.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.4%",
+      "compaction_count": 0
+    }
+  }
+}
