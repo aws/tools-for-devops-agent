@@ -62,7 +62,10 @@ def require_state_value(arguments: argparse.Namespace, state: dict[str, Any], ke
     }
     value = getattr(arguments, key) or state.get(state_keys[key])
     if not isinstance(value, str) or not value:
-        raise ValueError(f"{key} is required for {arguments.action}; supply --{key} or use the saved state file.")
+        flag = key.replace("_", "-")
+        raise ValueError(
+            f"{key} is required for {arguments.action}; supply --{flag} or use the saved state file."
+        )
     return value
 
 
@@ -201,15 +204,15 @@ def validate_collection(
 
 def main() -> int:
     arguments = parse_arguments()
-    session = boto3.Session(profile_name=None)
-    ec2 = session.client("ec2", region_name=arguments.region)
-    ssm = session.client("ssm", region_name=arguments.region)
-    cloudformation = session.client("cloudformation", region_name=arguments.region)
-    lambda_client = session.client("lambda", region_name=arguments.region)
-    state = read_state(arguments.state_file)
-    state.update({"region": arguments.region, "reservationId": arguments.reservation_id})
-
     try:
+        session = boto3.Session(profile_name=None)
+        ec2 = session.client("ec2", region_name=arguments.region)
+        ssm = session.client("ssm", region_name=arguments.region)
+        cloudformation = session.client("cloudformation", region_name=arguments.region)
+        lambda_client = session.client("lambda", region_name=arguments.region)
+        state = read_state(arguments.state_file)
+        state.update({"region": arguments.region, "reservationId": arguments.reservation_id})
+
         if arguments.action in {"launch", "run"}:
             reservation = wait_for_reservation(ec2, arguments.reservation_id)
             instance_id = launch_instance(arguments, ec2, reservation)

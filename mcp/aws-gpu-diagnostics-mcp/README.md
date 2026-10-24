@@ -68,6 +68,9 @@ export TRUSTED_INSTANCE_ROLE_ARNS=arn:aws:iam::123456789012:role/gpu-diagnostics
 ```
 
 The stack outputs `GatewayUrl`, `CognitoClientId`, `OAuthTokenUrl`, `ArtifactsBucketName`, and `CollectionDocumentName`.
+Deploy one stack in each Region where diagnostics will run. `ALLOWED_REGIONS`, when set, must
+contain only the same Region as `AWS_REGION` because the Automation document, artifact bucket,
+KMS key, and collector asset are Regional resources.
 
 ## Connect to AWS DevOps Agent
 

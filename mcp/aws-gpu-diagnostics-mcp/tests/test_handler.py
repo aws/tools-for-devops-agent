@@ -131,6 +131,39 @@ def test_validate_bundle_reports_failed_captures_as_incomplete():
     assert response["failedCaptures"] == ["nvlink-errors"]
 
 
+def test_validate_bundle_reports_unavailable_features_without_marking_incomplete():
+    manifest = {
+        "collectionComplete": True,
+        "failedCaptures": [],
+        "unavailableCaptures": ["nvlink-errors", "ecc-errors"],
+        "expectedFiles": ["nvlink-errors.txt", "nvidia-ecc.txt"],
+        "artifacts": [
+            {
+                "key": (
+                    "collections/i-0123456789abcdef0/"
+                    "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/nvlink-errors.txt"
+                )
+            },
+            {
+                "key": (
+                    "collections/i-0123456789abcdef0/"
+                    "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/nvidia-ecc.txt"
+                )
+            },
+        ],
+    }
+    with patch.object(handler, "_read_json", return_value=manifest):
+        response = handler.validate_gpu_bundle(
+            {
+                "instanceId": "i-0123456789abcdef0",
+                "collectionId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            }
+        )
+    assert response["complete"] is True
+    assert response["failedCaptures"] == []
+    assert response["unavailableCaptures"] == ["nvlink-errors", "ecc-errors"]
+
+
 def test_findings_evidence_strips_control_characters():
     findings = handler._sanitize_findings([
         {"severity": "high", "evidence": "Xid\x00 alert\x1b[31m\u202ereversed"},
@@ -179,6 +212,23 @@ def test_read_artifact_preserves_newlines_and_tabs_but_strips_carriage_returns()
     )
 
 
+def test_read_artifact_strips_del_and_c1_control_characters():
+    s3 = MagicMock()
+    s3.get_object.return_value = {
+        "Body": BytesIO("before\x7fmiddle\x9bafter".encode("utf-8")),
+    }
+    with patch.object(handler.boto3, "client", return_value=s3):
+        response = handler.read_gpu_artifact(
+            {
+                "artifactKey": (
+                    "collections/i-0123456789abcdef0/"
+                    "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/kernel-xid.txt"
+                )
+            }
+        )
+    assert response["content"] == "beforemiddleafter"
+
+
 def test_gateway_rejects_unknown_tool():
     context = SimpleNamespace(
         client_context=SimpleNamespace(custom={"bedrockAgentCoreToolName": "target___nope"})
@@ -186,6 +236,18 @@ def test_gateway_rejects_unknown_tool():
     response = handler.lambda_handler({}, context)
     assert response["statusCode"] == 400
     assert json.loads(response["body"])["success"] is False
+
+
+def test_gateway_logs_unexpected_tool_failure(caplog):
+    context = SimpleNamespace(
+        client_context=SimpleNamespace(
+            custom={"bedrockAgentCoreToolName": "target___validate_gpu_bundle"}
+        )
+    )
+    with patch.object(handler, "validate_gpu_bundle", side_effect=RuntimeError("boom")):
+        response = handler.lambda_handler({}, context)
+    assert response["statusCode"] == 500
+    assert "Unexpected error handling tool validate_gpu_bundle" in caplog.text
 
 
 @pytest.mark.parametrize("key", ["../secret", "collections/i-notvalid/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/test.txt"])

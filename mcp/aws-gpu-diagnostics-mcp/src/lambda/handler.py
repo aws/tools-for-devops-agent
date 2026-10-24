@@ -53,11 +53,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         response["durationMs"] = round((time.time() - started_at) * 1000)
         return _success(response)
     except ClientError as error:
-        LOGGER.error(
-            "AWS service call failed: operation=%s code=%s message=%s",
+        LOGGER.exception(
+            "AWS service call failed for tool %s: operation=%s code=%s",
+            tool_name,
             error.operation_name,
             error.response["Error"].get("Code", "Unknown"),
-            error.response["Error"].get("Message", "Unknown"),
         )
         return _error(
             502,
@@ -67,6 +67,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except ValueError as error:
         return _error(400, str(error))
     except Exception:
+        LOGGER.exception("Unexpected error handling tool %s", tool_name)
         return _error(500, "Unexpected server error.")
 
 
@@ -161,6 +162,7 @@ def validate_gpu_bundle(arguments: dict[str, Any]) -> dict[str, Any]:
         "artifactCount": len(artifacts),
         "missingExpectedFiles": missing,
         "failedCaptures": manifest.get("failedCaptures", []),
+        "unavailableCaptures": manifest.get("unavailableCaptures", []),
         "artifacts": manifest.get("artifacts", []),
     }
 

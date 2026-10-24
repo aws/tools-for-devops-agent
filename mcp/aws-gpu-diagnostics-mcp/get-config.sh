@@ -2,7 +2,7 @@
 set -euo pipefail
 
 STACK_NAME="${1:-AwsGpuDiagnosticsMcpStack}"
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:?Set AWS_REGION to the Region where the stack is deployed.}"
 SHOW_SECRET="${SHOW_SECRET:-false}"
 
 outputs="$(aws cloudformation describe-stacks \

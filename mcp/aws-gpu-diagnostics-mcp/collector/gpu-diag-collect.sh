@@ -23,6 +23,7 @@ outdir="$(mktemp -d /tmp/gpu-diag.XXXXXX)"
 trap 'rm -rf "$outdir"' EXIT
 summary="$outdir/summary.txt"
 capture_failures=()
+unavailable_captures=()
 
 run_capture() {
   local name="$1"
@@ -35,6 +36,20 @@ run_capture() {
     status=$?
     echo "FAILED (exit=$status)" | tee -a "$summary"
     capture_failures+=("$name")
+  fi
+}
+
+run_optional_capture() {
+  local name="$1"
+  local output="$2"
+  shift 2
+  printf '[%s] ' "$name" | tee -a "$summary"
+  if timeout --kill-after=30 300 "$@" >"$output" 2>&1; then
+    echo "SUCCESS" | tee -a "$summary"
+  else
+    status=$?
+    echo "UNAVAILABLE (exit=$status)" | tee -a "$summary"
+    unavailable_captures+=("$name")
   fi
 }
 
@@ -64,11 +79,11 @@ if [[ -x /usr/bin/nvidia-bug-report.sh ]]; then
 fi
 run_capture "nvidia-smi" "$outdir/nvidia-smi.txt" nvidia-smi
 run_capture "nvidia-smi-query" "$outdir/nvidia-smi-query.txt" nvidia-smi -q
-run_capture "nvlink-status" "$outdir/nvlink-status.txt" nvidia-smi nvlink -s
-run_capture "nvlink-errors" "$outdir/nvlink-errors.txt" nvidia-smi nvlink -e
+run_optional_capture "nvlink-status" "$outdir/nvlink-status.txt" nvidia-smi nvlink -s
+run_optional_capture "nvlink-errors" "$outdir/nvlink-errors.txt" nvidia-smi nvlink -e
 run_capture "gpu-topology" "$outdir/nvidia-topo.txt" nvidia-smi topo -m
-run_capture "ecc-errors" "$outdir/nvidia-ecc.txt" nvidia-smi -q -d ECC
-run_capture "row-remap-state" "$outdir/row-remap-state.txt" nvidia-smi -q -d ROW_REMAPPER
+run_optional_capture "ecc-errors" "$outdir/nvidia-ecc.txt" nvidia-smi -q -d ECC
+run_optional_capture "row-remap-state" "$outdir/row-remap-state.txt" nvidia-smi -q -d ROW_REMAPPER
 run_shell_capture "kernel-xid" "$outdir/kernel-xid.txt" "journalctl -k -b 2>/dev/null | grep -Ei 'Xid|GPU has fallen' || true"
 run_shell_capture "kernel-nvidia" "$outdir/kernel-nvidia.txt" "journalctl -k -b 2>/dev/null | grep -i nvidia || true"
 run_shell_capture "fabric-manager" "$outdir/fabricmanager-status.txt" "systemctl status nvidia-fabricmanager 2>&1 || true"
@@ -84,6 +99,7 @@ if [[ "$profile" == "extended" ]]; then
 fi
 
 CAPTURE_FAILURES="$(IFS=,; printf '%s' "${capture_failures[*]}")" \
+UNAVAILABLE_CAPTURES="$(IFS=,; printf '%s' "${unavailable_captures[*]}")" \
 OUTDIR="$outdir" PROFILE="$profile" PREFIX="$prefix" python3 - <<'PY'
 import json
 import os
@@ -94,6 +110,7 @@ from pathlib import Path
 outdir = Path(os.environ["OUTDIR"])
 findings = []
 failed_captures = [name for name in os.environ["CAPTURE_FAILURES"].split(",") if name]
+unavailable_captures = [name for name in os.environ["UNAVAILABLE_CAPTURES"].split(",") if name]
 nvlink_error_counters = (
     "malformed packet errors",
     "buffer overrun errors",
@@ -145,6 +162,7 @@ for filename in ("kernel-xid.txt", "nvidia-ecc.txt", "nvlink-errors.txt", "fabri
 manifest = {
     "collectionComplete": not failed_captures,
     "failedCaptures": failed_captures,
+    "unavailableCaptures": unavailable_captures,
     "profile": os.environ["PROFILE"],
     "expectedFiles": ["summary.txt", "nvidia-smi.txt", "nvidia-smi-query.txt", "kernel-xid.txt", "nvidia-ecc.txt", "nvlink-errors.txt"],
     "artifacts": [

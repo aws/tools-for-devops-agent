@@ -102,6 +102,11 @@ export class GpuDiagnosticsMcpStack extends cdk.Stack {
     }
 
     const allowedRegions = props.allowedRegions?.length ? props.allowedRegions : [this.region];
+    if (allowedRegions.some(region => region !== this.region)) {
+      throw new Error(
+        `ALLOWED_REGIONS must contain only the deployment Region ${this.region}. Deploy one stack per Region.`,
+      );
+    }
     const encryptionKey = new kms.Key(this, 'ArtifactsKey', {
       enableKeyRotation: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,

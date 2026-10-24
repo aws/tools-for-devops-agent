@@ -8,7 +8,7 @@ const app = new cdk.App();
 new GpuDiagnosticsMcpStack(app, 'AwsGpuDiagnosticsMcpStack', {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION,
+    region: process.env.AWS_REGION ?? process.env.CDK_DEFAULT_REGION,
   },
   allowedRegions: process.env.ALLOWED_REGIONS?.split(',').filter(Boolean),
   trustedInstanceProfileArns: process.env.TRUSTED_INSTANCE_PROFILE_ARNS
