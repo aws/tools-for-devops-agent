@@ -5,7 +5,8 @@ metadata:
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"
-  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+aws-devops-agent-skills:
+  agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
 ---
 
 # Datasets Skill - Discovering system and user-defined datasets

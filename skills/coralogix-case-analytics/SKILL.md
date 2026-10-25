@@ -5,7 +5,8 @@ metadata:
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"
-  agent_types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
+aws-devops-agent-skills:
+  agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
 ---
 
 # Case Analytics Skill — Fleet-level DataPrime queries over cases
