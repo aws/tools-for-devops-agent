@@ -3,8 +3,8 @@ name: aws-vpc-dns-investigation
 description: Use this skill when a name is not resolving as expected inside a VPC, or before applying a DNS control-plane change. Activate on symptoms such as NXDOMAIN or SERVFAIL from an EC2 instance, a hostname resolving to a public address when a private endpoint was expected, an AWS service endpoint that stopped resolving after a VPC endpoint or Route 53 change, an application reaching the wrong IP, resolution that works from one instance but not another, IPv6 or dualstack resolution differences, a suspected on-premises forwarding or hybrid DNS problem, or a request to check whether enabling private DNS, adding a Resolver rule, associating a private hosted zone, attaching DNS Firewall, or associating a Route 53 Profile would break anything. It drives the aws-vpc-dns-diagnostics MCP server to observe live resolution from inside the subnet and to simulate a proposed change before it is applied.
 metadata:
   author: ddericco
-  version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Incident RCA"
+  version: "1.0.1"
+  aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "Amazon VPC, Amazon Route 53, Amazon EC2, AWS Systems Manager"
   aws-devops-agent-skills.technical-domains: "Networking"
 ---

@@ -67,7 +67,7 @@ zip -r aws-eks-operations-review.zip aws-eks-operations-review/ \
      '*/README.md' '*/EKS_SKILL_OPTIMIZATION_REPORT.md' '*.DS_Store'
 ```
 
-Upload constraints: root entry `aws-eks-operations-review/SKILL.md`, ZIP ≤6 MB and ≤100 regular files, no `scripts/`, eval files, README, changelog, optimization report, `.DS_Store`, TSV, or runtime sidecars. The intended payload currently contains 74 files (26 below the limit); `check-consistency.sh` prints the remaining headroom. In the Agent Space Operator Web App choose **Skills → Add skill → Upload skill**, select On-demand/Evaluation (or Generic), review validation, and upload. The shared `operations-review-report-format` skill is optional; `references/runtime/report-contract.md` is the complete EKS fallback/adapter.
+Upload constraints: root entry `aws-eks-operations-review/SKILL.md`, ZIP ≤6 MB and ≤100 regular files, no `scripts/`, eval files, README, changelog, optimization report, `.DS_Store`, TSV, or runtime sidecars. The intended payload currently contains 74 files (26 below the limit); `check-consistency.sh` prints the remaining headroom. In the Agent Space Operator Web App choose **Skills → Add skill → Upload skill**, select **Chat tasks** (or **All agents** to apply the skill to all agent types), review validation, and upload. The shared `operations-review-report-format` skill is optional; `references/runtime/report-contract.md` is the complete EKS fallback/adapter.
 
 ## Contributing a check
 

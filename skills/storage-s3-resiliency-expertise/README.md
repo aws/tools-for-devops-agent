@@ -64,7 +64,7 @@ write, create, update, or delete operation.
 
 ## How to use it with DevOps Agent
 
-Works with the **Chat** and **Investigations / Incident RCA** subagents. Describe
+Works with the **Chat tasks** and **Incident RCA** subagents. Describe
 the task in natural language — you do not need to name the skill:
 
 - "Run an S3 resiliency review on `my-production-bucket`."
@@ -83,12 +83,10 @@ at upload time):
 
 - **Chat tasks** — conversational, on-demand reviews ("run an S3 resiliency review
   on `my-bucket`", "is `app-data-prod` safe?").
-- **Evaluation** — proactive, best-practices resiliency reviews of a bucket or fleet
-  against the nine dimensions.
 - **Incident RCA** — automated root cause analysis where an S3 bucket's
   data-protection or public-access posture may be a contributing factor.
 
-Select **Generic** instead if you want the skill available to all agent types.
+Select **All agents** instead if you want the skill available to all agent types.
 
 ## Uploading to AWS DevOps Agent
 
@@ -112,12 +110,12 @@ If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsa
 2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
 3. Click **Add skill** → **Upload skill**.
 4. Drag and drop the `storage-s3-resiliency-expertise.zip` file (max 6 MB).
-5. Select the agent types: **Chat tasks**, **Evaluation**, and **Incident RCA**.
+5. Select the agent types: **Chat tasks** and **Incident RCA**.
 6. Click **Upload**.
 
 **Option C: Upload via the Asset API**
 
-Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT`, `EVALUATION`, and `INCIDENT_RCA` agent types. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
+Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT` and `INCIDENT_RCA` agent types. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
 
 For more details, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) in the AWS DevOps Agent User Guide.
 

@@ -15,12 +15,13 @@ This repository consolidates open-source tools for AWS DevOps Agent — skills, 
 
 ```
 tools-for-devops-agent/
-├── README.md                 # Project overview with skills/agents/MCP tables
+├── README.md                 # Project overview with links to the docs-site catalogs
 ├── CONTRIBUTING.md           # Contribution guidelines
 ├── llms.txt                  # Structured repo overview for AI tools
 ├── .gitignore                # Root-level ignores
 ├── cloudformation/
-│   └── devops-agent-skill-policies.yaml  # IAM policies skills require
+│   ├── devops-agent-skill-policies/        # IAM policies skills require
+│   └── devops-agent-alarm-investigations/  # CloudWatch alarm → DevOps Agent webhook
 ├── docs/                     # GitHub Pages (mkdocs) documentation site
 ├── skills/
 │   ├── .gitignore            # Allowlist for DevOps Agent supported extensions only
@@ -53,7 +54,7 @@ Skills live under `skills/` and should follow both the [Agent Skills spec](https
 ### SKILL.md Requirements
 
 - Must include valid frontmatter with `name` and `description` fields.
-- `name`: lowercase letters, numbers, and hyphens only (max 64 characters, no leading/trailing hyphens).
+- `name`: lowercase letters, numbers, and single hyphens only (max 64 characters, no leading/trailing hyphens), equal to the folder name, and not `index`.
 - `description`: written from the agent's perspective, specifying when and why the skill should activate. Be specific about scenarios, services, error types, or symptoms that should trigger the skill. Minimum 100 characters recommended.
 - Instructions should be step-by-step, actionable, and include decision trees for different scenarios.
 - Include expected outputs and success criteria.
@@ -71,10 +72,36 @@ description: Use this skill when investigating [specific scenarios].
 metadata:
   author: github-username
   version: "1.0.0"
+  summary: "One line, at most 200 characters, shown as the skill's card text."
+  aws-devops-agent-skills.agent-types: "INCIDENT_RCA"
 ---
 ```
 
-The `metadata` block with `author` and `version` fields is required. Initial version should be `"1.0.0"`.
+The `metadata` block with `author` and `version` fields is required, and `summary` and `aws-devops-agent-skills.agent-types` should be set (see Skill Publishing Check). Initial version should be `"1.0.0"`.
+
+### Skill Publishing Check
+
+`.github/workflows/validate-skills.yml` runs `.github/scripts/validate_skills.py` on every pull request, and `.github/workflows/validate-skills-main.yml` runs it again after each push to `main`. `.github/workflows/build-docs.yml` runs `mkdocs build --strict` on pull requests and on `main`. The rules and their reasons are in the "Skill Publishing Rules" section of [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+- The rules live in `.github/scripts/skill_checks.py` as pure functions over an in-memory skill folder (`SkillTree` of `Entry(path, mode, data)`). `validate_skills.py` reads Git objects, computes the merge base and reports. The only rules it holds look beyond one skill folder (a file or submodule directly under `skills/`, symbolic links and `.gitattributes` lines outside it, and a deprecated skill still listed in a `connectors/*/connector.yaml`); `tests/test_validate_skills.py` covers them, since a conformance case is one skill folder. Keep every per-skill rule in `skill_checks.py`, so the conformance cases and unit tests exercise exactly what CI runs.
+- Every skill is checked on every PR, because skills on `main` are published automatically. Errors from any skill fail; warnings print only for skills the PR touches.
+- Skills are read from Git objects (`git ls-tree -r -z` plus `git cat-file --batch`), never the working tree, so modes are exact and a local run checks only committed changes.
+- Rule data lives in `.github/scripts/skill-rules/` and the check fails closed (exit 2) when a file there is malformed: `agent-types.json` (the values `aws-devops-agent-skills.agent-types` may take; an unknown one is an error), `vocabulary.json` (the `aws-services` and `technical-domains` values; unknown values only warn), `published-files.json` (root names left out of the published set: `evals/`, `.skilleval.yaml` and `CHANGELOG.md`; `README.md` and `images/` are published), `internal-names.json` (hosts and terms that warn on added lines) and `conformance-cases.json`.
+- The extension allowlist is not duplicated: it is parsed from the `!*.<ext>` lines of `skills/.gitignore`, read from the merge base, so a new extension takes effect only once its `.gitignore` change has merged.
+- Like the repository's other checks, a PR runs its own copy of the script, rules and tests, so it could edit them to pass. Code-owner review of `/skills/`, `/.github/`, `/tests/` and `/.gitattributes` (`.github/CODEOWNERS`) is the control; don't describe any in-script measure as stopping a determined PR. The post-merge run on `main` catches pull requests that break the rules together, not a pull request that edits the check.
+- Limits: at most 100 published files, each at most 1 MiB, a zip of at most 4,128,768 bytes (4 MiB less a 64 KiB margin), and frontmatter at most 32 KiB. The check warns past 90% of the file count, file size and zip limits. `validate_skills.repository_results` also rejects symbolic links anywhere in the repository and root `.gitattributes` lines that change archived bytes under `skills/`, because skills are published from an archive of the repository, which must hold exactly what Git holds.
+- `check_added_content` warns about internal host or tool names only on lines a PR adds, like `scan-aws-identifiers`, so names already on `main` don't warn on every PR.
+- With `--base-ref`, `check_history` compares each skill with its merge-base copy: no removed folders, no reuse of a path deleted in `main`'s first-parent history (`git log --first-parent --no-renames --diff-filter=D`, skipped with a warning on a shallow clone), a higher version whenever `content_hash` of the published files changes, one step at a time (next patch, minor or major), and `1.0.0` for a new skill. No folder is ever deleted, not even in an emergency: deprecate it instead. The hash function is pinned by the golden fixture under `content_hash` in `conformance-cases.json`, so any other implementation can prove it computes the same hash.
+- With or without a base, a deprecated skill can't stay in any `connectors/*/connector.yaml` `skills:` list (`connector_skill_references`, which composes the YAML rather than constructing it). A `connector.yaml` that can't be read, isn't a mapping, has a `skills:` value that isn't a list of skill names, or writes `skills:` more than once gets a warning; the names it does list are still checked.
+- Secrets in test fixtures are built at runtime (`"AKIA" + ...`) or stored as base64 in the conformance cases, so no file in the repository contains a literal key or invisible character. Internal names in tests are made up (`corp.example`, `Rivendell`), never real hosts or tools.
+- `conformance-cases.json` holds language-neutral cases for these rules. Another tool that validates or publishes these skills should give the same `expect` result on the cases for the rules it implements; some rules here are stricter than any other tool's. The script runs every case before checking any skill and exits 2 on a mismatch. A rule change needs a matching case change in the same PR.
+- Every rule applies to every skill; nothing is exempted. A rule that existing skills don't meet yet starts as a warning and becomes an error after a cleanup PR brings every skill into line: a missing `metadata.summary`, and dimension values outside the vocabulary. A missing `metadata.aws-devops-agent-skills.agent-types` stays a warning.
+- Agent types come from `metadata.aws-devops-agent-skills.agent-types` (comma-separated values from `agent-types.json`, not from `vocabulary.json` like the other two dimensions, and an unknown value is an error rather than a warning). `GENERIC` loads the skill for every agent, so combining it with another value is an error. Without the key a skill installs as `GENERIC`, which warns.
+- Metadata values are always text, `deprecated` (`"true"`/`"false"`) and `aws-devops-agent-skills.agent-types` included, as the Agent Skills spec and the skill evaluation tool's structure test require. `metadata.tier` is `aws-managed` or `partner-managed`. Unknown top-level and metadata keys warn, naming the nearest known key; a misspelled `aws-devops-agent-skills.` prefix is an error.
+- Exit codes: 0 pass (warnings allowed), 1 a rule broken, 2 could not run. Never report a 2 as the PR's fault.
+- Kill switch: a maintainer's `skip-validate-skills` label sets `continue-on-error` on the PR workflow's install, test and check steps, so the check still runs and reports but can't block that PR; the `labeled`/`unlabeled` triggers re-run it. Never skip the job with `if:` instead: a skipped required check counts as passed. For a check that breaks every PR, an admin drops the required context until the fix merges.
+- PyYAML is the only dependency, pinned by every PyPI hash in `skill-rules/requirements.txt`; actions are pinned by commit SHA.
+- Tests: `python3 -m unittest discover -s tests -v`.
 
 ### Skill README.md Structure
 
@@ -128,7 +155,7 @@ skills/<name>/evals/
     └── v<N>/
         ├── benchmark.json                            # scores for the run
         ├── evals.json                                # the evals this run executed
-        ├── _metadata.json                            # run metadata
+        ├── _metadata.json                            # gitignored; validate-skills rejects it
         └── iteration-<n>/
             └── <scenario-name>/                      # named from evals.json
                 ├── with_skill/
@@ -142,8 +169,8 @@ skills/<name>/evals/
 - `skills/.gitignore` excludes `cli_debug/` and `sdk_debug/` wholesale (debug traces from the eval tool and its SDK), plus `outputs/classified_output.json` and `outputs/metadata.json` (intermediate per-iteration artifacts). Don't add them back. `outputs/journal_records.json` is intentionally kept — it's the DevOps Agent journal for the run and serves as evidence of what the evaluation produced
 - Only the last version of each test type belongs in git. The tool retains every run locally, which can reach tens of thousands of files and over a GB for a single skill
 - `.github/workflows/validate-skill-evals.yml` (via `.github/scripts/validate_skill_evals.py`) checks, for each skill a PR touches: `evals/evals.json`; at least one `evals/structure/structure-tests-results-v<N>.json`; at least one complete `evals/best-practices/v<N>/` (`benchmark.json` + an `iteration-<n>/best-practices-tests-results.json`); and at least one complete `evals/functional/v<N>/` (`benchmark.json`, `evals.json`, and one `iteration-<n>/<scenario>/` holding both `with_skill/` and `without_skill/functional-tests-results.json`). Iteration numbers and scenario names are wildcards; the with/without pair must come from the same scenario directory
-- Validation stops at that depth on purpose. `outputs/*`, `_metadata.json`, iteration counts, and scenario names vary by run and tool version and are deliberately unchecked — don't tighten them without re-checking recent runs of the eval tool first
-- A skill that genuinely cannot produce one test type's results can commit `evals/exemptions.json` — `{"<test type>": {"reason": "..."}}`, keys `structure` / `best-practices` / `functional`. That type is then not checked but reported as a warning, so the check passes while staying visible. `evals.json` is never exemptable. The parser fails closed (bad JSON, unknown type, or empty `reason` grants nothing and is reported), and because the file is in the PR diff, exemptions go through normal review. Typical uses: limitations in accessing the skill evaluation tool, or an agent type its functional tests don't support yet. An exemption excuses the tool's results, not the testing — the PR should still carry manual with-skill / without-skill evidence for a maintainer to judge
+- Validation stops at that depth on purpose. `outputs/*`, `_metadata.json`, iteration counts, and scenario names vary by run and tool version and are deliberately unchecked — don't tighten them without re-checking recent runs of the eval tool first. `validate_skills.py` separately rejects a committed functional `_metadata.json` and any `cli_debug/` or `sdk_debug/` folder (see Skill Publishing Check)
+- A skill that genuinely cannot produce one test type's results can commit `evals/exemptions.json` — `{"<test type>": {"reason": "..."}}`, keys `structure` / `best-practices` / `functional`. That type is then not checked but reported as a warning, so the check passes while staying visible. `evals.json` is not one of the keys, but it is the functional tests' input, so an honored `functional` exemption waives it (and only that one does); it stays required under a withdrawal or a malformed file, since neither leaves an honored claim. `tests/test_validate_skill_evals.py` covers that. A partner-managed skill reaches the waiver through the standard three-type exemption in CONTRIBUTING.md, not through its tier, and attaches no manual evidence. The parser fails closed (bad JSON, unknown type, or empty `reason` grants nothing and is reported), and because the file is in the PR diff, exemptions go through normal review. Typical uses: limitations in accessing the skill evaluation tool, or an agent type its functional tests don't support yet. An exemption excuses the tool's results, not the testing — the PR should still carry manual with-skill / without-skill evidence for a maintainer to judge
 - The `enforce-evals` label withdraws every exemption claimed by the PR's skills: each exempted type is checked as though the file were absent, and the claimed reason is reported as withdrawn so the log names what was rejected. This is what makes the label a complete lever — forcing the mode alone can't reach a PR that exempts all three types, because an exemption removes the violations whose severity the mode decides. `--strict` deliberately still honors exemptions; withdrawing is a per-PR judgement on a stated reason, not a repo-wide migration push
 - Withdrawal is all-or-nothing per PR, by design: `withdraw_exemptions` is computed once from the label and passed to every skill in the run, so one label application refuses every exempted type on every touched skill — including a legitimate exemption sitting beside an unfounded one. There is no per-skill or per-type granularity; say so when a maintainer asks, rather than implying the label targets a single claim
 - Contributors can run the check locally: `python3 .github/scripts/validate_skill_evals.py --skill <skill-name>`
@@ -187,6 +214,7 @@ Only these extensions are permitted inside **skill** directories (enforced by `s
 
 - `scripts/` directories are not supported by DevOps Agent.
 - `.claude/` directories should not be committed (except CLAUDE.md).
+- `.kiro/` directories should not be committed (except `.kiro/steering/`).
 - `.DS_Store` and other OS files should not be committed.
 
 ## AWS Identifiers
@@ -212,23 +240,76 @@ A pull request check (`.github/workflows/scan-aws-identifiers.yml`, running `.gi
 - The `needs-id-redact` label is applied by automation when the check fails and removed when it passes. Do not add or remove it by hand.
 - Identifiers already on `main` are a separate follow-up change. Do not clean them up opportunistically in an unrelated pull request — the check never reports them, since it only reads added lines.
 
+## Common Review Findings
+
+These come up repeatedly in pull request reviews. Check them before opening a PR, and again after each round of review changes.
+
+### Versioning
+
+- A new skill stays at `1.0.0` until it merges, however many review rounds it goes through. `check_history` compares against the merge base, where the skill doesn't exist yet, so `1.0.1` or `1.0.2` on an unmerged skill fails the check. Record review changes under the single `1.0.0` CHANGELOG entry.
+- An existing skill moves one step per PR (next patch, minor or major), not one step per commit.
+
+### Docs site links
+
+The docs site renders each skill's and custom agent's `README.md` as a page one level below the site root, so relative links that work on GitHub may not work on the site.
+
+- Link to anything outside `skills/` and `custom-agents/` (for example `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`) with an absolute `https://github.com/aws/tools-for-devops-agent/blob/main/...` URL. A relative link there fails `mkdocs build --strict`.
+- In a custom agent README, link required skills in the Prerequisites section as `../../skills/<skill-name>/`. `docs/hooks/agents_catalog.py` reads skill tags for the agent card from that relative form only, so an absolute URL drops the tag.
+- The agent card lists only tools named `use_*` in backticks in the "Creating the Agent" section. Other tools (for example `verify_aws_claim`) don't appear on the card.
+- A skill's display name comes from its folder name: each hyphenated word is capitalized unless it is in `acronyms` in `docs/hooks/skills_catalog.py`, so `eos-cost-analysis` shows as "Eos Cost Analysis" until `eos` is added. Add a new acronym there in the same PR if the name needs one. A custom agent's display name is its README title, minus any " — Custom Agent" suffix.
+
+### IAM permissions
+
+- Before adding a statement to `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`, check the current `AIDevOpsAgentAccessPolicy` managed policy and add only the actions it doesn't grant. If the managed policy covers everything, list the skill under "Skills covered by AIDevOpsAgentAccessPolicy" instead.
+- Use IAM action prefixes in permission lists, not API client names. They differ for some services, for example OpenSearch Service is `opensearch` as an API client but `es:` in IAM.
+- In README prerequisites, state which permissions the managed policy covers and point to the template parameter for the rest, rather than restating every action, so the two can't drift apart.
+
+### Facts the skill asserts
+
+- Don't hardcode prices, dates or limits the agent can retrieve at runtime. If a skill needs reference values for sanity checks, keep them in one labelled table and point to it from everywhere else.
+- Check region-dependent facts outside `us-east-1`. For example, AWS Pricing API usagetypes have no region prefix in `us-east-1` but carry one (`USW2-`, `EU-`, `APS3-`) in every other region, and a rule tested only in `us-east-1` looks correct.
+- Verify each API naming or format rule with a live call before writing it into `SKILL.md` or an eval assertion.
+
+### Trigger scope
+
+- Read the `description` of every existing skill for the same services before writing yours. If a prompt could reasonably activate both, narrow your description, say which skill handles the neighbouring case, and add that case to the eval queries as `should_trigger: false`.
+- Cross-reference the neighbouring skill from the README's Related section.
+
+### Evaluation runs
+
+- Run functional evals against an account that holds resources the skill acts on, including at least one in a non-default region if the skill's behaviour depends on region. An empty account passes discovery assertions without classifying or pricing anything.
+- Compare with-skill and without-skill results scenario by scenario. When the baseline fails an assertion, check whether the baseline was right before treating it as a win, because the assertion may encode a mistake.
+- A scenario where both runs pass every assertion shows the skill adds nothing there. Either drop it or make it harder.
+
+### Before opening or updating a PR
+
+Commit first (the skill checks read Git objects, not the working tree), then run:
+
+```bash
+python3 .github/scripts/validate_skills.py --base-ref origin/main
+python3 .github/scripts/validate_skill_evals.py --skill <skill-name>
+python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict
+```
+
+Fix every error, and the warnings for the skill you touched. Pull requests from forks may need a maintainer to approve the workflow run before these checks appear on the PR, so a PR with no checks has not passed them.
+
 ## Adding a New Skill
 
 1. Create a new directory under `skills/` with the skill name.
 2. Add a `SKILL.md` with frontmatter and step-by-step instructions following the writing guidelines above.
 3. Add a `README.md` following the structure described above.
-4. Add a `CHANGELOG.md` starting at version 1.0.0.
+4. Add a `CHANGELOG.md` starting at version 1.0.0. The version stays 1.0.0 until the skill merges (see Common Review Findings).
 5. Add evaluation tests (`evals/` directory).
-6. Test the skill with DevOps Agent before submitting.
-7. Update the root `README.md` skills table with the new skill's name, description, agent types, author, and docs link.
-8. Update the `llms.txt` file at the repo root — add the new skill to the "Available Skills" section following the existing format: `- [Skill Name](skills/<name>/SKILL.md): One-line description`.
-9. If the skill requires IAM permissions beyond the `AIDevOpsAgentAccessPolicy` managed policy, add a new parameter, condition, and inline policy resource to `cloudformation/devops-agent-skill-policies.yaml`, and update the `SkillPolicySummary` output.
+6. Test the skill with DevOps Agent before submitting, and run the checks under "Before opening or updating a PR".
+7. No root `README.md` change is needed: the docs-site catalog and the skill's page are generated from `SKILL.md` and `README.md` at build time. Check how they render with `mkdocs build --strict` (see Common Review Findings).
+7. Update the `llms.txt` file at the repo root — add the new skill to the "Available Skills" section following the existing format: `- [Skill Name](skills/<name>/SKILL.md): One-line description`.
+8. If the skill requires IAM permissions beyond the `AIDevOpsAgentAccessPolicy` managed policy, add a new parameter, condition, and inline policy resource to `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`, and update the `SkillPolicySummary` output.
 
 ## Maintaining llms.txt
 
 The `llms.txt` file at the repo root provides AI tools with a structured overview of this repository. Keep it in sync:
 
-- **Available Skills / Available Custom Agents / Available MCP Servers sections**: Update the matching section whenever a tool of that type is added, removed, or renamed (for skills, this is step 8 above).
+- **Available Skills / Available Custom Agents / Available MCP Servers sections**: Update the matching section whenever a tool of that type is added, removed, or renamed (for skills, this is step 7 above).
 - **Repository Structure section**: Update whenever the directory structure conventions change (e.g., new required files, new directories, renamed paths).
 
 ## Zipping for Upload
@@ -239,6 +320,8 @@ Only skills are uploaded to DevOps Agent as zips (custom agents are created via 
 cd skills
 zip -r <skill-name>.zip <skill-name>/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' '*/CHANGELOG.md' '*/evals/*'
 ```
+
+This manual-upload zip is narrower than what is published from `main` (see Skill Publishing Check), which leaves out only `evals/`, `.skilleval.yaml` and `CHANGELOG.md`, so `README.md` and `images/` are published.
 
 ## Git Conventions
 

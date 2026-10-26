@@ -43,6 +43,81 @@ Follow these guidelines for each tool:
 
 Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
 
+#### Skill Publishing Rules
+
+Skills on `main` are published automatically, so a pull request check ([`.github/workflows/validate-skills.yml`](.github/workflows/validate-skills.yml)) applies these rules to **every** skill in `skills/`, not only to the ones your pull request changes. Errors fail the check. Warnings don't, and they're shown only for skills your pull request touches.
+
+`SKILL.md` frontmatter:
+
+| Field | Rule |
+|---|---|
+| `name` | Required. Lowercase letters, digits and single hyphens, at most 64 characters, and equal to the folder name. The folder path `skills/<name>` is the skill's permanent identity. `index` is reserved. |
+| `description` | Required. 1 to 1,024 characters, counted as Unicode code points. |
+| `title` | Optional display name. Non-empty, one line, at most 100 characters. |
+| `license`, `compatibility`, `allowed-tools` | Optional. When present, non-empty text; `compatibility` is at most 500 characters. |
+| `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `deprecated: "true"`. A key that isn't listed below is a warning, with the nearest known key when there is one. |
+| `metadata.author` | Required. One or more GitHub usernames separated by commas. |
+| `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix, suffix or leading zeros, at most 32 characters and at most 10 digits in each part. |
+| `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing or empty summary is a warning for now; it becomes required once every skill has one. |
+| `metadata.deprecated` | Optional. `"true"` or `"false"`. |
+| `metadata.tier` | Optional. `"aws-managed"` or `"partner-managed"`: who maintains the skill. |
+| `metadata.aws-devops-agent-skills.agent-types` | The agents that load the skill, as comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json), such as `"INCIDENT_RCA"`. An unknown value is an error, because this key decides which agents load the skill rather than only how catalogs filter it. `GENERIC` loads the skill for every agent, so it is an error to combine it with another value. Without the key the skill installs as `GENERIC` and loads for every agent, which is a warning. |
+| `metadata.aws-devops-agent-skills.*` | Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. Any other key under this prefix, or a misspelling of the prefix, is an error, so a typo can't drop the skill from a filter. For `aws-services` and `technical-domains`, a value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is a warning, with the approved spelling when there is one. |
+
+The frontmatter must be plain YAML that every parser reads the same way. These are rejected: tabs; a byte order mark at the start of the file; line breaks other than newlines (U+0085, U+2028, U+2029); `---` anywhere but the closing line; anchors (`&`), aliases (`*`), tags (`!`), directives (`%`) and document markers; flow collections (`[...]` or `{...}`); keys that aren't plain text, and duplicate keys, at any depth; and unquoted values that some parsers read as numbers, such as `1e3`. A top-level key other than the Agent Skills specification's fields and `title` is a warning.
+
+A `SKILL.md` body over 500 lines is a warning, as it is in the skill evaluation tool: move reference material into `references/` and link to it.
+
+Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). `README.md` and `images/` are published too. For the published files:
+
+- At most 100 files, each at most 1 MiB, and their zip at most 4,128,768 bytes (4 MiB less a margin, because zip sizes vary by tool). The check warns past 90% of each of these limits. The `SKILL.md` frontmatter is at most 32 KiB.
+- Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a new extension takes effect only after the `skills/.gitignore` change that adds it has merged.
+- Paths use only letters, digits, `.`, `_` and `-`, are at most 512 characters, have no hidden parts (such as `.DS_Store` or `.gitignore`), no part named `__proto__`, no Windows-reserved names (such as `CON` or `COM1`) and no part ending in a period. No two files or folders differ only in case, and no file has the same path as a folder, ignoring case.
+- No file starts with `#!`.
+
+Anywhere in the skill folder, `evals/` included:
+
+- Only regular files: no executable bits, symbolic links or submodules. Remove an executable bit with `git update-index --chmod=-x <path>`.
+- No `scripts/` folders.
+- No AWS access key IDs or private keys (PEM, OpenSSH, PGP or PuTTY).
+- No `cli_debug/` or `sdk_debug/` folders, and no `evals/functional/*/_metadata.json`. The skill evaluation tool writes these unredacted; the run metadata names the AWS account the run used. `skills/.gitignore` already skips them.
+- A warning when a pull request adds a line that names an internal host or tool ([`internal-names.json`](.github/scripts/skill-rules/internal-names.json)), since this repository is public.
+
+In published text files, invisible characters are errors, because they can hide instructions from a reviewer while the model still reads them: zero-width and other invisible characters (such as U+200B, U+00AD, U+3164 or U+180B), bidirectional controls, a byte order mark, Unicode tag characters, and variation selectors, except a single U+FE0E or U+FE0F after a character, as emoji use. In published Markdown, active HTML elements (`script`, `iframe`, `embed`, `form`, `style`, `link`, `meta`, `object` and `img`) and links to `javascript:` or `http://` targets are warnings, and so is a `<script>` element in a published `.html` or `.svg` file.
+
+Outside `skills/`: skills are published from GitHub's archive of the whole repository, which must hold exactly what Git holds. So no symbolic link may sit anywhere in the repository, and no root `.gitattributes` line may change how Git archives files under `skills/`: `export-ignore`, `export-subst`, `ident`, `filter`, `working-tree-encoding`, or an `eol`, `text` or `crlf` setting other than `text`, `text=auto`, `eol=lf`, `crlf` or `crlf=input`, which only normalize line endings when files are committed. A macro (`[attr]name ...`) that sets one of these is an error wherever it's defined. Scope such a line to another folder, such as `mcp/**`.
+
+Identity and versions, compared with the base branch:
+
+- A skill folder is never removed or renamed, because installed copies point at its path. To retire a skill, set `metadata.deprecated: "true"` and bump its version. To rename one, deprecate the old folder and add a new one.
+- There's no exception, even in an emergency such as malicious content: deprecate the skill; the DevOps Agent team can hide it from the catalog while the change publishes. Deleting the folder wouldn't remove the versions already published.
+- A path that belonged to a skill removed earlier can't be reused.
+- A published version is immutable. A change to any published file, `README.md` and `images/` included, needs a higher `metadata.version`. Changes only to `evals/`, `.skilleval.yaml` or `CHANGELOG.md` need no bump.
+- The version goes up one step at a time: from `3.4.0` to `3.4.1`, `3.5.0` or `4.0.0`. It never goes down.
+- The step is counted from the base branch, not from your last commit, so set `metadata.version` once, at the end. Bumping again for each round of review feedback (`1.0.0` to `1.0.1`, then `1.0.2`) fails the check.
+- A new skill starts at `1.0.0`.
+- When the version goes up, add a `CHANGELOG.md` entry for it. A bump without one is a warning.
+
+Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list. A `connector.yaml` that can't be read is a warning.
+
+The check is exact only for the base commit it ran on. Two pull requests that each pass on an older base can break the rules together, for example by both bumping a skill to the same version, so a later push to `main` can still fail. [`validate-skills-main.yml`](.github/workflows/validate-skills-main.yml) runs the check again after every push to `main` and reports such a break.
+
+If the check is wrong about a pull request, a maintainer can add the `skip-validate-skills` label: the check still runs and reports, but it no longer blocks the merge. If the check itself breaks and blocks every pull request, an admin removes `validate-skills` from the required status checks for `main` until the fix merges, then adds it back.
+
+Once branch protection requires it, changes under `skills/`, `.github/` and `tests/`, and to the root `.gitattributes`, need a code owner's approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)). A separate check, `build-docs`, runs `mkdocs build --strict` on every pull request; to run it locally, in the virtual environment below, `python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict`.
+
+Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
+
+```bash
+python3 -m venv venv && . venv/bin/activate
+python3 -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
+git remote add upstream https://github.com/aws/tools-for-devops-agent.git
+git fetch upstream main
+python3 .github/scripts/validate_skills.py --base-ref upstream/main
+```
+
+Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
+
 #### Test Your Skill
 
 1. Test relevant scenarios with DevOps Agent, with and without skill, to understand what good looks like. Iterate several times and make changes as necessary. Make sure you test relevant functionalities. For example, if your skill is intended for DevOps Agent investigations related to RDS PostgreSQL, then set up relevant AWS resources, simulate issues, and then start DevOps Agent investigations and evaluate the root cause with and without skill. Another example is, if your skill is intended to generate a report using DevOps Agent chat (such as EKS operations review), then set up relevant AWS resources, simulate scenarios that you expect your report to highlight, and then start DevOps Agent chat and evaluate its response with and without skill. Some tips for what you should check when evaluating your skill: for investigation, evaluate the different investigation root cause parts in the "Root cause" investigation tab (root cause, key findings, gaps, evidence) for correctness and quality across multiple iterations with and without skill. For chat, evaluate the chat's final response for actionability, correctness and completeness, with and without skill. Compare with and without skill runs and iterate to see if there are improvements. In both chat and investigation, evaluate multiple iterations for output consistency (investigation root cause or chat final response).
@@ -74,7 +149,7 @@ skills/<name>/evals/
     └── v<N>/
         ├── benchmark.json                            # scores for the run
         ├── evals.json                                # the evals this run executed
-        ├── _metadata.json                            # run metadata
+        ├── _metadata.json                            # gitignored; validate-skills rejects it
         └── iteration-<n>/
             └── <scenario-name>/                      # one per scenario in evals.json
                 ├── with_skill/
@@ -103,7 +178,7 @@ A pull request check ([`.github/workflows/validate-skill-evals.yml`](.github/wor
 
 | Required | |
 | --- | --- |
-| `evals/evals.json` | must exist |
+| `evals/evals.json` | must exist, unless the `functional` results are exempted (see "When a test type can't be run") |
 | `evals/structure/` | at least one `structure-tests-results-v<N>.json` |
 | `evals/best-practices/` | at least one **complete** `v<N>/`: `benchmark.json` **and** an `iteration-<n>/best-practices-tests-results.json` |
 | `evals/functional/` | at least one **complete** `v<N>/`: `benchmark.json`, `evals.json`, **and** an `iteration-<n>/<scenario-name>/` directory holding both `with_skill/functional-tests-results.json` and `without_skill/functional-tests-results.json` |
@@ -140,7 +215,21 @@ Some skills genuinely can't produce results for one of the test types. The two c
 }
 ```
 
-The exempted test type is then not checked. It's reported as a warning instead, so the check goes green while still showing what's missing and why. Keys are `structure`, `best-practices`, and `functional`; `evals.json` is hand-written rather than tool output, so it can't be exempted.
+The exempted test type is then not checked. It's reported as a warning instead, so the check goes green while still showing what's missing and why. Keys are `structure`, `best-practices`, and `functional`.
+
+`evals.json` isn't one of the keys, because you write it rather than the tool. It's the input to the functional tests, though — the tool reads it for that run, and the scenario directories a functional run writes are named from it — so exempting `functional` waives `evals.json` too. There's no run left for it to feed, and the check never reads the file, so requiring it would only ask for eval definitions nobody is going to execute. Exempting `structure` or `best-practices` doesn't waive it: those runs don't read it. If you've already written your definitions, commit them anyway — a maintainer running the tool later starts from them.
+
+**Partner-managed skills.** A skill whose `SKILL.md` sets `metadata.tier: "partner-managed"` commits an `evals/exemptions.json` with this reason for all three test types, which waives `evals/evals.json` along with the results, per the rule above:
+
+```json
+{
+  "structure":      { "reason": "Partner-managed skill: skill evaluation tool results aren't produced for partner-managed skills." },
+  "best-practices": { "reason": "Partner-managed skill: skill evaluation tool results aren't produced for partner-managed skills." },
+  "functional":     { "reason": "Partner-managed skill: skill evaluation tool results aren't produced for partner-managed skills." }
+}
+```
+
+This is the standing agreement for partner-managed skills, so it needs no separate sign-off from a maintainer, and the pull request doesn't need the manual testing evidence described below: the partner tests its skill, and a maintainer checks that it installs and loads before the connector that recommends it is promoted. The `enforce-evals` label still withdraws the exemption, and then `evals.json` is required too.
 
 Write a reason that explains the blocker and what *was* run — a future maintainer needs to know whether to revisit it. If the exemption is temporary, such as an agent type the tool will support later, say so, so it gets removed when the limitation goes away.
 
@@ -152,7 +241,7 @@ An exemption is a claim about what can't be produced, and a maintainer who doesn
 
 The label is all-or-nothing for the whole pull request: it withdraws every exempted test type on every skill the PR touches, not just the claim a maintainer means to refuse. On a PR where one exemption is unfounded and another is legitimate, applying the label requires the results for both, and the legitimate one has to be settled in review — either by producing those results too, or by splitting the skills across separate PRs.
 
-Everything below that depth is left unchecked, so `outputs/`, `_metadata.json`, `cli_debug/`, `sdk_debug/`, iteration counts, and scenario names are all free to vary, as are any extra files.
+Everything below that depth is left unchecked, so `outputs/`, `_metadata.json`, `cli_debug/`, `sdk_debug/`, iteration counts, and scenario names are all free to vary, as are any extra files. The separate skill publishing check still rejects a committed `_metadata.json` and any `cli_debug/` or `sdk_debug/` folder; see "Skill Publishing Rules".
 
 The check is rolling out gradually, so whether a violation fails the check or is only reported depends on the skill:
 

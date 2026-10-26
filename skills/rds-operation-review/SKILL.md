@@ -9,8 +9,8 @@ description: Comprehensive Amazon RDS and Aurora operational review aligned with
   my RDS instance", "RDS health check", or "ORR for RDS".
 metadata:
   author: yakiratz-aws
-  version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
+  version: "1.0.2"
+  aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon RDS"
   aws-devops-agent-skills.technical-domains: "Databases"
 ---

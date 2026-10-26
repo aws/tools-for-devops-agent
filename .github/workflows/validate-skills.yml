@@ -1,0 +1,93 @@
+name: Validate skills
+
+# Gates pull requests on every skill in skills/ meeting the publishing rules in
+# .github/scripts/skill_checks.py (see "Skill Publishing Rules" in
+# CONTRIBUTING.md). Skills on `main` are published automatically, so the check
+# applies the rules to every skill, not only the ones the pull request changes.
+#
+# It runs the unit tests for the check first, so a pull request that changes
+# the check is tested by the version it brings.
+#
+# NOTE: a red check does not block merging on its own. An admin must add the
+# job's name ("validate-skills") to the required status checks for `main` in
+# branch protection. Until then this workflow is advisory. Use "Require branches
+# to be up to date before merging" with it rather than a merge queue: the
+# workflow doesn't run on merge_group events.
+#
+# Kill switch: when the check is wrong about one pull request, a maintainer adds
+# the skip-validate-skills label. The check still runs and reports, but its steps
+# no longer fail the job, so the pull request can merge. When the check breaks
+# every pull request, an admin removes "validate-skills" from the required status
+# checks until the fix merges (see "Skill Publishing Rules" in CONTRIBUTING.md).
+
+on:
+  pull_request:
+    # labeled and unlabeled re-run the check when the skip label changes. The
+    # job must never be skipped with `if:` instead: a skipped required check
+    # counts as passed.
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    # Deliberately NOT filtered with `paths:`. A required status check that never
+    # runs is reported as pending forever, so a path filter would block every pull
+    # request that touches nothing under skills/. The check is fast and simply
+    # passes when no skill breaks a rule.
+
+# Read-only: the job inspects Git objects and reports a status, so pull requests
+# from forks work without any elevated permissions.
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-skills-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # The job id and its display name are kept identical, because the display name
+  # is the status check context that branch protection matches on.
+  validate-skills:
+    name: validate-skills
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to full commit SHAs (v4.4.0 and v5.6.0) so a moved tag
+      # can't change what runs here.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Full history, so the merge base with the base branch can be computed.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      # -I (isolated mode) keeps a file such as pip.py or unittest.py at the
+      # repository root from running in place of the module.
+      - name: Note the skip label
+        if: contains(github.event.pull_request.labels.*.name, 'skip-validate-skills')
+        run: echo "::warning title=validate-skills isn't blocking::The skip-validate-skills label is set, so this check's failures don't block the merge. Remove the label once the check is fixed."
+
+      - name: Install the pinned dependencies
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'skip-validate-skills') }}
+        run: python3 -I -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
+
+      - name: Test the check
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'skip-validate-skills') }}
+        run: python3 -I -m unittest discover -s tests -v
+
+      - name: Check every skill
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'skip-validate-skills') }}
+        # Event values are passed through the environment rather than
+        # interpolated into the command, and quoted on use.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          # Defensive only: a pull_request event always names its base branch.
+          # Without one, check the whole tree with no base.
+          if [ -z "${BASE_REF}" ]; then
+            python3 .github/scripts/validate_skills.py --head-ref HEAD
+            exit $?
+          fi
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          python3 .github/scripts/validate_skills.py \
+            --base-ref "origin/${BASE_REF}" \
+            --head-ref HEAD

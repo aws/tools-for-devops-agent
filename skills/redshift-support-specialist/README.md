@@ -238,7 +238,7 @@ You can upload this skill in one of two ways:
 2. In the AWS DevOps Agent web app, go to **Knowledge** → **Skills**.
 3. Click **Add Skill** → **Upload skill**.
 4. Drag and drop the zip file (or browse to it).
-5. Select agent type: **Chat** (or leave **Generic** to make it available to all agent types).
+5. Select agent type: **Chat tasks** (or leave **All agents** to make it available to all agent types).
 6. Review the validation results.
 7. Click **Upload**.
 
@@ -347,9 +347,9 @@ Only `SKILL.md`, `references/`, `assets/`, and `evals/` are part of the [Agent S
 
 This skill is intended for:
 
-- **Chat** - conversational invocation ("why is this Redshift query slow?", "run a Redshift health check on my cluster").
+- **Chat tasks** - conversational invocation ("why is this Redshift query slow?", "run a Redshift health check on my cluster").
 
-Select **Generic** at upload time if you want the skill available to all agent types.
+Select **All agents** at upload time if you want the skill available to all agent types.
 
 ## Architecture
 

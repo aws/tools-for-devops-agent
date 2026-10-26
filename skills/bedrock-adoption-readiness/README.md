@@ -39,7 +39,7 @@ Additional permissions that may be needed beyond the managed policy:
 3. Ensure the DevOps Agent role has the IAM permissions listed above
 4. Ask natural language questions about Bedrock readiness
 
-**Subagents:** Chat tasks, Evaluation
+**Agent types:** Chat tasks
 
 ## Output
 

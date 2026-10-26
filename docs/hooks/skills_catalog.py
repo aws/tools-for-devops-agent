@@ -19,6 +19,21 @@ import json
 import re
 from pathlib import Path
 
+# metadata.aws-devops-agent-skills.agent-types carries the API values, because it
+# sets which agents load the skill. The catalog shows them in readable form; a
+# value with no entry here is displayed as-is.
+AGENT_TYPE_LABELS = {
+    "GENERIC": "All agents",
+    "CHAT": "Chat tasks",
+    "INCIDENT_TRIAGE": "Incident triage",
+    "INCIDENT_RCA": "Incident RCA",
+    "INCIDENT_MITIGATION": "Incident mitigation",
+    "INCIDENT_UI": "Incident UI",
+    "PREVENTION": "Improvement",
+    "RELEASE_READINESS_REVIEW": "Release readiness review",
+    "RELEASE_TESTING": "Release testing",
+}
+
 
 def _parse_frontmatter(path: Path) -> dict:
     """Extract YAML frontmatter from a SKILL.md file (minimal parser, no deps)."""
@@ -128,7 +143,10 @@ def _build_catalog(config_dir: str) -> list:
         for key, value in metadata.items():
             if key.startswith("aws-devops-agent-skills."):
                 dim_name = key.replace("aws-devops-agent-skills.", "")
-                dimensions[dim_name] = [v.strip() for v in value.split(",")]
+                values = [v.strip() for v in value.split(",") if v.strip()]
+                if dim_name == "agent-types":
+                    values = [AGENT_TYPE_LABELS.get(v, v) for v in values]
+                dimensions[dim_name] = values
 
         catalog.append({
             "id": skill_path.name,

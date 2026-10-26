@@ -30,11 +30,10 @@ Output: a shareable report artifact `agentcore-observability-review-<target>-<YY
 
 ## Agent Types
 
-- **On-demand (Chat)** — "is AgentCore observability configured correctly?", "why can't I see traces
+- **Chat tasks** — "is AgentCore observability configured correctly?", "why can't I see traces
   for my agent?", "set up OTEL for my agent".
-- **Evaluation** — proactive observability-readiness recommendations.
 
-Select **Generic** to make it available to all agent types.
+Select **All agents** to make it available to all agent types.
 
 ## Prerequisites
 

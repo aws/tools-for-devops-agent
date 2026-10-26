@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.2.4] - 2026-10-21
+- Agent types now use the API values in `metadata.aws-devops-agent-skills.agent-types` (`CHAT`, `INCIDENT_RCA`, `INCIDENT_TRIAGE`), the field that sets which agents load the skill.
+
 ## [1.2.3] - 2026-09-21
 ### Changed
 - `SKILL.md`: set `metadata.author` to a resolvable GitHub login (`midakin`) so the generated docs-catalog profile link points to a valid account.

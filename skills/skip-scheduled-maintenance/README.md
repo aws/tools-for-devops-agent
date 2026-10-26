@@ -1,6 +1,6 @@
 # Skip Scheduled Maintenance Skill (Sample)
 
-This is a **sample skill** demonstrating how to write an incident filtering skill for the AWS DevOps Agent **Incident Triage** agent type. It shows how to define skip criteria so the agent automatically filters low-priority incidents during a scheduled maintenance window, avoiding unnecessary investigations for expected disruptions.
+This is a **sample skill** demonstrating how to write an incident filtering skill for the AWS DevOps Agent **Incident triage** agent type. It shows how to define skip criteria so the agent automatically filters low-priority incidents during a scheduled maintenance window, avoiding unnecessary investigations for expected disruptions.
 
 This skill appears as the ["Example: Incident filtering skill"](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#example-incident-filtering-skill) in the AWS DevOps Agent User Guide.
 
@@ -8,13 +8,13 @@ This skill appears as the ["Example: Incident filtering skill"](https://docs.aws
 
 ## Purpose
 
-Skills targeted to the Incident Triage agent type can define criteria for automatically skipping incidents that don't require investigation. When a new incident matches the skip criteria, AWS DevOps Agent marks it as **Skipped** and provides a reason explaining why it was filtered.
+Skills targeted to the Incident triage agent type can define criteria for automatically skipping incidents that don't require investigation. When a new incident matches the skip criteria, AWS DevOps Agent marks it as **Skipped** and provides a reason explaining why it was filtered.
 
-During scheduled maintenance windows, monitoring systems often fire alarms for expected disruptions — service restarts, brief connectivity blips, or elevated error rates from rolling deployments. Without filtering guidance, the Incident Triage agent would investigate each of these as a genuine incident. This sample skill demonstrates how to encode maintenance-window awareness so the agent can skip low-priority alarms while still escalating critical ones.
+During scheduled maintenance windows, monitoring systems often fire alarms for expected disruptions — service restarts, brief connectivity blips, or elevated error rates from rolling deployments. Without filtering guidance, the Incident triage agent would investigate each of these as a genuine incident. This sample skill demonstrates how to encode maintenance-window awareness so the agent can skip low-priority alarms while still escalating critical ones.
 
 ## Key Capabilities (Demonstrated)
 
-- Defining skip criteria that the Incident Triage agent evaluates for each incoming incident
+- Defining skip criteria that the Incident triage agent evaluates for each incoming incident
 - Combining multiple filtering conditions (time window AND severity) for skip decisions
 - Preserving escalation paths for high-severity incidents regardless of maintenance status
 
@@ -32,7 +32,7 @@ During scheduled maintenance windows, monitoring systems often fire alarms for e
 
 This skill is designed for:
 
-- **Incident Triage** — initial incident assessment. When the skill's skip criteria match an incoming incident, the agent marks it as Skipped instead of launching an investigation.
+- **Incident triage** — initial incident assessment. When the skill's skip criteria match an incoming incident, the agent marks it as Skipped instead of launching an investigation.
 
 ## Uploading to AWS DevOps Agent
 
@@ -56,7 +56,7 @@ If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsa
 2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
 3. Click **Add skill** → **Upload skill**.
 4. Drag and drop the zip file (max 6 MB).
-5. Select the agent type: **Incident Triage**.
+5. Select the agent type: **Incident triage**.
 6. Click **Upload**.
 
 **Option C: Upload via the Asset API**
@@ -75,9 +75,9 @@ For more details, see [Uploading a skill](https://docs.aws.amazon.com/devopsagen
 4. Add additional filtering criteria (e.g., specific services, alarm names, or AWS accounts)
 5. Consider creating separate skills for different maintenance windows or filtering scenarios
 
-### Sample Incident Triage Behavior (with this skill active)
+### Sample Incident triage Behavior (with this skill active)
 
-When the skill is active, the Incident Triage agent evaluates each incoming incident against the skip criteria. Incidents that match are marked as **Skipped** with a reason:
+When the skill is active, the Incident triage agent evaluates each incoming incident against the skip criteria. Incidents that match are marked as **Skipped** with a reason:
 
 - **Skipped:** A MEDIUM-severity alarm arriving at 2025-03-15 03:30 UTC
 - **Skipped:** A LOW-severity alarm arriving at 2025-03-15 04:15 UTC

@@ -104,7 +104,6 @@ still runs on AWS APIs alone at lower confidence for CRD/Helm/PDB checks.
 ## Agent Types
 
 - **Chat tasks** — ask for upgrade readiness assessments
-- **Evaluation** — periodic upgrade readiness scans
 
 ## Uploading to AWS DevOps Agent
 
@@ -129,12 +128,12 @@ zip -r eks-upgrade-readiness.zip eks-upgrade-readiness/ \
 2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
 3. Click **Add skill** → **Upload skill**.
 4. Drag and drop the `eks-upgrade-readiness.zip` file (max 6 MB).
-5. Select the agent types: **Chat tasks** and **Evaluation**.
+5. Select the agent type: **Chat tasks**.
 6. Click **Upload**.
 
 **Option C: Upload via the Asset API**
 
-Use the DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign to `CHAT` and `EVALUATION` agent types. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
+Use the DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign to the `CHAT` agent type. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
 
 ## How to Use This Skill
 

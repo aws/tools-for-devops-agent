@@ -10,9 +10,9 @@ description: >
   assessment", "check my Bedrock quotas", "Bedrock adoption audit", "Bedrock operational
   review", or "assess my Bedrock environment".
 metadata:
-  version: "1.0.0"
+  version: "1.0.2"
   author: sruved
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
+  aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock"
   aws-devops-agent-skills.technical-domains: "AI/ML"
 ---

@@ -2,8 +2,9 @@
 name: aws-routing
 description: 'Analyze and troubleshoot AWS routing and BGP path selection - how AWS chooses a network path, why traffic takes an unexpected route, and how to steer it. Use for AWS Cloud WAN route evaluation and CNE path selection; Direct Connect Gateway (DXGW) path selection and local vs remote region preference; Transit Gateway route tables, ECMP, and peering; VPC route tables and longest-prefix-match; BGP traffic engineering with local-preference communities (7224:7100/7200/7300), AS-path prepending, and MED; DX + VPN redundancy and active/active vs active/passive design; asymmetric routing and failover. Activate on symptoms like "traffic is leaving the region", "not using my local Direct Connect", "routing to the wrong VIF/location", "path is asymmetric", or "how do I make AWS prefer this path". Read-only: analysis, recommendations, and describe/get/list validation commands grounded in public AWS docs.'
 metadata:
-  version: "1.2.3"
+  version: "1.2.4"
   author: midakin
+  aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
 ---
 
 ## Overview

@@ -5,7 +5,8 @@ Every skill is expected to ship the results of all three evaluation test types,
 produced by the (internal) skill evaluation tool and committed as-is::
 
     evals/
-    ├── evals.json                                       # required
+    ├── evals.json                                       # required, unless
+    │                                                    # functional is exempted
     ├── structure/
     │   └── structure-tests-results-v<N>.json            # at least one
     ├── best-practices/
@@ -84,12 +85,18 @@ by committing ``evals/exemptions.json``::
     }
 
 An exempted test type is not checked; it is reported as a warning instead, so a
-green check still shows what is missing and why. ``evals.json`` is hand-written
-rather than tool output, so it is never exemptable. The file fails closed: bad
-JSON, an unknown test type, or a missing/empty ``reason`` grants no exemption and
-is itself reported, so a typo cannot silently waive a requirement. Because the
-file lives in the PR diff, granting an exemption goes through the same review as
-any other change.
+green check still shows what is missing and why. The file fails closed: bad JSON,
+an unknown test type, or a missing/empty ``reason`` grants no exemption and is
+itself reported, so a typo cannot silently waive a requirement. Because the file
+lives in the PR diff, granting an exemption goes through the same review as any
+other change.
+
+``evals.json`` is hand-written rather than tool output, so no exemption names it.
+It is the functional tests' input, though — the evaluation tool reads it for that
+run alone, and a functional run's scenario directories are named from it — so an
+honored ``functional`` exemption carries it: there is no run left for it to feed.
+It stays required whenever functional results are, which includes a withdrawn
+exemption and a malformed file, since neither leaves an honored claim behind.
 
 The ``enforce-evals`` label withdraws every exemption claimed by the skills of the
 pull request it is applied to. Each exempted type is then checked after all, and
@@ -208,7 +215,9 @@ PRS_PREDATING_CHECK = frozenset(
 ENFORCE_LABEL = "enforce-evals"
 
 # Test types whose results a skill can be exempted from, via evals/exemptions.json.
-# ``evals.json`` is hand-written and always required, so it is not exemptable.
+# ``evals.json`` is hand-written rather than tool output, so it is not a key here;
+# it follows the ``functional`` exemption instead, being that run's input. See
+# ``validate_skill``.
 EXEMPTABLE_TYPES = ("structure", "best-practices", "functional")
 EXEMPTIONS_FILENAME = "exemptions.json"
 
@@ -462,7 +471,9 @@ def validate_skill(
     """Validate one skill, returning (violations, reported exemptions).
 
     An honored exempted test type is not checked at all; instead it is reported as
-    a warning, so a green check still shows which results are missing and why.
+    a warning, so a green check still shows which results are missing and why. An
+    honored ``functional`` exemption also waives ``evals.json``, that run's input,
+    which is reported the same way.
 
     ``withdraw_exemptions`` names whatever is withdrawing the skill's exemptions
     (the label), or is None to honor them. When it is set, every exempted type is
@@ -483,8 +494,15 @@ def validate_skill(
     # intact to report, which is what keeps a withdrawal visible rather than silent.
     honored: dict[str, str] = {} if withdraw_exemptions else claimed
 
-    # Never exemptable: evals.json is hand-written, not tool output.
-    if not (evals / "evals.json").is_file():
+    # evals.json is hand-written rather than tool output, so no exemption names it.
+    # It is the functional tests' input, so an honored ``functional`` exemption
+    # carries it: the definitions describe a run that is not happening. Everything
+    # that leaves no honored claim therefore keeps it required — a withdrawal (which
+    # empties ``honored`` above) and a malformed file (which grants nothing) both do,
+    # so the waiver cannot be reached by accident.
+    evals_json_waived = "functional" in honored
+    has_evals_json = (evals / "evals.json").is_file()
+    if not has_evals_json and not evals_json_waived:
         violations.append(f"missing file `{rel_evals}/evals.json`")
 
     if "structure" not in honored:
@@ -523,6 +541,15 @@ def validate_skill(
             for test_type in EXEMPTABLE_TYPES
             if test_type in claimed
         ]
+
+    # Reported only when the file is actually absent: a skill that exempts functional
+    # and commits one anyway is not "missing" anything, and saying so would read as
+    # though the file should not be there.
+    if evals_json_waived and not has_evals_json:
+        reported.append(
+            "`evals.json` not required — it defines the functional tests, which are "
+            "exempted"
+        )
     return violations, reported
 
 

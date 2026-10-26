@@ -11,8 +11,8 @@ description: Amazon SageMaker AI Operational Review. Use this skill when a user 
   SageMaker", or "Operational Readiness Review (ORR) for SageMaker".
 metadata:
   author: jacklunn
-  version: "1.1.2"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
+  version: "1.1.5"
+  aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon SageMaker AI, Amazon CloudWatch, AWS Service Quotas"
   aws-devops-agent-skills.technical-domains: "AI/ML"
 ---

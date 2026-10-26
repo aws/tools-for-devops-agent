@@ -12,8 +12,8 @@ description: Identify and quantify AWS CloudTrail cost optimization opportunitie
   ingestion/retention waste, producing a severity-ranked report of savings.
 metadata:
   author: holmalla
-  version: "1.3.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
+  version: "1.3.2"
+  aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "AWS CloudTrail"
   aws-devops-agent-skills.technical-domains: "Security, Cost Optimization"
 ---

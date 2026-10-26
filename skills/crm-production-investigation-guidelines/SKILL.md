@@ -3,8 +3,8 @@ name: crm-production-investigation-guidelines
 description: Guidelines for investigating production incidents in the CRM application. Use when triaging any alert or incident involving the CRM REST API, SQS queues, Lambda functions, or Aurora DSQL database in this AWS account. Ensures thorough root cause analysis using AWS-native observability tools.
 metadata:
   author: jossaiaws
-  version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Incident Triage"
+  version: "1.0.2"
+  aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE"
 ---
 
 You are investigating a real production incident in the CRM application. This is a live production environment serving active sales teams.

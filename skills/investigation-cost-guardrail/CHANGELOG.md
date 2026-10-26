@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.1.1
+- Agent types now use the API values in `metadata.aws-devops-agent-skills.agent-types` (`CHAT`, `INCIDENT_RCA`, `INCIDENT_TRIAGE`), the field that sets which agents load the skill.
+
 ## 2.1.0
 
   - Replace every hardcoded rate with a live AWS Price List Query API lookup, resolved for the workload region at estimation time. The skill no longer carries baseline rates of any kind.

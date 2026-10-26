@@ -49,7 +49,7 @@ The AWS DevOps Agent's primary cloud-source role needs read access to MSK and
 CloudWatch. All calls except `kafka:GetBootstrapBrokers` are covered by
 `AIDevOpsAgentAccessPolicy`. `kafka:GetBootstrapBrokers` is granted by the
 opt-in `EnableMskOperations` parameter (default `true`) in
-[`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml).
+[`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
 The full set of actions the skill uses in practice:
 
 ```
@@ -100,9 +100,8 @@ Web App at upload time):
 - **Chat tasks** — conversational invocation in Chat ("my MSK cluster is
   latent", "run an MSK health check on `prod-cluster`", "why did broker 2
   restart last night?").
-- **Evaluation** — proactive best-practices recommendations.
 
-Select **Generic** instead if you want the skill available to all agent types.
+Select **All agents** instead if you want the skill available to all agent types.
 
 ## Uploading to AWS DevOps Agent
 
@@ -142,7 +141,7 @@ Constraints (enforced at upload time):
 1. Navigate to the **Skills** page in your Agent Space Operator Web App.
 2. Click **Add skill** → **Upload skill**.
 3. Drag and drop `msk-operations.zip` (or browse to it).
-4. Select agent types: **Chat tasks** and **Evaluation** (or leave **Generic**
+4. Select agent types: **Chat tasks** (or leave **All agents**
    to make it available to all agent types).
 5. Review the validation results.
 6. Click **Upload**.

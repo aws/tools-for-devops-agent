@@ -118,7 +118,7 @@ upload time):
 - **Incident RCA** — root cause analysis where database performance may be a contributing
   factor
 
-Select **Generic** instead if you want the skill available to all agent types.
+Select **All agents** instead if you want the skill available to all agent types.
 
 ## Uploading to AWS DevOps Agent
 

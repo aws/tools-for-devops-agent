@@ -19,9 +19,8 @@ When activated via Chat, this skill instructs the DevOps Agent to:
 This skill is intended for the following agent types (selected in the Operator Web App at upload time):
 
 - **Chat tasks** — conversational invocation in Chat ("review my DMS environment", "troubleshoot DMS task failure").
-- **Evaluation** — proactive operational improvement recommendations.
 
-Select **Generic** instead if you want the skill available to all agent types.
+Select **All agents** instead if you want the skill available to all agent types.
 
 ## Prerequisites
 
@@ -31,7 +30,7 @@ You need an existing [Agent Space](https://docs.aws.amazon.com/devopsagent/lates
 
 ### 2. IAM permissions for DMS read access
 
-The Agent Space IAM role needs read-only permissions for DMS resources. Nearly all required actions are already covered by the `AIDevOpsAgentAccessPolicy` managed policy attached to the DevOps Agent role. The one exception is `dms:TestConnection`, which must be granted separately — use the [CloudFormation template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml).
+The Agent Space IAM role needs read-only permissions for DMS resources. Nearly all required actions are already covered by the `AIDevOpsAgentAccessPolicy` managed policy attached to the DevOps Agent role. The one exception is `dms:TestConnection`, which must be granted separately — use the [CloudFormation template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
 
 For reference, the complete action set used by this skill:
 ```json
@@ -100,7 +99,7 @@ Constraints (enforced at upload time):
 1. Navigate to the **Skills** page in your Agent Space Operator Web App.
 2. Click **Add skill** → **Upload skill**.
 3. Drag and drop `database-migration-service-expertise.zip` (or browse to it).
-4. Select agent types: **Chat tasks** and **Evaluation** (or leave **Generic** to make it available to all agent types).
+4. Select agent types: **Chat tasks** (or leave **All agents** to make it available to all agent types).
 5. Review the validation results.
 6. Click **Upload**.
 

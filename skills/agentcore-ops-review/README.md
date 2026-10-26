@@ -18,10 +18,9 @@ All data is gathered through native AWS APIs (`bedrock-agentcore`, `cloudwatch`,
 
 This skill is intended for the following agent types (selected in the Operator Web App at upload time):
 
-- **On-demand** — conversational invocation in Chat ("review my AgentCore runtimes", "AgentCore health check").
-- **Evaluation** — proactive operational improvement recommendations.
+- **Chat tasks** — conversational invocation in Chat ("review my AgentCore runtimes", "AgentCore health check").
 
-Select **Generic** instead if you want the skill available to all agent types.
+Select **All agents** instead if you want the skill available to all agent types.
 
 ## Prerequisites
 
@@ -102,7 +101,7 @@ Constraints (enforced at upload time):
 1. Navigate to the **Skills** page in your Agent Space Operator Web App.
 2. Click **Add skill** → **Upload skill**.
 3. Drag and drop `agentcore-ops-review.zip` (or browse to it).
-4. Select agent types: **On-demand** and **Evaluation** (or leave **Generic** to make it available to all agent types).
+4. Select agent types: **Chat tasks** (or leave **All agents** to make it available to all agent types).
 5. Review the validation results.
 6. Click **Upload**.
 
