@@ -102,9 +102,10 @@ Measured on 2026-10-21 against a 26 image repository with a five rule policy
    called (0 of 4). One run stated the start call "is blocked as a mutating
    operation in my read-only access" and stopped there.
 4. `lastRecordedPullTime` was read only when the prompt hinted at direct pulls.
-5. One run offered to rewrite the policy.
-6. A one rule, six image control repository was handled correctly 6 of 6 times,
+5. A one rule, six image control repository was handled correctly 6 of 6 times,
    so the failure is multi rule priority semantics, not ECR knowledge.
+6. Even on that control repository, 1 of the 6 runs offered to rewrite the
+   policy, which a read only review must never do.
 
 The skill closes each gap with: preview first with a documented approval path, a
 deterministic simulation as fallback, a mandatory in use cross reference on
@@ -159,11 +160,13 @@ When running the skill evaluation tool, pass the four delta actions with
 |---|---|---|---|
 | 1 | `Safe` | Digest is not in the expiring set for this evaluation | none |
 | 2 | `Expiring-InUse` | In the expiring set and at least one confirmed reference: running ECS task digest or image, ECS service or ACTIVE task definition image, Batch ACTIVE job definition image, Lambda image function URI, App Runner service image, `lastRecordedPullTime` inside the pull window, or a CloudTrail pull event on the digest or tag | CRITICAL when the reference is a running ECS task, an App Runner service in `RUNNING`, or a Lambda function; otherwise HIGH |
-| 3 | `Expiring-Unknown` | In the expiring set, no confirmed reference, and at least one in use source is `AccessDenied`, `ToolingFailure` or `Partial`, or an EKS cluster exists in the Region | MEDIUM |
-| 4 | `Expiring-Unused` | In the expiring set, no reference, every in use source `OK`, no EKS cluster | INFO |
+| 3 | `Expiring-Unknown` | In the expiring set, no confirmed reference, and at least one in use source (U2 to U6: ECS tasks and services, ECS task definitions, Batch, Lambda, App Runner) is `AccessDenied`, `ToolingFailure` or `Partial`, or an EKS cluster exists in the Region. The optional CloudTrail probe is not an in use source for this row | MEDIUM |
+| 4 | `Expiring-Unused` | In the expiring set, no reference, every in use source U2 to U6 `OK`, no EKS cluster | INFO |
 
-A denied or cancelled source can never produce `Expiring-Unused`. Unknown is a
-real answer and is reported as such.
+A denied or cancelled in use source can never produce `Expiring-Unused`. Unknown
+is a real answer and is reported as such. A cancelled or skipped CloudTrail probe
+is listed under Not Assessed and changes no verdict; a CloudTrail pull event that
+was found still counts as a reference in row 2.
 
 ### Repository rating (first match wins)
 
@@ -201,8 +204,13 @@ evidence shows; it caps the rating at `Attention` when nothing in use was found.
   simulate it. If no repository is named, simulate against the images of the
   repository the user describes, or ask once which repository the draft is for.
 - Pull recency window defaults to 30 days. Honour a window the user states.
-- Prompts with given API values and "no account access required" are evaluated
-  with the simulation procedure and labelled `SIMULATED`.
+- Prompts that say "no account access required" and supply API values are
+  evaluated from those values alone, with no API calls. If the prompt supplies
+  `GetLifecyclePolicyPreview` results, they are the expiring set and are labelled
+  `AUTHORITATIVE`. If it supplies only a policy and an image list, run the
+  simulation procedure and label the set `SIMULATED`. In use sources named in
+  the prompt take the status the prompt gives them; sources it does not mention
+  are `NotChecked`.
 
 ## Execution Flow
 
@@ -259,8 +267,8 @@ evidence shows; it caps the rating at `Attention` when nothing in use was found.
       reference. Collect the evidence string for each match.
 - [ ] **Step 7. Verdicts, rule table, protected tags.** Assign each expiring
       image its first matching verdict. Build the Rule by Rule table: for each
-      rule, candidates, marked, expiring now, kept, and whether it removes an in
-      use image. For every image placed in the set by a `tagStatus: any` rule
+      rule, candidates, marked, expires now, keeps, and whether it removes an in
+      use image (the template's six count columns). For every image placed in the set by a `tagStatus: any` rule
       with no `tagged` rule claiming it, test its tags against the protected
       patterns (`^prod`, `^release`, `^v?\d+\.\d+\.\d+`, `^latest$`, `^stable$`,
       `^hotfix`); a match is finding P4, LOW.
@@ -283,7 +291,7 @@ source status, never a guessed result.
 | ID | Check | Finding condition | Severity |
 |---|---|---|---|
 | P1 | Lifecycle policy attached | No policy and no draft | INFO |
-| P2 | `tagStatus: any` rule carries the highest `rulePriority` number | Draft violates it (ECR rejects attached policies that do) | INFO |
+| P2 | `tagStatus: any` rule carries the highest `rulePriority` number | The policy violates the documented requirement (expected on a draft; ECR is expected to reject it at `PutLifecyclePolicy`, not verified from docs) | INFO |
 | P3 | Expiring set comes from the ECR preview | Set is `SIMULATED` | INFO |
 | P4 | Production like tags protected by a `tagged` rule | A tag matching the protected patterns is expiring under a `tagStatus: any` rule | LOW |
 | E1 | Expiring set established and every expiring image has exactly one verdict | Set missing, or a digest without a verdict row | rating `Indeterminate` |

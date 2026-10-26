@@ -81,7 +81,9 @@ Attach them as an inline policy on the Agent Space role:
 
 A parameter for this skill in the shared skill policies template at
 [cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
-is planned; until it lands, use the inline policy above.
+is not part of this skill folder and lands in the same pull request as a
+separate change (together with the `llms.txt` entry and the skills catalog
+acronym). Until it is merged, use the inline policy above.
 
 **The skill still runs without these four.** Without the preview actions the
 expiring set is computed by the skill and labelled `SIMULATED`, which caps the
@@ -242,8 +244,12 @@ returns a Markdown report with a verdict for every expiring image.
     added?
 11. Should cross account consumers (task definitions in other accounts pulling
     this registry) be in scope?
+12. Does `PutLifecyclePolicy` reject a policy whose `tagStatus: any` rule does
+    not carry the highest `rulePriority` number? The parameters page states the
+    requirement but not the rejection behaviour, so check P2 reports a violation
+    as INFO rather than assuming an attached policy can never violate it.
 
 ## Non-production disclaimer
 
-> ⚠ This skill is sample code, not intended for production use without additional
+> ⚠️ This skill is sample code, not intended for production use without additional
 > review and testing. Users should validate in a non-production environment first.

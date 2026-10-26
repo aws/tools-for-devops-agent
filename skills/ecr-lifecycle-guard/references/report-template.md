@@ -44,12 +44,12 @@ Images that survive this evaluation: <n>. <List their tags on one line, or "none
 
 ## Rule by Rule
 
-| Priority | Selection | Candidates | Expires now | Keeps | Removes an in use image? |
-|---|---|---|---|---|---|
-| <10> | <untagged, sinceImagePushed 1 day> | <n> | <n> | <n> | <No | Yes: <tags>> |
-| <100> | <any, imageCountMoreThan 6> | <n> | <n> | <n> | <No | Yes: <tags>> |
+| Priority | Selection | Candidates | Marked | Expires now | Keeps | Removes an in use image? |
+|---|---|---|---|---|---|---|
+| <10> | <untagged, sinceImagePushed 1 day> | <n> | <n> | <n> | <n> | <No | Yes: <tags>> |
+| <100> | <any, imageCountMoreThan 6> | <n> | <n> | <n> | <n> | <No | Yes: <tags>> |
 
-<One sentence per rule whose "Expires now" is smaller than its marked count, explaining which higher priority rule claimed the difference.>
+Candidates: images the rule selects on its own. Marked: candidates its count criterion would remove. Expires now: marked images no higher priority rule claimed. Keeps: candidates minus Expires now. <One sentence per rule whose "Expires now" is smaller than "Marked", naming the higher priority rule that claimed the difference.>
 
 ## Findings
 
