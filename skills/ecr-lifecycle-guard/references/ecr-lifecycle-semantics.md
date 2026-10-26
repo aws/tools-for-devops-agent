@@ -18,9 +18,12 @@ Inputs: the policy JSON (`lifecyclePolicyText`), the full image list from
    - Sort rules by `rulePriority` ascending (1 is the highest priority).
    - Confirm priorities are unique.
    - If a rule has `tagStatus: any`, confirm it carries the highest
-     `rulePriority` number. ECR rejects policies that violate this, so an
-     attached policy always satisfies it. A draft policy in chat may not; report
-     it as a validation error and stop the simulation for that policy.
+     `rulePriority` number. The parameters page states this as a requirement;
+     ECR is expected to reject a policy that violates it at `PutLifecyclePolicy`,
+     but the rejection behaviour is not stated in the public documentation (see
+     the unverified facts table in ecr-api-reference.md). Treat a violation in
+     an attached policy or a draft the same way: report it under check P2 and
+     stop the simulation for that policy.
    - At most one rule may select untagged images.
    - A rule may carry `tagPatternList` or `tagPrefixList`, never both. Lists are
      only valid with `tagStatus: tagged`. `untagged` rules carry neither.

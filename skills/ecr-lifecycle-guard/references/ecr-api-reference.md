@@ -1,6 +1,6 @@
 # API Reference for ECR Lifecycle Guard
 
-Load this file at Step 2 of the execution flow, before the first API call. It
+Load this file at Step 1 of the execution flow, before the first API call. It
 lists every operation the skill may call, the fields it reads, how each call is
 paginated, how errors are classified, and the operations it must never call.
 Everything is control plane and read only. Data is read with the agent's native
@@ -223,6 +223,7 @@ README repeats these as open questions for SME review.
 | The agent guardrail classifies `StartLifecyclePolicyPreview` as mutative in every Agent Space | section 3, step 2 | whether the platform can allowlist it | observed in gap transcripts on 2026-10-21; service reference marks the action `IsWrite: true` |
 | `ListTaskDefinitions status=ACTIVE` with 200 ARNs is a reasonable bound | section 5 | tool call budget in the Agent Space | SME judgement |
 | Batch job definition image fields cover every job type | section 1 | `ecsProperties` and `eksProperties` shapes | https://docs.aws.amazon.com/batch/latest/APIReference/API_JobDefinition.html |
+| ECR rejects a policy whose `tagStatus: any` rule does not carry the highest `rulePriority` number | semantics step 1, check P2 | whether `PutLifecyclePolicy` returns `InvalidParameterException` or accepts the policy and reorders or ignores the rule | https://docs.aws.amazon.com/AmazonECR/latest/userguide/lifecycle_policy_parameters.html states the requirement only; confirm with a `PutLifecyclePolicy` attempt in a sandbox |
 | `lastRecordedPullTime` is refreshed at least once every 24 hours and may lag | semantics, verdict rules | confirmed from `ImageDetail` doc; the skill therefore treats any pull inside the window as recent | https://docs.aws.amazon.com/AmazonECR/latest/APIReference/API_ImageDetail.html |
 
 ## 9. Documentation URLs
