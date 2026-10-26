@@ -1,0 +1,75 @@
+{
+  "skill_name": "aws-batch-investigation",
+  "evals": [
+    {
+      "id": "batch-silent-failure-invariant",
+      "task_type": "chat",
+      "prompt": "In AWS Batch, a job reports status SUCCEEDED with exitCode 0. Can I conclude from that alone that the work completed? Which specific fields must be read to verify it, and why is reading only one of them insufficient?",
+      "expected_output": "States that SUCCEEDED with exitCode 0 does NOT prove the work completed, that both statusReason and container.reason must be read, and that reading only one is insufficient because container.reason is null for the silent-timeout mode while statusReason does not carry the OutOfMemoryError text.",
+      "should_trigger": true,
+      "assertions": [
+        "The response names both statusReason and container.reason as fields that must be read",
+        "The response explains that reading only one of the two fields misses a failure mode, rather than treating them as interchangeable"
+      ]
+    },
+    {
+      "id": "batch-silent-timeout-field",
+      "task_type": "chat",
+      "prompt": "An AWS Batch job was terminated by Batch on its own attemptDurationSeconds but still reports SUCCEEDED. Which field carries the evidence, what is the exact text, and what is the value of container.reason for this mode?",
+      "expected_output": "Names statusReason as the field, quotes 'Job attempt duration exceeded timeout' as the text, and states that container.reason is null or empty for this mode so an OOM detector alone would miss it.",
+      "should_trigger": true,
+      "assertions": [
+        "The response states that container.reason is null, empty or absent for this mode",
+        "The response draws the consequence that a detector keyed only on container.reason would miss this mode"
+      ]
+    },
+    {
+      "id": "batch-listjobs-carries-reason",
+      "task_type": "chat",
+      "prompt": "To scan an AWS Batch job queue for jobs that reported SUCCEEDED but were actually killed for out-of-memory, do I need a batch:DescribeJobs call for each job? Name the API whose response carries the field I need.",
+      "expected_output": "States that DescribeJobs is NOT required per job because container.reason is present on the ListJobs summary object, so the scan is a paginated ListJobs and works with batch:ListJobs permission alone.",
+      "should_trigger": true,
+      "assertions": [
+        "The response states that a per-job DescribeJobs call is not required",
+        "The response identifies ListJobs as the API whose summary already carries container.reason",
+        "The response notes that this means the scan works with ListJobs permission alone"
+      ]
+    },
+    {
+      "id": "batch-ordered-ce-no-failover",
+      "task_type": "chat",
+      "prompt": "An AWS Batch job queue lists three compute environments in order. The order-1 compute environment cannot launch instances because its Spot bid is below market. Does Batch move the queued work to the order-2 compute environment? Name the Auto Scaling group field that proves what Batch actually did.",
+      "expected_output": "States that Batch does NOT move work to a later compute environment when an earlier one cannot launch, and that MaxSize 0 on the later compute environments' Auto Scaling groups proves Batch never requested capacity there. Describes ordered compute environments as an overflow mechanism rather than fault tolerance.",
+      "should_trigger": true,
+      "assertions": [
+        "The response states that Batch does not move the work to the order-2 compute environment",
+        "The response cites MaxSize 0 on the later Auto Scaling groups as the proof that Batch never requested capacity there",
+        "The response characterises ordered compute environments as an overflow mechanism rather than a fault-tolerance or failover mechanism",
+        "The response notes that a compute environment which cannot launch blocks the queue behind it",
+        {
+          "text": "MaxSize is named as the decisive field",
+          "evaluator": "regex",
+          "pattern": "(?i)max\\s*size"
+        }
+      ]
+    },
+    {
+      "id": "batch-fairshare-single-snapshot",
+      "task_type": "chat",
+      "prompt": "On an AWS Batch fair-share queue, a single snapshot shows the two highest-weightFactor shares holding 20 running jobs each while four other shares hold zero. Can I conclude the scheduling policy is misconfigured? What should I compare instead?",
+      "expected_output": "States that a single snapshot is not sufficient, that weightFactor controls which share runs first and the instantaneous split under contention rather than total allocation, that share usage tends to equalise over a full run, and that cumulative share-minutes across the whole contention window should be compared instead.",
+      "should_trigger": true,
+      "assertions": [
+        "The response explains that weightFactor governs ordering and the instantaneous split under contention rather than total allocation",
+        "The response notes that fair-share usage tends to equalise over a full run",
+        "The response warns that a single snapshot can show the opposite of the run's overall allocation pattern, rather than merely being incomplete"
+      ]
+    },
+    {
+      "id": "unrelated-sqs-queue-question",
+      "task_type": "chat",
+      "prompt": "What is the difference between an Amazon SQS standard queue and a FIFO queue, and when should I choose each?",
+      "should_trigger": false
+    }
+  ]
+}
