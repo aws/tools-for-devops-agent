@@ -5,8 +5,7 @@ metadata:
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"
-aws-devops-agent-skills:
-  agent-types: "CHAT,INCIDENT_MITIGATION,INCIDENT_UI"
+  aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_MITIGATION,INCIDENT_UI"
 ---
 
 # Case Management Skill — open, triage, resolve and link cases
