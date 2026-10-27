@@ -38,9 +38,9 @@ Policy last evaluated by ECR: <lastEvaluatedAt | never | unknown>.
 
 | Tags | Digest | Pushed | Last recorded pull | Claimed by rule | Action | Verdict | Evidence |
 |---|---|---|---|---|---|---|---|
-| <tag1, tag2> | <sha256:first 12 hex> | <time> | <time | never> | <rulePriority> | <expire | archive> | <Expiring-InUse | Expiring-Unknown | Expiring-Unused> | <running ECS task arn:... | task definition family:rev | Batch job definition name:rev | Lambda function name | App Runner service name | lastRecordedPullTime 2026-10-21 16:34 UTC inside 30 day window | CloudTrail BatchGetImage by <principal type> on <date> | no reference found; Batch not readable | no reference found in any checked source> |
+| <tag1, tag2> | <sha256:first 12 hex> | <time> | <time | never> | <rulePriority> | <expire | archive> | <Expiring-InUse | Expiring-Unknown | Expiring-Unused> | <tier (a) lastRecordedPullTime 2026-10-27 12:08 UTC inside 30 day window | tier (b) running ECS task arn:... | tier (b) task definition family:rev | tier (b) Batch job definition name:rev | tier (b) Lambda function name | tier (b) App Runner service name | tier (c) CloudTrail BatchGetImage 2026-10-25 14:02 UTC by role <name>, 4 days after push (<n> push correlated events excluded) | push correlated events only (<n> excluded), no tier (a) or (b) evidence; Batch not readable | no evidence in any tier; every source checked> |
 
-Images that survive this evaluation: <n>. <List their tags on one line, or "none".>
+Every Evidence cell names the tier that produced the verdict. Images that survive this evaluation: <n>. <List their tags on one line, or "none".>
 
 ## Rule by Rule
 
@@ -55,7 +55,8 @@ Candidates: images the rule selects on its own. Marked: candidates its count cri
 
 | ID | Severity | Finding | Recommendation |
 |---|---|---|---|
-| <R1> | <CRITICAL | HIGH | MEDIUM | LOW | INFO> | <what, which images, which rule> | <the operator action, one sentence> |
+| <R1> | <CRITICAL | HIGH | MEDIUM | LOW | INFO> | <what, which images, which rule, which evidence tier> | <the operator action, one sentence> |
+| <U8> | LOW | <n> CloudTrail events on <n> expiring images were excluded as push correlated (within 60 seconds of push or from the pushing principal) and did not count as pulls | None; informational, confirms the filter ran |
 
 ## Suggested Protective Rule
 
@@ -95,7 +96,8 @@ Apply it with `aws ecr put-lifecycle-policy` or the console after running a prev
 | U5 | Lambda container image functions checked | <OK | Partial | AccessDenied | ToolingFailure> | <n image functions of n functions> |
 | U6 | App Runner services checked | <OK | AccessDenied | ToolingFailure> | <n services> |
 | U7 | EKS presence recorded, CloudTrail pull probe status recorded | <OK | NotChecked> | <n EKS clusters (pod references not checked); CloudTrail <status>> |
-| R1 | No expiring image is in use | <PASS | HIGH | CRITICAL> | <tags> |
+| U8 | CloudTrail events excluded as push correlated | <PASS | LOW | NotChecked> | <n events on n images excluded; n qualifying pulls kept | probe did not run> |
+| R1 | No expiring image is in use | <PASS | HIGH | CRITICAL> | <tags, each with its evidence tier> |
 | R2 | No expiring image has an unknown in use status | <PASS | MEDIUM> | <n images; sources not readable: <list>> |
 
 ## Not Assessed
@@ -153,11 +155,17 @@ Check each item before sending. Fix the report, not the checklist.
    Rule by Rule "Expires now" column total.
 3. Every expiring digest has exactly one row in Expiring Images and exactly one
    verdict from `Expiring-InUse`, `Expiring-Unknown`, `Expiring-Unused`. A multi
-   tag digest is one row listing every tag.
+   tag digest is one row listing every tag. Every Evidence cell names the tier
+   ((a) `lastRecordedPullTime`, (b) consumer reference, (c) CloudTrail pull
+   after the push correlation rule) or states that only push correlated events
+   were found. No `Expiring-InUse` row rests on a CloudTrail event within 60
+   seconds of the push or from the pushing principal.
 4. The word "safe", "not a concern", "currently fine" or any equivalent appears
    only inside a verdict row or the rating sentence, never as free prose about an
    image.
-5. The Check Matrix has exactly 14 rows, P1 to P4, E1, U1 to U7, R1, R2.
+5. The Check Matrix has exactly 15 rows, P1 to P4, E1, U1 to U8, R1, R2. U8
+   states how many CloudTrail events were excluded as push correlated, or that
+   the probe did not run.
 6. The rating is stated once, in Repository Rating, and matches the first
    matching row of the rating table in SKILL.md.
 7. Every source with status `AccessDenied`, `ToolingFailure`, `Partial` or

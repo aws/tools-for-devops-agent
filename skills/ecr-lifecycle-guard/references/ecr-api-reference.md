@@ -36,7 +36,7 @@ https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAcc
 | App Runner | ListServices | `apprunner:ListServices` | Yes (`apprunner:List*`) | `NextToken`, `MaxResults` up to 20 | `ServiceSummaryList[].ServiceArn`, `Status` | Service inventory |
 | App Runner | DescribeService | `apprunner:DescribeService` | Yes (`apprunner:Describe*`) | one per call | `Service.SourceConfiguration.ImageRepository.ImageIdentifier`, `Service.Status` | ECR image a service runs |
 | EKS | ListClusters | `eks:ListClusters` | Yes (`eks:List*`) | `nextToken` | `clusters[]` | Presence only; pod image references are data plane and out of scope |
-| CloudTrail | LookupEvents | `cloudtrail:LookupEvents` | Yes | `NextToken`, `MaxResults` up to 50 | `Events[].EventName`, `CloudTrailEvent` (JSON string with `requestParameters.imageIds`, `repositoryName`) | Optional pull evidence; see section 6 |
+| CloudTrail | LookupEvents | `cloudtrail:LookupEvents` | Yes | `NextToken`, `MaxResults` up to 50 | `Events[].EventName`, `Events[].EventTime`, `CloudTrailEvent` (JSON string with `eventTime`, `userIdentity`, `requestParameters.imageIds`, `repositoryName`) | Optional tier (c) pull evidence and `PutImage` push principal; see section 6 |
 
 `lambda:GetFunctionConfiguration` is in the managed policy and returns
 `PackageType` but not the image URI, so it cannot replace `GetFunction`.
@@ -172,27 +172,64 @@ Source coverage per Region, with the bounded ECS task definition scan:
 confirmed reference `Expiring-Unknown`, with the reason "ECS task definition
 scan bounded at 200 ARNs". Never claim full coverage after a bounded scan.
 
-## 6. Optional CloudTrail pull probe
+## 6. Optional CloudTrail pull probe (evidence tier (c))
 
-Purpose: find direct pulls (EC2 hosts, CI runners, developer laptops) that no
-task or function definition records. Evidence of a pull makes the image
-`Expiring-InUse`. Absence of events is not evidence of non use.
+In use evidence is ranked, strongest first:
+
+- (a) `lastRecordedPullTime` present on the image (`DescribeImages`). ECR
+  maintains it from real pulls and refreshes it at least once every 24 hours,
+  so a pull in the last day may not show yet. Authoritative when present.
+- (b) a reference by tag or digest in an ECS running task, ECS service or ACTIVE
+  task definition, Batch ACTIVE job definition, Lambda image function URI, or
+  App Runner service (section 5). Confirmed.
+- (c) a CloudTrail `BatchGetImage` or `GetDownloadUrlForLayer` event on the
+  digest or tag. Circumstantial, and the only tier that is filtered.
+
+Purpose of tier (c): find direct pulls (EC2 hosts, CI runners, developer
+laptops) that no task or function definition records. A qualifying pull makes
+the image `Expiring-InUse`. Absence of events is not evidence of non use.
 
 - Call `LookupEvents` with `LookupAttributes=[{AttributeKey: EventName,
   AttributeValue: BatchGetImage}]` and again with `GetDownloadUrlForLayer`,
   `StartTime` = now minus 30 days (or the window the user set), paginate
   with `NextToken`. `LookupEvents` covers the last 90 days of management
   events and is rate limited, so cap the probe at 20 pages per event name per
-  Region.
+  Region. Call it a third time with `PutImage` for the same window so the
+  pushing principal of each expiring digest is known.
 - Parse `CloudTrailEvent` and match `requestParameters.repositoryName` and
   `requestParameters.imageIds[].imageTag` or `imageDigest` against the
-  expiring set.
+  expiring set. Keep `eventTime` and `userIdentity` (`arn`, `principalId`,
+  `sessionContext.sessionIssuer.arn`) for every matched event.
+- **Push correlation rule.** Before any matched event counts, drop:
+  1. every `BatchGetImage`, `GetDownloadUrlForLayer`, `PutImage`,
+     `InitiateLayerUpload`, `CompleteLayerUpload` or
+     `BatchCheckLayerAvailability` event whose `eventTime` is within 60
+     seconds of that image's `imagePushedAt`; the push workflow reads the
+     manifest and checks layers, and these events are the push, not a pull;
+  2. every event whose `userIdentity` matches the principal that performed the
+     push. Take that principal from the `PutImage` event for the same digest
+     when one was found; otherwise take it from the events inside the 60
+     second window. Compare on `sessionContext.sessionIssuer.arn` (the role)
+     when present, else on `arn`.
+  Count the dropped events per image and in total; the total is reported in
+  check U8. An image is `Expiring-InUse` on tier (c) only when at least one
+  event remains more than 60 seconds after `imagePushedAt`. The evidence string
+  names the event, its time, the principal, and the gap from push, for example
+  `tier (c) CloudTrail BatchGetImage 2026-10-25 14:02 UTC by role
+  batch-worker-instance-role, 4 days after push`. When every matched event was
+  dropped, the evidence string is `push correlated events only (n excluded),
+  no tier (a) or (b) evidence`.
 - Also look up `EventName=PolicyExecutionEvent` when the user asks why an image
   disappeared; those events list the images ECR expired.
 - The agent guardrail has been observed cancelling the whole `cloudtrail`
   namespace in other skills. A cancellation sets the source to `ToolingFailure`,
   which does not change any verdict for this optional source and is listed
   under Not Assessed.
+
+Observed 2026-10-27 on a 26 image fixture: every image had a `BatchGetImage`
+event 1 to 2 seconds after its `imagePushedAt` from the pushing principal, and
+`lastRecordedPullTime` was set on exactly one image. Without the rule above
+every expiring image would be reported in use.
 
 ## 7. Source status enum
 
@@ -203,6 +240,10 @@ task or function definition records. Evidence of a pull makes the image
 | `AccessDenied` | IAM denied a required call | Unreferenced expiring images become `Expiring-Unknown` (in use sources only) | at most `Attention` unless an `Expiring-InUse` exists |
 | `ToolingFailure` | Guardrail cancellation, throttling after retries, server error | Same as `AccessDenied` | same |
 | `NotChecked` | Source deliberately skipped (CloudTrail probe not requested, Region out of scope) | No effect for optional sources; for required sources treat as `ToolingFailure` | none for optional sources |
+
+For the CloudTrail source, `OK` means the events were read and the push
+correlation rule (section 6) was applied. Only events that survive it are
+evidence.
 
 For the expiring set itself: `AUTHORITATIVE` when it came from
 `GetLifecyclePolicyPreview`, `SIMULATED` when it came from the semantics
@@ -219,7 +260,8 @@ README repeats these as open questions for SME review.
 | Claim | Where used | What to confirm | Source to check |
 |---|---|---|---|
 | Preview results are retained briefly and then return `EXPIRED` | section 3, step 4 | the retention period | ECR User Guide lifecycle policy preview page (did not render during authoring), or a live test |
-| `BatchGetImage` and `GetDownloadUrlForLayer` pulls appear in `LookupEvents` as management events for ordinary pulls | section 6 | that pulls by EC2 hosts and CI appear with `requestParameters.imageIds` | https://docs.aws.amazon.com/AmazonECR/latest/userguide/logging-using-cloudtrail.html shows a `BatchGetImage` event example; confirm for user initiated pulls in the target account |
+| `BatchGetImage` and `GetDownloadUrlForLayer` pulls appear in `LookupEvents` as management events for ordinary pulls | section 6 | that pulls by EC2 hosts and CI appear with `requestParameters.imageIds`. Confirmed 2026-10-27 only for the push side: every push produced a `BatchGetImage` event 1 to 2 seconds later from the pushing principal, which is why the push correlation rule exists | https://docs.aws.amazon.com/AmazonECR/latest/userguide/logging-using-cloudtrail.html shows a `BatchGetImage` event example; confirm for consumer pulls in the target account |
+| 60 seconds is a wide enough push correlation window | section 6 | observed gap was 1 to 2 seconds (up to 4 in one run); a slow multi layer push could exceed 60 seconds between `imagePushedAt` and the last layer event, though `imagePushedAt` is set when the manifest is put, which is the end of the push | live test transcripts 2026-10-27; SME judgement |
 | The agent guardrail classifies `StartLifecyclePolicyPreview` as mutative in every Agent Space | section 3, step 2 | whether the platform can allowlist it | observed in gap transcripts on 2026-10-21; service reference marks the action `IsWrite: true` |
 | `ListTaskDefinitions status=ACTIVE` with 200 ARNs is a reasonable bound | section 5 | tool call budget in the Agent Space | SME judgement |
 | Batch job definition image fields cover every job type | section 1 | `ecsProperties` and `eksProperties` shapes | https://docs.aws.amazon.com/batch/latest/APIReference/API_JobDefinition.html |
