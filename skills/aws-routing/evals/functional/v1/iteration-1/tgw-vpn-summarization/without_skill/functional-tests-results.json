@@ -1,0 +1,70 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "tgw-vpn-summarization",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a specific technical mechanism: keep VPC propagation ENABLED (because specifics are needed for longest-prefix-match return forwarding), add a static summary route in the VPN-associated TGW route table, and rely on the fact that under the advertised-route cap, static routes beat propagated routes and the least-specific route is advertised first \u2014 so the summary survives and gets advertised while specifics remain for internal LPM routing. The summary should be anchored to a persistent attachment.\n\nThe agent's response gets this fundamentally backwards in a key respect: it explicitly instructs the user to SUPPRESS/disable propagation of the individual VPC-propagated routes once the summary is in place ('make sure the individual VPC-propagated routes it replaces aren't still being propagated into that same route table'). This is the opposite of the expected guidance, which says to keep propagation enabled because the specifics are needed for correct longest-prefix-match return forwarding inside the TGW route table. The agent's approach could actually break the return path internally (the very thing the user asked to avoid), which contradicts the expected output's core technical insight about why specifics must stay enabled.\n\nWhile the agent correctly identifies asymmetric routing as a risk and gives good general advice about CIDR planning, BGP attribute consistency, and validation, it misses the precise mechanism described in the expected answer (static-beats-propagated advertisement preference under the cap) and gives an instruction that directly contradicts the recommended approach (disable vs. keep propagation enabled). This is a substantive technical discrepancy, not just a wording difference.",
+      "evidence": "\"After adding the static aggregate route in the TGW route table associated with the VPN attachment, make sure the individual VPC-propagated routes it replaces aren't still being propagated into that same route table \u2014 leftover specifics will both re-inflate your advertised count and... can silently override the summary\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "keeps VPC route propagation enabled for the return path",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Suppress the propagated specifics once the summary is in place... make sure the individual VPC-propagated routes it replaces aren't still being propagated into that same route table\"",
+          "reasoning": "The agent explicitly recommends suppressing/removing propagation of the individual VPC routes once the summary is in place, which is the opposite of keeping propagation enabled.",
+          "confidence": "high"
+        },
+        {
+          "text": "adds a static summary route in the TGW route table associated with the VPN attachment",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"After adding the static aggregate route in the TGW route table associated with the VPN attachment...\" and \"Once the static aggregate is in place, confirm end-to-end reachability...\"",
+          "reasoning": "The agent explicitly instructs adding a static aggregate/summary route in the TGW route table associated with the VPN attachment.",
+          "confidence": "high"
+        },
+        {
+          "text": "explains static-over-propagated and least-specific selection under the advertisement cap",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"leftover specifics will both re-inflate your advertised count and, because of longest-prefix-match, can silently override the summary for a subset of addresses and send them to the wrong next hop.\" - this touches on longest-prefix-match but does not explicitly state static routes override propagated routes regardless of prefix length (TGW's actual route selection order), nor explain least-specific selection under the cap in detail.",
+          "reasoning": "The agent discusses suppressing specifics to avoid longest-prefix-match issues and re-inflating counts, but does not explicitly explain that static routes take precedence over propagated routes in TGW route tables, nor does it explain how least-specific route selection interacts with the advertisement cap in a structured way. It mentions longest-prefix-match briefly but not the static-over-propagated precedence rule or least-specific selection under the cap explicitly.",
+          "confidence": "medium"
+        },
+        {
+          "text": "does not contain 'error'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No occurrence of the word 'error' found in the response text.",
+          "reasoning": "The output does not contain the literal word 'error' anywhere in the text.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "39s",
+    "cost": "$0.33",
+    "context_window": {
+      "utilization": "4.0%",
+      "compaction_count": 0
+    }
+  }
+}

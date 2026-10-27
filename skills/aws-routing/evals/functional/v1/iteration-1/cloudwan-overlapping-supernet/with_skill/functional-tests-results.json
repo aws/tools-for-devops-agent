@@ -1,0 +1,74 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "cloudwan-overlapping-supernet",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-routing' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output has several specific technical claims:\n1. LPM means VPC /16s win and on-prem hosts inside a VPC CIDR are shadowed/unreachable\n2. Best fix is non-overlapping address planning\n3. Cloud WAN Routing Policies can drop the inbound supernet AND suppress VPC prefixes outbound on the DX attachment\n4. BGP communities cannot be matched on DX attachments\n\nThe agent's response covers points 1 and 2 reasonably well: it explains LPM correctly (VPC /16s win over the /8 when propagated), discusses the shadowing concept in a more nuanced way (noting that if on-prem has real hosts in that range it's a duplicate-IP conflict, not fully framing it as \"shadowed/unreachable\" for on-prem hosts specifically). The expected output frames the issue as on-prem hosts inside the VPC CIDR becoming unreachable due to LPM favoring VPC routes - the agent does touch this with point 4 and 5 but doesn't explicitly state \"on-prem hosts inside a VPC CIDR become unreachable/shadowed\" as directly as the expected answer. It discusses it as \"duplicate addressing\" which is a related but slightly different framing - though it does capture the same underlying issue.\n\nPoint 2 (best fix is non-overlapping address planning) - the agent does state \"Best fix \u2014 stop over-advertising at the source... advertise only the ranges it legitimately owns\" which aligns with non-overlapping address planning, though phrased as filtering at source rather than address planning per se. Still reasonably aligned.\n\nPoint 3 - the agent only mentions inbound filtering (\"add an inbound policy matching prefix-in-cidr... action drop\") but does NOT mention outbound suppression of VPC prefixes on the DX attachment. This is a specific capability mentioned in the expected answer that's missing from the agent's response.\n\nPoint 4 - BGP communities cannot be matched on DX attachments - this specific point is entirely absent from the agent's response. The agent doesn't mention BGP communities limitations on DX attachments at all.\n\nSo the agent's response is strong on general issue explanation and partially addresses the routing policy fix (inbound only, missing outbound), and completely misses the specific technical detail about BGP communities not being matchable on DX attachments. This is a notable gap matching the expected output's specific technical criteria.\n\nGiven the agent captures most of the conceptual content (LPM favoring VPC CIDRs, routing policy as a fix, address planning as best practice) but misses two specific technical details (outbound suppression capability and BGP community limitation on DX), this is a partial match. Given the specificity of the expected output mentioning these technical nuances, and the agent's omission of the BGP community point entirely, I lean towards this being a partial failure on technical completeness, though the core conceptual understanding is solid.",
+      "evidence": "Agent states: \"add an inbound policy matching prefix-in-cidr for 10.1.0.0/16 and 10.2.0.0/16 with action drop\" (only inbound, not outbound suppression) and does not mention BGP communities limitation on DX attachments anywhere in the response.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "explains longest-prefix-match shadows on-prem hosts inside a VPC CIDR",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Step 1 of CNE evaluation is longest-prefix-match (LPM), which is absolute \u2014 so traffic to an address literally inside 10.1.0.0/16 or 10.2.0.0/16 will correctly prefer the VPC-propagated /16 over the DX-sourced /8\" and later: \"If on-prem actually has live hosts inside 10.1.0.0/16 or 10.2.0.0/16 (not just an oversized aggregate), that's a real IP conflict\" and \"In any fallback case where the /8 wins, return traffic gets sent to on-prem for addresses on-prem doesn't actually own, producing drops or NAKs\" - this explains that LPM normally protects VPC CIDRs but if propagation fails, on-prem hosts get shadowed/traffic is misrouted, addressing the shadowing scenario.",
+          "reasoning": "The output explicitly discusses LPM behavior and how on-prem hosts inside the VPC CIDR ranges would create conflicts or shadowing issues when propagation fails or when duplicate addressing exists, satisfying the assertion's substance.",
+          "confidence": "high"
+        },
+        {
+          "text": "recommends non-overlapping address planning as the best fix",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Best fix \u2014 stop over-advertising at the source. Reconfigure the on-prem router to not originate 10.0.0.0/8 as a flat aggregate; advertise only the ranges it legitimately owns, explicitly excluding 10.1.0.0/16 and 10.2.0.0/16. This removes both the catch-all exposure and any genuine conflict, and doesn't depend on AWS-side filtering.\"",
+          "reasoning": "The output explicitly labels reconfiguring on-prem advertisement to avoid overlap as the 'Best fix', which is a form of non-overlapping address planning at the source.",
+          "confidence": "high"
+        },
+        {
+          "text": "mentions Cloud WAN Routing Policies can filter (drop) prefixes on the Direct Connect attachment",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Cloud WAN Routing Policies on the DX attachment. Cloud WAN supports prefix-based route filtering on DX attachments: add an inbound policy matching prefix-in-cidr for 10.1.0.0/16 and 10.2.0.0/16 with action drop.\"",
+          "reasoning": "The output explicitly mentions Cloud WAN Routing Policies with a drop action filtering prefixes on the DX attachment, directly satisfying this assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "does not contain 'error'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No occurrence of the word 'error' found anywhere in the output text.",
+          "reasoning": "A scan of the output shows no instance of the word 'error' (case-insensitive) appearing in the text.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m17s",
+    "cost": "$0.64",
+    "context_window": {
+      "utilization": "5.1%",
+      "compaction_count": 0
+    }
+  }
+}
