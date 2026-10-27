@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.5] - 2026-10-27
+### Added
+- `references/tgw-routing-patterns.md`: new "DXGW Advertises Only ONE Best Path Per Prefix to TGW" subsection. A single DXGW propagates one winner per prefix to the TGW, so redundant VIFs on one DXGW are active/passive at the TGW; multiple paths per prefix at the TGW require multiple DXGW attachments. Marked `[Field knowledge]`.
+### Changed
+- `references/tgw-routing-patterns.md`: removed the "multiple DX-GW attachments (within the same DX-GW)" ECMP line, which contradicted the one-path-per-prefix behavior. Clarified that TGW ECMP across separate DXGWs needs identical AS-paths (same ASNs, not just equal length) because TGW does not support AS-path relax, and contrasted this with DX-side ECMP, where AS_PATH ASNs do not need to match.
 ## [1.2.4] - 2026-10-21
 - Agent types now use the API values in `metadata.aws-devops-agent-skills.agent-types` (`CHAT`, `INCIDENT_RCA`, `INCIDENT_TRIAGE`), the field that sets which agents load the skill.
 
