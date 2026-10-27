@@ -1,0 +1,75 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "ddb-lat-gsi-throttle",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly explains the core mechanism: GSI writes are synchronous with base table writes, so a throttled GSI causes base-table PutItem throttling even though table-level WriteThrottleEvents remain at zero (since CloudWatch attributes throttle events to the GSI scope, not the table). It explicitly names the table (orders-prod), the GSI (orders-by-status), PutItem, and the time window (14:05\u201314:20), and ties the p99 elevation (140ms vs 20ms baseline) in 8 of 9 periods to the GSI throttle events. It correctly notes p50 stays mostly flat due to partial key skew. It does not perform capacity sizing \u2014 it offers to pull live metrics/config only if the user wants, phrased as a follow-up suggestion, not an actual determination. The response does not explicitly label the scenario as hypothetical with a disclaimer, though the prompt itself states 'hypothetical \u2014 do not call AWS' and the agent does not call any AWS tools, complying implicitly. The agent doesn't use the literal label 'LT-02 Throttle-induced' taxonomy code, but substantively classifies it as a GSI throttle-induced back-pressure issue affecting the base table, which matches the intent of the expected output. Overall, the response covers nearly all substantive expectations: GSI as throttled scope, coincidence of GSI throttle periods with p99 spike, explanation that table-level WriteThrottleEvents exclude GSI-attributed throttle events, GSI back-pressure mechanism, and a handoff-style naming of table/GSI/PutItem/window without performing capacity sizing itself.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the GSI orders-by-status as the source of the throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"GSI orders-by-status WriteThrottleEvents in 9 periods (14:05\u201314:20) \u2014 this index's provisioned WCUs are saturated\" - the agent explicitly identifies the GSI as the source of throttling.",
+          "reasoning": "The agent clearly names orders-by-status GSI as the throttling source, explaining it as saturated WCUs with likely hot-partition skew.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that GSI write throttling back-pressures writes to the base table",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"writes to a table with a GSI are atomic across the base table and all its indexes \u2014 a PutItem/UpdateItem/DeleteItem only succeeds if DynamoDB can also write the corresponding projected change into every GSI. If a GSI can't absorb that write... DynamoDB throttles the base table write itself\"",
+          "reasoning": "The agent explicitly explains the back-pressure mechanism from GSI throttling to base table write throttling via the atomicity requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that table-level throttle events do not include GSI throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Table-level WriteThrottleEvents: none \u2014 the base table's own capacity/key distribution is fine in isolation... because CloudWatch attributes the WriteThrottleEvents to the GSI, not the table.\"",
+          "reasoning": "The agent explicitly states that CloudWatch attributes WriteThrottleEvents to the GSI metric, not the table-level metric, which directly explains why table-level metrics show none despite the underlying throttling.",
+          "confidence": "high"
+        },
+        {
+          "text": "Hands off the throttling diagnosis with scope and time window instead of sizing capacity",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Check orders-by-status GSI's write capacity relative to the base table's provisioned WCUs... If on provisioned mode without auto scaling on the GSI, that's the likely root cause \u2014 the GSI needs its own adequate (and possibly auto-scaled) write capacity, independent of the base table's.\"",
+          "reasoning": "Rather than handing off the diagnosis with scope/time window for someone else to size capacity, the agent itself ventures into capacity-sizing recommendations (checking WCU ratios, suggesting auto-scaling as a fix). It does end with an offer to pull real CloudWatch metrics, but the response itself goes beyond pure diagnosis into prescriptive capacity remediation guidance rather than strictly handing off scope and time window.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Names the GSI",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'orders-by-status'"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.8%",
+      "compaction_count": 0
+    }
+  }
+}

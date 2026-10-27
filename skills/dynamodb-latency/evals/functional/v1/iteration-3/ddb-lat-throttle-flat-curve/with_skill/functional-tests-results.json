@@ -1,0 +1,87 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "ddb-lat-throttle-flat-curve",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'dynamodb-latency' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response meets most criteria: it labels the answer as a hypothetical classification, correctly classifies as LT-02 Throttle-induced via the retry branch, explains that SuccessfulRequestLatency excludes throttled requests and that SDK retries of ProvisionedThroughputExceededException explain the client-observed 3-6s latency, and includes a throttling handoff (CF-04) naming the table, PutItem, the counters, and the 09:22-11:48 window without diagnosing which capacity ceiling was hit.\n\nHowever, it fails two specific expected elements:\n1. It does NOT note that ThrottledRequests counts once per request so it is a floor (lower bound). Instead it explains WriteThrottleEvents being larger than ThrottledRequests, but frames it as 'ThrottledRequests counts once per throttled request regardless of how many underlying write-capacity events it triggered' \u2014 this is close but doesn't frame ThrottledRequests as a floor/minimum estimate of actual throttling impact, which is the expected takeaway.\n2. It does NOT recommend reviewing the SDK's existing retry configuration rather than adding more retries. The agent's 'Next' recommendation is to hand off to a throttling/capacity diagnostic and check consumed-vs-provisioned write capacity \u2014 it never mentions reviewing retry configuration at all.\n\nGiven the explicit recommendation about retry configuration is completely absent, and the 'floor' framing of ThrottledRequests is not clearly established, this response is missing two specific expected elements despite doing well on the rest.</reasoning>\n<parameter name=\"evidence\">\"Next: hand off to a throttling/capacity diagnostic with these counters, and check consumed-vs-provisioned write capacity in those 19 periods to see if it's a hot partition or genuine table-level under-provisioning.\" -- no mention of reviewing SDK retry configuration; also no explicit statement that ThrottledRequests is a floor/minimum.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies the profile as throttle-induced (LT-02)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Primary outcome: `LT-02` \u00b7 Throttle-induced\" is stated explicitly as the classification result.",
+          "reasoning": "The agent clearly and explicitly classifies the profile as LT-02 throttle-induced.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that throttled requests are not included in SuccessfulRequestLatency, which is why the curve is flat",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"SuccessfulRequestLatency only measures requests that eventually succeeded \u2014 throttled attempts are excluded entirely. ... A perfectly flat p50/p99 is fully consistent with heavy throttling underneath it; it does not rule throttling out.\"",
+          "reasoning": "The agent explicitly explains that throttled requests are excluded from SuccessfulRequestLatency, directly accounting for the flat curve.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that SDK automatic retries of throttled requests add client-observed latency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The AWS SDK retries `ProvisionedThroughputExceededException` with backoff automatically, and that retry wait is exactly the elapsed time your checkout writes are showing as 3\u20136 seconds.\"",
+          "reasoning": "The agent explicitly explains that SDK automatic retries of throttled requests cause the client-observed latency, matching the 3-6 second user reports.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provides a handoff with the table, operation, counters and time window rather than diagnosing which capacity ceiling was hit",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"`CF-04` (throttling handoff) applies regardless of primary outcome \u2014 the metrics confirm throttling occurred but don't establish *which* ceiling was hit... **Next:** hand off to a throttling/capacity diagnostic with these counters, and check consumed-vs-provisioned write capacity in those 19 periods...\" The agent references the table (checkout-prod implied by context), operation (PutItem), counters (ThrottledRequests 1,103, WriteThrottleEvents 1,842), and time window (09:22-11:48) throughout, while explicitly stating 'Not established: which capacity ceiling triggered the throttling.'",
+          "reasoning": "The agent provides a handoff referencing the relevant counters and time window and explicitly defers diagnosis of which capacity ceiling (hot partition, GSI, table-level) was hit to a separate diagnostic step, satisfying the assertion. Though it doesn't repeat the table name 'checkout-prod' in the handoff sentence itself, it was established earlier and the counters/window/operation are all present.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not recommend adding application-level retries on top of the SDK's retries",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of application-level retries anywhere in the output; the closest statement is about 'The AWS SDK retries ProvisionedThroughputExceededException with backoff automatically' as an explanation, not a recommendation, and the actual recommendation given is 'hand off to a throttling/capacity diagnostic... check consumed-vs-provisioned write capacity.'",
+          "reasoning": "The agent never recommends adding application-level retries on top of SDK retries; its only recommendation is to hand off to a capacity diagnostic, satisfying the assertion by omission.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites the throttle-induced rule ID",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'LT-02'"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "35s",
+    "cost": "$0.29",
+    "context_window": {
+      "utilization": "5.7%",
+      "compaction_count": 0
+    }
+  }
+}

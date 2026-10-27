@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "ddb-lat-clean-client-slow",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to explicitly label the scenario as hypothetical, classify it as LT-05 \"No DynamoDB-side elevation,\" and crucially NOT agree that the client is the established/confirmed cause \u2014 instead treating candidate causes (SDK retries/timeouts, connection setup, DNS/VPC endpoint/NAT, client resources) as unconfirmed, and naming specific next steps (SDK latency metric logging / end-to-end tracing, and the aws-vpc-dns-investigation skill).\n\nThe agent's response does cover much of the substantive technical content: it correctly notes that DynamoDB-side metrics are clean (ruling out server-side), and it lists plausible client/network-side causes (missing VPC endpoint, NAT/ENI exhaustion, SDK retry/connection pooling, DNS resolution, cross-VPC hop) framed as things to investigate rather than confirmed facts. It also offers a next step of pulling CloudWatch/VPC data.\n\nHowever, it fails several specific requirements:\n1. It does not label the scenario as \"hypothetical\" explicitly (though the user mentioned hypothetical, the agent doesn't acknowledge/label it in its response).\n2. It does not use or reference the LT-05 classification code (\"No DynamoDB-side elevation\") \u2014 no explicit skill-classification labeling is present.\n3. Critically, it directly agrees with the user's framing: \"yes \u2014 this points away from DynamoDB itself and toward something between your client and the table\" and \"this points away from DynamoDB itself and toward something between your client and the table\" \u2014 this is essentially agreeing that the client/network side is the cause, contradicting the expected output's requirement that the agent should NOT agree that client is the established cause and should note that SuccessfulRequestLatency being normal only rules out DynamoDB processing time, not client/network time, and thus doesn't identify where the 800ms comes from. The agent frames this as resolved/likely rather than strictly unconfirmed.\n4. It does not name the specific \"aws-vpc-dns-investigation skill\" as a next step, nor does it specifically call out \"SDK latency metric logging or end-to-end tracing of a slow request\" as the precise next measurement \u2014 it only vaguely offers to pull CloudWatch/VPC data.\n\nOverall, the agent's response captures some of the right technical reasoning but deviates from the required structure/classification and explicit next-step recommendations, and it overstates agreement with the \"client-side\" conclusion rather than treating it as unconfirmed. This constitutes a failure against the detailed expected output.</reasoning>\n<parameter name=\"confidence\">high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies as no DynamoDB-side elevation (LT-05)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'GetItem/PutItem p50 and p99 tracking the 7-day baseline... rules out a DynamoDB-side slowdown... Zero SystemErrors and zero throttle events... rules out internal service errors and throttling as causes.' This is a clear classification of no server-side DynamoDB elevation.",
+          "reasoning": "The agent explicitly concludes DynamoDB metrics are normal, consistent with LT-05 (no DynamoDB-side elevation).",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not state as a conclusion that the client or network is the cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent states as a direct conclusion: 'Based on those numbers, yes \u2014 this points away from DynamoDB itself and toward something between your client and the table.' and later 'I'd point your investigation at the network path first'",
+          "reasoning": "The assertion requires the agent NOT to state client/network as the cause, but the agent explicitly affirms the user's hypothesis and frames client/network as the likely cause, listing specific network causes (VPC endpoint, NAT gateway, DNS) as the probable explanation rather than merely a hypothesis to test. This fails the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that SuccessfulRequestLatency excludes client-side and network time",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent never mentions that SuccessfulRequestLatency (the specific CloudWatch metric) excludes client-side and network time. It only says 'If DynamoDB were adding the delay, you'd expect its own latency or error metrics to show it \u2014 they don't'",
+          "reasoning": "The output does not explain the specific technical detail that the SuccessfulRequestLatency metric is measured server-side and does not include network/client transit time, which is a key caveat for correctly reasoning about this scenario.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends SDK latency metric logging or end-to-end tracing as the next measurement",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent offers to 'pull the actual CloudWatch/VPC data for that VPC' but does not recommend SDK-level latency metrics (e.g., AWS SDK metrics for retries, connection acquisition time) or end-to-end distributed tracing (e.g., X-Ray) as the next measurement step.",
+          "reasoning": "While the agent mentions 'SDK-level behavior' as a possible cause, it does not recommend enabling SDK metric logging or end-to-end tracing as the next diagnostic step; it recommends NAT gateway metrics and VPC endpoint checks instead.",
+          "confidence": "high"
+        },
+        {
+          "text": "Mentions DNS or VPC endpoint investigation as a possible handoff",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Missing VPC endpoint for DynamoDB in that VPC... DNS resolution latency in that VPC if it's not resolving the regional DynamoDB endpoint efficiently.' and 'whether that VPC has a DynamoDB VPC endpoint'",
+          "reasoning": "The agent explicitly mentions both DNS resolution and VPC endpoint as possible investigation/handoff points.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not assert a client-side root cause",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.8%",
+      "compaction_count": 0
+    }
+  }
+}

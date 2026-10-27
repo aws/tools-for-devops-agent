@@ -1,0 +1,231 @@
+{
+  "skill_name": "dynamodb-latency",
+  "evals": [
+    {
+      "id": "ddb-lat-taxonomy",
+      "task_type": "chat",
+      "prompt": "Using the DynamoDB latency skill, list every primary outcome it can return for a table's latency profile, what establishes each one, and what else the report carries besides the primary outcome. Do not call any AWS APIs.",
+      "should_trigger": true,
+      "expected_output": "Names all six primary outcomes with their IDs and canonical names: LT-00 Indeterminate, LT-01 Service-side errors, LT-02 Throttle-induced, LT-03 Typical-latency elevation, LT-04 Tail elevation, LT-05 No DynamoDB-side elevation. States that LT-01 needs organic SystemErrors (fault-injection errors excluded) that persist and coincide with elevated latency or reported slowness, that LT-02 needs throttle events that coincide in time, that elevation is judged against each operation's own 7-day baseline, and that LT-05 is the catch-all. Explains that the report also carries a confidence level and an Also Observed list so coexisting conditions are not discarded, plus contributing factors.",
+      "assertions": [
+        "All six outcomes LT-00 through LT-05 are named",
+        "The response says a primary outcome carries a confidence level",
+        "The response says other qualifying conditions or signals are reported alongside the primary outcome rather than discarded",
+        "The response says SystemErrors or throttling must coincide in time with the latency to be treated as the cause",
+        {
+          "text": "Mentions the per-operation baseline",
+          "evaluator": "regex",
+          "pattern": "(?i)baseline"
+        },
+        {
+          "text": "Names the fault-injection metric",
+          "evaluator": "regex",
+          "pattern": "FaultInjectionServiceInducedErrors"
+        }
+      ]
+    },
+    {
+      "id": "ddb-lat-throttle-flat-curve",
+      "task_type": "chat",
+      "prompt": "Classify this DynamoDB profile with the latency skill's rules — it is a hypothetical, do not call any AWS APIs. Table checkout-prod, provisioned, 3-hour window, 60-second periods. PutItem SuccessfulRequestLatency is flat: p50 4.8 ms, p99 22 ms, matching its 7-day baseline, every period above 100 requests. ThrottledRequests for PutItem was recorded in 19 periods between 09:22 and 11:48, total 1,103. WriteThrottleEvents on the table totalled 1,842 in the same periods. No SystemErrors were recorded for PutItem or GetItem. Users report checkout writes intermittently taking 3 to 6 seconds during exactly those times, and the team stopped investigating DynamoDB because the latency dashboard is flat.",
+      "should_trigger": true,
+      "expected_output": "Labels the answer a hypothetical classification. Classifies as LT-02 Throttle-induced through the retry branch: SuccessfulRequestLatency is flat but throttle counters were recorded in at least 3 periods overlapping the reported slowness. Explains that throttled requests are excluded from SuccessfulRequestLatency because it counts only successful requests, and that the SDKs retry ProvisionedThroughputExceededException automatically so the retry wait shows up as client-observed latency. Notes ThrottledRequests counts once per request so it is a floor. Includes a throttling handoff naming the table, PutItem, the counters, and the 09:22–11:48 window, and does not itself diagnose which capacity ceiling was hit. Recommends reviewing the SDK's existing retry configuration rather than adding more retries.",
+      "assertions": [
+        "Classifies the profile as throttle-induced (LT-02)",
+        "Explains that throttled requests are not included in SuccessfulRequestLatency, which is why the curve is flat",
+        "Explains that SDK automatic retries of throttled requests add client-observed latency",
+        "Provides a handoff with the table, operation, counters and time window rather than diagnosing which capacity ceiling was hit",
+        "Does not recommend adding application-level retries on top of the SDK's retries",
+        {
+          "text": "Cites the throttle-induced rule ID",
+          "evaluator": "regex",
+          "pattern": "LT-02"
+        }
+      ]
+    },
+    {
+      "id": "ddb-lat-isolated-tail",
+      "task_type": "chat",
+      "prompt": "Hypothetical profile for the DynamoDB latency skill — classify it, no AWS calls. Table orders-prod, 3-hour window, 60-second periods. GetItem p99 reached 68 ms in 2 non-consecutive periods (10:14 and 11:31), each with over 9,000 requests, against a 7-day baseline p99 of 15 ms. GetItem p50 held at 3.6 ms against a baseline of 3.4 ms. No SystemErrors and no throttle events recorded for any active operation. A developer says this is because the Lambda cold-starts and opens new connections. No objective was stated.",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Classifies as LT-04 Tail elevation at Low severity with an isolated pattern (2 periods). States that SuccessfulRequestLatency excludes client activity and network time, so a client cold start or connection setup cannot raise its p99 — the developer's explanation does not account for this metric. Notes AWS documents occasional high-percentile spikes as expected, and that the tail would become actionable if it recurred or persisted or broke an application objective. Does not recommend lowering socket timeouts.",
+      "assertions": [
+        "Classifies as a tail elevation (LT-04) at Low severity or as isolated",
+        "States that client activity such as cold starts or connection setup is excluded from SuccessfulRequestLatency and therefore cannot explain the elevated p99",
+        "Says the tail would become worth acting on if it recurs, persists, or breaks an objective",
+        "Does not recommend lowering the socket or request timeout",
+        {
+          "text": "Cites the tail rule ID",
+          "evaluator": "regex",
+          "pattern": "LT-04"
+        }
+      ]
+    },
+    {
+      "id": "ddb-lat-recurring-tail-slo",
+      "task_type": "chat",
+      "prompt": "Apply the DynamoDB latency skill's rules to this hypothetical — do not call AWS. Table sessions-prod, 14-day window, 300-second periods. Our objective is GetItem p99 under 25 ms. GetItem p99 exceeded 60 ms in 41 of 4,032 periods, scattered with no 3 in a row, every period over 2,000 requests; the 7-day baseline p99 is 14 ms. p50 stayed at 3.9 ms, matching baseline. No SystemErrors or throttle events recorded. What is the classification and what should we do?",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Classifies as LT-04 Tail elevation at Medium severity: the p99 pattern is recurring (more than 2 elevated periods, never 3 consecutive) and the stated 25 ms objective was breached in at least 3 periods. Says this is more than the occasional spike AWS calls normal and is worth acting on even with normal p50. Recommends request hedging as the documented tail lever, with its preconditions — reads or idempotent/conditional writes, timestamp ordering for writes, extra request cost — and logging request IDs from the elevated periods for a support case if it persists. Warns against a very low socket timeout.",
+      "assertions": [
+        "Classifies as tail elevation (LT-04) at Medium severity",
+        "Identifies the pattern as recurring and treats it as actionable despite normal p50",
+        "Reports that the stated 25 ms p99 objective was breached",
+        "Recommends request hedging and states at least one precondition such as idempotent operations or timestamp ordering for writes",
+        "Advises against setting a very low socket timeout such as 50 ms"
+      ]
+    },
+    {
+      "id": "ddb-lat-uncorrelated-system-error",
+      "task_type": "chat",
+      "prompt": "DynamoDB latency skill, hypothetical — no AWS calls. Table payments-prod, 3-hour window, 60-second periods. One SystemErrors datapoint of 1 was recorded for UpdateItem at 09:12; FaultInjectionServiceInducedErrors none recorded. UpdateItem p99 rose to 71 ms in one period at 11:40 (baseline p99 18 ms, 4,000+ requests that period); p50 stayed at baseline. No throttling recorded. On-call wants to page AWS because DynamoDB returned a 500. Is the 500 the cause of the latency?",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Does not classify as LT-01: one SystemError is neither persistent nor coincident with the elevated period (09:12 vs 11:40). Classifies as LT-04 Tail elevation, isolated, Low. Reports the SystemError as observed but not established as the cause (CF-05), noting occasional HTTP 500s are expected in a distributed system and retried by the SDKs. Advises keeping request IDs and contacting AWS Support only if errors recur or persist, rather than treating this as a service incident.",
+      "assertions": [
+        "Does not treat the single SystemError as the cause of the latency",
+        "Points out that the error at 09:12 does not coincide with the 11:40 elevation",
+        "Reports the SystemError as an observed signal rather than discarding it",
+        "Says occasional HTTP 500 errors are expected and retried by the SDKs",
+        "Does not choose service-side errors (LT-01) as the primary outcome"
+      ]
+    },
+    {
+      "id": "ddb-lat-errors-and-throttles",
+      "task_type": "chat",
+      "prompt": "Use the DynamoDB latency skill on this hypothetical; no AWS calls. Table inventory-prod, provisioned, 3-hour window, 60-second periods. Organic SystemErrors on GetItem were recorded in 6 consecutive periods 10:02–10:07, total 380 against 410,000 requests; FaultInjectionServiceInducedErrors none recorded. GetItem p99 was elevated (190 ms vs baseline 12 ms) in those same 6 periods; p50 rose only slightly. Separately, ReadThrottleEvents on the table were recorded in 4 periods 10:04–10:07. Give the classification.",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Primary outcome LT-01 Service-side errors at High severity: organic SystemErrors persisted for 6 consecutive periods and coincided with the elevated GetItem p99 in those periods, with no FIS-induced errors. Does not discard the throttling: lists LT-02 Throttle-induced as also qualifying under Also Observed, since read throttle events coincide with the elevation, and includes a throttling handoff. States a confidence level. Recommends checking AWS Health, logging request IDs, and contacting AWS Support if the errors persist.",
+      "assertions": [
+        "Chooses service-side errors (LT-01) as the primary outcome",
+        "Reports the read throttling as also present or also qualifying rather than ignoring it",
+        "States a confidence level for the primary outcome",
+        "Recommends checking AWS Health and logging request IDs",
+        {
+          "text": "Mentions both rule IDs",
+          "evaluator": "regex",
+          "pattern": "LT-01[\\s\\S]*LT-02|LT-02[\\s\\S]*LT-01"
+        }
+      ]
+    },
+    {
+      "id": "ddb-lat-fis-errors",
+      "task_type": "chat",
+      "prompt": "Hypothetical for the DynamoDB latency skill — no AWS calls. Table catalog-test, 3-hour window. Query shows SystemErrors of 240 across 12 consecutive periods 13:00–13:11, and FaultInjectionServiceInducedErrors for Query is exactly 240 in the same periods. Query p99 rose to 130 ms against its 7-day baseline of 30 ms in those periods, with thousands of requests per period; p50 stayed at baseline. Our SystemErrors alarm fired. Is DynamoDB having a service problem?",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Explains that FaultInjectionServiceInducedErrors counts HTTP 500s injected by an AWS FIS experiment and that each is also counted in SystemErrors; here all 240 are experiment-induced, so organic SystemErrors are zero and LT-01 does not qualify. Reports the errors as observed, attributed to a fault-injection experiment, not a DynamoDB service problem. Classifies the p99 rise on its own terms (tail elevation) during the experiment window.",
+      "assertions": [
+        "Explains that the errors were injected by an AWS Fault Injection Service experiment",
+        "States that fault-injection errors are also counted in SystemErrors",
+        "Concludes this is not evidence of an organic DynamoDB service problem",
+        {
+          "text": "Names the FIS metric",
+          "evaluator": "regex",
+          "pattern": "FaultInjectionServiceInducedErrors"
+        }
+      ]
+    },
+    {
+      "id": "ddb-lat-clean-client-slow",
+      "task_type": "chat",
+      "prompt": "Classify with the DynamoDB latency skill, hypothetical, no AWS calls. Table profiles-prod, 3-hour window. GetItem and PutItem p50 and p99 match their 7-day baselines in every period (p99 under 15 ms, thousands of requests per period). No SystemErrors and no throttle events recorded for either active operation. Our service in another VPC logs DynamoDB calls taking 800 ms and occasional timeouts. So the problem is on our client side, right?",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Classifies as LT-05 No DynamoDB-side elevation. Does not agree that the client is the established cause: a normal SuccessfulRequestLatency rules out DynamoDB processing time but excludes client and network time, so it cannot identify where the 800 ms is. Lists candidate places — SDK retries and timeout configuration, connection setup, DNS / VPC endpoint / NAT path, client process resources — as unconfirmed. Names the next measurement: SDK latency metric logging or end-to-end tracing of a slow request, and the aws-vpc-dns-investigation skill if DNS or VPC endpoint behaviour is suspected.",
+      "assertions": [
+        "Classifies as no DynamoDB-side elevation (LT-05)",
+        "Does not state as a conclusion that the client or network is the cause",
+        "Explains that SuccessfulRequestLatency excludes client-side and network time",
+        "Recommends SDK latency metric logging or end-to-end tracing as the next measurement",
+        "Mentions DNS or VPC endpoint investigation as a possible handoff",
+        {
+          "text": "Does not assert a client-side root cause",
+          "evaluator": "regex",
+          "pattern": "(?i)root cause is (on )?(the )?client|the (latency|problem) is client-side",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "ddb-lat-low-volume",
+      "task_type": "chat",
+      "prompt": "Hypothetical for the DynamoDB latency skill, no AWS calls. Table admin-config, 3-hour window, 60-second periods. GetItem was called 2 to 6 times per minute; p99 jumped between 4 ms and 90 ms from minute to minute. No other operation was called. The table was created 2 days ago so there is no 7-day baseline. No SystemErrors or throttle events recorded. Is p99 degrading?",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Explains the SampleCount floor: with fewer than 10 requests per period no period is assessable for p50 and none for p99 (needs 100), so a p99 over 2–6 requests is effectively the slowest request and is noise. With no usable baseline and no assessable periods, classifies as LT-00 Indeterminate rather than declaring degradation or health. Notes the table age explains the missing baseline. Says what would settle it, such as a longer period or window with more requests per period.",
+      "assertions": [
+        "Classifies as indeterminate (LT-00) rather than degraded or healthy",
+        "Explains that too few requests per period make the p99 unreliable",
+        "Mentions that the table is too young for a 7-day baseline",
+        "Suggests what additional data or window would allow an assessment"
+      ]
+    },
+    {
+      "id": "ddb-lat-gsi-throttle",
+      "task_type": "chat",
+      "prompt": "DynamoDB latency skill, hypothetical — do not call AWS. Table orders-prod, provisioned, GSI orders-by-status. 3-hour window. Table-level WriteThrottleEvents: none recorded. WriteThrottleEvents for GSI orders-by-status: recorded in 9 periods 14:05–14:20. PutItem p99 rose to 140 ms vs baseline 20 ms in 8 of those 9 periods; p50 slightly up. ThrottledRequests for PutItem recorded in the same periods. Why are base-table writes slow when the table itself is not throttled?",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Classifies as LT-02 Throttle-induced with the GSI as the throttled scope: GSI write throttle events coincide with the PutItem p99 elevation in 8 periods. Explains that table-level WriteThrottleEvents exclude GSIs, and that a GSI without enough write capacity throttles writes to the base table (GSI back-pressure). Provides a throttling handoff naming the table, the GSI orders-by-status, PutItem, and 14:05–14:20, and does not itself size capacity or determine which ceiling was hit.",
+      "assertions": [
+        "Identifies the GSI orders-by-status as the source of the throttling",
+        "Explains that GSI write throttling back-pressures writes to the base table",
+        "Explains that table-level throttle events do not include GSI throttling",
+        "Hands off the throttling diagnosis with scope and time window instead of sizing capacity",
+        {
+          "text": "Names the GSI",
+          "evaluator": "regex",
+          "pattern": "orders-by-status"
+        }
+      ]
+    },
+    {
+      "id": "ddb-lat-scan-baseline",
+      "task_type": "chat",
+      "prompt": "Classify using the DynamoDB latency skill — hypothetical, no AWS calls. Table reports-prod, on-demand, 14-day window, 300-second periods. The nightly job uses Scan. Scan p50 is 410 ms against its 7-day baseline p50 of 120 ms, elevated in 62% of assessable periods; every period has hundreds of requests. ReturnedItemCount for Scan averaged 980 items per request versus 310 in the baseline. Mean item size from TableSizeBytes/ItemCount is 148 KB. No errors or throttling recorded. Is a 410 ms Scan slow, and why did the job slow down?",
+      "should_trigger": true,
+      "expected_output": "Labels it hypothetical. Classifies as LT-03 Typical-latency elevation, sustained, for Scan, judged against Scan's own baseline (about 3.4×) and not against any absolute single-item threshold. Reports the ReturnedItemCount rise (about 3.2×) as the leading candidate that coincides with the elevation while stating it is not established as the cause, and notes ReturnedItemCount counts items returned, not evaluated. Treats the 148 KB mean item size only as background context that cannot explain a change. Offers Scan request-shape levers such as Limit, narrower ProjectionExpression, and avoiding filter-heavy reads, and leaves data-model changes out of scope.",
+      "assertions": [
+        "Classifies as a sustained typical-latency elevation (LT-03) for Scan",
+        "Judges Scan against its own baseline rather than an absolute or single-item threshold",
+        "Presents the increase in items returned per request as a candidate explanation, not a proven cause",
+        "Treats mean item size as context only, not as the explanation",
+        "Suggests at least one Scan request-shape lever such as Limit or ProjectionExpression"
+      ]
+    },
+    {
+      "id": "ddb-lat-remediations",
+      "task_type": "chat",
+      "prompt": "Our Node.js service on AWS SDK for JavaScript v3 has bad DynamoDB p99. The team plans to (1) set the SDK socket timeout to 50 ms, (2) switch all reads to strongly consistent, (3) put DAX in front of our nightly Scan job, and (4) add a keep-alive GetItem every 30 seconds to reuse connections. Using the DynamoDB latency skill's guidance, evaluate each plan. No AWS calls needed.",
+      "should_trigger": true,
+      "expected_output": "Rejects (1): AWS documents a 50 ms socket timeout as the example that causes client-induced availability issues during network latency spikes, and says to prefer request hedging to short timeouts. Rejects (2): strongly consistent reads require twice the throughput, may have higher latency, and are not supported on GSIs; eventually consistent reads are the latency-friendly choice. Rejects (3): DAX serves eventually consistent reads, its query cache is not invalidated by item writes, and it suits read-heavy repeated reads, not a Scan job. Questions (4): the JavaScript v3 SDK already reuses TCP connections by default, and each keep-alive GetItem consumes read capacity.",
+      "assertions": [
+        "Rejects the 50 ms socket timeout and cites availability risk or prefers hedging",
+        "Rejects strongly consistent reads as a latency fix, mentioning twice the throughput or possibly higher latency",
+        "Rejects DAX for the Scan job and states at least one DAX consistency or caching trade-off",
+        "States that the AWS SDK for JavaScript v3 reuses connections by default",
+        "Notes that a keep-alive GetItem consumes read capacity"
+      ]
+    },
+    {
+      "id": "ddb-lat-neg-data-health",
+      "task_type": "chat",
+      "prompt": "Which DynamoDB secondary indexes on my table are unused and should be deleted, and is my TTL actually reclaiming storage?",
+      "should_trigger": false
+    },
+    {
+      "id": "ddb-lat-neg-s3-cost",
+      "task_type": "chat",
+      "prompt": "How do I reduce my Amazon S3 storage costs?",
+      "should_trigger": false
+    },
+    {
+      "id": "ddb-lat-neg-python",
+      "task_type": "chat",
+      "prompt": "Write a Python function that merges two sorted linked lists",
+      "should_trigger": false
+    },
+    {
+      "id": "ddb-lat-neg-dns",
+      "task_type": "chat",
+      "prompt": "My EC2 instance cannot resolve an S3 VPC endpoint hostname and returns NXDOMAIN. Fix the DNS configuration.",
+      "should_trigger": false
+    }
+  ]
+}

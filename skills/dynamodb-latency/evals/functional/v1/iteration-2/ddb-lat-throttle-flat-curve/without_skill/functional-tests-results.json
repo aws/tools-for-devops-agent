@@ -1,0 +1,83 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "ddb-lat-throttle-flat-curve",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response gets much of the core reasoning right (flat SuccessfulRequestLatency excludes throttled requests, SDK retry/backoff causes client-observed latency, throttle counters overlap with the slow window, no SystemErrors rules out service fault, and it includes a handoff-style summary naming the table, PutItem, counters, and the 09:22\u201311:48 window). However, several specific required elements from the expected output are missing or not addressed: (1) it never explicitly labels the answer as a 'hypothetical classification' as instructed; (2) it does not use or reference the specific classification code 'LT-02 Throttle-induced' from the latency skill's rules; (3) it does not note that ThrottledRequests counts once per request and is therefore a floor (it doesn't discuss the floor/undercount nature of the metric); (4) critically, it does not recommend reviewing the SDK's existing retry configuration rather than adding more retries \u2014 instead it offers to help frame findings for the capacity owner, which is a different recommendation. The response also goes further than instructed by speculating on hot partition/GSI causes, when the expected output says the agent should not itself diagnose which capacity ceiling was hit (the agent does lean into 'consistent with a hot partition or under-provisioned GSI' which contradicts the instruction to leave that undiagnosed). Given the missing classification code, missing floor-counting note, missing retry-configuration recommendation, and the explicit violation of not diagnosing the capacity ceiling, this fails to meet several key expected criteria.</reasoning>\n<parameter name=\"evidence\">\"Classification: Client-side retry latency driven by write throttling (service metrics hidden from SuccessfulRequestLatency)\" ... \"consistent with a hot partition or under-provisioned GSI rather than a one-off blip\" ... no mention of 'LT-02', no mention of 'hypothetical', no mention of ThrottledRequests being a floor metric, and the closing offer is to help frame a finding for capacity owners rather than recommending reviewing SDK retry configuration.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies the profile as throttle-induced (LT-02)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Classification: Client-side retry latency driven by write throttling (service metrics hidden from SuccessfulRequestLatency)\" and \"this is a classic throttling masquerading as a flat latency dashboard profile\"",
+          "reasoning": "The agent explicitly classifies the profile as throttle-induced, consistent with LT-02 style classification.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that throttled requests are not included in SuccessfulRequestLatency, which is why the curve is flat",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Throttled calls never factor into it at all \u2014 a ProvisionedThroughputExceededException is a rejection, not a successful request, so it's excluded from the p50/p99 sample entirely... That's exactly why p50 4.8ms / p99 22ms stayed flat\"",
+          "reasoning": "The agent directly explains that throttled requests are excluded from SuccessfulRequestLatency and that this exclusion is the reason the latency curve remains flat.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that SDK automatic retries of throttled requests add client-observed latency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"the 3\u20136 second user-perceived latency is SDK retry/backoff time stacking on top of throttled attempts... the client is burning seconds retrying through ProvisionedThroughputExceededException responses before one finally lands.\"",
+          "reasoning": "The agent explicitly attributes the client-observed latency to SDK automatic retry/backoff behavior on throttled requests.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provides a handoff with the table, operation, counters and time window rather than diagnosing which capacity ceiling was hit",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent speculates: \"this table-level metric aggregates throttling across all write paths (e.g., UpdateItem, BatchWriteItem, or GSI back-pressure), so the capacity exhaustion is broader than PutItem alone, consistent with a hot partition or under-provisioned GSI rather than a one-off blip.\" It also offers to help 'point at adaptive capacity / hot-key suspicion.'",
+          "reasoning": "Rather than simply handing off the table, operation, counters, and time window without diagnosing the root cause of the capacity ceiling, the agent actively speculates about hot partition or under-provisioned GSI as the specific cause, which goes beyond a neutral handoff.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Does not recommend adding application-level retries on top of the SDK's retries",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output never suggests adding application-level retries; instead it frames the problem as SDK retries already stacking up and recommends addressing capacity/hot-key issues, offering to 'help frame this as a finding for whoever owns checkout-prod's capacity.'",
+          "reasoning": "No recommendation to add extra application-level retries on top of SDK retries appears anywhere in the response.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites the throttle-induced rule ID",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "13s",
+    "cost": "$0.11",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

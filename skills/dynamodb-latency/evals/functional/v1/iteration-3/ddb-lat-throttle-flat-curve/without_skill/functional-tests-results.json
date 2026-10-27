@@ -1,0 +1,83 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "ddb-lat-throttle-flat-curve",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent explicitly states it does not have access to \"the latency skill\" and does not apply the named rule set at all, instead improvising generic DynamoDB diagnostic reasoning. The expected output requires classification using the skill's specific taxonomy (LT-02 Throttle-induced), which never appears in the response. While the agent's reasoning does correctly identify throttling as the cause, correctly explains SuccessfulRequestLatency excludes throttled/retried requests, and correctly ties the window to ThrottledRequests/WriteThrottleEvents, it misses several required specifics: it does not label the answer a 'hypothetical classification' per skill rules, does not use the LT-02 label, does not explicitly note that ThrottledRequests counts once per request (floor characteristic) stated as such, does not include a clear 'throttling handoff' structure naming table/PutItem/counters/window while explicitly declining to diagnose which capacity ceiling was hit, and does not recommend reviewing the SDK's existing retry configuration (instead it offers to investigate hot partition/key distribution, which is the opposite of avoiding capacity-ceiling diagnosis sometimes, and does not mention retry config review at all). Overall the response demonstrates good general diagnostic reasoning but fails to follow the specific skill-based classification, labeling, and recommendation structure required by the expected output.</reasoning>\n<parameter name=\"evidence\">\"I don't have a skill specifically named \\\"the latency skill\\\" in this agent space, so I can't apply a named rule set\" ... \"Classification: False negative on the latency dashboard \u2014 throttling-induced client-side latency, not a backend latency degradation.\" ... \"If you want, I can look into the actual key distribution or capacity settings on checkout-prod to confirm the hot-partition theory.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies the profile as throttle-induced (LT-02)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Classification: False negative on the latency dashboard \u2014 throttling-induced client-side latency, not a backend latency degradation.\"",
+          "reasoning": "The agent explicitly classifies the profile as throttle-induced, though it does not use the label 'LT-02' since it claims not to have the skill. The substance of the classification matches throttle-induced latency.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that throttled requests are not included in SuccessfulRequestLatency, which is why the curve is flat",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"SuccessfulRequestLatency only measures the server-side duration of requests that succeeded as sent. It excludes any request that got a ProvisionedThroughputExceededException... So a perfectly flat p50/p99 on that metric is fully consistent with heavy throttling happening underneath it\"",
+          "reasoning": "The agent clearly explains that throttled requests are excluded from SuccessfulRequestLatency, which is why the metric stays flat despite throttling.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that SDK automatic retries of throttled requests add client-observed latency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"it excludes the time an SDK spends in exponential-backoff retry loops before a write finally lands\" and \"this is consistent with SDK default retry/backoff (several retries with increasing backoff can easily sum to multiple seconds) absorbing the throttling before a write finally succeeds \u2014 explaining why users feel it but SuccessfulRequestLatency never does.\"",
+          "reasoning": "The agent explicitly explains that SDK automatic retries/backoff for throttled requests contribute to the client-observed latency of 3-6 seconds.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provides a handoff with the table, operation, counters and time window rather than diagnosing which capacity ceiling was hit",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response is a full narrative diagnosis including a definitive theory: \"the gap between those two suggests a hot partition rather than overall undersized capacity\" and ends with an offer: \"If you want, I can look into the actual key distribution or capacity settings on checkout-prod to confirm the hot-partition theory.\"",
+          "reasoning": "Rather than providing a structured handoff with just the table, operation, counters, and time window and deferring the capacity-ceiling diagnosis, the agent actively diagnoses which capacity ceiling was likely hit (hot partition vs. undersized table capacity), explicitly stating one theory is more likely than the other. This is the opposite of what the assertion requires - it does diagnose rather than defer the diagnosis in a clean handoff format.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not recommend adding application-level retries on top of the SDK's retries",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains no recommendation for application-level retries; it only discusses SDK default retry/backoff as an explanatory factor, and suggests investigating key distribution/capacity settings instead.",
+          "reasoning": "There is no statement recommending adding extra application-level retries on top of SDK retries anywhere in the response. The only suggested next step is investigating partition key distribution or capacity settings, not adding retries.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites the throttle-induced rule ID",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "3.8%",
+      "compaction_count": 0
+    }
+  }
+}

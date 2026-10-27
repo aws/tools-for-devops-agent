@@ -1,0 +1,83 @@
+{
+  "version": "v1",
+  "iteration": 4,
+  "eval_id": "ddb-lat-throttle-flat-curve",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response correctly identifies the core mechanism (throttling masquerading as flat latency, SuccessfulRequestLatency excludes throttled requests, SDK retries cause client-observed latency) and correctly ties the 09:22-11:48 window, PutItem, ThrottledRequests, and WriteThrottleEvents counters together. However, several specific required elements from the expected output are missing or not addressed:\n\n1. It does not explicitly label the answer as a 'hypothetical classification' (the prompt did instruct not to call APIs, but the expected output specifically requires the response to label itself as a hypothetical classification).\n2. It does not use the specific taxonomy code 'LT-02 Throttle-induced' - no classification code is given at all, just a prose description.\n3. It does not note that ThrottledRequests counts once per request so it is a floor (this specific nuance about the counter methodology is absent).\n4. It does not include an explicit 'throttling handoff' structure - while it mentions the table, PutItem, and window, it doesn't frame this as a handoff to another team/process, nor does it explicitly state it's not diagnosing which capacity ceiling was hit.\n5. Critically, it does NOT recommend reviewing the SDK's existing retry configuration \u2014 instead it says 'The right metrics to alarm on are ThrottledRequests/WriteThrottleEvents' as the key recommendation, missing the specific actionable recommendation about reviewing retry configuration.\n\nGiven the specificity of the expected output (naming a classification code, specific handoff format, the 'floor' nuance, and the specific recommendation about retry config review), the response is missing multiple key required elements despite getting the general diagnosis right.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies the profile as throttle-induced (LT-02)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent explicitly states: 'Classification: Write-capacity throttling masquerading as \"no DynamoDB issue\" \u2014 a client-side retry-latency problem, not a service-side latency problem.' and later 'this is a provisioned-capacity write throttling incident on checkout-prod, not a latency anomaly.' This matches a throttle-induced classification.",
+          "reasoning": "The agent clearly classifies the issue as throttling-caused, consistent with a throttle-induced (LT-02) classification label even though it doesn't use that exact code.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that throttled requests are not included in SuccessfulRequestLatency, which is why the curve is flat",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'SuccessfulRequestLatency only measures requests DynamoDB actually processed and returned a result for. A throttled call ... is rejected before DynamoDB does any work \u2014 it never enters the SuccessfulRequestLatency sample population at all. So a perfectly flat p50/4.8ms and p99/22ms ... tells you nothing about throttling.'",
+          "reasoning": "This directly explains that throttled requests are excluded from SuccessfulRequestLatency, explaining the flat curve.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that SDK automatic retries of throttled requests add client-observed latency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: '3\u20136 second write latency on checkout ... is the signature of SDK-level retry/backoff on throttled PutItem calls \u2014 each retry waits with exponential backoff before DynamoDB rejects it again ... The seconds of delay the user feels live entirely in client-side retry time.'",
+          "reasoning": "This explicitly explains that SDK automatic retries/backoff on throttled requests cause the client-observed latency.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provides a handoff with the table, operation, counters and time window rather than diagnosing which capacity ceiling was hit",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent's response does not present a structured handoff listing table, operation, counters, and time window; instead it discusses the table name, operation, counters, and window inline within prose, and notably attempts to diagnose capacity by suggesting 'consistent with additional write throttling pressure on the table (e.g., GSI write throttling or other write operations sharing capacity) beyond just PutItem' \u2014 this is an attempt to diagnose which capacity ceiling was hit rather than a pure handoff.",
+          "reasoning": "The assertion requires avoiding diagnosis of which capacity ceiling was hit and instead providing a handoff format. The agent does mention GSI write throttling as a possible cause, which is a diagnostic guess about the capacity ceiling, violating the 'rather than diagnosing' requirement. Also no explicit handoff format (e.g., bullet list for escalation) is given, though the info is present in narrative form.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Does not recommend adding application-level retries on top of the SDK's retries",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent does not mention adding application-level retries anywhere in the response; it focuses on explaining throttling causes and metric selection ('The right metrics to alarm on are ThrottledRequests/WriteThrottleEvents').",
+          "reasoning": "No recommendation for additional application-level retries is present, so by omission this assertion passes, though confidence is lower since absence of a recommendation is the only evidence.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Cites the throttle-induced rule ID",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "23s",
+    "cost": "$0.19",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

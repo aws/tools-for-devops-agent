@@ -1,0 +1,80 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "ddb-lat-gsi-throttle",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'dynamodb-latency' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The response labels itself hypothetical at the top (\"Hypothetical classification...\"). It classifies the issue as LT-02 Throttle-induced, correctly identifying the GSI as the throttled scope, and notes the coincidence of GSI throttle events with PutItem p99 elevation in 8 of 9 periods. It explains the mechanism: a GSI with insufficient write capacity throttles the base-table PutItem (GSI back-pressure), consistent with table-level WriteThrottleEvents staying clean while the GSI and PutItem ThrottledRequests fire. It provides a handoff (CF-04) naming the table context, the GSI orders-by-status, PutItem, and the 14:05\u201314:20 window, explicitly stating it does not size capacity or determine which ceiling was hit (\"Not established: which capacity ceiling on the GSI was hit...\"). All core expected elements are present and accurate.",
+      "evidence": "\"Primary outcome: LT-02 \u00b7 Throttle-induced (base-table PutItem)... a GSI shares every write with its base table but has its own provisioned write capacity. If orders-by-status doesn't have enough WCU for the write rate, DynamoDB throttles the base-table PutItem request... Next: treat this as CF-04 \u2014 pull the GSI's consumed-vs-provisioned write capacity for 14:05\u201314:20...\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the GSI orders-by-status as the source of the throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"WriteThrottleEvents on GSI orders-by-status: recorded in 9 periods... Coincidence test (a) is met directly: the GSI's non-zero throttle periods line up with PutItem's elevated-p99 periods\" and the explicit title 'LT-02 Throttle-induced (base-table PutItem)' pointing to the GSI as the cause.",
+          "reasoning": "The agent explicitly identifies the GSI as the source: it ties the GSI's WriteThrottleEvents directly to the base-table PutItem slowdown and states the GSI's own provisioned write capacity is the bottleneck.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that GSI write throttling back-pressures writes to the base table",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"a GSI shares every write with its base table but has its own provisioned write capacity. If orders-by-status doesn't have enough WCU for the write rate, DynamoDB throttles the base-table PutItem request to keep the index in sync \u2014 this is documented GSI write back-pressure.\"",
+          "reasoning": "This is a direct, explicit explanation of GSI write throttling back-pressuring the base table's write operations, naming the mechanism as 'GSI write back-pressure'.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains that table-level throttle events do not include GSI throttling",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"That's consistent with: table-level write counters staying clean (the table's own ceiling was never hit) while the GSI's counter and PutItem's ThrottledRequests both fire\" and \"Table-level WriteThrottleEvents: none recorded \u2014 the base table's own provisioned write capacity was not exhausted.\"",
+          "reasoning": "The agent explains that the table-level throttle counter remains clean/separate from the GSI's own throttle counter, implicitly (and reasonably clearly) conveying that table-level metrics don't capture GSI-level throttling \u2014 it treats them as distinct metrics that can diverge.",
+          "confidence": "high"
+        },
+        {
+          "text": "Hands off the throttling diagnosis with scope and time window instead of sizing capacity",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Next: treat this as CF-04 \u2014 pull the GSI's consumed-vs-provisioned write capacity for 14:05\u201314:20 to see how far over provisioned WCU it ran, and check whether the write pattern concentrates on a small set of status values\"",
+          "reasoning": "The agent explicitly hands off the deeper diagnosis (capacity sizing / hot key investigation) to a follow-up process (CF-04) with a defined scope (GSI consumed-vs-provisioned WCU, hot key check) and time window (14:05\u201314:20), rather than attempting to size capacity itself. It states 'Not established: which capacity ceiling... outside what these metrics alone settle,' confirming it defers rather than performs sizing.",
+          "confidence": "high"
+        },
+        {
+          "text": "Names the GSI",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'orders-by-status'"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "37s",
+    "cost": "$0.31",
+    "context_window": {
+      "utilization": "6.4%",
+      "compaction_count": 0
+    }
+  }
+}
