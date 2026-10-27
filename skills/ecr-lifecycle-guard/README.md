@@ -34,7 +34,8 @@ instead of prose.
 - In use cross reference by digest and tag: `lastRecordedPullTime`, running ECS
   tasks, ECS services and ACTIVE task definitions, Batch ACTIVE job definitions,
   Lambda container image functions, App Runner services, EKS cluster presence,
-  optional CloudTrail pull events
+  optional CloudTrail pull events (events within 60 seconds of the push or from
+  the pushing principal are excluded as push correlated)
 - Fixed per image verdict: `Safe`, `Expiring-Unused`, `Expiring-InUse`,
   `Expiring-Unknown`; fixed repository rating: `Healthy`, `Attention`,
   `AtRisk`, `Indeterminate`

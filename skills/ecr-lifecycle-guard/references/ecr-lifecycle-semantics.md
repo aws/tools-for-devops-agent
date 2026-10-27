@@ -227,7 +227,66 @@ Rules for the suggestion:
 - The operator applies it with `PutLifecyclePolicy` or the console after running
   a preview. This skill never applies it, even when asked.
 
-## 6. Documentation URLs
+## 6. In use evidence hierarchy and push correlation
+
+The verdict for an expiring image rests on evidence that the image is still
+consumed. Not every signal is equal, so the skill ranks them and only the weakest
+tier is filtered.
+
+| Tier | Evidence | Why it ranks here |
+|---|---|---|
+| (a) | `lastRecordedPullTime` on the image | ECR writes it from real pulls, so it cannot be produced by a push. The `ImageDetail` doc says it is refreshed at least once every 24 hours, so it may lag the newest pull by a day. Present means pulled; absent means "no recorded pull", never "unused" |
+| (b) | A tag or digest reference in an ECS running task, service or ACTIVE task definition, a Batch ACTIVE job definition, a Lambda image function URI, or an App Runner service | A consumer has declared the image. The reference exists whether or not it has pulled recently, so it is deliberate intent |
+| (c) | A CloudTrail `BatchGetImage` or `GetDownloadUrlForLayer` event on the digest or tag | The same API calls are made by a `docker pull`, by a task launch, and by the push itself. The event alone does not say which |
+
+Why tier (c) needs a filter. When a client pushes an image, the registry
+workflow checks layers (`BatchCheckLayerAvailability`), uploads them
+(`InitiateLayerUpload`, `CompleteLayerUpload`), puts the manifest (`PutImage`,
+which sets `imagePushedAt`), and the client then reads the manifest back
+(`BatchGetImage`). All of these land in CloudTrail from the pushing principal
+within a few seconds of `imagePushedAt`. On 2026-10-27, 26 of 26 images in the
+test repository carried a `BatchGetImage` event 1 to 2 seconds after their push,
+every one from the same role that pushed, and ECR's own `lastRecordedPullTime`
+was set on one image only. Counting those events as pulls marked 11 of 11
+expiring images `Expiring-InUse`, a 100 percent false positive rate, and would
+hand a customer with 200 images 200 HIGH findings.
+
+The push correlation rule:
+
+1. Any `BatchGetImage`, `GetDownloadUrlForLayer`, `PutImage`,
+   `InitiateLayerUpload`, `CompleteLayerUpload` or `BatchCheckLayerAvailability`
+   event whose `eventTime` is within 60 seconds of that image's `imagePushedAt`
+   is part of the push workflow and MUST NOT count as a consumer pull. Sixty
+   seconds is deliberately wide compared with the observed 1 to 4 seconds; a
+   genuine consumer that pulls within a minute of a push is rare, and
+   `lastRecordedPullTime` would still catch it in tier (a).
+2. Any event whose `userIdentity` matches the principal that performed the push
+   is also excluded, regardless of its time. The principal is taken from the
+   `PutImage` event for the same digest when one is available, otherwise from
+   the events inside the 60 second window. Compare on the role
+   (`sessionContext.sessionIssuer.arn`) when present so that two sessions of the
+   same CI role are treated as the same principal. A push pipeline that re-reads
+   its own image hours later is still not a consumer.
+3. What remains is a qualifying pull. One qualifying pull more than 60 seconds
+   after push makes the image `Expiring-InUse` on tier (c), and the evidence
+   string names the event, time, principal and gap from push.
+4. Count the excluded events per image and in total. The total is reported in
+   check U8 (LOW, informational) so the operator can see the filter worked. The
+   count never changes a verdict or the rating.
+
+How the tiers combine:
+
+- Tier (a) or tier (b) evidence gives `Expiring-InUse` on its own, regardless of
+  any denied source or of what CloudTrail says.
+- With (a) and (b) empty, tier (c) after the rule decides between `Expiring-InUse`
+  (a qualifying pull exists) and the no evidence path.
+- With no evidence from any tier, the image is `Expiring-Unused` when every in
+  use source U2 to U6 is `OK` and no EKS cluster exists, and `Expiring-Unknown`
+  when one of those sources was denied, cancelled or partial. Push correlated
+  events alone are the no evidence path; they never produce `Expiring-Unknown`
+  by themselves.
+
+## 7. Documentation URLs
 
 - Lifecycle policies and evaluation rules:
   https://docs.aws.amazon.com/AmazonECR/latest/userguide/LifecyclePolicies.html
@@ -239,5 +298,8 @@ Rules for the suggestion:
   https://docs.aws.amazon.com/AmazonECR/latest/userguide/lpp_creation.html
 - `ImageDetail` (`lastRecordedPullTime`, `imageStatus`, `lastActivatedAt`):
   https://docs.aws.amazon.com/AmazonECR/latest/APIReference/API_ImageDetail.html
-- Lifecycle events in CloudTrail (`PolicyExecutionEvent`, `DryRunEvent`):
+- Lifecycle events in CloudTrail (`PolicyExecutionEvent`, `DryRunEvent`) and the
+  `BatchGetImage` event example used for the push correlation rule:
   https://docs.aws.amazon.com/AmazonECR/latest/userguide/logging-using-cloudtrail.html
+- CloudTrail `userIdentity` element (`arn`, `sessionContext.sessionIssuer`):
+  https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-user-identity.html

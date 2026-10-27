@@ -6,7 +6,7 @@
       "task_type": "chat",
       "prompt": "Which images in ECR repo nebula-batch-worker will be deleted by the current lifecycle policy? Give me the exact list, and tell me if any of them are still being used.",
       "should_trigger": true,
-      "expected_output": "The full ECR Lifecycle Guard report for repository nebula-batch-worker: Scope, Repository Rating, Source of Truth stating whether the expiring set is AUTHORITATIVE (from GetLifecyclePolicyPreview) or SIMULATED, an Expiring Images table with one row per expiring digest and a verdict of Expiring-InUse, Expiring-Unknown or Expiring-Unused with evidence, a Rule by Rule table, Findings, a Suggested Protective Rule when an in use or production like image is expiring, a 14 row Check Matrix, Not Assessed, and Next Steps. The agent attempted StartLifecyclePolicyPreview, or explains that the call was cancelled by the guardrail and asked for approval once, before falling back to simulation. No image is described as safe or not a concern outside a verdict row, and no policy change is performed or offered as the agent's own action.",
+      "expected_output": "The full ECR Lifecycle Guard report for repository nebula-batch-worker: Scope, Repository Rating, Source of Truth stating whether the expiring set is AUTHORITATIVE (from GetLifecyclePolicyPreview) or SIMULATED, an Expiring Images table with one row per expiring digest and a verdict of Expiring-InUse, Expiring-Unknown or Expiring-Unused with evidence, a Rule by Rule table, Findings, a Suggested Protective Rule when an in use or production like image is expiring, a 15 row Check Matrix, Not Assessed, and Next Steps. The agent attempted StartLifecyclePolicyPreview, or explains that the call was cancelled by the guardrail and asked for approval once, before falling back to simulation. No image is described as safe or not a concern outside a verdict row, and no policy change is performed or offered as the agent's own action.",
       "assertions": [
         "The response is the full report, not a prose summary or an offer to produce one.",
         "The response states whether the expiring set is AUTHORITATIVE (from GetLifecyclePolicyPreview) or SIMULATED, and if SIMULATED gives the reason the preview did not run.",
@@ -26,10 +26,10 @@
           "pattern": "(?i)\\b(Healthy|Attention|AtRisk|Indeterminate)\\b"
         },
         {
-          "text": "The Check Matrix contains the 14 check rows P1 to P4, E1, U1 to U7, R1 and R2",
+          "text": "The Check Matrix contains the 15 check rows P1 to P4, E1, U1 to U8, R1 and R2",
           "evaluator": "regex",
-          "pattern": "\\|\\s*(P[1-4]|E1|U[1-7]|R[12])\\s*\\|",
-          "min_count": 14
+          "pattern": "\\|\\s*(P[1-4]|E1|U[1-8]|R[12])\\s*\\|",
+          "min_count": 15
         },
         {
           "text": "No write API is reported as having been called",
@@ -118,10 +118,10 @@
           "pattern": "\\b(AUTHORITATIVE|SIMULATED)\\b"
         },
         {
-          "text": "The Check Matrix contains 14 check rows",
+          "text": "The Check Matrix contains 15 check rows",
           "evaluator": "regex",
-          "pattern": "\\|\\s*(P[1-4]|E1|U[1-7]|R[12])\\s*\\|",
-          "min_count": 14
+          "pattern": "\\|\\s*(P[1-4]|E1|U[1-8]|R[12])\\s*\\|",
+          "min_count": 15
         }
       ]
     },
@@ -283,6 +283,91 @@
           "evaluator": "regex",
           "pattern": "(?i)v2\\.3\\.0[^\\n]{0,80}\\b(is safe|currently safe|not a concern|currently fine)\\b",
           "match": "absent"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(ecr[: ])?(PutLifecyclePolicy|DeleteLifecyclePolicy|BatchDeleteImage|PutImage|PutImageTagMutability|DeleteRepository)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "ecr-guard-evaluation-push-correlated-event-excluded",
+      "task_type": "chat",
+      "prompt": "No account access required. Using these API results, give me the verdict for the expiring image, the evidence tier it rests on, and the repository rating. Repository example-api, account 123456789012, us-east-1. Policy: one rule, rulePriority 100, tagStatus any, imageCountMoreThan 10, action expire. GetLifecyclePolicyPreview status COMPLETE, expiringImageTotalCount 1, previewResults: build-41 (digest sha256:0000000000000000000000000000000000000000000000000000000000000041) imagePushedAt 2026-10-20T09:15:00Z appliedRulePriority 100 action.type expire. DescribeImages: 11 images, all tagged, none has a lastRecordedPullTime field. Evaluation time 2026-10-27 12:00 UTC, pull window 30 days. ecs:ListClusters returned no clusters. ecs:ListTaskDefinitions status ACTIVE returned no task definitions. batch:DescribeJobDefinitions status ACTIVE returned 0 job definitions. lambda:ListFunctions returned 2 functions, both PackageType Zip. apprunner:ListServices returned no services. eks:ListClusters returned no clusters. CloudTrail LookupEvents, 30 day window, events for repository example-api: PutImage imageTag build-41 eventTime 2026-10-20T09:15:00Z userIdentity arn:aws:sts::123456789012:assumed-role/ci-push-role/github-run-8812; BatchGetImage imageTag build-41 eventTime 2026-10-20T09:15:01Z userIdentity arn:aws:sts::123456789012:assumed-role/ci-push-role/github-run-8812. No other events.",
+      "should_trigger": true,
+      "expected_output": "An AUTHORITATIVE report. build-41 is Expiring-Unused: no lastRecordedPullTime (tier (a) empty), no ECS, Batch, Lambda or App Runner reference (tier (b) empty, every source OK), and the only CloudTrail BatchGetImage event is 1 second after imagePushedAt from the same principal as the PutImage event, so the push correlation rule excludes it and tier (c) has no qualifying pull. The evidence cell says only push correlated events were found and that 1 event was excluded. Check U8 reports 1 CloudTrail event excluded as push correlated at LOW (informational). R1 is PASS. Repository Rating is Healthy (U8 does not move the rating, no production like tag, set is AUTHORITATIVE). The response does not call build-41 in use and does not propose a protective rule for it.",
+      "assertions": [
+        "build-41 is given the verdict Expiring-Unused, not Expiring-InUse and not Expiring-Unknown.",
+        "The response explains that the BatchGetImage event at 2026-10-20T09:15:01Z is within 60 seconds of imagePushedAt and comes from the same principal as the PutImage, so it is part of the push workflow and does not count as a consumer pull.",
+        "The response states that one CloudTrail event was excluded as push correlated, in the evidence cell or in check U8 or both.",
+        "The response states that lastRecordedPullTime is absent for build-41 and that no ECS, Batch, Lambda or App Runner reference exists, with every in use source OK.",
+        "Check R1 is PASS and the Repository Rating is Healthy.",
+        {
+          "text": "build-41 row carries Expiring-Unused",
+          "evaluator": "regex",
+          "pattern": "build-41[^\\n]*Expiring-Unused"
+        },
+        {
+          "text": "Push correlation is named",
+          "evaluator": "regex",
+          "pattern": "(?i)push correlated"
+        },
+        {
+          "text": "No image is called Expiring-InUse",
+          "evaluator": "regex",
+          "pattern": "Expiring-InUse\\s*\\|",
+          "match": "absent"
+        },
+        {
+          "text": "Check U8 is present",
+          "evaluator": "regex",
+          "pattern": "\\|\\s*U8\\s*\\|"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(ecr[: ])?(PutLifecyclePolicy|DeleteLifecyclePolicy|BatchDeleteImage|PutImage|PutImageTagMutability|DeleteRepository)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "ecr-guard-evaluation-cloudtrail-consumer-pull-in-use",
+      "task_type": "chat",
+      "prompt": "No account access required. Using these API results, give me the verdict for the expiring image, the evidence tier it rests on, and the repository rating. Repository example-api, account 123456789012, us-east-1. Policy: one rule, rulePriority 100, tagStatus any, imageCountMoreThan 10, action expire. GetLifecyclePolicyPreview status COMPLETE, expiringImageTotalCount 1, previewResults: build-41 (digest sha256:0000000000000000000000000000000000000000000000000000000000000041) imagePushedAt 2026-10-20T09:15:00Z appliedRulePriority 100 action.type expire. DescribeImages: 11 images, all tagged, none has a lastRecordedPullTime field. Evaluation time 2026-10-27 12:00 UTC, pull window 30 days. ecs:ListClusters returned no clusters. ecs:ListTaskDefinitions status ACTIVE returned no task definitions. batch:DescribeJobDefinitions status ACTIVE returned 0 job definitions. lambda:ListFunctions returned 2 functions, both PackageType Zip. apprunner:ListServices returned no services. eks:ListClusters returned no clusters. CloudTrail LookupEvents, 30 day window, events for repository example-api: PutImage imageTag build-41 eventTime 2026-10-20T09:15:00Z userIdentity arn:aws:sts::123456789012:assumed-role/ci-push-role/github-run-8812; BatchGetImage imageTag build-41 eventTime 2026-10-20T09:15:01Z userIdentity arn:aws:sts::123456789012:assumed-role/ci-push-role/github-run-8812; BatchGetImage imageTag build-41 eventTime 2026-10-23T09:15:04Z userIdentity arn:aws:sts::123456789012:assumed-role/batch-worker-instance-role/i-0abc123def456. No other events.",
+      "should_trigger": true,
+      "expected_output": "An AUTHORITATIVE report. build-41 is Expiring-InUse at HIGH on tier (c): the BatchGetImage at 2026-10-23T09:15:04Z comes from a different role (batch-worker-instance-role) 3 days after imagePushedAt, so it survives the push correlation rule and is a qualifying consumer pull. The BatchGetImage at 2026-10-20T09:15:01Z from ci-push-role is excluded as push correlated (1 second after push, same principal as PutImage) and is counted in U8. The evidence cell names the tier, the event time, the role and the 3 day gap from push. R1 is HIGH, U8 is LOW with 1 excluded event, Repository Rating is AtRisk. A protective tagPatternList rule for build-* with a rulePriority below 100 is presented for the operator and not applied.",
+      "assertions": [
+        "build-41 is given the verdict Expiring-InUse with the CloudTrail BatchGetImage at 2026-10-23T09:15:04Z by batch-worker-instance-role, about 3 days after push, cited as the evidence and the CloudTrail tier (tier (c)) named.",
+        "The response explains that the earlier BatchGetImage at 2026-10-20T09:15:01Z from ci-push-role was excluded as push correlated and did not contribute to the verdict.",
+        "The Repository Rating is AtRisk with the deciding rule that an expiring image is in use.",
+        "The response presents a protective rule JSON using tagPatternList for build-* with a rulePriority lower than 100 and states that the operator applies it.",
+        {
+          "text": "build-41 row carries Expiring-InUse",
+          "evaluator": "regex",
+          "pattern": "build-41[^\\n]*Expiring-InUse"
+        },
+        {
+          "text": "The consumer role is named as the evidence",
+          "evaluator": "regex",
+          "pattern": "batch-worker-instance-role"
+        },
+        {
+          "text": "Push correlation is named",
+          "evaluator": "regex",
+          "pattern": "(?i)push correlated"
+        },
+        {
+          "text": "Rating AtRisk is stated",
+          "evaluator": "regex",
+          "pattern": "AtRisk"
+        },
+        {
+          "text": "A protective rule with tagPatternList is present",
+          "evaluator": "regex",
+          "pattern": "tagPatternList"
         },
         {
           "text": "No write API is reported as having been called",

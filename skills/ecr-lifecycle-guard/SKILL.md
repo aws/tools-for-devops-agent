@@ -54,8 +54,9 @@ natural in chat:
 
 **Self check before responding.** The expiring image count must be identical in
 Scope, Source of Truth, Expiring Images and the Rule by Rule total. The Check
-Matrix has exactly 14 rows. The rating appears once. If any of these fail, fix
-the report before sending.
+Matrix has exactly 15 rows. The rating appears once. Every verdict row names
+the evidence tier that produced it. If any of these fail, fix the report before
+sending.
 
 ## When to Use
 
@@ -112,6 +113,13 @@ deterministic simulation as fallback, a mandatory in use cross reference on
 every run, a fixed verdict table that leaves no room for "safe" prose, and a
 hard rule that the skill reports and never remediates.
 
+Live test round 1 (2026-10-27, skill on) exposed a flaw in the skill itself:
+every expiring image had a CloudTrail `BatchGetImage` event 1 to 2 seconds after
+its own `imagePushedAt`, emitted by the push, and the skill counted all of them
+as consumer pulls (11 of 11 `Expiring-InUse`, 100 percent false positive) while
+`lastRecordedPullTime` showed one real pull in the repository. The evidence
+hierarchy and push correlation rule below are the fix.
+
 ## Required Permissions
 
 Managed policy column is `AIDevOpsAgentAccessPolicy` v11, verified 2026-10-26 at
@@ -154,19 +162,49 @@ When running the skill evaluation tool, pass the four delta actions with
 
 ## Verdict Model
 
+### In use evidence hierarchy (strongest first)
+
+| Tier | Evidence | Weight |
+|---|---|---|
+| (a) | `lastRecordedPullTime` present on the image | Authoritative. ECR maintains it from real pulls. ECR refreshes it at least once every 24 hours, so a pull in the last day may not show yet, and absence is never proof of non use |
+| (b) | A reference by tag or digest in a running ECS task, an ECS service or ACTIVE task definition, a Batch ACTIVE job definition, a Lambda image function URI (`ImageUri` or `ResolvedImageUri`), or an App Runner service | Confirmed. A defined consumer names the image |
+| (c) | A CloudTrail `BatchGetImage` or `GetDownloadUrlForLayer` event on the digest or tag | Circumstantial. The only tier that needs filtering, because an image push itself emits these events |
+
+Tier (a) and tier (b) evidence is used as found. Tier (c) is used only after the
+push correlation rule below.
+
+**Push correlation rule (tier (c) only).** A `BatchGetImage`,
+`GetDownloadUrlForLayer`, `PutImage`, `InitiateLayerUpload`,
+`CompleteLayerUpload` or `BatchCheckLayerAvailability` event whose `eventTime`
+is within 60 seconds of that image's `imagePushedAt` is part of the push
+workflow and MUST NOT count as a consumer pull. Also exclude any event whose
+`userIdentity` matches the principal that performed the push; correlate with
+the `PutImage` event for the same digest when one is available, otherwise with
+the principal of the events inside the 60 second window. CloudTrail evidence
+yields `Expiring-InUse` only when at least one qualifying pull event remains
+more than 60 seconds after push. Record per image how many events were
+excluded; the total feeds check U8. Reasoning and the observed event pattern are
+in [ecr-lifecycle-semantics.md](references/ecr-lifecycle-semantics.md)
+section 6.
+
 ### Per image verdict (first match wins)
 
 | # | Verdict | Rule | Severity |
 |---|---|---|---|
 | 1 | `Safe` | Digest is not in the expiring set for this evaluation | none |
-| 2 | `Expiring-InUse` | In the expiring set and at least one confirmed reference: running ECS task digest or image, ECS service or ACTIVE task definition image, Batch ACTIVE job definition image, Lambda image function URI, App Runner service image, `lastRecordedPullTime` inside the pull window, or a CloudTrail pull event on the digest or tag | CRITICAL when the reference is a running ECS task, an App Runner service in `RUNNING`, or a Lambda function; otherwise HIGH |
-| 3 | `Expiring-Unknown` | In the expiring set, no confirmed reference, and at least one in use source (U2 to U6: ECS tasks and services, ECS task definitions, Batch, Lambda, App Runner) is `AccessDenied`, `ToolingFailure`, `Partial` or `NotChecked`, or an EKS cluster exists in the Region. The optional CloudTrail probe is not an in use source for this row | MEDIUM |
-| 4 | `Expiring-Unused` | In the expiring set, no reference, every in use source U2 to U6 `OK`, no EKS cluster | INFO |
+| 2 | `Expiring-InUse` | In the expiring set and at least one piece of evidence from tier (a), tier (b), or tier (c) after the push correlation rule. Tier (a) or (b) evidence gives this verdict regardless of any denied check | CRITICAL when the reference is a running ECS task, an App Runner service in `RUNNING`, or a Lambda function; otherwise HIGH |
+| 3 | `Expiring-Unknown` | In the expiring set, tier (a) and (b) empty, no qualifying tier (c) event, and at least one in use source (U2 to U6: ECS tasks and services, ECS task definitions, Batch, Lambda, App Runner) is `AccessDenied`, `ToolingFailure`, `Partial` or `NotChecked`, or an EKS cluster exists in the Region. The optional CloudTrail probe is not an in use source for this row | MEDIUM |
+| 4 | `Expiring-Unused` | In the expiring set, tier (a) and (b) empty, no qualifying tier (c) event (push correlated events only, or none), every in use source U2 to U6 `OK`, no EKS cluster | INFO |
 
 A denied or cancelled in use source can never produce `Expiring-Unused`. Unknown
 is a real answer and is reported as such. A cancelled or skipped CloudTrail probe
 is listed under Not Assessed and changes no verdict; a CloudTrail pull event that
-was found still counts as a reference in row 2.
+survives the push correlation rule counts as a reference in row 2, and one that
+does not survive it is no evidence at all. Every verdict row names the tier that
+produced it, for example `tier (a) lastRecordedPullTime 2026-10-27 12:08Z`,
+`tier (c) CloudTrail BatchGetImage 2026-10-25 by role batch-worker, 4 days after
+push`, or `push correlated events only (1 excluded), no tier (a) or (b)
+evidence`.
 
 ### Repository rating (first match wins)
 
@@ -174,7 +212,7 @@ was found still counts as a reference in row 2.
 |---|---|---|
 | 1 | `Indeterminate` | The expiring set could not be established: `DescribeImages` or `GetLifecyclePolicy` failed, or both preview and simulation failed |
 | 2 | `AtRisk` | Any image is `Expiring-InUse` |
-| 3 | `Attention` | Any image is `Expiring-Unknown`, or any finding of LOW or higher exists, or the expiring set is `SIMULATED` |
+| 3 | `Attention` | Any image is `Expiring-Unknown`, or any finding of LOW or higher exists other than U8 (informational, never moves the rating), or the expiring set is `SIMULATED` |
 | 4 | `Healthy` | Everything else, including "no lifecycle policy attached" (reported as INFO) and an empty expiring set |
 
 A `SIMULATED` set or a denied source never lowers a rating below what the
@@ -187,7 +225,7 @@ evidence shows; it caps the rating at `Attention` when nothing in use was found.
 | CRITICAL | A running workload's image will be removed | Before the next lifecycle evaluation (within 24 hours) |
 | HIGH | A defined but not currently running workload's image, or a recently pulled image, will be removed | Within 24 hours |
 | MEDIUM | In use status unknown because a source could not be read | Grant the read action and rerun this week |
-| LOW | Production like tag governed only by a catch all rule | Next policy change |
+| LOW | Production like tag governed only by a catch all rule (P4), or the informational count of CloudTrail events excluded as push correlated (U8, never moves the rating) | Next policy change (P4); none (U8) |
 | INFO | Observations that need no action | none |
 
 ## Scope Resolution
@@ -258,13 +296,21 @@ evidence shows; it caps the rating at `Attention` when nothing in use was found.
       EKS: `ListClusters`; any cluster means pod references are not checked.
       CloudTrail (optional): `LookupEvents` for `BatchGetImage` and
       `GetDownloadUrlForLayer`, last 30 days or the user's window, capped at 20
-      pages per event name.
+      pages per event name, keeping `eventTime` and `userIdentity` for every
+      event. Also look up `PutImage` for the same window so each expiring
+      digest's pushing principal is known for the push correlation rule.
       Record a status per source: `OK`, `Partial`, `AccessDenied`,
       `ToolingFailure`, `NotChecked`.
-- [ ] **Step 6. Cross reference every expiring image.** Match by digest and by
-      every tag (through the tag to digest map) against every reference in the
-      inventory. A `lastRecordedPullTime` inside the window counts as a
-      reference. Collect the evidence string for each match.
+- [ ] **Step 6. Cross reference every expiring image, tier by tier.** Match by
+      digest and by every tag (through the tag to digest map) against every
+      reference in the inventory. Tier (a): a `lastRecordedPullTime` inside the
+      window. Tier (b): every ECS, Batch, Lambda and App Runner reference. Tier
+      (c): CloudTrail events on the digest or tag, then apply the push
+      correlation rule: drop every event within 60 seconds of `imagePushedAt`
+      and every event from the pushing principal, count the drops per image, and
+      keep only pulls more than 60 seconds after push. Collect one evidence
+      string per image that names the tier, the timestamp and the principal or
+      consumer, or states `push correlated events only (n excluded)`.
 - [ ] **Step 7. Verdicts, rule table, protected tags.** Assign each expiring
       image its first matching verdict. Build the Rule by Rule table: for each
       rule, candidates, marked, expires now, keeps, and whether it removes an in
@@ -276,7 +322,7 @@ evidence shows; it caps the rating at `Attention` when nothing in use was found.
       `tagPatternList` rule per affected tag family, priority below every
       existing rule, `imageCountMoreThan` 50 unless the user gave a retention
       target. Present the JSON. Never call `PutLifecyclePolicy`.
-- [ ] **Step 9. Checks and render.** Evaluate the 14 checks, compute the rating
+- [ ] **Step 9. Checks and render.** Evaluate the 15 checks, compute the rating
       with the ordered table, then load
       [report-template.md](references/report-template.md) and render. Multi
       repo: Account Summary ordered AtRisk, Indeterminate, Attention, Healthy,
@@ -285,7 +331,7 @@ evidence shows; it caps the rating at `Attention` when nothing in use was found.
 
 ## Fixed Check Matrix
 
-Every run reports all 14 checks. A check that could not be evaluated shows its
+Every run reports all 15 checks. A check that could not be evaluated shows its
 source status, never a guessed result.
 
 | ID | Check | Finding condition | Severity |
@@ -302,10 +348,12 @@ source status, never a guessed result.
 | U5 | Lambda container image functions checked | Source not `OK` | status shown |
 | U6 | App Runner services checked | Source not `OK` | status shown |
 | U7 | EKS presence and CloudTrail probe status recorded | Never a finding; records what was and was not checked | status shown |
-| R1 | No expiring image is in use | Any `Expiring-InUse` | HIGH, or CRITICAL per the verdict table |
+| U8 | CloudTrail events excluded as push correlated | At least one CloudTrail event on an expiring image was dropped by the push correlation rule; the detail states how many, across how many images. `PASS` when the probe ran and nothing was dropped, `NotChecked` when it did not run | LOW, informational, never moves the rating |
+| R1 | No expiring image is in use | Any `Expiring-InUse` after the evidence hierarchy and the push correlation rule. Push correlated CloudTrail events alone never fail this check | HIGH, or CRITICAL per the verdict table |
 | R2 | No expiring image has unknown in use status | Any `Expiring-Unknown` | MEDIUM |
 
-A protective rule is proposed whenever R1 or P4 produces a finding.
+A protective rule is proposed whenever R1 or P4 produces a finding. U8 exists so
+the operator can see that the filter worked; it never changes a verdict.
 
 ## Report Format
 
@@ -317,7 +365,8 @@ per repository sections.
 
 Expiring Images columns: Tags, Digest (first 12 hex characters), Pushed, Last
 recorded pull, Claimed by rule, Action, Verdict, Evidence. One row per digest.
-Survivors are listed once below the table.
+The Evidence cell names the tier that produced the verdict. Survivors are listed
+once below the table.
 
 The report ends at Next Steps. Nothing follows it.
 
@@ -335,7 +384,10 @@ The report ends at Next Steps. Nothing follows it.
    ECR's result.
 3. **Every run cross references in use sources**, whether or not the prompt
    mentions pulls, Batch, ECS or anything else. Read `lastRecordedPullTime` for
-   every image on every run.
+   every image on every run. CloudTrail is the weakest tier: apply the push
+   correlation rule before any CloudTrail event counts, and never let an event
+   inside 60 seconds of the push, or from the pushing principal, make an image
+   `Expiring-InUse`.
 4. **No "safe" prose.** An image is `Safe` only because its digest is outside
    the expiring set. Images inside the set are never safe; they are InUse,
    Unknown or Unused.
@@ -375,6 +427,7 @@ The report ends at Next Steps. Nothing follows it.
 | Lifecycle actions appear in CloudTrail as `PolicyExecutionEvent`, previews as `DryRunEvent` | Use `LookupEvents` on these names for "why did my image disappear" |
 | `batch:DescribeJobDefinitions` and `lambda:GetFunction` are not in the managed policy | Expect `AccessDenied` until the delta policy is attached; report Unknown, not Unused |
 | The guardrail has cancelled the whole `cloudtrail` namespace in other skills | The pull probe is optional; a cancellation is listed under Not Assessed and changes no verdict |
+| An image push emits `BatchGetImage` (and layer events) 1 to 2 seconds after `imagePushedAt`, from the pushing principal (observed 2026-10-27 on 26 of 26 images) | The push correlation rule drops these events; they are counted in U8 and never make an image `Expiring-InUse` |
 
 ## References
 
@@ -383,7 +436,9 @@ The report ends at Next Steps. Nothing follows it.
   statuses, unverified facts. Load at Step 1.
 - [ecr-lifecycle-semantics.md](references/ecr-lifecycle-semantics.md):
   numbered simulation procedure with documentation quotes, worked 26 image
-  example, protected tag patterns, protective rule template. Load at Step 4.
+  example, protected tag patterns, protective rule template, in use evidence
+  hierarchy and push correlation reasoning (section 6). Load at Step 4, or
+  section 6 alone at Step 6 when CloudTrail returned events.
 - [report-template.md](references/report-template.md): single and multi
   repository report skeletons and the pre render validation list. Load at
   Step 9.
