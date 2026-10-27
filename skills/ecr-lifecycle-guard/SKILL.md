@@ -160,7 +160,7 @@ When running the skill evaluation tool, pass the four delta actions with
 |---|---|---|---|
 | 1 | `Safe` | Digest is not in the expiring set for this evaluation | none |
 | 2 | `Expiring-InUse` | In the expiring set and at least one confirmed reference: running ECS task digest or image, ECS service or ACTIVE task definition image, Batch ACTIVE job definition image, Lambda image function URI, App Runner service image, `lastRecordedPullTime` inside the pull window, or a CloudTrail pull event on the digest or tag | CRITICAL when the reference is a running ECS task, an App Runner service in `RUNNING`, or a Lambda function; otherwise HIGH |
-| 3 | `Expiring-Unknown` | In the expiring set, no confirmed reference, and at least one in use source (U2 to U6: ECS tasks and services, ECS task definitions, Batch, Lambda, App Runner) is `AccessDenied`, `ToolingFailure` or `Partial`, or an EKS cluster exists in the Region. The optional CloudTrail probe is not an in use source for this row | MEDIUM |
+| 3 | `Expiring-Unknown` | In the expiring set, no confirmed reference, and at least one in use source (U2 to U6: ECS tasks and services, ECS task definitions, Batch, Lambda, App Runner) is `AccessDenied`, `ToolingFailure`, `Partial` or `NotChecked`, or an EKS cluster exists in the Region. The optional CloudTrail probe is not an in use source for this row | MEDIUM |
 | 4 | `Expiring-Unused` | In the expiring set, no reference, every in use source U2 to U6 `OK`, no EKS cluster | INFO |
 
 A denied or cancelled in use source can never produce `Expiring-Unused`. Unknown
