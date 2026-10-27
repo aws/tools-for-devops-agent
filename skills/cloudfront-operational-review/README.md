@@ -1,4 +1,4 @@
-# CloudFront Operation Review — AWS DevOps Agent Skill
+# CloudFront Operational Review — AWS DevOps Agent Skill
 
 A comprehensive Amazon CloudFront operational review skill for [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent.html). Conducts best-practices assessments aligned with the [Amazon CloudFront Developer Guide](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Introduction.html) and the [AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html) across security, reliability, performance, cost optimization, and operational excellence. Generates a shareable report artifact per distribution.
 
@@ -22,7 +22,7 @@ When activated via Chat, this skill instructs the DevOps Agent to:
 
 1. Discover CloudFront distributions in the account (CloudFront is a global service — no per-region loop).
 2. Collect distribution config, origins, cache behaviors, policies, OAC/OAI, WAF association (`WebACLId`), ACM certificate, CloudFront Functions / Lambda@Edge, VPC origins, and tags.
-3. Collect origin-side evidence (S3 bucket public status, VPC-origin load balancer / target / instance health) before reporting origin security or availability findings; checks it cannot verify are reported as UNKNOWN.
+3. Collect origin-side evidence (S3 bucket policy status, Block Public Access (bucket and account), and ACLs; VPC-origin load balancer / target / instance health) before reporting origin security or availability findings; checks it cannot verify are reported as UNKNOWN.
 4. Collect 7-day historical CloudWatch metrics (from `us-east-1`), alarm coverage (metric, metric-math, and composite alarms), standard logging (legacy and v2) and real-time log configuration, access-log signals, and configuration-change notes.
 5. Report account-level Cost Explorer data and per-distribution usage drivers, detect flat-rate pricing plans, and show per-distribution dollars only when resource-level billing data provides them.
 6. Analyze against the Well-Architected pillars (Security, Reliability, Performance, Cost Optimization, Operational Excellence).
@@ -37,10 +37,9 @@ scripts, or non-AWS MCP servers.
 
 This skill is intended for the following agent types (selected in the Operator Web App at upload time):
 
-- **On-demand** — conversational invocation in Chat ("review my CloudFront distribution", "CDN audit").
-- **Evaluation** — proactive operational improvement recommendations.
+- **Chat tasks** — conversational invocation in Chat ("review my CloudFront distribution", "CDN audit").
 
-Select **Generic** instead if you want the skill available to all agent types.
+Select **All agents** instead if you want the skill available to all agent types.
 
 ## Prerequisites
 
@@ -50,8 +49,13 @@ You need an existing [Agent Space](https://docs.aws.amazon.com/devopsagent/lates
 
 ### 2. IAM permissions for the DevOps Agent's primary cloud-source role
 
-The Agent Space's IAM role must have read access to the following. Most are covered by the
-AWS managed policy [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security-devops-agent-iam-permissions.html) — verify in your account before running the review. A per-skill policy block is provided in the repo's `cloudformation/devops-agent-skill-policies.yaml` (`EnableCloudFrontOperationalReview`).
+The Agent Space's IAM role needs read access to the following. The AWS managed policy
+[`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security-devops-agent-iam-permissions.html)
+covers all of them except `cloudfront:GetVpcOrigin`, `s3:GetBucketPolicyStatus`,
+`s3:GetAccountPublicAccessBlock`, and `pricingplanmanager:ListSubscriptions` (checked against
+policy version v11). The `EnableCloudFrontOperationalReview` parameter of the
+[skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
+adds those four.
 
 - `cloudfront:ListDistributions`, `cloudfront:GetDistribution`, `cloudfront:GetDistributionConfig`
 - `cloudfront:ListCachePolicies`, `cloudfront:ListOriginRequestPolicies`, `cloudfront:ListResponseHeadersPolicies`
@@ -64,13 +68,15 @@ AWS managed policy [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/dev
 - `acm:DescribeCertificate` (called in `us-east-1`)
 - `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics`, `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmsForMetric`
 - `logs:DescribeDeliverySources`, `logs:DescribeDeliveries`, `logs:DescribeDeliveryDestinations` (`us-east-1`) — detect standard logging v2
-- `logs:DescribeLogGroups`, `logs:FilterLogEvents`, `logs:GetLogEvents` (only when a v2 delivery writes to CloudWatch Logs)
-- `s3:GetBucketPolicyStatus`, `s3:GetBucketPublicAccessBlock` — verify whether an S3 REST origin without OAC/OAI is public
+- `logs:StartQuery`, `logs:GetQueryResults` — one bounded Logs Insights query when a v2 delivery writes JSON to CloudWatch Logs
+- `s3:GetBucketPolicyStatus`, `s3:GetBucketPublicAccessBlock`, `s3:GetAccountPublicAccessBlock`, `s3:GetBucketOwnershipControls`, `s3:GetBucketAcl`, `s3:ListAllMyBuckets` — S3 REST origin exposure without OAC/OAI
 - `elasticloadbalancing:DescribeLoadBalancers`, `elasticloadbalancing:DescribeTargetGroups`, `elasticloadbalancing:DescribeTargetHealth`, `ec2:DescribeInstanceStatus` — VPC-origin backing-resource health
-- `s3:GetObject`, `s3:ListBucket` (optional — only if you want the agent to read access logs from an S3 log bucket)
 - `ce:GetCostAndUsage`; optional `ce:GetCostAndUsageWithResources` (per-distribution dollars; requires resource-level data enabled in Cost Explorer, last 14 days)
 - `pricingplanmanager:ListSubscriptions` (`us-east-1`) — detect flat-rate pricing plans
 - `tag:GetResources` (optional — cross-service tag reporting)
+
+The skill does not read log objects from S3 or Firehose destinations; those log checks are
+reported as UNKNOWN.
 
 Without the origin-evidence permissions the review still runs, and the affected checks are
 reported as **UNKNOWN — manual verification required** instead of guessed.
@@ -87,14 +93,15 @@ subscription** (additional metrics) on the distributions you want to review:
 - `aws cloudfront create-monitoring-subscription --distribution-id <id> --monitoring-subscription RealtimeMetricsSubscriptionConfig={RealtimeMetricsSubscriptionStatus=Enabled}`
 
 Additional metrics incur CloudWatch charges. Without them, the skill still produces a
-complete report from default metrics, configuration, and access logs — it just derives cache
-hit ratio from logs instead of the `CacheHitRate` metric.
+complete report from default metrics, configuration, and access logs, and derives cache hit
+ratio from CloudWatch Logs (v2) when available, otherwise reports it as UNKNOWN.
 
 ### 4. Standard access logging (recommended)
 
-For log-pattern analysis (Step 6), enable standard access logging so the skill can analyze
-`x-edge-result-type`, `sc-status`, and TLS fields. If the log bucket is not readable by the
-agent role, the skill reports "access logs not reachable" and relies on CloudWatch metrics.
+For log-pattern analysis (Step 8), deliver standard logs (v2) to CloudWatch Logs in JSON,
+including `x-edge-detailed-result-type`. The skill runs one Logs Insights query over the last
+24 hours (billed per GB scanned). Logs delivered to S3 or Firehose, and legacy logs, are not
+read: those checks are reported as UNKNOWN and the skill relies on CloudWatch metrics.
 
 ## Uploading to AWS DevOps Agent
 
@@ -136,7 +143,7 @@ Constraints (enforced at upload time):
 1. Navigate to the **Skills** page in your Agent Space Operator Web App.
 2. Click **Add skill** → **Upload skill**.
 3. Drag and drop `cloudfront-operational-review.zip` (or browse to it).
-4. Select agent types: **On-demand** and **Evaluation** (or leave **Generic** for all types).
+4. Select agent types: **Chat tasks** (or leave **All agents** to make it available to all agent types).
 5. Review the validation results.
 6. Click **Upload**.
 
@@ -169,7 +176,7 @@ cloudfront-operational-review/
 │   ├── metrics-thresholds.md           # CloudWatch metric thresholds & severity rules
 │   └── findings-severity-catalog.md    # findings catalog mapped to Well-Architected pillars
 ├── assets/
-│   └── report-template.md              # per-distribution report template (loaded in Step 10)
+│   └── report-template.md              # per-distribution report template (loaded in Step 12)
 └── evals/                              # evaluation data (not included in upload zip)
     ├── evals.json                      # skill-eval functional cases (new-schema)
     ├── additional-permissions.json     # read-only grants for the functional eval's agent space
@@ -195,7 +202,8 @@ cloudfront-operational-review/
 | MEDIUM | Notable improvement opportunity | 30 days |
 | LOW | Minor optimization or hardening | When convenient |
 | INFO | Observation, no action required | N/A |
+| UNKNOWN | Evidence could not be collected | Manual verification |
 
 ## License
 
-Apache-2.0. See the repository [LICENSE](../../LICENSE).
+Apache-2.0. See the repository [LICENSE](https://github.com/aws/tools-for-devops-agent/blob/main/LICENSE).

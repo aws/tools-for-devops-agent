@@ -81,7 +81,7 @@ Parameters:
 
   EnableCloudFrontOperationalReview:
     Type: String
-    Description: CloudFront Operational Review skill.
+    Description: CloudFront Operational Review skill (adds cloudfront:GetVpcOrigin, s3:GetBucketPolicyStatus, s3:GetAccountPublicAccessBlock and pricingplanmanager:ListSubscriptions).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -299,8 +299,13 @@ Resources:
               - logs:GetLogEvents
             Resource: '*'
 
-  # cloudfront-operational-review: read-only CloudFront config + WAF/ACM/CloudWatch/logs
-  # for the review. All actions are read-only; no Create/Update/Delete/Invalidation.
+  # cloudfront-operational-review: adds cloudfront:GetVpcOrigin, s3:GetBucketPolicyStatus,
+  # s3:GetAccountPublicAccessBlock and pricingplanmanager:ListSubscriptions. Every other API the
+  # skill calls -- cloudfront List/Get, wafv2:GetWebACL, acm:DescribeCertificate, CloudWatch
+  # metrics and alarms, logs delivery describes and Logs Insights, S3 bucket BPA/ACL/ownership,
+  # elasticloadbalancing/ec2 describes, ce:Get* -- is covered by AIDevOpsAgentAccessPolicy (v11).
+  # Without this policy, VPC-origin health, S3 policy status, account-level Block Public Access
+  # and flat-rate plan checks report UNKNOWN. All four actions are read-only.
   PolicyCloudFrontOperationalReview:
     Type: AWS::IAM::Policy
     Condition: SkillCloudFrontOperationalReview
@@ -311,61 +316,13 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: CloudFrontRead
+          - Sid: CloudFrontOperationalReviewRead
             Effect: Allow
             Action:
-              - cloudfront:ListDistributions
-              - cloudfront:GetDistribution
-              - cloudfront:GetDistributionConfig
-              - cloudfront:ListCachePolicies
-              - cloudfront:ListOriginRequestPolicies
-              - cloudfront:ListResponseHeadersPolicies
-              - cloudfront:ListOriginAccessControls
-              - cloudfront:ListCloudFrontOriginAccessIdentities
-              - cloudfront:ListFieldLevelEncryptionConfigs
-              - cloudfront:ListKeyGroups
-              - cloudfront:ListFunctions
-              - cloudfront:ListVpcOrigins
               - cloudfront:GetVpcOrigin
-              - cloudfront:GetMonitoringSubscription
-              - cloudfront:ListRealtimeLogConfigs
-              - cloudfront:ListTagsForResource
-            Resource: '*'
-          # WAF association comes from GetDistributionConfig.WebACLId; GetWebACL reads
-          # the rules of that ACL (Scope=CLOUDFRONT, us-east-1). GetWebACLForResource
-          # does not support CloudFront and is intentionally not granted.
-          - Sid: CloudFrontWafAcmRead
-            Effect: Allow
-            Action:
-              - wafv2:GetWebACL
-              - acm:DescribeCertificate
-            Resource: '*'
-          # Standard logging v2 detection (CloudWatch Logs delivery APIs, us-east-1).
-          - Sid: CloudFrontLoggingRead
-            Effect: Allow
-            Action:
-              - logs:DescribeDeliverySources
-              - logs:DescribeDeliveries
-              - logs:DescribeDeliveryDestinations
-              - logs:GetLogEvents
-            Resource: '*'
-          # Origin evidence: S3 public status, VPC-origin backing resource health.
-          - Sid: CloudFrontOriginEvidenceRead
-            Effect: Allow
-            Action:
               - s3:GetBucketPolicyStatus
-              - s3:GetBucketPublicAccessBlock
-              - elasticloadbalancing:DescribeLoadBalancers
-              - elasticloadbalancing:DescribeTargetGroups
-              - elasticloadbalancing:DescribeTargetHealth
-              - ec2:DescribeInstanceStatus
-            Resource: '*'
-          # Cost: flat-rate plan detection and optional resource-level cost data.
-          - Sid: CloudFrontCostRead
-            Effect: Allow
-            Action:
+              - s3:GetAccountPublicAccessBlock
               - pricingplanmanager:ListSubscriptions
-              - ce:GetCostAndUsageWithResources
             Resource: '*'
 
   # ecs-operation-review: adds compute-optimizer:GetECSServiceRecommendations (PERF8 rightsizing);
@@ -696,7 +653,7 @@ Outputs:
         - aws-health-events: ${EnableAwsHealthEvents} (health:DescribeEventTypes)
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
-        - cloudfront-operational-review: ${EnableCloudFrontOperationalReview} (cloudfront:List*/Get* read, wafv2:GetWebACL, acm:DescribeCertificate, logs delivery describes, s3 bucket public status, elbv2/ec2 health describes, pricingplanmanager:ListSubscriptions, ce:GetCostAndUsageWithResources)
+        - cloudfront-operational-review: ${EnableCloudFrontOperationalReview} (cloudfront:GetVpcOrigin, s3:GetBucketPolicyStatus, s3:GetAccountPublicAccessBlock, pricingplanmanager:ListSubscriptions)
         - ecs-operation-review: ${EnableEcsOperationReview} (compute-optimizer:GetECSServiceRecommendations)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
         - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)

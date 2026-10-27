@@ -7,7 +7,11 @@ workloads.
 
 If the required evidence cannot be collected (`AccessDenied`, unreadable bucket, origin in
 another account), report the check as **UNKNOWN — manual verification required**, naming the
-API and error. Do not substitute a CloudFront-config inference for missing origin evidence.
+API and error. The configuration-absent codes listed in `SKILL.md` Known API quirks (for
+example, `NoSuchBucketPolicy`) mean the feature is not configured: record a negative result,
+not UNKNOWN. `NoSuchBucket` on an origin bucket is a missing origin (see Reliability). Do not
+substitute a CloudFront-config
+inference for missing origin evidence.
 
 ## Severity Definitions
 
@@ -25,9 +29,11 @@ API and error. Do not substitute a CloudFront-config inference for missing origi
 | Check | Condition | Evidence required | Severity |
 |---|---|---|---|
 | WAF web ACL attached | `WebACLId` empty on an internet-facing distribution | `GetDistributionConfig.WebACLId` | HIGH (CRITICAL for auth'd/sensitive apps) |
-| S3 REST origin publicly readable | REST origin (`S3OriginConfig`) with no OAC/OAI **and** `GetBucketPolicyStatus.IsPublic=true` | `s3.GetBucketPolicyStatus`, `s3.GetPublicAccessBlock` | CRITICAL |
-| S3 REST origin without OAC/OAI, bucket not public | No OAC/OAI and bucket not public — CloudFront cannot authenticate, so requests likely fail with 403 | Same as above | HIGH (availability) — confirm with 403ErrorRate or logs |
-| S3 REST origin without OAC/OAI, bucket status unreadable | Bucket calls return `AccessDenied` | Error from the bucket calls | UNKNOWN |
+| S3 REST origin: bucket policy classified as public | REST origin (`S3OriginConfig`) with no OAC/OAI, `GetBucketPolicyStatus.IsPublic=true`, and `RestrictPublicBuckets` is not true at bucket or account level | `s3.GetBucketPolicyStatus`, `s3.GetPublicAccessBlock`, `s3control.GetPublicAccessBlock` (bucket owner account) | CRITICAL — word it "bucket policy classified as public; effective access is public unless an organization-level Block Public Access policy applies" |
+| S3 REST origin: bucket ACL grants public access | No OAC/OAI, ACLs enabled (`ObjectOwnership` not `BucketOwnerEnforced`), a `GetBucketAcl` grant to `AllUsers` or `AuthenticatedUsers`, and `IgnorePublicAcls` is not true at bucket or account level | `s3.GetBucketOwnershipControls`, `s3.GetBucketAcl`, the Block Public Access calls | CRITICAL — name what the grant permits (`READ` = public object listing, `WRITE` = public write, `WRITE_ACP` or `FULL_CONTROL` = anyone can change the ACL); same organization-level caveat |
+| S3 REST origin without OAC/OAI, no public path | Policy not public (or `RestrictPublicBuckets=true`) **and** public ACLs cannot apply (ACLs disabled, or `IgnorePublicAcls=true` at bucket or account level) — CloudFront cannot authenticate, so requests likely fail with 403 | All of the above | HIGH (availability) — confirm with 403ErrorRate or logs |
+| S3 REST origin without OAC/OAI, object ACLs unchecked | Policy not public (or `RestrictPublicBuckets=true`), no public bucket-ACL grant, ACLs enabled, and `IgnorePublicAcls` not true at bucket or account level — objects can still be public through object ACLs | All of the above, plus 403ErrorRate (additional metrics) or the log 403 share (Step 8) | HIGH (availability) when the 403 evidence shows requests failing; otherwise UNKNOWN — "object ACLs not checked" |
+| S3 REST origin, evidence incomplete | Any bucket, ACL, or account-level call returns `AccessDenied`, or the bucket is owned by another account, and the readable evidence does not already settle the check | Error from the call, or `s3.ListBuckets` | UNKNOWN — name the API and error |
 | S3 website endpoint origin | Custom origin with an `s3-website` domain | Origin type | INFO — OAC/OAI cannot be used with website endpoints by design; the bucket must allow public reads. Recommend a REST origin with OAC only if website features (redirects, index documents) are not needed |
 | Origin Access Control | REST origin using legacy OAI instead of OAC | Origin config | MEDIUM |
 | OAC signing disabled | OAC attached with `SigningBehavior=never` | `ListOriginAccessControls` | MEDIUM |
@@ -41,6 +47,9 @@ API and error. Do not substitute a CloudFront-config inference for missing origi
 | Security response headers | No response headers policy (HSTS, X-Content-Type-Options) | Cache behaviors | LOW |
 | Lambda@Edge / Functions | Untracked edge functions altering security behavior | Function associations | INFO–LOW |
 
+Block Public Access applies the most restrictive of bucket, account, and organization settings
+([S3 Block Public Access](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html)).
+
 ## Reliability
 
 | Check | Condition | Evidence required | Severity |
@@ -52,9 +61,10 @@ API and error. Do not substitute a CloudFront-config inference for missing origi
 | Origin error trend | Custom-origin 502/503/504 rising over 7 days | Additional metrics or logs | HIGH |
 | 5xx error rate | `5xxErrorRate` 7-day avg > 1% | Default metric | HIGH |
 | 5xx error rate | `5xxErrorRate` 7-day avg > 5% | Default metric | CRITICAL |
+| S3 origin bucket missing | Any bucket call for an origin bucket returns `NoSuchBucket` | Error from the S3 call | HIGH — origin requests fail, and another account can re-register the bucket name |
 | VPC origin backing health | Backing ALB/NLB has unhealthy targets, or load balancer is not `active` | `elbv2.DescribeLoadBalancers`, `DescribeTargetHealth` in the backing region | HIGH |
 | VPC origin single-AZ | Backing load balancer spans one Availability Zone | `DescribeLoadBalancers.AvailabilityZones` | MEDIUM |
-| VPC origin EC2 health | Backing EC2 instance status checks impaired | `ec2.DescribeInstanceStatus` | HIGH |
+| VPC origin EC2 health | Backing instance state is not `running`, or `InstanceStatus`/`SystemStatus` is impaired | `ec2.DescribeInstanceStatus` (`IncludeAllInstances=true`) | HIGH |
 | VPC origin evidence unavailable | Backing resource could not be described | Error from ELB/EC2 calls | UNKNOWN — `GetVpcOrigin` alone identifies the resource but not its health |
 | Connection settings | `ConnectionAttempts=1` with no failover | Origin config | MEDIUM |
 | Origin timeouts | Default timeouts unsuited to a slow origin (p95 OriginLatency near `OriginReadTimeout`) | Origin config + p95 OriginLatency | MEDIUM |
@@ -64,8 +74,10 @@ API and error. Do not substitute a CloudFront-config inference for missing origi
 
 | Check | Condition | Evidence required | Severity |
 |---|---|---|---|
-| Cache hit ratio | `CacheHitRate` 7-day avg < 90% | Additional metric, or labeled log-derived approximation | MEDIUM |
-| Cache hit ratio | `CacheHitRate` 7-day avg < 80% | Same | HIGH |
+| Cache hit ratio | `CacheHitRate` 7-day avg < 90% on a distribution where at least one behavior caches; label mixed distributions per metrics-thresholds Notes | Additional metric, or labeled log-derived approximation | MEDIUM |
+| Cache hit ratio | `CacheHitRate` 7-day avg < 80% on a distribution where at least one behavior caches; label mixed distributions per metrics-thresholds Notes | Same | HIGH |
+| Cache hit ratio, uncached by design | No behavior caches (`MaxTTL` 0) | Cache policies | INFO |
+| Cache hit ratio unavailable | Additional metrics off and no queryable logs | Monitoring subscription + Step 8 outcome | UNKNOWN |
 | Compression | `Compress=false` on text/JSON/HTML behaviors | Cache behaviors | MEDIUM |
 | HTTP version | `HttpVersion` not `http2and3` (no HTTP/3) | Distribution config | LOW |
 | HTTP version | HTTP/1.1 only | Distribution config | MEDIUM |
@@ -83,7 +95,7 @@ report's `Resource` column) provides it.
 | Check | Condition | Evidence required | Severity |
 |---|---|---|---|
 | Price class | `PriceClass_All` for a region-limited audience (pay-as-you-go only) | Price class + user-confirmed audience | MEDIUM |
-| Cache hit ratio → cost | Low cache hit ratio raising origin fetch and data transfer | Cache hit ratio | MEDIUM |
+| Cache hit ratio → cost | Low cache hit ratio raising origin fetch and data transfer (behaviors that cache only) | Cache hit ratio | MEDIUM |
 | Unused distribution | `Enabled=false` or `Requests` 7-day sum ≈ 0 | Default metric | MEDIUM |
 | Additional metrics on idle | Monitoring subscription on a near-zero-traffic distribution | Monitoring subscription + Requests | LOW |
 | Cost-allocation tags | Missing `Environment`, `Owner`, `CostCenter`, `Application` | Tags | LOW |
@@ -97,6 +109,7 @@ report's `Resource` column) provides it.
 | CloudWatch alarms | No alarm covers p95 `OriginLatency` / `CacheHitRate` — **only when additional metrics are enabled** | `DescribeAlarms` + monitoring subscription | MEDIUM |
 | Standard logging | Legacy `Logging.Enabled=false` **and** no v2 delivery source/delivery for the distribution | `GetDistributionConfig.Logging` + `logs.DescribeDeliverySources` / `DescribeDeliveries` | MEDIUM |
 | Standard logging, v2 unreadable | Legacy logging off and delivery-source calls return `AccessDenied` | Error from logs calls | UNKNOWN |
+| Log signals unavailable | Destination is S3 or Firehose, legacy logging only, output not JSON, or the Logs Insights query is denied | `DescribeDeliveries` / `DescribeDeliveryDestinations`, or the query error | UNKNOWN — name the reason; rely on CloudWatch metrics |
 | Additional metrics | `GetMonitoringSubscription` disabled | Monitoring subscription | LOW–MEDIUM |
 | Real-time logs | Absent for a high-value distribution needing sub-minute visibility (Kinesis Data Streams) | `RealtimeLogConfigArn` + `ListRealtimeLogConfigs` | LOW |
 | Default root object | Not set on a website distribution | Distribution config | LOW |
@@ -108,7 +121,7 @@ report's `Resource` column) provides it.
 - [ ] WAF web ACL attached to internet-facing distributions (`WebACLId`)
 - [ ] `MinimumProtocolVersion` ≥ `TLSv1.2_2021`
 - [ ] `ViewerProtocolPolicy` = `redirect-to-https` or `https-only`
-- [ ] S3 REST origins use **OAC** with signing enabled; bucket not public (verified with S3 APIs)
+- [ ] S3 REST origins use **OAC** with signing enabled; bucket policy not public, no public ACL, Block Public Access on (bucket or account)
 - [ ] S3 website origins identified as such (OAC not applicable)
 - [ ] Custom domains use an ACM certificate (not the default cert)
 - [ ] Response headers policy adds HSTS + security headers

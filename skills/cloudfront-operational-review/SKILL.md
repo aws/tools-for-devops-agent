@@ -12,9 +12,10 @@ description: Comprehensive Amazon CloudFront operational review aligned with the
 metadata:
   author: derekzie
   version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
+  summary: "Read-only CloudFront review across security, reliability, performance, cost, and operations, with origin evidence checks and a severity-ranked report per distribution."
+  aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon CloudFront"
-  aws-devops-agent-skills.technical-domains: "Networking / Content Delivery"
+  aws-devops-agent-skills.technical-domains: "Networking"
 ---
 
 # CloudFront Operational Review
@@ -24,7 +25,7 @@ AWS Well-Architected Framework and CloudFront best practices (security, reliabil
 performance, cost, operational excellence), producing one report per distribution.
 
 This skill uses only native, **read-only** AWS APIs — `cloudfront`, `cloudwatch`, `logs`,
-`wafv2`, `acm`, `ce`, `pricingplanmanager`, and, for origin evidence, `s3`,
+`wafv2`, `acm`, `ce`, `pricingplanmanager`, and, for origin evidence, `s3`, `s3control`,
 `elasticloadbalancing`, and `ec2` describe/get calls. It never calls a mutating API
 (`Create*`, `Update*`, `Delete*`, `Put*`, `CreateInvalidation`, `Associate*`, `Tag*`), and uses
 no internal tooling or non-AWS MCP servers.
@@ -40,10 +41,12 @@ give only a distribution ID or domain.
 ## Evidence rule
 
 Assign a finding only from evidence you collected. When a check needs data you could not
-read (`AccessDenied`, a missing permission, an unreadable bucket, an inaccessible origin
+read (`AccessDenied`, a missing permission, throttling, a timeout, an inaccessible origin
 account), record that check as **UNKNOWN — manual verification required**, name the API and
-error, and continue with the remaining checks. Never infer a HIGH or CRITICAL result from
-CloudFront configuration alone when the catalog says it needs origin-side evidence.
+error, and continue with the remaining checks. The configuration-absent codes under Known API
+quirks (for example, `NoSuchBucketPolicy`) are negative results, not UNKNOWN; `NoSuchBucket` on
+an origin bucket is a missing origin (see the catalog). Never infer a HIGH or CRITICAL result
+from CloudFront configuration alone when the catalog says it needs origin-side evidence.
 
 ## Review workflow
 
@@ -75,11 +78,23 @@ delivery, and `pricingplanmanager` calls in `us-east-1`.
 - [ ] Step 4 — Origin evidence: for each origin, collect the evidence the catalog requires
   before a security or availability finding. Classify each S3 origin as a REST endpoint
   (`S3OriginConfig`) or a website endpoint (`CustomOriginConfig` with an `s3-website` domain).
-  For a REST origin without OAC or OAI, call `s3.GetBucketPolicyStatus` and
-  `s3.GetPublicAccessBlock`. For a VPC origin, take the backing resource ARN from
+  For a REST origin without OAC or OAI:
+  - Bucket policy: `s3.GetBucketPolicyStatus` (`IsPublic`).
+  - Block Public Access: `s3.GetPublicAccessBlock` for the bucket. Unless the bucket already
+    sets both `RestrictPublicBuckets` and `IgnorePublicAcls`, also call
+    `s3control.GetPublicAccessBlock` with `AccountId` = the bucket owner. Confirm the owner with
+    `s3.ListBuckets` (`Prefix` = the bucket name); a bucket owned by another account makes
+    effective access UNKNOWN.
+  - ACLs: `s3.GetBucketOwnershipControls`; unless `ObjectOwnership=BucketOwnerEnforced`, call
+    `s3.GetBucketAcl` and look for grants to the `AllUsers` or `AuthenticatedUsers` groups.
+    Object ACLs are not read, so the catalog sets when "no public path" needs 403 evidence.
+
+  For a VPC origin, take the backing resource ARN from
   `GetVpcOrigin.VpcOriginEndpointConfig.Arn` and, in that resource's region, call
   `elbv2.DescribeLoadBalancers` (state and Availability Zones) and `DescribeTargetGroups` +
-  `DescribeTargetHealth` for an ALB/NLB, or `ec2.DescribeInstanceStatus` for an EC2 instance.
+  `DescribeTargetHealth` for an ALB/NLB, or `ec2.DescribeInstanceStatus` with `InstanceIds` =
+  [the instance ID from the ARN] and `IncludeAllInstances=true` for an EC2 instance (record
+  `InstanceState.Name`, `InstanceStatus.Status`, `SystemStatus.Status`).
   When you need the rules for interpreting this evidence, load
   [the findings and severity catalog](references/findings-severity-catalog.md).
 - [ ] Step 5 — Logging and monitoring config: `GetMonitoringSubscription` (are additional
@@ -104,19 +119,36 @@ delivery, and `pricingplanmanager` calls in `us-east-1`.
   `Metrics[].MetricStat` references it, or when a composite alarm's `AlarmRule` includes such an
   alarm. Do not rely on `DescribeAlarmsForMetric` alone; it omits metric-math and composite
   alarms. Assess OriginLatency and CacheHitRate alarms only when additional metrics are enabled.
-- [ ] Step 8 — Logs (7 days): if a standard-log destination is readable, scan for
-  `x-edge-result-type` = Error, `sc-status` 502/503/504, `504` with `NonS3OriginCommError`, and
-  deprecated `ssl-protocol` (TLSv1/TLSv1.1). If additional metrics are off, approximate cache hit
-  ratio from these logs using only cacheable requests, as defined in
-  [metric thresholds](references/metrics-thresholds.md), and label it as log-derived.
+- [ ] Step 8 — Logs (bounded window): log signals come only from a standard logging v2
+  delivery to CloudWatch Logs (Step 5). From `DescribeDeliveryDestinations` take the log group
+  (`deliveryDestinationConfiguration.destinationResourceArn`) and `outputFormat`; from
+  `DescribeDeliveries` take `recordFields`. When the format is `json`, run one
+  `logs.StartQuery` over the last 24 hours in the log group's Region and poll
+  `logs.GetQueryResults`:
+
+  ```
+  stats count(*) as requests by `sc-status`, `x-edge-result-type`, `x-edge-detailed-result-type`, `cs-method`, `ssl-protocol`
+  ```
+
+  Use the names in `recordFields` (wrap names with hyphens in backticks); mark the signals of
+  any missing field UNKNOWN. Label every log-derived value with the window. For S3 or Firehose
+  destinations, legacy logging, another output format, or a denied query, mark all log-derived
+  signals UNKNOWN and name the reason. Interpret the counts with
+  [metric thresholds](references/metrics-thresholds.md): split `x-edge-result-type=Error` by
+  `sc-status`, break 5xx down by `x-edge-detailed-result-type`, count CloudFront-generated 503s
+  (`CapacityExceeded`, `LimitExceeded`), and check `ssl-protocol` for TLSv1/TLSv1.1. If
+  additional metrics are off, approximate cache hit ratio from these counts as defined there;
+  with no queryable logs either, report "cache hit ratio: UNKNOWN — no additional metrics and
+  no queryable logs".
 - [ ] Step 9 — Change context: read `LastModifiedTime` from `GetDistribution`; if CloudTrail
   access is in scope, correlate `UpdateDistribution`, WAF, and ACM changes from the last 14
   days. If CloudTrail is unavailable, say so in the report.
 - [ ] Step 10 — Cost (once per review): first call `pricingplanmanager.ListSubscriptions` in
   `us-east-1` and note which distributions sit in a flat-rate plan (`resourceArns`, `planTier`).
-  Then call `costexplorer.GetCostAndUsage` for 3 months, Service = "Amazon CloudFront", grouped by
-  `USAGE_TYPE`, and report the **account-level** total and its main usage types. Per
-  distribution, report usage drivers only (BytesDownloaded, Requests, price class, cache hit
+  Then call `ce.GetCostAndUsage` for the latest full calendar month (`TimePeriod` from the
+  first day of last month to the first day of this month, `Granularity=MONTHLY`), filtered to
+  Service = "Amazon CloudFront", grouped by `USAGE_TYPE`, and report the **account-level**
+  total and its main usage types. Per distribution, report usage drivers only (BytesDownloaded, Requests, price class, cache hit
   ratio) — do not invent a dollar split. Report per-distribution dollars only when the data
   exposes the distribution as a resource: `ce.GetCostAndUsageWithResources` (requires
   resource-level data enabled in Cost Explorer; last 14 days only) or the CloudFront usage
@@ -129,7 +161,9 @@ delivery, and `pricingplanmanager` calls in `us-east-1`.
   methods), **Performance**, **Cost Optimization**, and **Operational Excellence**.
 - [ ] Step 12 — Validate, then report: run the self-check below, then produce one report per
   distribution by loading [the report template](assets/report-template.md) and filling in every
-  section. Save each report as `cloudfront-review-<distribution-id>-<YYYY-MM-DD>.md`.
+  section. Save each report as `cloudfront-review-<distribution-id>-<YYYY-MM-DD>.md`. End the
+  turn with the report: list follow-up options as a closing line, and do not ask the user a
+  question.
 
 ## Validate your output before presenting
 
@@ -146,6 +180,8 @@ For each report, confirm before showing it to the user:
 - the cost section contains no per-distribution dollar figure unless it came from resource-level
   billing data;
 - every check blocked by an access error appears as UNKNOWN with the API and error named;
+- no custom-header value, WAF match string or regex, key material, or cookie, query-string, or
+  client IP value appears; log findings are aggregates;
 - every template section is filled in or explicitly marked "not applicable";
 - the filename is exactly `cloudfront-review-<distribution-id>-<YYYY-MM-DD>.md`.
 
@@ -174,9 +210,24 @@ Fix any mismatch before presenting.
 - VPC origins are regional resources; resolve their backing ALB/NLB/EC2 health in that region.
 - `cloudfront.ListTagsForResource`'s parameter is `Resource` (the ARN), not `ResourceName`.
 - CloudFront list APIs paginate with `Marker`/`NextMarker`, not `NextToken`.
+- `NoSuch*` / `*NotFound*` errors are answers: `NoSuchMonitoringSubscription` = additional
+  metrics disabled; `NoSuchBucketPolicy` = no bucket policy (not public by policy);
+  `NoSuchPublicAccessBlockConfiguration` = no Block Public Access at that level (for a bucket,
+  continue to the account-level check); `OwnershipControlsNotFoundError` = ACLs are enabled.
+  Reserve UNKNOWN for `AccessDenied`, throttling, and timeouts.
+- `s3control.GetPublicAccessBlock` reads the account-level setting and needs `AccountId` (the
+  bucket owner); IAM action `s3:GetAccountPublicAccessBlock`.
+- `ec2.DescribeInstanceStatus` returns only running instances unless `IncludeAllInstances=true`.
+- Logs Insights field names with hyphens need backticks; a v2 delivery logs only its
+  `recordFields`, so `x-edge-detailed-result-type` may be absent.
 
 ## Data source boundaries
 
-Read-only describe/get/list calls only. No mutating calls, no internal tooling, no non-AWS MCP
-servers. If a log destination, bucket, or origin account is not readable, record the affected
-checks as UNKNOWN and rely on CloudWatch metrics where they apply.
+Read-only describe/get/list calls, plus at most one bounded Logs Insights query per
+distribution. No mutating calls, no internal tooling, no non-AWS MCP servers. If a log
+destination, bucket, or origin account is not readable, record the affected checks as UNKNOWN
+and rely on CloudWatch metrics where they apply.
+
+Redaction: the report is meant to be shared. Never reproduce origin custom-header values, WAF
+match strings or regex patterns, key material, or cookie, query-string, or client IP values.
+Report header names, rule names, and counts. Log findings are aggregates only.

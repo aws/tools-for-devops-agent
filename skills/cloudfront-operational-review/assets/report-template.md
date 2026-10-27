@@ -14,10 +14,10 @@ Price Class: <PriceClass_*> | HTTP: <http2and3> | WAF: <yes/no>
 
 | Item | Value |
 |------|-------|
-| Origins | domain(s), type (S3 / custom / VPC), OAC or OAI, protocol policy, timeouts |
+| Origins | domain(s), type (S3 / custom / VPC), OAC or OAI, protocol policy, timeouts, custom header names (never values) |
 | Origin groups | members, failover status codes, allowed/cached methods of behaviors that use them |
 | Cache behaviors | count, viewer protocol policy, cache policy, compression |
-| Security | WAF web ACL, TLS min version, viewer protocol, cert (ACM / default), FLE |
+| Security | WAF web ACL (rule names only), TLS min version, viewer protocol, cert (ACM / default), FLE |
 | Access control | signed URLs/cookies (key groups), geo restriction |
 | Edge compute | CloudFront Functions, Lambda@Edge associations |
 | Delivery | price class, HTTP version, IPv6, Origin Shield |
@@ -38,13 +38,17 @@ Operational Excellence. Assign severities using `references/findings-severity-ca
 |--------|------|-------------|--------|---------|
 |        |      |             |        |         |
 
-## Log Analysis (7-Day)
+## Log Analysis (<window>)
+
+Source: <log group, window, Logs Insights> or "not queried — <reason>" (all rows UNKNOWN)
 
 | Pattern / status | Occurrences or rate | Severity | Finding |
 |------------------|---------------------|----------|---------|
 |                  |                     |          |         |
 
-Include the 504 / origin-connection-failure breakdown (timeout vs refused vs TLS) when 5xx is present.
+When 5xx is present, include the breakdown by `x-edge-detailed-result-type` (timeout:
+`OriginCommError`/`OriginReadError`; refused: `OriginConnectError`; DNS: `OriginDnsError`) and
+any CloudFront-generated 503s (`CapacityExceeded`, `LimitExceeded`).
 
 ## Configuration Change / Event Notes
 
@@ -54,7 +58,8 @@ Include the 504 / origin-connection-failure breakdown (timeout vs refused vs TLS
 
 - Pricing model: pay-as-you-go, or flat-rate plan `<tier>` (from `pricingplanmanager.ListSubscriptions`)
 - Account-level CloudFront cost, latest full month, with the top usage types (Cost Explorer)
-- This distribution's usage drivers: 7-day BytesDownloaded, Requests, price class, cache hit ratio
+- This distribution's usage drivers: 7-day BytesDownloaded, Requests, price class, cache hit
+  ratio (CloudWatch, log-derived approx., or UNKNOWN)
 - Per-distribution cost: only if resource-level billing data was available — cite the source
   (`GetCostAndUsageWithResources` or the usage report's `Resource` column); otherwise state
   "not available without resource-level billing data". Never split account cost proportionally.
@@ -75,9 +80,10 @@ Include the 504 / origin-connection-failure breakdown (timeout vs refused vs TLS
 
 ## Next Steps
 
-- Immediate (CRITICAL/HIGH — 7 days): <list>
+- Immediate (CRITICAL — 24–48 hours; HIGH — 1 week): <list>
 - Short-term (MEDIUM — 30 days): <list>
-- Long-term (LOW — 90 days): <list>
+- When convenient (LOW): <list>
+- Verify manually (UNKNOWN): <list>
 
 ## Appendix — Reference Links
 

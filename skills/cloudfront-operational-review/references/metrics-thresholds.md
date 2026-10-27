@@ -21,7 +21,8 @@ Always available for every distribution at no additional charge.
 
 Only populated when `cloudfront.GetMonitoringSubscription` shows additional metrics enabled
 (these incur CloudWatch charges). If disabled, record that as an Operational Excellence
-finding, skip every row below, and approximate cache hit ratio from logs (see Notes).
+finding, skip every row below, and approximate cache hit ratio from logs, or report it UNKNOWN
+(see Notes).
 
 `OriginLatency` supports only percentile statistics — request `p95` in `GetMetricData`
 (`ExtendedStatistics` in `GetMetricStatistics`) and label the value "p95". The thresholds
@@ -36,27 +37,37 @@ origin's expected latency (for example, a dynamic API origin versus a static S3 
 | 403ErrorRate | Average | < 1% | > 2% | > 10% | Access denied — OAC/OAI, signed URL, WAF blocks, S3 perms |
 | 404ErrorRate | Average | < 2% | > 5% | > 15% | Missing objects — default root object, routing, cache key |
 | 502ErrorRate | Average | ≈ 0 | > 0.5% | > 2% | Bad gateway — origin TLS/protocol mismatch |
-| 503ErrorRate | Average | ≈ 0 | > 0.5% | > 2% | Origin overloaded / capacity exceeded |
-| 504ErrorRate | Average | ≈ 0 | > 0.5% | > 2% | Origin timeout / connection failure (NonS3OriginCommError) |
+| 503ErrorRate | Average | ≈ 0 | > 0.5% | > 2% | Origin overloaded, or CloudFront-side capacity/quota (logs: `CapacityExceeded`, `LimitExceeded`) |
+| 504ErrorRate | Average | ≈ 0 | > 0.5% | > 2% | Origin timeout or connection failure (logs: `OriginCommError`, `OriginReadError`, `OriginConnectError`) |
 
 ## 504 / Origin-Connection Failure Triage (map metric spikes to root cause)
 
+Detailed types come from the log field `x-edge-detailed-result-type`
+([standard log fields](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/standard-logs-reference.html)).
+
 | Symptom | Likely root cause | Where to confirm |
 |---|---|---|
-| 504 + high OriginLatency | Origin slower than `OriginReadTimeout` | Origin app latency, raise timeout or scale origin |
-| 504 + connection refused/closed in logs | Origin down or security group blocks CloudFront | Origin health, SG ingress, VPC origin backing target |
-| 502 + TLS/handshake errors | Origin cert expired or `OriginSslProtocols` mismatch | Origin cert, `OriginProtocolPolicy`, SSL protocols |
-| 503 sustained | Origin capacity exceeded | Origin autoscaling, Origin Shield to absorb load |
+| 504 with `OriginCommError` / `OriginReadError`, or high p95 OriginLatency | Origin slower than `OriginReadTimeout` | Origin app latency, raise timeout or scale origin |
+| 502/504 with `OriginConnectError` | Origin down, or security group/NACL blocks CloudFront | Origin health, SG ingress, VPC origin backing target |
+| 502/504 with `OriginDnsError` | Origin domain does not resolve | Origin DNS record |
+| 502 (no detailed type identifies TLS) | Origin cert expired or `OriginSslProtocols` mismatch | Origin cert, `OriginProtocolPolicy`, SSL protocols |
+| 503 with `x-edge-result-type` `CapacityExceeded` or `LimitExceeded` | CloudFront-generated: edge capacity or a CloudFront quota | CloudFront quotas; not an origin scaling issue |
+| 503 sustained from origin (`Miss`/`Error`, origin-side detailed type) | Origin capacity exceeded | Origin autoscaling, Origin Shield |
 
-## Standard Access Log Signals (7-day scan)
+## Standard Access Log Signals (Step 8 query, bounded window)
 
 | Field / value | Severity if prevalent | Action |
 |---|---|---|
-| `x-edge-result-type = Error` | HIGH | Correlate with 5xx metric and origin logs |
-| `x-edge-result-type = Miss` (high ratio) | MEDIUM | Improve cacheability (TTL, cache key) |
-| `sc-status` 502/503/504 | HIGH | Origin failover / timeout / capacity review |
-| `x-edge-result-type = OriginShieldHit` present | INFO | Origin Shield working as intended |
+| `sc-status` 5xx with `x-edge-result-type=Error` | HIGH | Break down by `x-edge-detailed-result-type` (triage table); correlate with 5xxErrorRate |
+| `x-edge-result-type` `CapacityExceeded` / `LimitExceeded` (503) | HIGH when sustained | CloudFront-side; check CloudFront quotas |
+| `sc-status` 4xx with `x-edge-result-type=Error` | Use the 4xx/403/404 rows above | Not HIGH on its own |
+| `x-edge-detailed-result-type` `ClientCommError` / `ClientHungUpRequest` | INFO | Viewer disconnects |
+| `x-edge-result-type=Miss` (high ratio, behaviors that cache) | MEDIUM | Improve cacheability (TTL, cache key) |
+| `x-edge-detailed-result-type=OriginShieldHit` present | INFO | Origin Shield working as intended |
 | `ssl-protocol = TLSv1 / TLSv1.1` | MEDIUM | Deprecated viewer TLS — raise `MinimumProtocolVersion` |
+
+Standard logging v2 logs only the delivery's `recordFields`; if `x-edge-detailed-result-type`
+is not among them, report the 5xx breakdown as UNKNOWN.
 
 ## Alarm Coverage Expectations
 
@@ -86,11 +97,20 @@ alarms; recommend enabling additional metrics first if the workload needs them.
 
 ## Notes
 
-- Log-derived cache hit ratio approximates `CacheHitRate`, which counts only cacheable
-  requests (POST, PUT, and errors are excluded). Filter first: keep rows whose `cs-method` is
-  GET, HEAD, or OPTIONS and whose `x-edge-result-type` is not `Error`. Then compute
-  `(Hit + RefreshHit) / (Hit + RefreshHit + Miss)`. Label the result "log-derived (approx.)";
-  it is not directly comparable to the CloudWatch metric.
+- Cacheable behaviors: a behavior caches when its cache policy's `MaxTTL` is above 0 (for a
+  legacy `ForwardedValues` behavior, the behavior's `MaxTTL`). If no behavior caches, report
+  cache hit ratio as INFO "uncached by design" and skip the cache-hit rows. If only some
+  behaviors cache, label every cache-hit value "distribution-wide, includes uncached
+  behaviors": `CacheHitRate` and the log-derived ratio both count requests to uncached
+  behaviors as misses.
+- Log-derived cache hit ratio (approximates `CacheHitRate`): from the Step 8 counts keep
+  `cs-method` GET and HEAD. Include OPTIONS only when every behavior's `CachedMethods` includes
+  OPTIONS; otherwise exclude it and label the result "OPTIONS excluded". Drop
+  `x-edge-result-type=Error`, then compute `(Hit + RefreshHit) / (Hit + RefreshHit + Miss)`.
+  Label it "log-derived (approx.), <window>". GETs on behaviors using CachingDisabled or TTL 0,
+  and WebSocket or gRPC connections, log as `Miss`.
+- No additional metrics and no queryable logs: report "cache hit ratio: UNKNOWN — no
+  additional metrics and no queryable logs".
 - Error-rate metrics are percentages of total requests, already averaged by CloudFront — use
   `Average` stat, not `Sum`.
 - Zero-traffic windows can make error-rate `Average` misleading; always read error rates

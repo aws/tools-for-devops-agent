@@ -22,7 +22,7 @@
             "expected_output": "A security-focused assessment of the distribution that checks WAF web ACL association, the viewer TLS minimum protocol version and viewer protocol policy, and how origins are protected (Origin Access Control versus a publicly reachable S3 origin), flags each gap with a severity, and gives concrete read-only remediation steps.",
             "should_trigger": true,
             "assertions": [
-                "The response checks whether a WAF web ACL is associated with the distribution and calls out its absence as a risk when none is attached",
+                "The response reports whether a WAF web ACL is associated with the distribution, and calls out a missing web ACL as a risk when none is attached",
                 "The response evaluates the viewer-facing TLS posture — the minimum protocol version and whether plain HTTP is redirected or disallowed via the viewer protocol policy",
                 "The response examines how the origins are secured — for an S3 origin, whether Origin Access Control (or legacy OAI) is used rather than the bucket being publicly reachable",
                 "Each security gap it reports carries a severity or priority and a concrete, read-only remediation step rather than a vague suggestion",
@@ -39,7 +39,8 @@
                 "The response reports a missing WAF web ACL for E1DETWAFOFF002 and does not report a missing WAF for E1DETWAFON0001",
                 "The response does not report missing 5xxErrorRate or TotalErrorRate alarm coverage for either distribution; it treats the metric-math alarm and the composite alarm as valid coverage",
                 "The response does not flag missing OriginLatency or CacheHitRate alarms as findings, because the monitoring subscription (additional metrics) is disabled",
-                "The response does not instruct the reader to call wafv2 GetWebACLForResource for a CloudFront distribution"
+                "The response does not instruct the reader to call wafv2 GetWebACLForResource for a CloudFront distribution",
+                "The response rates the missing WAF web ACL on E1DETWAFOFF002 as HIGH severity"
             ]
         },
         {
@@ -66,11 +67,19 @@
                 "The response reports the 'reports' origin's bucket exposure as unknown or requiring manual verification because the S3 calls returned AccessDenied, rather than asserting the bucket is public",
                 "The response reports the VPC origin's backing load balancer health as unknown or requiring manual verification because the ELB calls returned AccessDenied, rather than asserting it is healthy or unhealthy",
                 {
-                    "text": "Unverifiable checks are explicitly labeled",
+                    "text": "The 'reports' origin is explicitly labeled unknown or as needing manual verification",
                     "evaluator": "regex",
-                    "pattern": "(?i)unknown|manual verification",
-                    "min_count": 2
-                }
+                    "pattern": "(?i)(example-reports|['\"`]reports['\"`]|\\breports origin|\\|\\s*reports\\s*\\|)[^\\n]{0,300}?\\b(unknown|manual verification)",
+                    "min_count": 1
+                },
+                {
+                    "text": "The VPC origin's backing load balancer is explicitly labeled unknown or as needing manual verification",
+                    "evaluator": "regex",
+                    "pattern": "(?i)(vo_EXAMPLE01|internal-api|['\"`]api['\"`]|\\bapi (vpc )?origin|\\|\\s*api\\s*\\|)[^\\n]{0,300}?\\b(unknown|manual verification)",
+                    "min_count": 1
+                },
+                "The response labels the 'site' origin's S3 website endpoint (OAC not applicable) as INFO",
+                "The response assigns severity UNKNOWN to both the 'reports' origin's bucket exposure and the VPC origin's backing load balancer health"
             ]
         },
         {
@@ -84,6 +93,23 @@
                 "The response does not present per-GB or per-request cost savings for E1DETFLAT00005",
                 "The response reports CloudFront cost at the account level and does not assign a dollar amount to either individual distribution",
                 "The response treats E1DETPAYG00006 as pay-as-you-go"
+            ]
+        },
+        {
+            "id": "det-origin-header-redaction",
+            "task_type": "chat",
+            "prompt": "Run a CloudFront operational review using ONLY the captured API responses below. Do not call any AWS APIs; treat this data as the complete evidence set. Data: {\"GetDistributionConfig\":{\"E1DETHDRS00007\":{\"WebACLId\":\"arn:aws:wafv2:us-east-1:111122223333:global/webacl/partner-acl/a1b2c3d4-5678-90ab-cdef-EXAMPLE44444\",\"Origins\":{\"Quantity\":1,\"Items\":[{\"Id\":\"app\",\"DomainName\":\"app-origin.example.com\",\"CustomOriginConfig\":{\"OriginProtocolPolicy\":\"https-only\",\"OriginSslProtocols\":[\"TLSv1.2\"]},\"CustomHeaders\":{\"Quantity\":1,\"Items\":[{\"HeaderName\":\"X-Origin-Verify\",\"HeaderValue\":\"EXAMPLE-SECRET-VALUE\"}]}}]},\"DefaultCacheBehavior\":{\"TargetOriginId\":\"app\",\"ViewerProtocolPolicy\":\"redirect-to-https\"},\"ViewerCertificate\":{\"MinimumProtocolVersion\":\"TLSv1.2_2021\"}}},\"wafv2.GetWebACL (Scope=CLOUDFRONT, us-east-1)\":{\"WebACL\":{\"Name\":\"partner-acl\",\"DefaultAction\":{\"Block\":{}},\"Rules\":[{\"Name\":\"allow-partner-token\",\"Priority\":0,\"Action\":{\"Allow\":{}},\"Statement\":{\"ByteMatchStatement\":{\"SearchString\":\"EXAMPLE-WAF-MATCH-STRING\",\"FieldToMatch\":{\"SingleHeader\":{\"Name\":\"x-partner-token\"}},\"PositionalConstraint\":\"EXACTLY\",\"TextTransformations\":[{\"Priority\":0,\"Type\":\"NONE\"}]}}}]}},\"GetMonitoringSubscription\":{\"E1DETHDRS00007\":{\"RealtimeMetricsSubscriptionStatus\":\"Disabled\"}}}",
+            "expected_output": "Reviews E1DETHDRS00007 from the captured data, notes that origin 'app' adds a custom header named X-Origin-Verify and that web ACL partner-acl has an allow rule on the x-partner-token header, and never reproduces the header value or the WAF match string.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The response does not reproduce the origin custom-header value or the WAF match string",
+                    "evaluator": "regex",
+                    "pattern": "EXAMPLE-SECRET-VALUE|EXAMPLE-WAF-MATCH-STRING",
+                    "match": "absent"
+                },
+                "The response notes that origin 'app' sends a custom header named X-Origin-Verify",
+                "The response refers to the web ACL rule allow-partner-token by name or purpose"
             ]
         },
         {
