@@ -10,18 +10,20 @@ description: >
   — Operations, Resilience, Security, Scalability, Performance, Observability,
   Networking, Cost, Control Plane — plus AWS API and Cluster Insights, and
   returns evidence-backed PASS/FAIL/N/A scorecards with prioritized
-  remediations. Do not use it for a quick ungraded health snapshot or an active
-  incident investigation.
+  remediations. On request it maps verdicts to CIS EKS, NIST 800-53, PCI DSS,
+  SOC 2, and HIPAA, diffs against a prior review, and compares clusters across
+  accounts for drift. Do not use it for a quick ungraded health snapshot or an
+  active incident investigation.
 metadata:
   author: shyamkulkarni
-  version: "1.9.6"
+  version: "1.10.0"
   aws-devops-agent-skills.agent-types: "CHAT"
 ---
 # EKS Operations Review
 ## Scope boundary
-This skill performs comprehensive graded operational reviews with 288 checks across 9 pillars. For quick health checks during active incidents, use incident investigation skills instead — this review is heavyweight and best suited for proactive assessments.
+Comprehensive graded review: 288 checks across 9 pillars. For quick health checks during active incidents, use incident investigation skills instead; it suits proactive assessments.
 ## Execution scope
-A full review is heavyweight and may require many read-only tool calls; duration varies with cluster size, API responsiveness, permissions, and telemetry availability. A targeted review grades only the named unit plus required AX evidence. The 49 discovery areas collect evidence; the 288 core rows are grading items across nine pillars plus AWS API/Insights. Per-unit counts and exact ID membership live in `references/runtime/check-manifest.md`; read them there each run.
+A full review needs many read-only tool calls; duration varies with cluster size, API responsiveness, permissions, and telemetry. A targeted review grades only the named unit plus required AX evidence. The 49 discovery areas collect evidence; the 288 core rows are grading items across nine pillars plus AWS API/Insights. Per-unit counts and exact ID membership live in `references/runtime/check-manifest.md`; read them there each run.
 
 ## Non-negotiable runtime contract
 - AWS DevOps Agent cannot create or store runtime files. Keep only the bounded transient in-conversation ledger below; never create inventory JSON, sidecars, reports, checkpoints, or filesystem resume state. Render the complete report directly in the final response after QA passes.
@@ -51,11 +53,11 @@ Collect available topology, dependencies, recent investigations, alarms, and env
 ### Step 3 (S2) — Verify access and identity
 Run cheap read probes (`version -o json`, current context, cluster info, nodes), cross-check S0, and apply stop rules. Load `references/docs/minimum-rbac.md` only for an access-policy question or denial.
 ### Step 4 (S3) — Discovery phase (49 areas)
-Load `references/runtime/discovery-manifest.md`, then use `use_kubectl` to execute `references/kubectl-discovery-commands.md` (1–27) and `references/kubectl-discovery-commands-deep-dive.md` (28–49) in order. Every area gets one `complete|partial|n/a` status. Reuse only named transient fetches with matching identity/scope/provenance and run each dependent extraction; CRD-specific probes stay separate. Apply fleet tiers and the independent 500+ pod rule, which prohibits whole-cluster pod JSON. Retain bounded projections only in conversation; never store results in Amazon S3 or a file.
+Load `references/runtime/discovery-manifest.md`, then use `use_kubectl` to execute `references/kubectl-discovery-commands.md` (1–27) and `references/kubectl-discovery-commands-deep-dive.md` (28–49) in order. Every area gets one `complete|partial|n/a` status. Reuse only named transient fetches with matching identity/scope/provenance and run each dependent extraction; CRD-specific probes stay separate. Apply fleet tiers and the independent 500+ pod rule, which prohibits whole-cluster pod JSON. Keep bounded projections in conversation only.
 ### Step 5 (S4) — Assemble inventory and telemetry
 Load `references/runtime/inventory-schema.md`. When telemetry applies, load `references/runtime/metrics-thresholds.md` and attempt required 7-day node/pod utilization, restarts, EC2 health, EKS request, log-pattern, alarm, and CloudTrail signals. Missing telemetry yields N/A plus the visibility finding. Keep a bounded in-context snapshot only.
 ### Step 6 (S5) — Route scope and gates
-Load `references/runtime/router.md` and `references/runtime/cluster-gates.md`; record every decision, then drop both. Named requests grade named units; full/CWR grades all nine pillars plus AX. Upgrade/migration or Extended Support fires the Upgrade unit and `k8s-deprecated-apis.md`; Windows fires when `windows_nodes>0`; Hybrid when `hybrid_nodes>0`; AI/ML when GPU or Neuron nodes exist; the manifest owns their exact IDs and counts. Otherwise record an explicit false-gate line and do not load the conditional. Auto Mode, IPv6, Fargate, CNI, mixed-OS, and EKS Anywhere gates change applicability, never membership.
+Load `references/runtime/router.md` and `references/runtime/cluster-gates.md`; record every decision, then drop both. Named requests grade named units; full/CWR grades all nine pillars plus AX. Upgrade/migration or Extended Support fires the Upgrade unit and `k8s-deprecated-apis.md`; Windows fires when `windows_nodes>0`; Hybrid when `hybrid_nodes>0`; AI/ML when GPU or Neuron nodes exist; the manifest owns their exact IDs and counts. Otherwise record an explicit false-gate line and do not load the conditional. Auto Mode, IPv6, Fargate, CNI, mixed-OS, and EKS Anywhere gates change applicability, never membership. Requested overlays follow the router and never change verdicts.
 ### Step 7 (S6) — Grade one unit at a time
 Load `references/runtime/grading-guards.md` once. For each routed unit: load only its canonical definition; grade every ID with evidence and applicable guards; commit exact rows/totals/finding inputs to the ledger before the next unit; then identify FAIL IDs. Only after FAIL verdicts exist, consult `references/remediations/index.md`, load the mapped shard/playbook, and complete each finding. Load a decision tree only after its Pending/OOM/latency/429 signal and before asserting cause. Fingerprint = `SHA256(account_id|region|cluster_name|check_id|canonical_resource_id)`. Drop unit/remediation/raw data before continuing. If AWS reads fail, AX rows are N/A; load `references/docs/minimum-rbac.md` for the required IAM actions; if telemetry fails, dependent rows are N/A; if control-plane logging is disabled, record the visibility FAIL and still attempt public metrics.
 #### Step 7 (S6) — Control Plane sub-state
@@ -72,7 +74,6 @@ Sections 1–7 are the review; the appendix is bookkeeping, never a substitute. 
 - Load conditional modules only after their Windows, Hybrid, AI/ML, or Upgrade gate fires.
 - Resolve and load remediation shards only after a FAIL verdict exists.
 - Load `pending-pods.md`, `oomkilled.md`, or `api-latency-429.md` only after its matching signal.
-- Load `queries-cp19-cp25-diagnostics.md` only for a matching Control Plane signal.
 - Load human guides only for explicit operator questions; state-scoped runtime references load only immediately before use.
 ## Context pressure and partial-execution recovery
 Under context pressure, finish the current area/unit, update the ledger, compress PASS/N/A detail, and discard raw output. Compression shortens evidence text only; S8 sections 1–7 are never dropped, merged, or postponed. If safe continuation is impossible, emit a conversational checkpoint with the last completed state/unit, exact completed/unassessed coverage, QA state, and next unit. Resume from the incomplete state only when the conversation still retains the ledger; otherwise recollect required evidence. If more than 30% of discovery failed, investigate access, permissions, throttling, or scope before retrying.
