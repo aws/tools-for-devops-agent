@@ -167,7 +167,8 @@ Check each item before sending. Fix the report, not the checklist.
    states how many CloudTrail events were excluded as push correlated, or that
    the probe did not run.
 6. The rating is stated once, in Repository Rating, and matches the first
-   matching row of the rating table in SKILL.md.
+   matching entry of the repository rating list in SKILL.md (table form in
+   [verdict-model.md](verdict-model.md)).
 7. Every source with status `AccessDenied`, `ToolingFailure`, `Partial` or
    `NotChecked` appears in Not Assessed, and none of them is described as having
    returned zero references.
