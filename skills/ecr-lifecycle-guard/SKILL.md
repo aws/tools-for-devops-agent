@@ -14,7 +14,7 @@ description: >
   replication or pull through cache setup, image scanning findings, building or
   tagging images, or ECS task failures unrelated to image availability.
 metadata:
-  author: matemara
+  author: matt-emara
   version: "1.0.0"
   summary: "Read only ECR lifecycle policy guard: previews or simulates deletions and flags in use or production tagged images before a rule runs."
   aws-devops-agent-skills.agent-types: "CHAT"
