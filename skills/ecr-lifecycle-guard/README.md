@@ -21,6 +21,39 @@ every expiring image against ECS, AWS Batch, Lambda, App Runner, EKS presence an
 recorded pull activity on every run, and return a fixed verdict for every image
 instead of prose.
 
+### Gap measured against the base agent
+
+Measured on 2026-10-21 against a 26 image repository with a five rule policy
+(untagged after 1 day, keep 2 `nightly-`, keep 5 `build-*`, `rc-` after 14 days,
+`tagStatus: any` keep 6), four runs of the base agent without this skill:
+
+1. The correct 12 image expiring set was produced in 1 of 4 runs. The others
+   listed 9 images, 1 image, and a wrong set of 12 (expired `rc-*` and
+   `build-8` to `build-12`, missed `build-1` to `build-7`).
+2. An image with a recorded pull and no task definition (`v2.3.0`) was called
+   "not a concern" in one run and "currently safe" in another. ECR's own preview
+   listed it, and ECR deleted it within 24 hours.
+3. `StartLifecyclePolicyPreview` and `GetLifecyclePolicyPreview` were never
+   called (0 of 4). One run stated the start call "is blocked as a mutating
+   operation in my read-only access" and stopped there.
+4. `lastRecordedPullTime` was read only when the prompt hinted at direct pulls.
+5. A one rule, six image control repository was handled correctly 6 of 6 times,
+   so the failure is multi rule priority semantics, not ECR knowledge.
+6. Even on that control repository, 1 of the 6 runs offered to rewrite the
+   policy, which a read only review must never do.
+
+The skill closes each gap with: preview first with a documented approval path, a
+deterministic simulation as fallback, a mandatory in use cross reference on
+every run, a fixed verdict table that leaves no room for "safe" prose, and a
+hard rule that the skill reports and never remediates.
+
+Live test round 1 (2026-10-27, skill on) exposed a flaw in the skill itself:
+every expiring image had a CloudTrail `BatchGetImage` event 1 to 2 seconds after
+its own `imagePushedAt`, emitted by the push, and the skill counted all of them
+as consumer pulls (11 of 11 `Expiring-InUse`, 100 percent false positive) while
+`lastRecordedPullTime` showed one real pull in the repository. The evidence
+hierarchy and push correlation rule in `SKILL.md` are the fix.
+
 ## Key Capabilities
 
 - Preview first: `StartLifecyclePolicyPreview` and `GetLifecyclePolicyPreview`,

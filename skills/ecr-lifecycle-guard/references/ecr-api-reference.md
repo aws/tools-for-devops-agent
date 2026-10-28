@@ -283,3 +283,28 @@ README repeats these as open questions for SME review.
 - Batch DescribeJobDefinitions: https://docs.aws.amazon.com/batch/latest/APIReference/API_DescribeJobDefinitions.html
 - Lambda GetFunction and FunctionCodeLocation: https://docs.aws.amazon.com/lambda/latest/api/API_GetFunction.html and https://docs.aws.amazon.com/lambda/latest/api/API_FunctionCodeLocation.html
 - App Runner DescribeService and ImageRepository: https://docs.aws.amazon.com/apprunner/latest/api/API_DescribeService.html and https://docs.aws.amazon.com/apprunner/latest/api/API_ImageRepository.html
+
+## 10. Known quirks
+
+Behaviours observed or documented that change how the skill calls or reads these
+APIs. Each is already encoded in the execution flow and the verdict model; this
+table is the lookup form.
+
+| Quirk | Effect on the skill |
+|---|---|
+| One preview at a time per repository; a second start returns `LifecyclePolicyPreviewInProgressException` | Wait and poll; never retry the start call in a loop |
+| Preview results are kept for a limited time and then report `EXPIRED` | Read all pages as soon as `COMPLETE`; restart once if `EXPIRED` |
+| `StartLifecyclePolicyPreview` is a write access level action in IAM terms | The agent guardrail may cancel it; approval is safe because it changes nothing |
+| `lastRecordedPullTime` is refreshed at least once every 24 hours | A pull in the last day may not show yet; any value inside the window counts as recent, and absence is never proof of non use |
+| Images never pulled have no `lastRecordedPullTime` field | Missing field means "no recorded pull", not "unused" |
+| `tagPrefixList` and `tagPatternList` entries are ANDed across the list | A two entry list protects only images carrying both tags; suggest one rule per family |
+| `tagStatus: any` must carry the highest `rulePriority` number | Catch all is always evaluated last and claims only what higher rules left |
+| A higher priority rule's candidates are claimed even when that rule does not expire them | This is why a 14 day `rc-` rule stops the catch all from touching `rc-` images |
+| Multi tag digests match through any tag and are expired once | One row per digest |
+| Manifest list children are not expired while the list exists | Remove them from a simulated set and say so |
+| `archive` action and `imageStatus ARCHIVED` exist | Archive is treated as removal for verdicts and shown in the Action column |
+| ECR acts within 24 hours of an image meeting the criteria | A HIGH or CRITICAL finding is urgent |
+| Lifecycle actions appear in CloudTrail as `PolicyExecutionEvent`, previews as `DryRunEvent` | Use `LookupEvents` on these names for "why did my image disappear" |
+| `batch:DescribeJobDefinitions` and `lambda:GetFunction` are not in the managed policy | Expect `AccessDenied` until the delta policy is attached; report Unknown, not Unused |
+| The guardrail has cancelled the whole `cloudtrail` namespace in other skills | The pull probe is optional; a cancellation is listed under Not Assessed and changes no verdict |
+| An image push emits `BatchGetImage` (and layer events) 1 to 2 seconds after `imagePushedAt`, from the pushing principal (observed 2026-10-27 on 26 of 26 images) | The push correlation rule drops these events; they are counted in U8 and never make an image `Expiring-InUse` |
