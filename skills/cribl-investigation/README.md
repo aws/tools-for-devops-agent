@@ -26,7 +26,7 @@ When telemetry is missing, delayed or wrong, the cause is often in the pipeline 
 
 ## Setup
 
-1. Connect Cribl to your Agent Space by following [connectors/cribl/README.md](../../connectors/cribl/README.md).
+1. Connect Cribl to your Agent Space by following [connectors/cribl/README.md](https://github.com/aws/tools-for-devops-agent/blob/main/connectors/cribl/README.md).
 2. Install this skill in the same Agent Space.
 
 ## Sample prompts
