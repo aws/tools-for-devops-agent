@@ -165,7 +165,7 @@ def _format_name(skill_id: str) -> str:
     """Convert skill-id to display name: aws-health-events -> AWS Health Events."""
     words = skill_id.split("-")
     # Capitalize known acronyms
-    acronyms = {"aws", "eks", "rds", "rca", "mcp", "crm"}
+    acronyms = {"aws", "eks", "rds", "rca", "mcp", "crm", "eos"}
     return " ".join(
         w.upper() if w.lower() in acronyms else w.capitalize()
         for w in words
