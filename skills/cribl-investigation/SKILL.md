@@ -6,7 +6,7 @@ metadata:
   version: "1.0.0"
   tier: partner-managed
   summary: "Investigate Cribl pipeline health, Sources, Destinations, Pipelines and Cribl Search data during an incident."
-  aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA"
+  aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_TRIAGE, INCIDENT_RCA"
   aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
