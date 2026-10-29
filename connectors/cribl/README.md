@@ -14,7 +14,7 @@ d. Product access for the tools you want to use. Cribl filters the tool list by 
 
 An administrator must turn the server on once per Organization:
 
-1. Log in to your Cribl.Cloud Organization.
+1. Log in to your Cribl.Cloud Organization, or to your on-prem Leader.
 2. Go to **Settings > Global > MCP Server**.
 3. Toggle **Enable MCP server** on.
 
