@@ -23,7 +23,8 @@ Connecting and running tools does not require the admin role — only enabling t
 
 ## 2. Choose your connection (Cribl.Cloud or Cribl On-Prem)
 
-2a. Cribl.Cloud 
+### 2a. Cribl.Cloud
+
 If using Cribl.Cloud your MCP endpoint is `https://<workspace>-<organization>.cribl.cloud/api/v1/mcp`. The DevOps Agent console asks for the full host label — the **tenant** — which is your Workspace name and Organization ID joined by a hyphen, exactly as it appears in your Cribl.Cloud URL (for example `main-a1b2c3d4`).
 
 You can confirm both parts under **Settings > Global > Information**.
