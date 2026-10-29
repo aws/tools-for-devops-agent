@@ -17,7 +17,7 @@ A dedicated custom agent that discovers AWS resources approaching or past End of
 ## Prerequisites
 
 - An AWS DevOps Agent space
-- The [eos-cost-analysis skill](https://github.com/aws/tools-for-devops-agent/tree/main/skills/eos-cost-analysis) uploaded to your Agent Space (choose "All agents" for Agent Type)
+- The [eos-cost-analysis skill](../../skills/eos-cost-analysis/) uploaded to your Agent Space (choose "All agents" for Agent Type)
 - `use_aws` and `verify_aws_claim` tools available in the Agent Space
 - Resource discovery permissions (EKS, RDS, Lambda, ElastiCache, and OpenSearch read-only `List`/`Describe` calls, with OpenSearch under the `es:` IAM prefix) are already covered by the `AIDevOpsAgentAccessPolicy` managed policy — no extra IAM is required for discovery
 - For live Extended Support pricing, grant the AWS Pricing API actions (`pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`) by setting `EnableEosCostAnalysis` in [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml)
