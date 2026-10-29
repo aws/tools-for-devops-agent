@@ -5,10 +5,11 @@ Cribl's embedded MCP server lets AWS DevOps Agent investigate your Cribl environ
 These steps happen in **Cribl**, before you connect in the DevOps Agent console.
 
 ## Pre-requisites
-a. Cribl environment: [Cribl.Cloud](https://aws.amazon.com/marketplace/pp/prodview-gwiqiktubqhhk?sr=0-0&ref_=ucaf&applicationId=AWSMPContessa) or [on-prem](https://docs.cribl.io/stream/deploy-types/)
-b.  For on-prem deployments, Cribl version 4.19.0 or newer
-c. Admin role in your Cribl Organization to enable the MCP server on the MCP Server settings page. Connecting to the server and running tools does not require the admin role.
-d. Product access for the tools you want to use. Cribl filters the tool list by your permissions. See [Tool Access and Permissions](https://docs.cribl.io/copilot/cribl-mcp-server/#rbac).
+
+- A Cribl environment: [Cribl.Cloud](https://aws.amazon.com/marketplace/pp/prodview-gwiqiktubqhhk?sr=0-0&ref_=ucaf&applicationId=AWSMPContessa) or [on-prem](https://docs.cribl.io/stream/deploy-types/).
+- For on-prem deployments, Cribl version 4.19.0 or newer.
+- The Admin role in your Cribl Organization, to enable the MCP server on the MCP Server settings page. Connecting to the server and running tools does not require the admin role.
+- Product access for the tools you want to use. Cribl filters the tool list by your permissions. See [Tool Access and Permissions](https://docs.cribl.io/copilot/cribl-mcp-server/#rbac).
 
 ## 1. Enable the MCP server
 
