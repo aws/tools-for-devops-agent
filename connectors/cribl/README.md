@@ -67,6 +67,7 @@ Paste this value as the **Cribl Bearer token** in the AWS DevOps Agent console.
 
 The token never grants more than the account that copied it, and Cribl checks permissions again on every tool call. Give the agent the access it should have:
 
+- **Leader MCP Access** — required to connect. Without it, the server answers HTTP 403.
 - **Stream product access** — read Sources, Destinations, and Pipelines.
 - **Search product access** — run KQL searches and read Search Notebooks.
 - **System metrics / System messages / Monitors** — read deployment health, alerts, and monitor rules.
@@ -76,7 +77,7 @@ Cribl filters the tool list to what your token's permissions allow, so a read-on
 
 ## Token expiration
 
-Cribl.Cloud Bearer tokens expire after about 24 hours. When tool calls start returning HTTP 401, copy a fresh token and update the connection. If the server has been disabled, tool calls return HTTP 403 — an administrator re-enables it at **Settings > Global > MCP Server**.
+Cribl.Cloud Bearer tokens expire after about 24 hours. When tool calls start returning HTTP 401, copy a fresh token and update the connection. HTTP 403 means the server has been disabled or the token's user lacks Leader MCP Access: an administrator re-enables the server at **Settings > Global > MCP Server** or grants the permission.
 
 ## Notes
 
