@@ -52,5 +52,5 @@ Ingested metrics (Prometheus remote-write data, not Cribl's own health):
 - A Dataset or KQL query you assume may not exist. When search returns nothing useful, call `cribl_getSearchContext` and re-check available Datasets and syntax before concluding.
 - A tool missing from the list means the token lacks that product access (Search / Stream) — report it as a permissions gap, do not retry.
 - A tool present in the list can still return `Forbidden: insufficient API permissions for this tool (RBAC).` for a Worker Group or Dataset outside the user's access. That is call-time enforcement, not a transient error.
-- Tokens expire (about 24h on Cribl.Cloud). Repeated HTTP 401s mean the token needs refreshing on the customer side; HTTP 403 means the MCP server was disabled.
+- Tokens expire (about 24h on Cribl.Cloud). Repeated HTTP 401s mean the token needs refreshing on the customer side; HTTP 403 means the MCP server was disabled or the user lacks Leader MCP Access.
 - For a Pipeline inside a Pack, you must name both the Pack (`packId`) and its Worker Group (`groupName`).
