@@ -3,7 +3,8 @@ name: launchdarkly-aiconfig-create
 description: "DEPRECATED redirect — this skill was renamed to launchdarkly-configs-create. Do not use this skill; invoke launchdarkly-configs-create instead. Kept only so old references to launchdarkly-aiconfig-create still point users to the new name."
 license: Apache-2.0
 metadata:
-  version: 0.1.0
+  author: launchdarkly
+  version: "1.0.0"
   deprecated: "true"
 ---
 

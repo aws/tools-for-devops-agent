@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: launchdarkly
-  version: "1.3.0-experimental"
+  version: "1.0.0"
 ---
 
 # LaunchDarkly Release Autopilot Settings

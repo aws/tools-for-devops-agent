@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: "Advisory and read-only. Works on all platforms. Does NOT require the LaunchDarkly MCP server. Reads code with standard file tools (Read/Grep/Glob) and returns a structured verdict via the `recommend-flag` tool."
 metadata:
   author: launchdarkly
-  version: "0.4.0-experimental"
+  version: "1.0.0"
 ---
 
 # Should This Change Be Behind a Flag?

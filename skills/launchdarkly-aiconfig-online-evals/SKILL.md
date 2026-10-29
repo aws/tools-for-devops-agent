@@ -3,7 +3,8 @@ name: launchdarkly-aiconfig-online-evals
 description: "DEPRECATED redirect — this skill was renamed to launchdarkly-online-evals. Do not use this skill; invoke launchdarkly-online-evals instead. Kept only so old references to launchdarkly-aiconfig-online-evals still point users to the new name."
 license: Apache-2.0
 metadata:
-  version: 0.1.0
+  author: launchdarkly
+  version: "1.0.0"
   deprecated: "true"
 ---
 

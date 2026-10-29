@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires git and the GitHub CLI (gh); pairs with the investigate skill
 metadata:
   author: launchdarkly
-  version: "0.1.0"
+  version: "1.0.0"
 ---
 
 # Create a fix PR

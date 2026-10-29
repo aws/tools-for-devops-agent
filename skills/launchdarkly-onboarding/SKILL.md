@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires an MCP-capable coding agent and `npx` on PATH for optional skill installs. SDK keys, client-side IDs, and mobile keys are only needed when the SDK key step runs.
 metadata:
   author: launchdarkly
-  version: "0.4.0"
+  version: "1.0.0"
 ---
 
 # LaunchDarkly Onboarding

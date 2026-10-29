@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: launchdarkly
-  version: "0.1.0"
+  version: "1.0.0"
 ---
 
 # Migrate to AgentControl

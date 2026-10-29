@@ -3,7 +3,8 @@ name: launchdarkly-aiconfig-ai-metrics
 description: "DEPRECATED redirect — this skill was renamed to launchdarkly-built-in-metrics. Do not use this skill; invoke launchdarkly-built-in-metrics instead. Kept only so old references to launchdarkly-aiconfig-ai-metrics still point users to the new name."
 license: Apache-2.0
 metadata:
-  version: 0.1.0
+  author: launchdarkly
+  version: "1.0.0"
   deprecated: "true"
 ---
 

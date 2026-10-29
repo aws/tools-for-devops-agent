@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: Requires the LaunchDarkly server-side AI SDK (`launchdarkly-server-sdk-ai>=0.20.0` for Python or `@launchdarkly/server-sdk-ai>=0.20.0` for Node) and an existing config.
 metadata:
   author: launchdarkly
-  version: "1.0.0-experimental"
+  version: "1.0.0"
 ---
 
 # Agent Metrics Instrumentation

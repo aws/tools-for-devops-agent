@@ -5,7 +5,7 @@ license: Apache-2.0
 compatibility: "Uses the LaunchDarkly MCP server when it is configured; otherwise falls back to the LaunchDarkly REST API (needs a LaunchDarkly API token). Reads the local codebase and git history."
 metadata:
   author: launchdarkly
-  version: "0.1.0-experimental"
+  version: "1.0.0"
 ---
 
 # LaunchDarkly Experiment Guide

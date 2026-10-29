@@ -4,7 +4,7 @@ description: Configure config targeting rules to control which variations serve 
 compatibility: Requires LaunchDarkly API access token with ai-configs:write permission.
 metadata:
   author: launchdarkly
-  version: "0.1.0"
+  version: "1.0.0"
 ---
 
 # Config Targeting

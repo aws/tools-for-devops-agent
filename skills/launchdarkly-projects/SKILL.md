@@ -4,7 +4,7 @@ description: Guide for setting up LaunchDarkly projects in your codebase. Helps 
 compatibility: Requires the remotely hosted LaunchDarkly MCP server. Code that creates projects itself (scripts, IaC, admin tools) needs an API access token with projects:write permission.
 metadata:
   author: launchdarkly
-  version: "0.5.0"
+  version: "1.0.0"
 ---
 
 # LaunchDarkly Projects Setup

@@ -4,7 +4,7 @@ description: Attach judges to config variations for automatic LLM-as-a-judge eva
 compatibility: Requires the remotely hosted LaunchDarkly MCP server. Scripted setup without MCP needs an API access token with ai-configs:write permission. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
 metadata:
   author: launchdarkly
-  version: "0.2.0"
+  version: "1.0.0"
 ---
 
 # Config Online Evaluations
