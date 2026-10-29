@@ -63,9 +63,7 @@ Pricing is ALWAYS retrieved live from the AWS Pricing API (`pricing:GetProducts`
 | OpenSearch | $0.0065/NIH | $0.0065/NIH | per Normalized Instance Hour | Single tier — no escalation |
 | Lambda | — | — | — | No Extended Support charge (deprecated runtimes are a security risk only) |
 
-After Year 3, AWS may force-upgrade the resource.
-
-**Cost framing:** these rates represent the AVOIDABLE Extended Support premium (what the customer eliminates by upgrading). For EKS, the $0.50/hour is the ES surcharge on top of the $0.10 standard cluster cost the customer pays regardless — report the premium as the cost exposure/savings opportunity, not the standard cost.
+After Year 3, AWS may force-upgrade the resource. **Cost framing:** these rates represent the AVOIDABLE Extended Support premium (what the customer eliminates by upgrading). For EKS, the $0.50/hour is the ES surcharge on top of the $0.10 standard cluster cost the customer pays regardless — report the premium as the cost exposure/savings opportunity, not the standard cost.
 
 ## Prerequisites
 
@@ -81,7 +79,6 @@ After Year 3, AWS may force-upgrade the resource.
 - NEVER fabricate pricing rates — retrieve live rates from the AWS Pricing API (Step 3.2)
 - When calling the Pricing API, ALWAYS extract only `pricePerUnit` — never dump the full PriceList (responses are very large)
 - If a version's EOS date is not found, mark it as "UNVERIFIED — check AWS docs"
-- If a pricing usagetype returns empty, use `pricing:GetAttributeValues` to discover the correct format before giving up
 - All output is AI-generated and must be independently verified before taking action
 - Read-only operations only — do not modify any resources
 
