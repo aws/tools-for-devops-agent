@@ -17,9 +17,8 @@ Discovers AWS resources approaching or past End of Standard Support and calculat
 
 - AWS DevOps Agent space with the `use_aws` and `verify_aws_claim` tools available
 - Resource discovery permissions (EKS, RDS, Lambda, ElastiCache, OpenSearch read-only `List`/`Describe` calls) are already covered by the `AIDevOpsAgentAccessPolicy` managed policy — no extra IAM is required for discovery
-- For live Extended Support pricing, grant the AWS Pricing API actions (`pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`) by setting `EnableEosCostAnalysis` in [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml)
+- For live Extended Support pricing, grant the AWS Pricing API actions (`pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`) by setting `EnableEosCostAnalysis` in [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
 - For multi-account analysis: associate secondary accounts in DevOps Agent settings
-- AWS Support plan: Business, Enterprise On-Ramp, or Enterprise (required for DevOps Agent)
 
 > **Note on the OpenSearch IAM prefix:** the OpenSearch discovery actions live under the `es:` IAM prefix (`es:ListDomainNames`, `es:DescribeDomain`, `es:DescribeDomains`), even though the `use_aws` calls in SKILL.md use the `opensearch` API client name. The managed policy already grants these, so you do not need to add them yourself.
 

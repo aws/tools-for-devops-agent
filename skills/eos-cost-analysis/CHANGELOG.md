@@ -36,6 +36,6 @@ Reporting:
 - Lambda deprecated runtimes flagged as security risk (no ES charge)
 
 Packaging:
-- IAM: discovery is covered by `AIDevOpsAgentAccessPolicy`; the `EnableEosCostAnalysis` toggle in `cloudformation/devops-agent-skill-policies.yaml` adds only the Pricing API actions
+- IAM: discovery is covered by `AIDevOpsAgentAccessPolicy`; the `EnableEosCostAnalysis` toggle in `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml` adds only the Pricing API actions
 - Evaluation tests (`.skilleval.yaml`, `evals/evals.json`, `evals/eval_queries.json`) with reports from a run against live resources across us-east-1, eu-west-1 and ap-south-1
 - Companion custom agent in `custom-agents/eos-cost-analysis` for scheduled runs

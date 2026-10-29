@@ -44,8 +44,8 @@ Support charges, and generate an actionable cost-impact report.
 | Amazon EKS | Per cluster/hour | `eks:ListClusters`, `eks:DescribeCluster` |
 | Amazon RDS/Aurora | Per vCPU/hour | `rds:DescribeDBInstances`, `rds:DescribeDBClusters` |
 | AWS Lambda | No direct ES charge (security risk only) | `lambda:ListFunctions` |
-| Amazon ElastiCache | Per node/hour | `elasticache:DescribeCacheClusters` |
-| Amazon OpenSearch | Per instance/hour | `opensearch:ListDomainNames`, `opensearch:DescribeDomains` |
+| Amazon ElastiCache | Per node/hour | `elasticache:DescribeCacheClusters`, `elasticache:DescribeReplicationGroups`, `elasticache:DescribeServerlessCaches` |
+| Amazon OpenSearch | Per instance/hour | `opensearch:ListDomainNames`, `opensearch:DescribeDomain` |
 
 > **IAM prefix note:** the `use_aws` calls above use `opensearch` because that is the correct API client name, but the corresponding IAM actions live under the `es:` prefix (`es:ListDomainNames`, `es:DescribeDomain`, `es:DescribeDomains`). The `AIDevOpsAgentAccessPolicy` managed policy already grants the discovery actions for all five services.
 
@@ -59,7 +59,7 @@ Pricing is ALWAYS retrieved live from the AWS Pricing API (`pricing:GetProducts`
 |---------|---------------|-------------|--------------|---------------|
 | EKS | $0.50/cluster/hour | $0.50/cluster/hour | per cluster/hour | Flat — no Year 3 escalation. This is the ES premium on top of the $0.10 standard cluster cost. |
 | RDS | $0.10/vCPU/hour | $0.20/vCPU/hour | per vCPU/hour | Year 3 = 2× Year 1-2 |
-| ElastiCache | ~$0.165/node/hour (varies by node type) | ~$0.330/node/hour (varies by node type) | per node/hour | Year 3 = 2× Year 1-2 |
+| ElastiCache | $0.165/node/hour for `cache.r6g.large` (rate depends on node type, e.g. $0.054 for `cache.t3.medium`) | $0.330/node/hour for `cache.r6g.large` | per node/hour | Year 3 = 2× Year 1-2 |
 | OpenSearch | $0.0065/NIH | $0.0065/NIH | per Normalized Instance Hour | Single tier — no escalation |
 | Lambda | — | — | — | No Extended Support charge (deprecated runtimes are a security risk only) |
 
@@ -69,8 +69,8 @@ After Year 3, AWS may force-upgrade the resource.
 
 ## Prerequisites
 
-- IAM permissions for service discovery APIs (see list per service above)
-- `pricing:GetProducts` and `pricing:GetAttributeValues` permissions (managed policy: `AWSPriceListServiceFullAccess`) for live Extended Support pricing
+- Discovery APIs (listed per service above) are covered by the `AIDevOpsAgentAccessPolicy` managed policy
+- The Pricing API actions `pricing:GetProducts`, `pricing:GetAttributeValues` and `pricing:DescribeServices` for live Extended Support pricing, granted by the `EnableEosCostAnalysis` parameter of the skill-policies CloudFormation template
 - For organization-wide analysis: resources across all associated accounts (via Agent Space cloud source associations)
 - For EOS date validation and upgrade guidance: `verify_aws_claim` or AWS documentation search
 
@@ -155,7 +155,7 @@ use_aws: rds:DescribeDBClusters (region: <region>)    # Aurora clusters (authori
              DBClusterMembers (instance identifiers)
 ```
 
-**Filter:** Include `Engine` in: `postgres`, `mysql`, `mariadb`, `aurora-mysql`, `aurora-postgresql`, `oracle-*`, `sqlserver-*`.
+**Filter:** RDS Extended Support is offered for `mysql`, `postgres`, `aurora-mysql` and `aurora-postgresql`; discover those. Other engines (`mariadb`, `oracle-*`, `sqlserver-*`) have no Extended Support charge or Pricing API usagetype, so list them in the discovery summary as out of scope and do not price them.
 **Aurora handling:** For Aurora, use the cluster's `EngineVersion` as the authoritative version (instance-level version may lag). Extended Support is billed per Aurora instance (vCPU-based), so map each cluster member instance's class to vCPUs.
 **Record:** account_id, region, resource_id, engine, engine_version, instance_class, multi_az, arn, is_aurora, cluster_id
 
@@ -255,28 +255,31 @@ If documentation search returns no result for a specific version:
 **CRITICAL — Response size:** The Pricing API returns large JSON. ALWAYS use the exact usagetype patterns below and extract ONLY `pricePerUnit`. Never dump the full PriceList into context.
 
 **Pricing API constraints:**
-- Region: call in `us-east-1` (Pricing API is only available in us-east-1 and ap-south-1)
-- Requires `pricing:GetProducts` and `pricing:GetAttributeValues` permissions
+- Region: call the Pricing API in `us-east-1` (its endpoint region)
+- Requires `pricing:GetProducts` and `pricing:GetAttributeValues` (plus `pricing:DescribeServices` for the empty-result fallback below)
 - The `regionCode` filter targets the region you're pricing for (e.g., `us-east-1`), separate from the API endpoint region
 
 **Per-service pricing lookup:**
 
 | Service | ServiceCode | Usage Type Pattern | Region Prefix | Billing Unit | Year 3 |
 |---------|-------------|-------------------|---------------|--------------|--------|
-| EKS | `AmazonEKS` | `{PREFIX}-AmazonEKS-Hours:extendedSupport` | Yes (USE1, USW2...) | per cluster/hour | Flat (no escalation) |
-| RDS | `AmazonRDS` | `{PREFIX}ExtendedSupport:Yr1-Yr2:{Engine}` / `{PREFIX}ExtendedSupport:Yr3:{Engine}` | Yes — **empty in us-east-1**, prefixed elsewhere (USW2-, EU-, APS3-...) | per vCPU/hour | 2× Yr1-2 |
-| ElastiCache | `AmazonElastiCache` | `{PREFIX}-ExtendedSupportYr1_Yr2-NodeUsage:{nodeType}` / `{PREFIX}-ExtendedSupportYr3-NodeUsage:{nodeType}` | Yes | per node/hour | 2× Yr1-2 |
-| OpenSearch | `AmazonES` | `{PREFIX}-OpenSearchExtendedSupport` | Yes | per NIH/hour | Single tier (no escalation) |
+| EKS | `AmazonEKS` | `{PREFIX}-AmazonEKS-Hours:extendedSupport` | Yes, in every region (`USE1-` in us-east-1) | per cluster/hour | Flat (no escalation) |
+| RDS | `AmazonRDS` | `{PREFIX}-ExtendedSupport:Yr1-Yr2:{EngineVersion}` / `{PREFIX}-ExtendedSupport:Yr3:{EngineVersion}` | **None in us-east-1**, prefixed elsewhere (`USW2-`, `EU-`, `APS3-`...) | per vCPU/hour | 2× Yr1-2 |
+| ElastiCache | `AmazonElastiCache` | `{PREFIX}-ExtendedSupportYr1_Yr2-NodeUsage:{nodeType}` / `{PREFIX}-ExtendedSupportYr3-NodeUsage:{nodeType}` | Yes, in every region (`USE1-` in us-east-1) | per node/hour | 2× Yr1-2 |
+| OpenSearch | `AmazonES` | `{PREFIX}-OpenSearchExtendedSupport` | **None in us-east-1**, prefixed elsewhere (`EU-`, `APS3-`...) | per NIH/hour | Single tier (no escalation) |
 | Lambda | — | No Extended Support charge | — | — | — |
 
-**RDS has a region prefix like every other service — the prefix is just EMPTY in us-east-1.** This is the one that trips people up: in `us-east-1` the usagetype is exactly `ExtendedSupport:Yr1-Yr2:{Engine}` (no prefix), but in every OTHER region it is `{PREFIX}-ExtendedSupport:Yr1-Yr2:{Engine}` — e.g. `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2` in us-west-2, `EU-ExtendedSupport:Yr3:PostgreSQL` in eu-west-1. Do NOT assume RDS never has a prefix: outside us-east-1 the bare `ExtendedSupport:...` form returns 0 products, which would silently make the resource `PRICING_UNAVAILABLE` or $0. Resolve the RDS prefix exactly the way you do for the other services (below): no prefix for us-east-1, and `pricing:GetAttributeValues` to read the real prefix for any other region.
+**Whether us-east-1 carries a prefix depends on the service, so never assume.** Checked against the live Pricing API:
+- **RDS and OpenSearch** have NO prefix in us-east-1 (`ExtendedSupport:Yr1-Yr2:MySQL8.0`, `OpenSearchExtendedSupport`) and a prefix in every other region (`APS3-ExtendedSupport:Yr1-Yr2:MySQL8.0`, `EU-OpenSearchExtendedSupport`). Outside us-east-1 the bare form returns 0 products, which would silently turn the resource into `PRICING_UNAVAILABLE` or $0.
+- **EKS and ElastiCache** carry a prefix everywhere, `USE1-` in us-east-1.
+- **RDS `{EngineVersion}` is the engine plus its major version**, not the bare engine: `MySQL8.0`, `MySQL5.7`, `PostgreSQL13`, `AuroraMySQL2`, `AuroraMySQL3`, `AuroraPostgreSQL13`. Build it from the discovered `Engine` and major `EngineVersion`, and confirm it with `pricing:GetAttributeValues`. If no usagetype exists for that engine and version, mark the cost `PRICING_UNAVAILABLE` instead of guessing.
 
-**Region prefix mapping** (applies to ALL priced services — EKS, RDS, ElastiCache, OpenSearch):
+**Region prefix mapping** (EKS, RDS, ElastiCache, OpenSearch):
 
-The AUTHORITATIVE way to get the region prefix is the Pricing API — do NOT rely on a hardcoded prefix for any region you are not certain about. For `us-east-1` the prefix is empty (no prefix segment). For ANY region outside the common set below, call `pricing:GetAttributeValues` on the `usagetype` attribute (filtered by ServiceCode) and match the prefix for your target `regionCode`. This is the DEFAULT method, not a fallback, and it applies to RDS too.
+The AUTHORITATIVE way to get the region prefix is the Pricing API — do NOT rely on a hardcoded prefix for any region you are not certain about. For ANY region outside the common set below, call `pricing:GetAttributeValues` on the `usagetype` attribute (filtered by ServiceCode) and match the prefix for your target `regionCode`. This is the DEFAULT method, not a fallback, and it applies to every service.
 
-Common prefixes (safe to use directly; still verify via API if a lookup returns empty). NOTE: for RDS specifically, us-east-1 uses NO prefix at all (the `USE1-` form is for EKS/ElastiCache/OpenSearch; RDS in us-east-1 is the bare `ExtendedSupport:...`). Every other region prefixes RDS the same as the other services:
-- us-east-1 → `USE1` (RDS: no prefix) | us-east-2 → `USE2` | us-west-1 → `USW1` | us-west-2 → `USW2`
+Common prefixes (safe to use directly; still verify via API if a lookup returns empty). These apply to every service except where the list above says there is no prefix in us-east-1:
+- us-east-1 → `USE1` | us-east-2 → `USE2` | us-west-1 → `USW1` | us-west-2 → `USW2`
 - eu-west-1 → `EU` (or `EUW1`) | eu-west-2 → `EUW2` | eu-central-1 → `EUC1`
 - ap-northeast-1 → `APN1` | ap-southeast-1 → `APS1` | ap-southeast-2 → `APS2`
 - ca-central-1 → `CAN1` | sa-east-1 → `SAE1`
@@ -285,7 +288,7 @@ Regions you MUST resolve via the API (prefixes vary / are not reliably guessable
 
 **Lookup procedure per affected resource:**
 
-1. Build the usagetype string using the pattern + region prefix + resource attribute (engine/nodeType as applicable). For the region prefix: use no prefix for us-east-1, and for any other region resolve it via `pricing:GetAttributeValues` (do not guess). This applies to RDS as well — e.g. `ExtendedSupport:Yr1-Yr2:AuroraMySQL2` in us-east-1 but `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2` in us-west-2.
+1. Build the usagetype string using the pattern + region prefix + resource attribute (engine version / node type as applicable). Take the prefix from the rules above: none for RDS and OpenSearch in us-east-1, `USE1-` for EKS and ElastiCache in us-east-1, and for any other region resolve it via `pricing:GetAttributeValues` (do not guess). For example `ExtendedSupport:Yr1-Yr2:AuroraMySQL2` in us-east-1 but `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2` in us-west-2.
 2. Call `pricing:GetProducts`:
    ```
    use_aws: pricing:GetProducts (
@@ -516,5 +519,5 @@ a security and compliance risk.
 - **Start with a single service** for faster results — EKS is the simplest (flat per-cluster rate)
 - **RDS has the most complex pricing** due to vCPU mapping and Multi-AZ doubling
 - **Lambda has no cost impact** but deprecated runtimes are a security risk worth flagging
-- **Year 2 and Year 3 multipliers** significantly increase costs — resources past EOS for 2+ years may cost 2–3× more than Year 1 estimates suggest
+- **Year 3 doubles the rate for RDS and ElastiCache** (EKS and OpenSearch stay flat), so a resource 24+ months past EOS costs twice what it did in Year 1-2
 - **Verify EOS dates from AWS documentation at runtime** — deprecation schedules shift, so confirm each engine + version rather than trusting cached knowledge
