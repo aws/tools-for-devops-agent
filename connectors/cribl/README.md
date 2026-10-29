@@ -32,7 +32,9 @@ If using Cribl On-Prem, take note of your Cribl On-Prem Leader hostname and API 
 
 ## 3. Get your Bearer token
 Use the applicable instructions depending if you're using Cribl.Cloud (3a) or Cribl On-prem (3b):
-3a. Cribl.Cloud
+
+### 3a. Cribl.Cloud
+
 The connector authenticates with a Cribl.Cloud session **Bearer token**:
 
 1. Go to **Settings > Global > MCP Server**.
