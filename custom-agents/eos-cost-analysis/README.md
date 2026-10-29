@@ -12,7 +12,7 @@ A dedicated custom agent that discovers AWS resources approaching or past End of
 - Discovers resources across all associated accounts automatically
 - Produces a persisted artifact (report) each run for tracking over time
 - Covers EKS, RDS/Aurora, Lambda, ElastiCache, and OpenSearch
-- Calculates per-resource Extended Support cost with Year 1/2/3 pricing tiers
+- Calculates per-resource Extended Support cost with Year 1-2 and Year 3 pricing tiers
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ A dedicated custom agent that discovers AWS resources approaching or past End of
 - The [eos-cost-analysis skill](../../skills/eos-cost-analysis/) uploaded to your Agent Space (choose "All agents" for Agent Type)
 - `use_aws` and `verify_aws_claim` tools available in the Agent Space
 - Resource discovery permissions (EKS, RDS, Lambda, ElastiCache, and OpenSearch read-only `List`/`Describe` calls, with OpenSearch under the `es:` IAM prefix) are already covered by the `AIDevOpsAgentAccessPolicy` managed policy — no extra IAM is required for discovery
-- For live Extended Support pricing, grant the AWS Pricing API actions (`pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`) by setting `EnableEosCostAnalysis` in [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml)
+- For live Extended Support pricing, grant the AWS Pricing API actions (`pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`) by setting `EnableEosCostAnalysis` in [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
 - For multi-account analysis: associate secondary accounts in DevOps Agent settings
 
 ## Creating the Agent
@@ -42,13 +42,17 @@ You can execute the custom agent on-demand, on schedule, or using chat. Follow t
 **On-demand prompts:**
 - "Run this agent now" (uses default — full EOS analysis across all services and accounts)
 - "Analyze EKS EOS only in us-east-1 and eu-west-1"
-- "Check RDS extended support costs for the last quarter"
+- "Check RDS and Aurora Extended Support costs in ap-south-1"
 
 **Scheduled runs:**
 - Configure weekly or monthly execution under the agent's schedule settings
 - Each run produces a new artifact version, allowing week-over-week comparison
 
 Once finished, the artifact is persisted on the **Artifacts** page in the DevOps Agent web app.
+
+## Safety and Notifications
+
+The agent is read-only: it never modifies, upgrades, or deletes resources. The only outbound action is an optional summary message after a run that found affected resources (total monthly Extended Support cost, number of CRITICAL resources, top impacted account and service). It is sent only if you have attached a messaging tool such as Slack to the agent. Without one, the agent notes "Notification skipped" in the report and nothing is sent. The agent has no way to change customer AWS resources.
 
 ## Multi-Account Setup
 
