@@ -33,10 +33,10 @@ Discovers AWS resources approaching or past End of Standard Support and calculat
 
 ## Agent Types
 
-This skill is used by the following agent types:
+This skill installs for **All agents** (`GENERIC`), so it loads wherever an EOS cost question comes up:
 
 - **Chat tasks** — conversational, ad-hoc EOS cost queries and analysis
-- **Custom agents** — scheduled/automated EOS posture reports (see the [eos-cost-analysis custom agent](https://github.com/aws/tools-for-devops-agent/tree/main/custom-agents/eos-cost-analysis))
+- **Custom agents** — scheduled/automated EOS posture reports through the [eos-cost-analysis custom agent](https://github.com/aws/tools-for-devops-agent/tree/main/custom-agents/eos-cost-analysis), which uses the skill
 
 ## Uploading to AWS DevOps Agent
 
