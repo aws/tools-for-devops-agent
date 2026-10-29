@@ -1,0 +1,111 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "new-stack-create",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'iac-change-cost-preview' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response closely matches the expected structure (dashboard layout, eu-west-1 pricing, all resources Added, topology check with $0 adjustment, correct RDS instance/storage pricing of $365.00 and $50.00, NAT gateway hours $36.50, NAT EIP $3.65, ALB hours $18.25, correct discarding of UnusedBox and TS- trust-store SKUs, and correct usage-dependent listing of ArchiveBucket, ReconcilerFunction, NAT data processing, ALB LCU-hours). However, it misses the ALB public IPv4 charge that the expected output calls for: 'ALB public IPv4 x 2 subnets = $7.30' (using the FX-IP-01 public IPv4 rate applied to the ALB's 2 public subnets, since an internet-facing ALB consumes public IPv4 addresses in each subnet it's deployed to). The agent only counted one public IPv4 charge for the NAT EIP ($3.65) but did not account for the ALB's public IP usage. This causes the net monthly total to be $473.40 instead of the expected \u2248$480.70 \u2014 a discrepancy of exactly $7.30, confirming the missing ALB IPv4 line item. Since the final total and a required price line are incorrect/missing, this does not fully meet the expected output.</reasoning>\n<parameter name=\"evidence\">Expected: \"ALB public IPv4 x 2 subnets = $7.30. Net monthly change \u2248 +$480.70.\" Agent output: \"Net monthly change | \u2248 +$473.40 / month\" and no line item for ALB public IPv4 usage anywhere in the Added resources or Pricing trace tables.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Response reports a net monthly change of about +$480.70 (accept $480.00-$481.50).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Response reports 'Net monthly change | \u2248 +$473.40 / month' and total added '+$473.40', not within $480.00-$481.50.",
+          "reasoning": "The asserted figure of ~$480.70 is not matched; agent's total is $473.40, which is outside the accepted range.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response states that the pricing Region eu-west-1 was taken from the deploy workflow (AWS_REGION), and does not ask the user which Region to use.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Pricing Region | eu-west-1 \u00b7 from `deploy.yml` `AWS_REGION`/`--region` flag, confirmed by Price List filter `regionCode=eu-west-1`'",
+          "reasoning": "The response explicitly states the region was taken from the deploy workflow and does not ask the user to clarify the region (it only advises confirming with finance as a caveat, not asking the user directly).",
+          "confidence": "high"
+        },
+        {
+          "text": "Every resource is classified as Added, and the Removed and Resized sections are present but empty.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'### \u2796 Removed resources\\n_None._' and '### \ud83d\udd01 Resized resources\\n_None._' with all 9 resources listed under '### \u2795 Added resources'.",
+          "reasoning": "All resources are classified as Added, and Removed/Resized sections are present but empty, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "LedgerDb is priced as two lines, instance $365.00 and storage $50.00, using the 0.500 Multi-AZUsage row and not the 0.000 UnusedBox row.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "A2a priced at $365.00 using rate '$0.500 / Hr' (ref P1, SKU FX-RDS-01, EU-Multi-AZUsage:db.r6g.large) and A2b at $50.00 using '$0.250 / GB-Mo' (ref P2). The FX-RDS-09 (0.000 UnusedBox) row is not used for pricing, only mentioned in the dropped-SKU note is actually not mentioned for RDS-09 explicitly in the note, but it is not used anywhere in the total.",
+          "reasoning": "The agent correctly priced LedgerDb as two lines ($365 instance + $50 storage) using the 0.500 Multi-AZUsage rate and the 0.250 storage rate, not the 0.000 UnusedBox rate.",
+          "confidence": "high"
+        },
+        {
+          "text": "The load balancer is priced at $18.25 using the LoadBalancerUsage row (not the TS- trust-store row), plus $7.30 for two public IPv4 addresses (one per subnet).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "A6 priced at $18.25 using 'EU-LoadBalancerUsage' (P5, FX-ALB-01) correctly, but there is no line item for two public IPv4 addresses costing $7.30; only one EIP (ReconcilerNatEip, A3) is priced at $3.65 for a single public IP associated with the NAT gateway. ApiLoadBalancer's subnets (PublicSubnetA, PublicSubnetB) are not priced for additional public IPs.",
+          "reasoning": "The ALB pricing portion ($18.25, correct row) is satisfied, but the assertion also requires $7.30 for two public IPv4 addresses (one per subnet) which is not present in the output. Only one public IP (NAT EIP) is priced, not two for the ALB subnets.",
+          "confidence": "high"
+        },
+        {
+          "text": "ArchiveBucket, ReconcilerFunction, NAT gateway data processing and load balancer LCU-hours are listed as usage-dependent with no dollar figure.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Usage-dependent table lists 'ReconcilerNatGateway' (NAT data processing), 'ApiLoadBalancer' (LCU-hours), 'ArchiveBucket', and 'ReconcilerFunction' all with no dollar figures, just rate descriptions like '$0.050/GB' and '$0.008/LCU-Hr' as reference rates, not totals in the cost sum.",
+          "reasoning": "All four items are listed in the 'Usage-dependent (not in total)' section without being added to the total dollar figure, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response does not introduce any rate other than the fixture rates (for example it does not show $0.504/hr or $367.92 for the database).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response uses exactly '$0.500 / Hr' for RDS, '$0.250 / GB-Mo' for storage, etc., matching the fixture rates; no alternate rate like $0.504/hr or $367.92 appears anywhere in the response.",
+          "reasoning": "All rates and computed dollar figures in the response trace directly to the fixture's exact rates (0.500, 0.250, 0.005, 0.050, 0.025), with no deviation introduced.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every dollar amount in the Added table references a Pricing trace row that names the SKU (FX-...).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Added table references 'Price ref' column with P1-P5 for all priced line items (A2a\u2192P1, A2b\u2192P2, A3\u2192P3, A4\u2192P4, A6\u2192P5), each of which is defined in the Pricing trace table with explicit SKU column (FX-RDS-01, FX-RDS-02, FX-IP-01, FX-NAT-01, FX-ALB-01).",
+          "reasoning": "Every non-zero dollar amount in the Added table has a corresponding Price ref (P1-P5) that maps to a Pricing trace row explicitly naming the SKU; zero-dollar items (no charge) have no price ref, which is consistent and doesn't violate the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response uses the cost dashboard layout: a Summary table, an Added resources table and a Pricing trace section, in that order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'Summary\\n| Metric | Value |\\n|---|---|\\n| **Net monthly change** | **\u2248 +$473.40 / month** |\\n| Repo-based net (first check) | +$473.40 |\\n| Topology adjustment (second check) | $0.00 \u00b7 0 resources |\\n| \u2795 Ad\u2026'"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 0.7778
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m13s",
+    "cost": "$1.11",
+    "context_window": {
+      "utilization": "5.3%",
+      "compaction_count": 0
+    }
+  }
+}

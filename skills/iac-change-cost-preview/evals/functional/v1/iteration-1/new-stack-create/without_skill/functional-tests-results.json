@@ -1,0 +1,108 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "new-stack-create",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a specific total of \u2248+$480.70/month, which includes an ALB public IPv4 charge of $7.30 (2 subnets \u00d7 $0.005/hr \u00d7 730) that the agent's response omits entirely. The agent only counted a single Elastic IP charge ($3.65) attributed to the NAT gateway, and never accounted for the ALB's public IPv4 addresses across its two public subnets. This causes the agent's floor total ($473.40) to be $7.30 short of the expected $480.70. Additionally, the expected output calls for a structured 'cost dashboard' format (per assets/output-template.md) with explicit Added/Removed/Resized sections and an explicit topology-check/stack-existence adjustment line ($0.00) \u2014 the agent's response is a looser breakdown table and narrative, and does not explicitly frame things as Added/Removed/Resized or document the $0.00 topology adjustment as a distinct line item, though it does correctly note the stack doesn't exist and treats everything as net-new.\n\nWhile most of the individual price-line calculations match (RDS instance $365.00, storage $50.00, NAT hours $36.50, EIP $3.65, ALB hours $18.25, correct discarding of UnusedBox and Trust Store SKUs, correct identification of ArchiveBucket/ReconcilerFunction/NAT data/ALB LCU as usage-dependent with no figure, and correctly no-charge for subnet group/security group/IAM role), the agent missed the ALB's own public IPv4 charge, leading to an incorrect bottom-line figure ($473/month floor vs. the expected ~$480.70). This is a meaningful numerical discrepancy from the expected output.",
+      "evidence": "Agent's subtotal: \"$473.40/month\" vs expected \"Net monthly change \u2248 +$480.70\" which includes \"ALB public IPv4 x 2 subnets = $7.30\" \u2014 a line item entirely absent from the agent's response.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Response reports a net monthly change of about +$480.70 (accept $480.00-$481.50).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Subtotal (floor) | | $473.40/month\"",
+          "reasoning": "The agent reports a subtotal of $473.40/month, not ~$480.70. It does not include EIP x2 or other items that would bring it to the expected figure.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response states that the pricing Region eu-west-1 was taken from the deploy workflow (AWS_REGION), and does not ask the user which Region to use.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response never explicitly says 'eu-west-1 was taken from the deploy workflow (AWS_REGION)' - it just uses eu-west-1 pricing rows directly without comment on region sourcing, and does not ask the user for a region.",
+          "reasoning": "The agent implicitly used eu-west-1 pricing (matching the AWS_REGION in the workflow) without asking the user which region to use. However, it never explicitly states that the region was derived from AWS_REGION in the deploy workflow.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every resource is classified as Added, and the Removed and Resized sections are present but empty.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Sections used are 'Fixed, predictable costs', 'Usage-dependent \u2014 can't be fixed from the PR alone', and 'Not priced \u2014 missing from the pricing data pulled'. No 'Added', 'Removed', or 'Resized' headers appear.",
+          "reasoning": "The response does not use an Added/Removed/Resized classification structure at all. It uses 'Fixed, predictable costs', 'Usage-dependent', and 'Not priced' sections instead. There is no explicit Removed or Resized section, empty or otherwise.",
+          "confidence": "high"
+        },
+        {
+          "text": "LedgerDb is priced as two lines, instance $365.00 and storage $50.00, using the 0.500 Multi-AZUsage row and not the 0.000 UnusedBox row.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"RDS db.r6g.large, Multi-AZ (instance hours) | $0.500/hr \u00d7 730 | $365.00\" and \"RDS storage, 200 GB gp3 | $0.250/GB-mo \u00d7 200 | $50.00\"; also 'RDS \"unused capacity reservation\" SKU returned at $0.000/hr \u2014 not applicable ... safe to ignore.'",
+          "reasoning": "LedgerDb is priced as two lines: $365.00 for instance hours using the 0.500/hr Multi-AZUsage rate, and $50.00 for storage. The 0.000 UnusedBox row is explicitly called out as not applicable.",
+          "confidence": "high"
+        },
+        {
+          "text": "The load balancer is priced at $18.25 using the LoadBalancerUsage row (not the TS- trust-store row), plus $7.30 for two public IPv4 addresses (one per subnet).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Elastic IP (in-use address, attached to NAT GW) | $0.005/hr \u00d7 730 | $3.65\" - only one EIP line is priced, not two public IPv4 addresses totaling $7.30. ALB is correctly priced: \"ALB (hourly) | $0.025/hr \u00d7 730 | $18.25\"",
+          "reasoning": "The ALB is correctly priced at $18.25 using the LoadBalancerUsage row (not trust store). However, the response does NOT include $7.30 for two public IPv4 addresses (one per subnet) - it only includes a single Elastic IP at $3.65 (for the NAT gateway), not two public IPv4 addresses for the ALB subnets.",
+          "confidence": "high"
+        },
+        {
+          "text": "ArchiveBucket, ReconcilerFunction, NAT gateway data processing and load balancer LCU-hours are listed as usage-dependent with no dollar figure.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"NAT Gateway data processing \u2014 $0.050/GB on everything... Scales with reconciler traffic volume\"; \"ALB LCU-hours \u2014 $0.008/LCU-Hr, driven by connections... No traffic data to size this yet.\"; \"ArchiveBucket (S3, versioning enabled) \u2014 no S3 SKU came back... not captured at all\"; \"ReconcilerFunction (Lambda, arm64, 512MB) \u2014 no Lambda SKU in the lookup either\"",
+          "reasoning": "The response lists NAT data processing and ALB LCU-hours as usage-dependent without a dollar figure, and ArchiveBucket (S3) and ReconcilerFunction (Lambda) as not priced due to missing pricing data.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response does not introduce any rate other than the fixture rates (for example it does not show $0.504/hr or $367.92 for the database).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "All rates used: $0.500/hr, $0.250/GB-mo, $0.050/hr, $0.005/hr, $0.025/hr, $0.008/LCU-Hr, $0.006/hr, $0.000/hr - no deviation from fixture rates found.",
+          "reasoning": "The response consistently uses the fixture rates ($0.500/hr, $0.250/GB-mo, $0.050/hr, $0.005/hr, $0.025/hr) and does not introduce any other rate like $0.504/hr or $367.92.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every dollar amount in the Added table references a Pricing trace row that names the SKU (FX-...).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Table rows like \"RDS db.r6g.large, Multi-AZ (instance hours) | $0.500/hr \u00d7 730 | $365.00\" do not mention SKU names such as FX-RDS-01. SKU names only appear later in prose for unused-capacity and trust-store rows, not systematically for every priced line.",
+          "reasoning": "The fixed-cost table does not cite the specific SKU codes (e.g., FX-RDS-01, FX-RDS-02, FX-NAT-01, FX-ALB-01) alongside each dollar amount; it only references rates and usage types informally without naming SKUs in the table.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Response uses the cost dashboard layout: a Summary table, an Added resources table and a Pricing trace section, in that order",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 5,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 0.4444
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "4.0%",
+      "compaction_count": 0
+    }
+  }
+}
