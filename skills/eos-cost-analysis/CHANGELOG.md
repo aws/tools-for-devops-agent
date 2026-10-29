@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (2026-10-20)
+## 1.0.0 (2026-10-28)
 
 Initial release.
 
@@ -23,7 +23,8 @@ Classification & pricing:
 - Per-version EOS date verification from AWS documentation (no guessing, no date-bleed across versions/engines)
 - OpenSearch Elasticsearch vs OpenSearch engine families verified independently (separate EOS calendars)
 - Live pricing from the AWS Pricing API (`pricing:GetProducts`); never hardcoded. A single us-east-1 validation-reference rate table is a sanity check only
-- Region prefix resolved via `pricing:GetAttributeValues` for every priced service, including RDS: no prefix in us-east-1, prefixed everywhere else (for example `USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2`); `pricing:DescribeServices` confirms ServiceCode and attribute names when a lookup returns empty
+- Pricing usagetypes checked against the live Pricing API: RDS and OpenSearch have no region prefix in us-east-1 and a prefix everywhere else (`APS3-ExtendedSupport:Yr1-Yr2:MySQL8.0`, `EU-OpenSearchExtendedSupport`), while EKS and ElastiCache carry a prefix in every region (`USE1-` in us-east-1). RDS usagetypes end in the engine plus major version (`MySQL8.0`, `PostgreSQL13`, `AuroraMySQL2`). Prefixes not in the common list are resolved with `pricing:GetAttributeValues`, and `pricing:DescribeServices` confirms ServiceCode and attribute names when a lookup returns empty
+- RDS Extended Support is limited to MySQL, PostgreSQL and the two Aurora engines, the only ones with a Pricing API usagetype
 - Year 1/2 vs Year 3 tiered pricing (boundary at >= 24 months); Multi-AZ cost doubling for RDS
 - When a resource's Year 3 usagetype is not yet published, Year 3 is projected from the documented escalation (RDS/ElastiCache 2×, EKS/OpenSearch flat) and labeled as derived, rather than reported as `PRICING_UNAVAILABLE`
 - OpenSearch NIH derived from instance type x count; small/micro sizes doc-verified, never extrapolated
