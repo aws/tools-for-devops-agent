@@ -38,6 +38,7 @@ Ingested metrics (Prometheus remote-write data, not Cribl's own health):
 - `cribl_getMonitors` — alert-on-metric rules for ingested metrics.
 
 > `cribl_queryMetrics` and `cribl_getMonitors` are about the metrics the customer ingests into Cribl, **not** Cribl's own health. For deployment health use `cribl_getSystemMetrics` and `cribl_getAlerts`.
+> cribl_getDatasetIntelligence - Pass in a datasetId to retrieve its generated Dataset Intelligence card if enabled. The card will show an Overview of the dataset, record families, semantic field mappings, starter queries, investigation playbook, and limitations
 
 ## A typical investigation
 
