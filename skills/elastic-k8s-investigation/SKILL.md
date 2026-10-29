@@ -1,5 +1,5 @@
 ---
-name: observability-k8s-investigation
+name: elastic-k8s-investigation
 description: >
   Investigate Kubernetes workload, node, and control-plane issues using OTel telemetry
   (EDOT). Use when diagnosing pod failures (CrashLoopBackOff, OOMKilled, Error), node
@@ -14,9 +14,11 @@ compatibility: >
   8.14 and GA only in 9.4 on Stack; a `VALUES()`-free rewrite is given at the point
   of use. Alert-state lookups additionally need a Kibana context.
 metadata:
-  author: elastic
-  version: 0.5.1
-  universal: true
+  author: "Udayel"
+  version: "1.0.0"
+  tier: "partner-managed"
+  summary: "Diagnose Kubernetes workload, node, and cluster issues."
+  aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
 ---
 
 # Kubernetes Investigation
@@ -66,7 +68,7 @@ semantic conventions (`k8s.pod.name`, `k8s.namespace.name`, `k8s.container.resta
 - The legacy Elastic Agent Kubernetes integration (`metrics-kubernetes.*`, `logs-kubernetes.*`, `kubernetes.*` fields).
   Being deprecated — do not author queries against these paths.
 - APM-layer analysis (service SLO breaches, transaction error rates, upstream dependency health). Different domain —
-  once a K8s root cause is ruled in or out, hand off to the **observability-sre-triage** skill, which owns SLO status
+  once a K8s root cause is ruled in or out, hand off to the **elastic-sre-triage** skill, which owns SLO status
   and burn rate, active alerting rules, throughput, latency, error rate, dependency health, and log funnelling. That is
   also the skill to use when the workload turns out not to be Kubernetes-hosted at all.
 - Cluster provisioning, capacity planning, cost optimization. Different domain.
@@ -182,7 +184,7 @@ limits. A pod-level throttling check on a sidecar-injected pod silently returns 
 | k8s-demo      | 9                    | 6           | 40      | 0              |
 
 Use the pod-level fields only when the question is genuinely about the pod as a whole — total consumption against the
-sum of its containers' limits — and only after confirming they are populated. **observability-sre-triage** applies the
+sum of its containers' limits — and only after confirming they are populated. **elastic-sre-triage** applies the
 same rule, so the two skills return the same answer for the same pod.
 
 ### Field availability

@@ -1,5 +1,5 @@
 ---
-name: observability-service-reliability
+name: elastic-service-reliability
 description: >
   Design and operate service reliability targets in Elastic Observability: choose
   an SLI type and a defensible target, pick a time window and budgeting method, create
@@ -16,9 +16,11 @@ compatibility: >
   `stack kb` and `stack es` support. Synthetics SLIs additionally require the Synthetics
   app and at least one configured monitor location.
 metadata:
-  author: elastic
-  version: 0.4.1
-  universal: true
+  author: "Udayel"
+  version: "1.0.0"
+  tier: "partner-managed"
+  summary: "Define and tune SLOs, burn-rate rules, and alert thresholds."
+  aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
 ---
 
 # Service Reliability
@@ -32,7 +34,7 @@ Reliability instruments are not interchangeable. An SLO measures a user-visible 
 threshold rule fires on a raw condition; an anomaly job finds deviations where no fixed threshold exists; a synthetics
 monitor is the only one of the four that can see a service that has stopped emitting telemetry entirely. Choosing wrong
 produces alerts that are technically correct and operationally useless. For diagnosing a service that is already
-degraded, and for the incident workflow itself, use the **observability-sre-triage** skill; for general rule lifecycle
+degraded, and for the incident workflow itself, use the **elastic-sre-triage** skill; for general rule lifecycle
 mechanics use the **kibana-alerting-rules** skill.
 
 <!-- begin-partial: preamble -->

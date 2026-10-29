@@ -1,5 +1,5 @@
 ---
-name: observability-sre-triage
+name: elastic-sre-triage
 description: >
   Triage a degraded or suspect service end to end: read SLO status and burn rate,
   check active alerting rules and ML anomalies, measure throughput, latency, and error
@@ -10,16 +10,17 @@ description: >
   of those signals — throughput, latency percentiles, error rate, dependency health,
   or log volume — over APM/OTel traces, metrics, or logs.
 compatibility: >
-  Requires the `elastic` CLI (>= 0.2) with Elasticsearch and Kibana contexts on the
-  same cluster. Base floor is Elasticsearch 8.11+ or Serverless. Three ES|QL features
-  need more, each with a fallback at its point of use: `FORK` (Stack GA 9.4), `CATEGORIZE`
+  Reads Elastic through Agent Builder MCP tools. Base floor is Elasticsearch 8.11+ or Serverless.
+  Three ES|QL features have fallbacks at their point of use: `FORK` (Stack GA 9.4), `CATEGORIZE`
   (Stack GA 9.1, Platinum licence) and `TS` (Stack GA 9.4); all are GA on Serverless.
   Reads APM/OTel traces, metrics and logs, the Kibana SLO and Alerting APIs, and the
   Elasticsearch ML APIs. Read-only.
 metadata:
-  author: elastic
-  version: 0.5.2
-  universal: true
+  author: "Udayel"
+  version: "1.0.0"
+  tier: "partner-managed"
+  summary: "Triage a degraded service in Elastic from SLOs, alerts, golden signals, dependencies and logs."
+  aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
 ---
 
 # SRE Service Triage
@@ -30,23 +31,20 @@ dependencies and infrastructure explain where the failure comes from, and logs s
 incident channel. Work down the hierarchy until the evidence supports a verdict, then stop.
 
 For authoring and tuning SLO definitions, burn-rate rules, and alert thresholds, use the
-**observability-service-reliability** skill. This skill only reads that state. For Kubernetes workload, node, or
+**elastic-service-reliability** skill. This skill only reads that state. For Kubernetes workload, node, or
 control-plane diagnosis — restart loops, OOM kill confirmation, node pressure, admission rejections, stuck rollouts —
-hand off to the **observability-k8s-investigation** skill. This skill checks whether a Kubernetes-hosted service is
+hand off to the **elastic-k8s-investigation** skill. This skill checks whether a Kubernetes-hosted service is
 saturated; it does not diagnose why the pod or the node behind it is failing.
 
 <!-- begin-partial: preamble -->
 
 ## Environment Configuration
 
-This skill executes Elasticsearch operations through the `elastic` CLI. If the
-[`elastic` CLI](https://github.com/elastic/cli#configuration) is not installed, tell the user what it is needed for. Do
-not guess credentials, call the HTTP API directly, or attempt other workarounds.
-
-This skill references operations in HTTP-shorthand form (e.g., `GET /`, `GET /_cat/indices`, `GET /{index}/_mapping`,
-`GET /{index}/_settings/index.mode`, `POST /_query`). The [Operations](#operations) table at the end of this document
-maps each shorthand to the equivalent `elastic` CLI command — always use the CLI rather than calling the HTTP API
-directly.
+This skill reads Elastic through the Elastic Agent Builder MCP tools connected to AWS DevOps Agent: run ES|QL with
+`platform.core.execute_esql`, list indices and data streams with `platform.core.list_indices`, and read field mappings
+with `platform.core.get_index_mapping`. Operations below are written in HTTP-shorthand form (e.g., `POST /_query`); the
+[Operations](#operations) table maps each one to its tool. If no connected tool covers an operation, say what you would
+check and why instead of calling the HTTP API another way.
 
 <!-- end-partial: preamble -->
 
@@ -253,7 +251,7 @@ function is GA with no separate licence gate.
 
    When the Kubernetes branch shows saturation, restarts, or an OOM kill, the mechanism is established and the remaining
    diagnosis — why the pod is being killed, whether the node is under pressure, whether a rollout is stuck — belongs to
-   the **observability-k8s-investigation** skill. Hand off rather than continuing here.
+   the **elastic-k8s-investigation** skill. Hand off rather than continuing here.
 
 7. **Explain with logs.** Scope logs by `service.name`, or by `trace.id` when a specific failing trace is in hand, and
    run the funnel until the remaining set is small enough to read. See

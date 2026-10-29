@@ -1,5 +1,5 @@
 ---
-name: observability-llm-obs
+name: elastic-llm-obs
 description: >
   Answer questions about LLM and agentic-application behavior from data already ingested
   into Elastic: latency and error rate, token and cost utilization, response quality
@@ -14,9 +14,11 @@ compatibility: >
   Below Stack 9.4 fall back to `FROM` with `BUCKET`. SLO and alerting lookups require
   Kibana. No Kibana UI is required.
 metadata:
-  author: elastic
-  version: 0.3.1
-  universal: true
+  author: "Udayel"
+  version: "1.0.0"
+  tier: "partner-managed"
+  summary: "Monitor and debug LLM applications and inference performance."
+  aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
 ---
 
 # LLM and Agentic Observability
@@ -28,7 +30,7 @@ chaining or agentic workflow orchestration.
 A given deployment typically uses **one or more** ingestion paths: APM/OTLP traces, and/or integration metrics and logs.
 Which one exists is a discovery result, not an assumption — never assume both are present. For ES|QL syntax, commands,
 and query patterns, use the **elasticsearch-esql** skill. For service-level latency and error triage that is not
-LLM-specific, use the **observability-sre-triage** skill.
+LLM-specific, use the **elastic-sre-triage** skill.
 
 <!-- begin-partial: preamble -->
 

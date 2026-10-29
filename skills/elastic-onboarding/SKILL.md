@@ -1,5 +1,5 @@
 ---
-name: observability-onboarding
+name: elastic-onboarding
 description: >
   Onboard an application into Elastic Observability with the Elastic Distribution
   of OpenTelemetry (EDOT): route on language and runtime, detect and replace a classic
@@ -13,9 +13,11 @@ compatibility: >
   managed OTLP endpoint or an EDOT Collector. ES|QL verification requires Elasticsearch
   8.11 or later. Covers Java, Python, .NET, and PHP runtimes.
 metadata:
-  author: elastic
-  version: 0.3.0
-  universal: true
+  author: "Udayel"
+  version: "1.0.0"
+  tier: "partner-managed"
+  summary: "Guide onboarding for new applications and services."
+  aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
 ---
 
 # Observability Onboarding
@@ -28,9 +30,9 @@ The scope is application instrumentation with the EDOT SDKs. Deploying an EDOT C
 infrastructure, and onboarding data through Elastic Agent, Fleet, or integration packages are separate ingest paths that
 this skill does not cover.
 
-Once telemetry is flowing, use the **observability-sre-triage** skill to assess service health,
-**observability-k8s-investigation** for Kubernetes-layer failures, **observability-service-reliability** to define SLOs
-and alerts on the new signals, and **observability-llm-obs** for GenAI and agentic workloads.
+Once telemetry is flowing, use the **elastic-sre-triage** skill to assess service health,
+**elastic-k8s-investigation** for Kubernetes-layer failures, **elastic-service-reliability** to define SLOs
+and alerts on the new signals, and **elastic-llm-obs** for GenAI and agentic workloads.
 
 <!-- begin-partial: preamble -->
 
