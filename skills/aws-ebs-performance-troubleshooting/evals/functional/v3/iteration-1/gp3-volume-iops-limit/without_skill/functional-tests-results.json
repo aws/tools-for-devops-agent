@@ -1,0 +1,91 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "gp3-volume-iops-limit",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent correctly answers Yes and identifies the gp3 volume saturated at its provisioned IOPS (3,000), explains that per-op latency looks fine but writes are queueing (matching the 'CloudWatch latency looks low but app waits longer' idea), and recommends raising provisioned IOPS. However, it misses several specific required elements: it does not mention VolumeIOPSExceededCheck metric at all, does not check/mention the instance's EBS IOPS limit to ensure it's not the bottleneck, and does not frame the observed IOPS as a 'minimum' that should be exceeded when raising the limit. Additionally, the expected output explicitly states there should be no offer to make the change, but the agent ends with 'Want me to go ahead and increase the provisioned IOPS on that volume now?' which directly violates this requirement. There's no support case opened, which is consistent, but the offer to make the change is a clear violation of the expected output criteria.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response identifies the gp3 volume at its provisioned IOPS limit",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The volume `data-02` (`vol-07588b7a5019b08b6`, gp3, 100GB, attached as `/dev/sdg`) is saturated at its provisioned **3,000 IOPS** ceiling.",
+          "reasoning": "The response explicitly identifies the gp3 volume and states it is at its provisioned IOPS limit of 3,000.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites VolumeIOPSExceededCheck",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'VolumeIOPSExceededCheck' anywhere in the response. The agent cites VolumeQueueLength, latency, and throughput metrics instead.",
+          "reasoning": "The specific CloudWatch metric/check name 'VolumeIOPSExceededCheck' is never mentioned.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response checks the instance EBS IOPS limit and says it is not reached",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response discusses CPU, network, the other gp2 volume, instance/host status checks, and CloudTrail changes as ruled-out causes, but never mentions instance-level EBS IOPS limits (e.g., EC2 instance bandwidth/IOPS throughput limits).",
+          "reasoning": "There is no mention of checking or ruling out the instance's own EBS IOPS limit separate from the volume's provisioned IOPS.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the application waits longer than CloudWatch latency shows",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'Per-operation latency is still fine (~0.85ms), so writes aren't individually slow \u2014 they're queueing' without any claim that actual application-perceived latency is higher than what CloudWatch shows.",
+          "reasoning": "The agent explicitly says latency metrics look fine and attributes slowness to queueing, not to application wait times exceeding CloudWatch-reported latency.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says real demand may be higher than the observed IOPS and recommends raising provisioned IOPS above it",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Bump provisioned IOPS on `vol-07588b7a5019b08b6` (gp3 supports up to 16,000 IOPS independent of size) \u2014 e.g. to 6,000\u201310,000 to absorb the burst.' and 'this is an organic write-demand spike ... outstripping the volume's baseline gp3 capacity'",
+          "reasoning": "The response implies real demand exceeds the current 3,000 IOPS ceiling (since it's pegged there) and recommends raising provisioned IOPS well above the current limit (to 6,000-10,000), consistent with the assertion that real demand may be higher than observed and provisioned IOPS should be raised above it.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not offer to modify the volume on the user's behalf (advising the user how to change it is fine)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The final line asks: 'Want me to go ahead and increase the provisioned IOPS on that volume now?'",
+          "reasoning": "The agent explicitly offers to modify the volume on the user's behalf by asking if it should increase the provisioned IOPS, which violates the assertion that it should not offer to do so.",
+          "confidence": "high"
+        },
+        {
+          "text": "VolumeIOPSExceededCheck is named",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 5,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.2857
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m31s",
+    "cost": "$1.26",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}
