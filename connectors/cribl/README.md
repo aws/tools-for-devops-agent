@@ -44,7 +44,8 @@ You can also copy it from the **Bearer Token** row at **Settings > Global > Info
 
 Paste this value as the **Cribl Bearer token** in the AWS DevOps Agent console.
 
-3b. Cribl On-Prem
+### 3b. Cribl On-Prem
+
 On an on-prem Leader, go to **Settings > Global > MCP Server** and toggle **Enable MCP server** on. Then obtain a Bearer token from the login API. Replace the hostname, port, and credentials with your own values.
 
 ```bash
