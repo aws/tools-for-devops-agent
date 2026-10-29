@@ -59,7 +59,7 @@ curl -s -X POST 'https://${hostname}:${port}/api/v1/auth/login' \
 
 On-prem Bearer tokens expire according to the Auth token TTL value at Settings > Global > General Settings > API Server Settings > Advanced (default 3600 seconds, or one hour). For details, see [Authenticate with the Cribl API](https://docs.cribl.io/cribl-as-code/api-auth).
 
-To use https for on-prem requests, you must [configure Transport Layer Security (TLS)](https://docs.cribl.io/stream/securing-tls-ui-api). If TLS is not configured, use http instead. Use http only for testing in development environments.
+The connector connects over `https` only, so [configure Transport Layer Security (TLS)](https://docs.cribl.io/stream/securing-tls-ui-api) on your Leader before you connect.
 
 Paste this value as the **Cribl Bearer token** in the AWS DevOps Agent console.
 
