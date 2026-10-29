@@ -76,5 +76,5 @@ Cribl.Cloud Bearer tokens expire after about 24 hours. When tool calls start ret
 
 ## Notes
 
-- This connector targets **Cribl.Cloud**. For on-prem Leaders or the standalone Docker MCP server, see the [Cribl MCP server documentation](https://docs.cribl.io/copilot/cribl-mcp-server/).
+- This connector covers **Cribl.Cloud** and on-prem Leaders. For the standalone Docker MCP server, see the [Cribl MCP server documentation](https://docs.cribl.io/copilot/cribl-mcp-server/).
 - Protect your token like a password. A connected client inherits your Cribl permissions.
