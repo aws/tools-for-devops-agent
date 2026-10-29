@@ -29,7 +29,8 @@ If using Cribl.Cloud your MCP endpoint is `https://<workspace>-<organization>.cr
 
 You can confirm both parts under **Settings > Global > Information**.
 
-2b. Cribl On-Prem
+### 2b. Cribl On-Prem
+
 If using Cribl On-Prem, take note of your Cribl On-Prem Leader hostname and API port and paste it in the AWS DevOps Agent console.
 
 ## 3. Get your Bearer token
