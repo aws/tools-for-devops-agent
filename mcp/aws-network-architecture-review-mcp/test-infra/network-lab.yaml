@@ -1,0 +1,235 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Test network for the AWS Network Architecture Review MCP server. Creates
+  resources each tool can inspect: two VPCs, a Transit Gateway with two
+  segmented route tables and a blackhole route, a BGP VPN to the Transit
+  Gateway, a static VPN to a virtual private gateway, and VPC endpoints.
+  VPN tunnels stay DOWN (no customer router), which exercises the
+  tunnel-down findings. A Direct Connect gateway has no CloudFormation
+  resource type; create it with the CLI (see README "Test infrastructure").
+
+  Approximate cost while running: 3 TGW attachments + 2 VPN connections +
+  1 single-AZ interface endpoint, about USD 0.26/hour. Delete the stack
+  after testing.
+
+Parameters:
+  CustomerGatewayIp:
+    Type: String
+    Default: 203.0.113.12
+    Description: >
+      Public IPv4 for the test customer gateway. No device answers at this
+      address, so the VPN tunnels remain DOWN by design.
+
+Resources:
+  # ---------------- VPC A (prod) ----------------
+  VpcA:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: narmcp-lab-prod-vpc}]
+  SubnetA1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcA
+      CidrBlock: 10.10.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{Key: Name, Value: narmcp-lab-prod-a}]
+  SubnetA2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcA
+      CidrBlock: 10.10.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{Key: Name, Value: narmcp-lab-prod-b}]
+  RouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcA
+      Tags: [{Key: Name, Value: narmcp-lab-prod-rt}]
+  SubnetA1Rt:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref SubnetA1, RouteTableId: !Ref RouteTableA}
+  SubnetA2Rt:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref SubnetA2, RouteTableId: !Ref RouteTableA}
+
+  # ---------------- VPC B (shared services) ----------------
+  VpcB:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: narmcp-lab-shared-vpc}]
+  SubnetB1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcB
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{Key: Name, Value: narmcp-lab-shared-a}]
+  SubnetB2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcB
+      CidrBlock: 10.20.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{Key: Name, Value: narmcp-lab-shared-b}]
+  RouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcB
+      Tags: [{Key: Name, Value: narmcp-lab-shared-rt}]
+  SubnetB1Rt:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref SubnetB1, RouteTableId: !Ref RouteTableB}
+  SubnetB2Rt:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref SubnetB2, RouteTableId: !Ref RouteTableB}
+
+  # ---------------- Transit Gateway (segmented) ----------------
+  Tgw:
+    Type: AWS::EC2::TransitGateway
+    Properties:
+      AmazonSideAsn: 64600
+      DefaultRouteTableAssociation: disable
+      DefaultRouteTablePropagation: disable
+      DnsSupport: enable
+      VpnEcmpSupport: enable
+      Description: narmcp test lab
+      Tags: [{Key: Name, Value: narmcp-lab-tgw}]
+  TgwRtProd:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      Tags: [{Key: Name, Value: narmcp-lab-rt-prod}]
+  TgwRtShared:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      Tags: [{Key: Name, Value: narmcp-lab-rt-shared}]
+  AttachA:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      VpcId: !Ref VpcA
+      SubnetIds: [!Ref SubnetA1, !Ref SubnetA2]
+      Tags: [{Key: Name, Value: narmcp-lab-attach-prod}]
+  AttachB:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      VpcId: !Ref VpcB
+      SubnetIds: [!Ref SubnetB1, !Ref SubnetB2]
+      Tags: [{Key: Name, Value: narmcp-lab-attach-shared}]
+  # prod <-> shared, but prod cannot reach other prod segments (shared-services pattern)
+  AssocA:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties: {TransitGatewayAttachmentId: !Ref AttachA, TransitGatewayRouteTableId: !Ref TgwRtProd}
+  AssocB:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties: {TransitGatewayAttachmentId: !Ref AttachB, TransitGatewayRouteTableId: !Ref TgwRtShared}
+  PropAToShared:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties: {TransitGatewayAttachmentId: !Ref AttachA, TransitGatewayRouteTableId: !Ref TgwRtShared}
+  PropBToProd:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties: {TransitGatewayAttachmentId: !Ref AttachB, TransitGatewayRouteTableId: !Ref TgwRtProd}
+  BlackholeRoute:
+    Type: AWS::EC2::TransitGatewayRoute
+    Properties:
+      TransitGatewayRouteTableId: !Ref TgwRtProd
+      DestinationCidrBlock: 10.99.0.0/16
+      Blackhole: true
+  VpcARouteToB:
+    Type: AWS::EC2::Route
+    DependsOn: AttachA
+    Properties: {RouteTableId: !Ref RouteTableA, DestinationCidrBlock: 10.20.0.0/16, TransitGatewayId: !Ref Tgw}
+  VpcBRouteToA:
+    Type: AWS::EC2::Route
+    DependsOn: AttachB
+    Properties: {RouteTableId: !Ref RouteTableB, DestinationCidrBlock: 10.10.0.0/16, TransitGatewayId: !Ref Tgw}
+
+  # ---------------- Hybrid: BGP VPN to TGW ----------------
+  CustomerGateway:
+    Type: AWS::EC2::CustomerGateway
+    Properties:
+      Type: ipsec.1
+      BgpAsn: 65010
+      IpAddress: !Ref CustomerGatewayIp
+      Tags: [{Key: Name, Value: narmcp-lab-cgw}]
+  VpnToTgw:
+    Type: AWS::EC2::VPNConnection
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !Ref CustomerGateway
+      TransitGatewayId: !Ref Tgw
+      StaticRoutesOnly: false
+      Tags: [{Key: Name, Value: narmcp-lab-vpn-tgw-bgp}]
+
+  # ---------------- Hybrid: static VPN to VGW ----------------
+  Vgw:
+    Type: AWS::EC2::VPNGateway
+    Properties:
+      Type: ipsec.1
+      AmazonSideAsn: 64700
+      Tags: [{Key: Name, Value: narmcp-lab-vgw}]
+  VgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: {VpcId: !Ref VpcB, VpnGatewayId: !Ref Vgw}
+  VpnToVgw:
+    Type: AWS::EC2::VPNConnection
+    DependsOn: VgwAttach
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !Ref CustomerGateway
+      VpnGatewayId: !Ref Vgw
+      StaticRoutesOnly: true
+      Tags: [{Key: Name, Value: narmcp-lab-vpn-vgw-static}]
+  VpnToVgwRoute:
+    Type: AWS::EC2::VPNConnectionRoute
+    Properties: {VpnConnectionId: !Ref VpnToVgw, DestinationCidrBlock: 192.168.50.0/24}
+
+  # ---------------- VPC endpoints ----------------
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcA
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref RouteTableA]
+  EndpointSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: narmcp lab interface endpoint (HTTPS from VPC)
+      VpcId: !Ref VpcA
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 10.10.0.0/16}
+  SsmInterfaceEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcA
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref SubnetA1]
+      SecurityGroupIds: [!Ref EndpointSg]
+
+Outputs:
+  TransitGatewayId:
+    Value: !Ref Tgw
+  ProdRouteTableId:
+    Value: !Ref TgwRtProd
+  SharedRouteTableId:
+    Value: !Ref TgwRtShared
+  VpnToTgwId:
+    Value: !Ref VpnToTgw
+  VpnToVgwId:
+    Value: !Ref VpnToVgw
+  VgwId:
+    Value: !Ref Vgw
