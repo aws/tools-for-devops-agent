@@ -1,0 +1,73 @@
+{
+  "version": "v14",
+  "iteration": 3,
+  "eval_id": "cdn-origin-shield-audit",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'live-streaming-event-readiness-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response comprehensively addresses all the specific checks outlined in the expected output:\n\n1. **Single consistent origin via CloudFront (CDN1)**: Explicitly checked and marked PASS - confirms distribution routes through one origin-group.\n\n2. **Origin Shield enabled for origin offload (CDN2)**: Thoroughly audited - found enabled on primary but disabled on failover origin, correctly identified as a risk since failover is exactly when Origin Shield protection is most needed. Marked as High-severity FAIL with clear remediation.\n\n3. **Cache-key hygiene / cache-hit ratio on short-TTL live segments (CDN3)**: Directly addresses this with the 4-second segment context - notes the 24h default TTL is inappropriate for live manifests, explicitly discusses the need for short TTL (~4-10s) aligned to segment duration, recommends honoring origin Cache-Control headers, and notes query strings/cookies/headers not in cache key (addressing cache-key normalization implicitly). Flagged as High-severity FAIL.\n\n4. **CloudFront Functions vs Lambda@Edge split (CDN4)**: Checked and reported N/A since no edge compute found - this is a reasonable finding given discovery showed no Functions or Lambda@Edge in use.\n\n5. **Origin failover (CDN5)**: Explicitly checked - found FailoverCriteria only covers 500/502/503, missing 504 timeouts which is the most likely failure mode under peak load. Marked Medium-severity FAIL with clear remediation.\n\nAll five explicit expected checks are covered with specific evidence, verdicts, and remediation guidance. The response also appropriately uses the 4-second segment detail provided by the user to ground the TTL recommendations. The agent went beyond the minimum scope by also covering S3 prefix scaling, MediaTailor SSAI, multi-CDN switching, and LL-HLS considerations, but this does not detract from meeting the core expected criteria - if anything it demonstrates thoroughness.\n\nThe response is well-structured, evidence-based, and provides actionable findings aligned with the expected output description.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Explains that short-TTL live segments (2-6 seconds) make origin offload critical, and recommends Origin Shield to keep the origin request rate predictable at peak",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Origin Shield is the control that collapses cache-miss thundering herds before they hit the origin. Because it's off on the failover origin, the exact moment traffic needs to shift there (primary failing under peak load) is also the moment origin protection disappears\" and the CDN3 finding ties segment duration directly to TTL guidance: 'manifest/playlist needs a short TTL (~one segment duration, so ~4-10s for your cadence)'",
+          "reasoning": "The output explicitly ties the 4s segment duration to cache/TTL hygiene and recommends Origin Shield as the control that collapses cache-miss thundering herds, framing it as critical for peak load protection.",
+          "confidence": "high"
+        },
+        {
+          "text": "Addresses cache-key normalization or stripping query-string variation to protect the cache-hit ratio on short-TTL live segments",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "CDN3 evidence states 'query strings/cookies/headers not in cache key' merely as a description of the existing CachingOptimized policy, with no discussion of normalizing or stripping query-string variation as a protective measure for cache-hit ratio.",
+          "reasoning": "The output discusses TTL tuning for manifests/segments extensively but never mentions query-string variation, cache-key normalization, or stripping query parameters as a cache-hit-ratio protection measure. The cache policy evidence even notes 'query strings/cookies/headers not in cache key' but does not discuss normalizing or stripping query strings as a recommendation.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends CloudFront Functions for lightweight, high-frequency edge logic and Lambda@Edge for heavier runtime work",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"CDN4 | CloudFront Functions vs Lambda@Edge placement | N/A | Medium | No edge compute (Functions or Lambda@Edge) found on any distribution \u2014 no confirmed requirement for one\" \u2014 no guidance given on when to use one vs the other.",
+          "reasoning": "The CDN4 check explicitly states no edge compute (CloudFront Functions or Lambda@Edge) is in use and marks it N/A, with no recommendation comparing when to use CloudFront Functions vs Lambda@Edge for lightweight vs heavier logic.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommends designing for a high cache-hit ratio on the short-TTL live segments, for example a single consistent origin and normalized cache keys",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "CDN1 'PASS...routes through one origin-group, not fragmented origins' and CDN3 remediation: 'Give the manifest/playlist object its own short-TTL cache behavior (~one segment duration); keep segments on a longer TTL since they're immutable... Enable CloudFront's additional/real-time metrics so CacheHitRate is queryable before the event.' This covers single consistent origin and cache-hit-ratio design intent, satisfying the substance of the assertion even without explicit cache-key normalization language.",
+          "reasoning": "The output explicitly discusses designing for high cache-hit ratio under CDN3, recommends a single consistent origin (CDN1 passes with evidence of one origin-group) and a manifest-specific short-TTL cache behavior, which together address high-hit-ratio design, though it doesn't explicitly mention normalized cache keys as a remediation step.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m33s",
+    "cost": "$2.27",
+    "context_window": {
+      "utilization": "7.5%",
+      "compaction_count": 0
+    }
+  }
+}

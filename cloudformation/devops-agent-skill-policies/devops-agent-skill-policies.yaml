@@ -151,6 +151,12 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableLiveStreamingEventReadinessReview:
+    Type: String
+    Description: Live-streaming event readiness review skill (adds mediatailor read-only for CDN7 SSAI discovery and route53-recovery-cluster:ListRoutingControls for RES2 ARC sub-TTL shed).
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -189,6 +195,7 @@ Conditions:
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
+  SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -600,6 +607,39 @@ Resources:
               - savingsplans:DescribeSavingsPlans
             Resource: '*'
 
+  # live-streaming-event-readiness-review: adds mediatailor read-only for CDN7 (SSAI
+  # playback-config discovery + PrefetchSchedule check) and
+  # route53-recovery-cluster:ListRoutingControls for the RES2 Route 53 ARC sub-TTL shed
+  # option. Every other API the skill calls -- CloudFront, EC2, EKS, ECS, Lambda, ELB,
+  # DynamoDB, ElastiCache, RDS, Keyspaces, Route 53, FIS, CloudWatch, Health, service
+  # quotas, MediaLive channel + caption outputs, MediaPackage/v2 SPEKE encryption,
+  # Kinesis/Firehose/MSK, IVS -- is already covered by AIDevOpsAgentAccessPolicy or the
+  # companion skills' policies (service-quota-check, msk-operations, aws-health-events,
+  # support-cases). Without this policy, CDN7 and the RES2 ARC branch fall back to
+  # N/A with reason (graceful degradation per the skill's applicability gates).
+  PolicyLiveStreamingEventReadinessReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillLiveStreamingEventReadinessReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-LiveStreamingEventReadinessReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LseMediaTailorRead
+            Effect: Allow
+            Action:
+              - mediatailor:ListPlaybackConfigurations
+              - mediatailor:GetPlaybackConfiguration
+              - mediatailor:ListPrefetchSchedules
+            Resource: '*'
+          - Sid: LseRoute53ArcRead
+            Effect: Allow
+            Action:
+              - route53-recovery-cluster:ListRoutingControls
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -629,6 +669,7 @@ Outputs:
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
+        - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
