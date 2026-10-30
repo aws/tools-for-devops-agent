@@ -10,7 +10,7 @@ metric-data queries per call — batch and paginate for accounts with many model
 | Metric | Stat | Normal | Warning | Critical | Finding |
 |---|---|---|---|---|---|
 | Invocations | Sum | baseline | — | — | Volume; denominator for rate calculations |
-| InvocationThrottles | Sum | throttle rate ~0% | > 1% of Invocations | > 5% of Invocations | Add retries w/ backoff+jitter, request quota increase, use CRIS |
+| InvocationThrottles | Sum | throttle rate ~0% | > 1% of attempts | > 5% of attempts | Add retries w/ backoff+jitter, request quota increase, use CRIS |
 | InvocationServerErrors | Sum | ~0% | > 2% of Invocations | > 5% of Invocations | Investigate service-side failures / problematic content |
 | InvocationClientErrors | Sum | < 1% | > 5% of Invocations | > 15% of Invocations | Bad or blocked input reaching models; add guardrails |
 | InvocationLatency | Average | task-dependent | rising trend | sustained high | Use smaller model / streaming; deploy in-region |
@@ -24,7 +24,7 @@ metric-data queries per call — batch and paginate for accounts with many model
 | CacheWriteInputTokenCount | Sum | present | high vs reads | — | Prompt-cache writes; used for offload % |
 
 **Derived rates:**
-- Throttle rate = `InvocationThrottles / Invocations`
+- Throttle rate = `InvocationThrottles / (Invocations + InvocationThrottles)` (`Invocations` excludes throttled requests; SDK retries count as attempts)
 - Server error rate = `InvocationServerErrors / Invocations`
 - Client error rate = `InvocationClientErrors / Invocations`
 - Intervened rate = `InvocationsIntervened / Invocations`
