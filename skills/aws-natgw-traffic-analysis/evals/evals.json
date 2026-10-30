@@ -1,0 +1,124 @@
+{
+  "skill_name": "aws-natgw-traffic-analysis",
+  "evals": [
+    {
+      "id": "live-natgw-overview",
+      "task_type": "chat",
+      "prompt": "NAT Gateway nat-025b433abd8a6ca46 in VPC vpc-0d3f631fd4b84a05e (us-east-1) is processing more data than we expect. Investigate what traffic is going through it and why, and what we could change.",
+      "should_trigger": true,
+      "expected_output": "Uses the flow logs on the NAT Gateway's own network interface to break NAT traffic down by destination, and explains why each portion crosses NAT: same-region S3 traffic from a private subnet whose route table is not associated with the existing S3 Gateway Endpoint; DynamoDB traffic because the VPC has no DynamoDB Gateway Endpoint; S3 traffic to us-west-2 that a same-region Gateway Endpoint cannot intercept (expected, not a misconfiguration); traffic to the peer VPC instance's public IP even though a peering connection with routes exists; and EC2 API calls that bypass the existing EC2 Interface Endpoint because its private DNS is disabled. Presents volumes in GB and percent, compares fix options with trade-offs, and does not modify any resources.",
+      "assertions": [
+        "Identifies that one private route table is not associated with the S3 Gateway Endpoint, so same-region S3 traffic from that subnet crosses NAT",
+        "Identifies that the VPC has no DynamoDB Gateway Endpoint",
+        "Identifies S3 traffic to us-west-2 and states that a same-region Gateway Endpoint cannot intercept it",
+        "Identifies traffic to the peer VPC's public IP even though a VPC peering connection exists",
+        "Identifies that the EC2 Interface Endpoint has private DNS disabled, so EC2 API calls still use NAT",
+        "Reports traffic volumes in GB and/or percent of the NAT total",
+        {
+          "text": "No dollar savings figure is given",
+          "evaluator": "regex",
+          "pattern": "\\$\\s?\\d[\\d,]*(\\.\\d+)?\\s*[kK]?\\s*(/\\s?(mo|month|yr|year)\\b|per (month|year)|a (month|year)|monthly|annually|annual)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "live-s3-despite-endpoint",
+      "task_type": "chat",
+      "prompt": "VPC vpc-0d3f631fd4b84a05e has an S3 Gateway Endpoint, but the flow logs for NAT Gateway nat-025b433abd8a6ca46 still show a lot of S3 traffic. Why is S3 traffic still going through the NAT Gateway?",
+      "should_trigger": true,
+      "expected_output": "Finds two separate causes. First, one private route table is not associated with the S3 Gateway Endpoint, so same-region S3 traffic from that subnet goes through NAT - fixed by associating the endpoint with that route table. Second, some S3 traffic goes to a bucket in us-west-2; a same-region Gateway Endpoint cannot intercept it, so that portion is expected behavior rather than a misconfiguration, and any cross-region fix must first pass the CopyObject/UploadPartCopy check.",
+      "assertions": [
+        "Separately identifies cross-region S3 traffic to us-west-2 as expected behavior for a same-region Gateway Endpoint",
+        "Checks or recommends checking the destination IPs against the region's S3 managed prefix list",
+        {
+          "text": "Names the cross-region destination region",
+          "evaluator": "regex",
+          "pattern": "us-west-2"
+        }
+      ]
+    },
+    {
+      "id": "live-peering-bypassed",
+      "task_type": "chat",
+      "prompt": "VPC vpc-0d3f631fd4b84a05e is peered with VPC vpc-0530e37ce1de95fb9, but NAT Gateway nat-025b433abd8a6ca46 shows traffic going to 18.235.14.3, which is an instance in the peer VPC. Why isn't that traffic using the peering connection?",
+      "should_trigger": true,
+      "expected_output": "Confirms the peering connection is active and that the workload route tables have a route to the peer VPC CIDR, then explains that the traffic is addressed to the peer instance's public IP, which matches the default route to the NAT Gateway rather than the peering route. The fix is for the application to use the peer instance's private IP or private DNS name.",
+      "assertions": [
+        "Confirms that the peering connection exists and that routes to the peer VPC CIDR are present"
+      ]
+    },
+    {
+      "id": "live-interface-endpoint-unused",
+      "task_type": "chat",
+      "prompt": "We created an EC2 API interface endpoint in VPC vpc-0d3f631fd4b84a05e so our instances wouldn't call the EC2 API through NAT Gateway nat-025b433abd8a6ca46, but it looks like those calls still go through the NAT Gateway. Why?",
+      "should_trigger": true,
+      "expected_output": "Checks the EC2 Interface Endpoint and finds that private DNS is disabled, so SDK and CLI calls still resolve the public EC2 endpoint and route through the NAT Gateway. Confirms the VPC DNS attributes, notes the endpoint covers both workload AZs, and recommends enabling private DNS on the endpoint. May use CloudTrail events whose source IP is the NAT Gateway's public IP to confirm EC2 API calls cross NAT.",
+      "assertions": [
+        "Checks both VPC DNS attributes (enableDnsSupport and enableDnsHostnames) as part of confirming why the endpoint is not used"
+      ]
+    },
+    {
+      "id": "copyobject-gate",
+      "task_type": "chat",
+      "prompt": "Our NAT Gateway flow log analysis found 5,000 GB/month of cross-region S3 reads. Should we add a Cross-Region S3 Interface Endpoint to fix it?",
+      "should_trigger": true,
+      "expected_output": "Does not recommend the endpoint unconditionally. States that CopyObject/UploadPartCopy activity must be checked first, because enabling private DNS on a Cross-Region Interface Endpoint blocks cross-region CopyObject for the entire VPC (all subnets). Presents CRR plus local reads or MRAP as safer alternatives if CopyObject activity is found.",
+      "assertions": [
+        "Explains that private DNS on this endpoint type applies VPC-wide, with no subnet-level isolation"
+      ]
+    },
+    {
+      "id": "instance-eni-vs-natgw-eni",
+      "task_type": "chat",
+      "prompt": "I have VPC Flow Logs for my private subnet's EC2 instances. Can I use these to see what's driving my NAT Gateway costs?",
+      "should_trigger": true,
+      "expected_output": "Explains that instance-ENI flow logs capture all traffic, including traffic that never crosses NAT (for example Gateway Endpoint-routed traffic), so they cannot reliably determine what actually traversed NAT Gateway. States that flow logs must be captured from the NAT Gateway's own ENI, and recommends collecting that data source instead of proceeding with instance-ENI data.",
+      "assertions": [
+        "Explains that instance-ENI flow logs include traffic that does not cross NAT, such as endpoint-routed traffic",
+        "States that NAT Gateway ENI flow logs are needed for a reliable analysis",
+        "Does not produce a categorized traffic breakdown from instance-ENI data alone"
+      ]
+    },
+    {
+      "id": "no-dollar-figures",
+      "task_type": "chat",
+      "prompt": "We're investigating our NAT Gateway bill. Our NAT Gateway flow log analysis shows about 40% of NAT traffic, roughly 12,000 GB last month, goes to public IPs that belong to our own other VPCs. How much money would we save by moving that traffic off NAT?",
+      "should_trigger": true,
+      "expected_output": "Does not give a dollar savings figure. Explains that a cost figure depends on the account's specific rate card, discounts, and billing period, which flow log data does not contain, and presents the finding in GB and percentage terms instead, with the inputs the user would need to price it themselves.",
+      "assertions": [
+        {
+          "text": "No dollar savings total (per month or per year) is given",
+          "evaluator": "regex",
+          "pattern": "\\$\\s?\\d[\\d,]*(\\.\\d+)?\\s*[kK]?\\s*(/\\s?(mo|month|yr|year)\\b|per (month|year)|a (month|year)|monthly|annually|annual)",
+          "match": "absent"
+        },
+        "Explains that a cost estimate needs rate-card or billing information that flow logs do not contain"
+      ]
+    },
+    {
+      "id": "neg-dx-path-preference",
+      "task_type": "chat",
+      "prompt": "How do I make my Transit Gateway prefer one Direct Connect location over another?",
+      "should_trigger": false
+    },
+    {
+      "id": "neg-lambda-s3-resize",
+      "task_type": "chat",
+      "prompt": "Help me write a Lambda function to resize images uploaded to S3.",
+      "should_trigger": false
+    },
+    {
+      "id": "neg-ec2-cost-trend",
+      "task_type": "chat",
+      "prompt": "Summarize this quarter's EC2 cost trend.",
+      "should_trigger": false
+    },
+    {
+      "id": "neg-private-dns-resolution",
+      "task_type": "chat",
+      "prompt": "An EC2 instance in our VPC can't resolve a hostname from our Route 53 private hosted zone. How do we troubleshoot that?",
+      "should_trigger": false
+    }
+  ]
+}
