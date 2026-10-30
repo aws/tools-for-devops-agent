@@ -5,8 +5,12 @@ description: >
   of them is still in use or production tagged. Use this skill when a user asks
   which images a lifecycle policy will delete or expire, whether it is safe to
   apply or keep a lifecycle policy, whether an image used by ECS, Batch, Lambda,
-  App Runner or direct pulls is at risk, why an image disappeared from ECR, or to
-  review lifecycle policies across repositories. Do not use for push or pull
+  App Runner or direct pulls is at risk, or to review lifecycle policies across
+  repositories. Also use when the user pastes a lifecycle policy, an image list
+  or lifecycle preview output, even with no account access, and asks to
+  evaluate it, which images expire under which rule, or whether any
+  expiring image is in use, and when investigating why an image or tag was
+  removed or disappeared from an ECR repository. Do not use for push or pull
   authentication failures, replication or pull through cache, image scanning
   findings, or ECS task failures unrelated to image availability.
 metadata:
@@ -60,7 +64,11 @@ Activate when the user asks to:
 - Preview what a draft lifecycle policy would do before applying it
 - Check whether images still used by ECS, AWS Batch, Lambda, App Runner, or
   pulled directly by EC2 hosts or CI, are at risk of deletion
-- Explain why an image tag disappeared from a repository
+- Explain why an image tag disappeared from a repository, or run the
+  postmortem after a deployment failed because its image was gone
+- Evaluate a lifecycle policy, image list or lifecycle preview output pasted
+  into the chat, with or without account access, and say which images expire,
+  under which rule, and whether any of them is in use
 - Review lifecycle policies across every repository in an account or Region
 - Protect `prod*`, `release*`, version, `latest`, `stable` or `hotfix*` tags
   from a catch all rule
