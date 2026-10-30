@@ -20,6 +20,7 @@ Metadata:
           - EnableSupportCases
           - EnableRdsOperationReview
           - EnableEksOperationReview
+          - EnableCloudFrontOperationalReview
           - EnableEcsOperationReview
           - EnableInvestigationCostGuardrail
           - EnableEnrichWithSecurityAgent
@@ -75,6 +76,12 @@ Parameters:
   EnableEksOperationReview:
     Type: String
     Description: EKS Operation Review skill (covered by managed policy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableCloudFrontOperationalReview:
+    Type: String
+    Description: CloudFront Operational Review skill (adds cloudfront:GetVpcOrigin, s3:GetBucketPolicyStatus, s3:GetAccountPublicAccessBlock and pricingplanmanager:ListSubscriptions).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -180,6 +187,7 @@ Conditions:
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
   SkillSupportCases: !Equals [!Ref EnableSupportCases, 'true']
   SkillRdsOperationReview: !Equals [!Ref EnableRdsOperationReview, 'true']
+  SkillCloudFrontOperationalReview: !Equals [!Ref EnableCloudFrontOperationalReview, 'true']
   SkillEcsOperationReview: !Equals [!Ref EnableEcsOperationReview, 'true']
   SkillInvestigationCostGuardrail: !Equals [!Ref EnableInvestigationCostGuardrail, 'true']
   SkillMskOperations: !Equals [!Ref EnableMskOperations, 'true']
@@ -289,6 +297,32 @@ Resources:
             Effect: Allow
             Action:
               - logs:GetLogEvents
+            Resource: '*'
+
+  # cloudfront-operational-review: adds cloudfront:GetVpcOrigin, s3:GetBucketPolicyStatus,
+  # s3:GetAccountPublicAccessBlock and pricingplanmanager:ListSubscriptions. Every other API the
+  # skill calls -- cloudfront List/Get, wafv2:GetWebACL, acm:DescribeCertificate, CloudWatch
+  # metrics and alarms, logs delivery describes and Logs Insights, S3 bucket BPA/ACL/ownership,
+  # elasticloadbalancing/ec2 describes, ce:Get* -- is covered by AIDevOpsAgentAccessPolicy (v11).
+  # Without this policy, VPC-origin health, S3 policy status, account-level Block Public Access
+  # and flat-rate plan checks report UNKNOWN. All four actions are read-only.
+  PolicyCloudFrontOperationalReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillCloudFrontOperationalReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-CloudFrontOperationalReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFrontOperationalReviewRead
+            Effect: Allow
+            Action:
+              - cloudfront:GetVpcOrigin
+              - s3:GetBucketPolicyStatus
+              - s3:GetAccountPublicAccessBlock
+              - pricingplanmanager:ListSubscriptions
             Resource: '*'
 
   # ecs-operation-review: adds compute-optimizer:GetECSServiceRecommendations (PERF8 rightsizing);
@@ -619,6 +653,7 @@ Outputs:
         - aws-health-events: ${EnableAwsHealthEvents} (health:DescribeEventTypes)
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
+        - cloudfront-operational-review: ${EnableCloudFrontOperationalReview} (cloudfront:GetVpcOrigin, s3:GetBucketPolicyStatus, s3:GetAccountPublicAccessBlock, pricingplanmanager:ListSubscriptions)
         - ecs-operation-review: ${EnableEcsOperationReview} (compute-optimizer:GetECSServiceRecommendations)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
         - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)
