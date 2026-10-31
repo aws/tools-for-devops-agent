@@ -140,7 +140,9 @@ Ingested metrics (Prometheus remote-write data, not Cribl's own health):
 - **HTTP 401:**
   - Cribl.Cloud: the token has expired (tokens last about 24 hours), so it needs refreshing on the customer side.
   - On-prem Leader: token lifetime follows the Leader's auth settings.
-- **HTTP 403 "Leader MCP is disabled":** an admin must enable the MCP server under Settings → MCP Server.
+- **HTTP 403:**
+  - "Leader MCP is disabled": an admin must enable the MCP server under Settings > Global > MCP Server.
+  - Any other 403: the user may lack the Leader MCP Access permission, which an admin grants.
 - **Reduced throughput is not a fault:** Pipelines often filter, sample, or aggregate data on purpose. Compare against the baseline, not against zero loss.
 - **Two kinds of metrics:** `cribl_queryMetrics` and `cribl_getMonitors` cover the customer's ingested metrics. Cribl's own health comes from `cribl_getSystemMetrics` and `cribl_getAlerts`.
 - **Intelligence cards are snapshots:** a card can be out of date. Verify any surprising claim with a small query.
