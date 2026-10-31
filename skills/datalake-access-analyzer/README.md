@@ -17,7 +17,8 @@ It is read-only. It recommends fixes; it does not apply them.
 The invoking role needs read-only access to:
 - `lakeformation:GetDataLakeSettings`, `lakeformation:ListPermissions`, `lakeformation:ListResources`
 - `glue:GetDatabase`, `glue:GetTable`, `glue:GetTables`, `glue:GetResourcePolicy`
-- `iam:SimulatePrincipalPolicy`
+- `iam:ListAttachedRolePolicies`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:GetPolicy`, `iam:GetPolicyVersion`, `iam:GetRole`
+- `iam:SimulatePrincipalPolicy` (optional - corroboration only; frequently unavailable in the DevOps Agent runtime)
 - `ram:GetResourceShares`, `ram:GetResourceShareAssociations`
 - `s3:GetBucketPolicy`
 - `kms:GetKeyPolicy`
@@ -36,10 +37,15 @@ account, and the querying engine. The skill returns the breaking layer, evidence
 a remediation patch.
 
 ## Limitations
-- SCP-statement attribution: the IAM policy simulator evaluates service control
-  policies but does not return which SCP statement denied. When a deny is attributed
-  to the organization, the skill flags it and defers exact-statement attribution to
-  an organization-level review or a dedicated SCP evaluator.
+- IAM evaluation uses direct policy reads as the primary method.
+  `iam:SimulatePrincipalPolicy` is used only as optional corroboration and is frequently
+  unavailable in the DevOps Agent runtime; the skill never blocks on it.
+- SCPs: the policy simulator evaluates unconditional SCPs but does NOT evaluate SCPs that
+  contain conditions, and cannot simulate cross-account access. It also does not reveal
+  which SCP statement denied. When a deny is attributed to AWS Organizations, the skill
+  flags that an SCP is blocking and defers exact-statement attribution to an
+  organization-level review (or a dedicated SCP evaluator). It is not a definitive SCP
+  verdict.
 - Results from policy simulation can differ from the live environment; confirm against
   the live account.
 

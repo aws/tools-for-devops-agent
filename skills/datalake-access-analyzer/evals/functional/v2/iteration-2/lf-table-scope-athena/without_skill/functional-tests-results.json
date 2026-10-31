@@ -1,0 +1,70 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "lf-table-scope-athena",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a specific diagnosis: a catalog/database-level grant exists but lacks table-level SELECT (a scope mismatch), with the fix being to grant table-level SELECT plus DESCRIBE on the database. The agent's response instead lists six generic possible causes (missing IAM lakeformation:GetDataAccess permission, IAM access control toggle, missing DESCRIBE on database, missing DATA_LOCATION_ACCESS, principal mismatch, cross-account sharing not accepted). While point 3 touches on grant levels, it frames it as 'table SELECT grant exists but database DESCRIBE might be missing' \u2014 which is the opposite direction of the expected scenario (database/catalog-level grant exists but table-level SELECT is missing). The agent never identifies the specific catalog-vs-table scope mismatch described in the expected output, nor does it clearly recommend granting table-level SELECT as the primary missing piece. The response is a generic troubleshooting checklist rather than the specific diagnosis expected, and it even defers to asking for more info rather than pinpointing the catalog/table scope issue.",
+      "evidence": "\"A `SELECT` grant on the table alone isn't sufficient if the role also needs `DESCRIBE` on the database (and the catalog). Missing the database-level grant is a very common reason queries fail even though the table-level grant looks correct.\" \u2014 this is the inverse of the expected scenario, which requires detecting a database/catalog-level grant missing table-level SELECT.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response walks the authorization chain in order rather than guessing a single cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response is structured as a numbered list covering 6 distinct layers: '1. Missing IAM permission for lakeformation:GetDataAccess', '2. Database still has \"Use only IAM access control\" enabled', '3. Grant made at the wrong level', '4. Missing DATA_LOCATION_ACCESS on the S3 path', '5. Principal mismatch', '6. Cross-account sharing not accepted' - this covers IAM, LF settings, grant scope, S3 permissions, principal identity, and cross-account sharing in a logical chain.",
+          "reasoning": "The response systematically walks through multiple layers of the authorization chain: IAM permissions, database IAM access control setting, grant level (database vs table), S3 data location access, principal matching, and cross-account sharing, rather than fixating on a single guessed cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "It identifies the breaking layer as the Lake Formation grant scope (database-level grant without table-level SELECT)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Point 3 states: 'A SELECT grant on the table alone isn't sufficient if the role also needs DESCRIBE on the database (and the catalog). Missing the database-level grant is a very common reason queries fail even though the table-level grant looks correct.' This assumes the user already has table-level SELECT and is missing database-level DESCRIBE - the exact opposite of the assertion's claim that the issue is a database-level grant without table-level SELECT. The response never commits to this being THE breaking layer; it's presented as one of six possibilities, not identified as the definitive answer.",
+          "reasoning": "The response does not identify the breaking layer as specifically being a database-level grant without table-level SELECT. Instead, it presents this as one of several possibilities (point 3), but frames it differently - as the grant being made at the table level without a corresponding database-level DESCRIBE grant, which is the opposite framing of what the assertion describes (database-level grant without table-level SELECT).",
+          "confidence": "high"
+        },
+        {
+          "text": "It recommends a concrete corrective grant (table-level SELECT, and DESCRIBE on the database)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Point 3 states: 'A SELECT grant on the table alone isn't sufficient if the role also needs DESCRIBE on the database (and the catalog). Missing the database-level grant is a very common reason queries fail even though the table-level grant looks correct.' This explicitly recommends adding DESCRIBE at the database level alongside the SELECT grant at the table level.",
+          "reasoning": "The response does recommend DESCRIBE on the database as a corrective action, paired with the existing table-level SELECT grant. While the assertion's phrasing suggests the fix is 'table-level SELECT, and DESCRIBE on the database', the response does recommend ensuring DESCRIBE is granted on the database in addition to the table SELECT grant.",
+          "confidence": "medium"
+        },
+        {
+          "text": "It notes that a Lake Formation grant alone does not guarantee access when the scope is wrong",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response opens with: 'This is a classic case where Lake Formation grants alone usually aren't the whole story.' Additionally, point 3 'Grant made at the wrong level' explicitly discusses how an incomplete/wrong-scoped grant (table-only without database-level DESCRIBE) causes failures despite the table-level grant looking correct: 'Missing the database-level grant is a very common reason queries fail even though the table-level grant looks correct.'",
+          "reasoning": "The response's overall framing and multiple points support the idea that a Lake Formation grant alone does not guarantee access when the scope or context is wrong. The opening line explicitly states this, and point 3 specifically addresses grant scope issues.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.75
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "10s",
+    "cost": "$0.09",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

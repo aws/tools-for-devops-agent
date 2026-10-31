@@ -15,7 +15,7 @@ for f in SKILL.md README.md references/permission-chain.md evals/evals.json; do
 done
 
 echo "=== 2. evals.json valid + scenario count ==="
-if python3 -c "import json,sys; d=json.load(open('$SKILL/evals/evals.json')); n=len(d['scenarios']); print('  OK   valid JSON, scenarios =', n); sys.exit(0 if n==5 else 1)"; then
+if python3 -c "import json,sys; d=json.load(open('$SKILL/evals/evals.json')); n=len(d['evals']); print('  OK   valid JSON, evals =', n); sys.exit(0 if n==5 else 1)"; then
   :
 else
   echo "  FAIL evals.json invalid or scenario count != 5"; fail=1
