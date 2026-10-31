@@ -32,13 +32,21 @@ in this order.
   organization.
 
 ## 4. IAM identity policy
-- API: `iam:SimulatePrincipalPolicy` with the required actions and `ResourceArns`;
-  pass relevant `ContextEntries`.
-- Include SCPs. The simulator evaluates SCPs (condition keys + resource scoping) and
-  attributes an explicit deny to the organization, but does NOT return the matched SCP
-  statement and does NOT list SCP-only condition keys. Treat an org-attributed deny as
-  "an SCP is blocking - exact statement needs org-level review or a dedicated SCP
-  evaluator."
+- API (PRIMARY): `iam:ListAttachedRolePolicies`, `iam:ListRolePolicies`,
+  `iam:GetRolePolicy`, `iam:GetPolicy`, `iam:GetPolicyVersion`, `iam:GetRole`. Read the
+  identity's attached and inline policies directly and evaluate the statements against
+  the required actions and resources - this is the primary method for evaluating this
+  layer, matching SKILL.md Step 4.
+- API (OPTIONAL corroboration): `iam:SimulatePrincipalPolicy` with the required actions
+  and `ResourceArns`; pass relevant `ContextEntries`. This is optional corroboration
+  only, not the primary evaluation method - it is frequently `RuntimeUnavailable` in the
+  DevOps Agent runtime, so never block on it. When it is unavailable, rely on the direct
+  policy reads above and state that the IAM verdict is read-based.
+- Include SCPs when using the simulator as corroboration. The simulator evaluates SCPs
+  (condition keys + resource scoping) and attributes an explicit deny to the
+  organization, but does NOT return the matched SCP statement and does NOT list
+  SCP-only condition keys. Treat an org-attributed deny as "an SCP is blocking - exact
+  statement needs org-level review or a dedicated SCP evaluator."
 - Typical data-plane actions: `lakeformation:GetDataAccess`, `glue:GetTable`,
   `glue:GetPartitions`, `athena:StartQueryExecution`, `athena:GetQueryResults`,
   `s3:GetObject`, `s3:ListBucket`.
