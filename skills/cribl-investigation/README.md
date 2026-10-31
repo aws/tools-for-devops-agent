@@ -20,8 +20,8 @@ When telemetry is missing, delayed or wrong, the cause is often in the pipeline 
 
 ## Prerequisites
 
-- A Cribl.Cloud workspace with the MCP server enabled (Settings > Global > MCP Server)
-- The Cribl connector added to your Agent Space, with your `<workspace>-<organization>` tenant and a Cribl Bearer token
+- A Cribl.Cloud workspace, or an on-prem Leader on Cribl 4.19.0 or newer, with the MCP server enabled (Settings > Global > MCP Server)
+- The Cribl connector added to your Agent Space, with your `<workspace>-<organization>` tenant or your Leader's hostname and API port, and a Cribl Bearer token
 - A Cribl user with read access to the Stream Worker Groups and Search Datasets the investigation needs
 
 ## Setup
