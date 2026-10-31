@@ -3,21 +3,18 @@ name: datalake-access-analyzer
 description: >
   Diagnoses AWS Lake Formation and cross-service data-lake "access denied" and
   "insufficient permissions" errors. Use when a principal cannot access a Glue Data
-  Catalog database or table or a Lake Formation-governed resource, or when an Amazon
-  Athena, Amazon EMR, Amazon Redshift Spectrum, or Amazon QuickSight query fails with
-  access denied or a Lake Formation permission error. Traces the full authorization
-  chain - Lake Formation grants, Data Catalog resource links, cross-account AWS RAM
-  shares, IAM identity policies, S3 bucket policies, and KMS key policies - to pinpoint
-  the missing or incorrect grant and produce a corrective Lake Formation grant, IAM, or
-  RAM patch. Also detects governed resources that are granted but not resource-linked,
-  and catalog-level vs table-level grant-scope mismatches. Read-only: it recommends
-  fixes and does not apply them.
+  Catalog database or table or a Lake Formation-governed resource, or when Athena,
+  EMR, Redshift Spectrum, or QuickSight fails with access denied or a Lake Formation
+  permission error. Traces the chain - Lake Formation grants, Data Catalog resource
+  links, cross-account RAM shares, IAM identity policy, S3 bucket policy, KMS key
+  policy - to pinpoint the missing or incorrect grant and produce a corrective patch.
+  Detects granted-but-unlinked resources and catalog-vs-table scope mismatches.
+  Read-only: recommends fixes, does not apply them.
 
-  Do NOT use for Amazon Bedrock or Amazon SageMaker service-role, iam:PassRole, or
-  model-access denials (use aiml-access-diagnostics instead), or for an AI/ML service
-  (Comprehend, Personalize, Kendra, Forecast, Rekognition, Textract, Transcribe, Polly,
-  Lex, Translate) denied reading NON-governed S3/KMS. Also not for a speculative
-  least-privilege audit with no observed failure, or a throttling/quota error.
+  Do NOT use for Bedrock/SageMaker service-role, iam:PassRole, or model-access
+  denials (use aiml-access-diagnostics), or an AI/ML service denied on NON-governed
+  S3/KMS. Not for a speculative audit with no observed failure, or a throttling/quota
+  error.
 metadata:
   author: jbakthav
   version: "1.0.0"
