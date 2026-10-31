@@ -7,12 +7,12 @@ description: >
   about LLM monitoring, GenAI observability, token spend or AI cost, model latency,
   prompt or guardrail failures, or how an agent's tool-call chain executed.
 compatibility: >
-  Requires the `elastic` CLI (>= 0.2) with `es` and `kb` support, and an Elasticsearch
-  deployment holding LLM telemetry from APM/OTLP traces or an Elastic LLM integration.
-  Base floor is Elasticsearch 8.11+ or Serverless. The time-series path for integration
-  metrics needs `TS` (Stack GA 9.4) and `TRANGE` (Stack GA 9.3); both are GA on Serverless.
-  Below Stack 9.4 fall back to `FROM` with `BUCKET`. SLO and alerting lookups require
-  Kibana. No Kibana UI is required.
+  Reads Elastic through Agent Builder MCP tools. Requires an Elasticsearch deployment
+  holding LLM telemetry from APM/OTLP traces or an Elastic LLM integration. Base floor
+  is Elasticsearch 8.11+ or Serverless. The time-series path for integration metrics
+  needs `TS` (Stack GA 9.4) and `TRANGE` (Stack GA 9.3); both are GA on Serverless.
+  Below Stack 9.4 fall back to `FROM` with `BUCKET`. SLO and alerting lookups access
+  the Kibana SLO and Alerting APIs.
 metadata:
   author: "Udayel"
   version: "1.0.0"
@@ -36,14 +36,11 @@ LLM-specific, use the **elastic-sre-triage** skill.
 
 ## Environment Configuration
 
-This skill executes Elasticsearch operations through the `elastic` CLI. If the
-[`elastic` CLI](https://github.com/elastic/cli#configuration) is not installed, tell the user what it is needed for. Do
-not guess credentials, call the HTTP API directly, or attempt other workarounds.
-
-This skill references operations in HTTP-shorthand form (e.g., `GET /`, `GET /_cat/indices`, `GET /{index}/_mapping`,
-`GET /{index}/_settings/index.mode`, `POST /_query`). The [Operations](#operations) table at the end of this document
-maps each shorthand to the equivalent `elastic` CLI command — always use the CLI rather than calling the HTTP API
-directly.
+This skill reads Elastic through the Elastic Agent Builder MCP tools connected to AWS DevOps Agent: run ES|QL with
+`platform.core.execute_esql`, list indices and data streams with `platform.core.list_indices`, and read field mappings
+with `platform.core.get_index_mapping`. Operations below are written in HTTP-shorthand form (e.g., `POST /_query`); the
+[Operations](#operations) table maps each one to its tool. If no connected tool covers an operation, say what you would
+check and why instead of calling the HTTP API another way.
 
 <!-- end-partial: preamble -->
 

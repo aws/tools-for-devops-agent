@@ -1,6 +1,6 @@
-Set up Elastic for AWS DevOps Agent
+# Set up Elastic for AWS DevOps Agent
 
-Connect AWS DevOps Agent to your Elastic data through the **Elastic Agent Builder MCP server**. Before connecting, select or deploy Elastic, copy your MCP URL, and create an API key. To start investigations automatically from Elastic alerts, also complete step 6.
+Connect AWS DevOps Agent to your Elastic data through the **Elastic Agent Builder MCP server**. Before connecting, select or deploy Elastic, copy your MCP URL, and create an API key. To start investigations automatically from Elastic alerts, also complete step 4.
 
 ## 1. Deploy or select your Elastic environment
 
@@ -16,13 +16,15 @@ Use an Elastic Cloud Serverless project or a currently supported Elastic Stack d
 
 ### Elastic Cloud Serverless
 
+1. Sign in to [Elastic Cloud](https://cloud.elastic.co/) and select **Create project**.
+2. Choose **Observability**, select **AWS** and a region near your data, name the project, and select **Create project**.
+3. Open Kibana when the project is ready.
+
 ### Prepare your data
 
 Open **Agents / Agent Builder** in Kibana, using global search if needed. Ingest the logs, metrics, and traces you want investigated, and confirm you can query them. Existing environments can reuse their current data.
 
 The MCP endpoint is part of Agent Builder in Kibana. **You do not need to deploy a separate MCP container or EC2 instance.**
-
-If Kibana is privately reachable, configure an [AWS DevOps Agent private connection](https://docs.aws.amazon.com/devopsagent/latest/userguide/configuring-integrations-and-knowledge-connecting-to-privately-hosted-tools.html) with a route to its HTTPS endpoint.
 
 ## 2. Find your Elastic MCP URL
 
@@ -80,24 +82,9 @@ Elastic expects this HTTP header:
 Authorization: ApiKey <encoded-api-key>
 ```
 
-Use the complete encoded credential, not the separate key ID or raw `api_key` field. In the AWS custom MCP configuration below, enter **`ApiKey` followed by one space and the encoded key**. An Elastic API key does not use the `Bearer` prefix.
+When you connect, paste only the **encoded** key: the connection form adds the `ApiKey ` prefix. Use the complete encoded credential, not the separate key ID or raw `api_key` field.
 
-## 4. Connect AWS DevOps Agent
-
-1. In the AWS DevOps Agent console, open **Capability Providers**.
-2. Under **MCP Server**, select **Register** and enter a name and the MCP endpoint from step 2. Leave dynamic client registration off for this API key setup.
-3. Choose **API Key** authentication and enter:
-
-| Field | Value |
-| --- | --- |
-| API key name | `elastic-mcp` |
-| Header name | `Authorization` |
-| API key value | `ApiKey <encoded-api-key>` |
-
-4. Submit the registration and confirm connection validation succeeds.
-5. Open your **Agent Space > Capabilities > MCP Servers > Add**. Select the registered server and allowlist only the read-only tools needed for investigations.
-
-Start with these tools, where available:
+Enable these tools when you connect, where available:
 
 | Tool | Purpose |
 | --- | --- |
@@ -105,72 +92,22 @@ Start with these tools, where available:
 | `platform.core.get_index_mapping` | Inspect available fields and their types. |
 | `platform.core.execute_esql` | Query and aggregate data using ES\|QL. |
 
-AWS DevOps Agent requires **Streamable HTTP** transport. Use the remote Kibana MCP endpoint directly.
-
-## 5. Verify the connection
-
-For an optional API-key check, set the endpoint and encoded key locally, then list Agent Builder tools:
-
-```bash
-export ELASTIC_MCP_URL="https://<kibana-host>/api/agent_builder/mcp"
-export ELASTIC_API_KEY="<encoded-api-key>"
-
-curl --fail-with-body --silent --show-error \
-  "${ELASTIC_MCP_URL%/mcp}/tools" \
-  --header "Authorization: ApiKey ${ELASTIC_API_KEY}"
-```
-
-For a custom space, set `ELASTIC_MCP_URL` to its full space-specific URL. Keep real credentials out of the README and source control.
-
-A successful JSON response confirms access to the tools API. To verify MCP transport and data access, also complete AWS connection validation and ask DevOps Agent:
-
-> Use Elastic to identify accessible log indices, inspect their fields, and summarize error logs from the last 15 minutes.
-
-Check that the investigation uses the Elastic tools and returns records from an expected index and time range.
+If the connection fails, check:
 
 | Symptom | Check |
 | --- | --- |
-| `401 Unauthorized` | Encoded key, expiration, and the `Authorization: ApiKey …` header. |
+| `401 Unauthorized` | Encoded key and expiration. |
 | `403 Forbidden` | `feature_agentBuilder.read`, index privileges, owner permissions, and matching space scope. |
-| `404 Not Found` | Kibana host, base path, space ID, and Agent Builder availability. |
-| Connection timeout | DNS, HTTPS reachability, Elastic network filters, and any AWS private connection. |
+| `404 Not Found` | Project or deployment alias, region, and Agent Builder availability. |
 | Tools connect but return no data | Index patterns, data ingestion, timestamps, and query filters. |
 
-Before the key expires, create a replacement and update the registered provider through **Capability Providers > Actions > Update**. Verify access before invalidating the previous key.
+Before the key expires, create a replacement, update the connection with it, and confirm access before you invalidate the previous key.
 
-## 6. Trigger investigations from Elastic alerts — optional
+## 4. Trigger investigations from Elastic alerts (optional)
 
-The MCP connection lets DevOps Agent query Elastic. A webhook lets an Elastic alert start an investigation.
+1. In Kibana, go to **Stack Management > Connectors** and create a **Webhook** connector, or create one while configuring a rule. Set the method to **POST**, paste the webhook URL AWS DevOps Agent shows, and select **None** for the connector's built-in authentication.
+2. Add the `Authorization` header with the value AWS DevOps Agent shows, stored as a **Secret** header where supported, and `Content-Type: application/json`. If `xpack.actions.allowedHosts` restricts outbound destinations, include the webhook hostname.
+3. Add the connector to the rule as a per-alert action (not an alert summary) on the rule's active-alert action group with **On status changes**, and paste the body AWS DevOps Agent shows. Do not attach it to the recovery action.
+4. Set `priority` for the rule, add service, host and environment details to `description` using the rule's variable picker, and send a test notification.
 
-1. In your Agent Space's **Capabilities** tab, add a generic webhook with **API key** authentication. Copy its URL and generated token.
-2. In Kibana, go to **Stack Management > Connectors** and create a **Webhook** connector. You can also create one while configuring a rule.
-3. Set the method to **POST**, use the AWS webhook URL, and select **None** for the connector's built-in authentication. Add these headers:
-
-| Header | Value |
-| --- | --- |
-| `Content-Type` | `application/json` |
-| `Authorization` | `Bearer <aws-webhook-token>` |
-
-Store the authorization value as a **Secret** header where supported. If `xpack.actions.allowedHosts` restricts outbound destinations, include the webhook hostname.
-
-4. Add the connector to the rule's actions. For a per-alert action in Kibana Classic Alerting, use this starting body:
-
-```json
-{
-  "eventType": "incident",
-  "incidentId": "{{alert.uuid}}",
-  "action": "created",
-  "priority": "HIGH",
-  "title": "{{rule.name}}",
-  "description": "Elastic alert {{alert.id}} from rule {{rule.name}}. Rule URL: {{rule.url}}",
-  "timestamp": "{{date}}"
-}
-```
-
-5. Verify the variables using the rule's variable picker. Add service, host, environment, and relevant alert details to `description`; AWS does not include the free-form `data` object in the investigation context. Adjust the priority for the rule.
-6. Select the rule's active-alert action group and **On status changes**. Do not attach this `action: created` body to the recovery action.
-7. Send a test notification and verify that an investigation opens in the intended Agent Space.
-
-Use a per-alert action, not an alert summary, for this template. `alert.uuid` remains stable while an alert is active. The rule URL may be empty if Kibana's public base URL is not configured.
-
-**Keep the two credentials separate:** the Elastic API key uses `ApiKey` for AWS-to-Elastic queries; the AWS webhook token uses `Bearer` for Elastic-to-AWS notifications.
+`alert.uuid` remains stable while an alert is active. The rule URL may be empty if Kibana's public base URL is not configured.

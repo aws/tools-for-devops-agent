@@ -9,12 +9,12 @@ description: >
   burn-rate alerting, reducing alert noise, or setting up availability monitoring
   for a user-facing endpoint.
 compatibility: >
-  Requires Kibana 8.x or 9.x with a matching Elasticsearch cluster (self-managed,
-  Elastic Cloud Hosted, or Serverless) and the Observability solution enabled. The
-  cluster must have nodes carrying both the `transform` and `ingest` roles, since
-  every SLO is backed by a continuous transform. Needs the `elastic` CLI >= 0.2 with
-  `stack kb` and `stack es` support. Synthetics SLIs additionally require the Synthetics
-  app and at least one configured monitor location.
+  Reads Elastic through Agent Builder MCP tools. Requires Kibana 8.x or 9.x with a
+  matching Elasticsearch cluster (self-managed, Elastic Cloud Hosted, or Serverless)
+  and the Observability solution enabled. The cluster must have nodes carrying both
+  the `transform` and `ingest` roles, since every SLO is backed by a continuous
+  transform. Synthetics SLIs additionally require the Synthetics app and at least one
+  configured monitor location.
 metadata:
   author: "Udayel"
   version: "1.0.0"
@@ -41,20 +41,17 @@ mechanics use the **kibana-alerting-rules** skill.
 
 ## Environment Configuration
 
-This skill executes Elasticsearch operations through the `elastic` CLI. If the
-[`elastic` CLI](https://github.com/elastic/cli#configuration) is not installed, tell the user what it is needed for. Do
-not guess credentials, call the HTTP API directly, or attempt other workarounds.
-
-This skill references operations in HTTP-shorthand form (e.g., `GET /`, `GET /_cat/indices`, `GET /{index}/_mapping`,
-`GET /{index}/_settings/index.mode`, `POST /_query`). The [Operations](#operations) table at the end of this document
-maps each shorthand to the equivalent `elastic` CLI command — always use the CLI rather than calling the HTTP API
-directly.
+This skill reads Elastic through the Elastic Agent Builder MCP tools connected to AWS DevOps Agent: run ES|QL with
+`platform.core.execute_esql`, list indices and data streams with `platform.core.list_indices`, and read field mappings
+with `platform.core.get_index_mapping`. Operations below are written in HTTP-shorthand form (e.g., `POST /_query`); the
+[Operations](#operations) table maps each one to its tool. If no connected tool covers an operation, say what you would
+check and why instead of calling the HTTP API another way.
 
 <!-- end-partial: preamble -->
 
 ### Analysis without cluster access
 
-The CLI check above gates _querying the cluster_ — it does not gate analysis. When the user has already supplied the
+The connected Elastic tools gate _querying the cluster_ — they do not gate analysis. When the user has already supplied the
 evidence in their question (metric values, counts, status reasons, log lines, alert payloads, configuration), reason
 from that evidence and deliver the conclusion.
 
