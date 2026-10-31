@@ -37,6 +37,6 @@ When telemetry is missing, delayed or wrong, the cause is often in the pipeline 
 
 ## Limitations
 
-- Cribl.Cloud only. On-prem and standalone Docker MCP servers are not covered by the connector.
-- Bearer tokens expire after about 24 hours on Cribl.Cloud. Repeated HTTP 401 errors mean the token needs refreshing.
+- Cribl.Cloud and on-prem Leaders only. The standalone Docker MCP server is not covered by the connector.
+- Bearer tokens expire after about 24 hours on Cribl.Cloud, and after the Leader's Auth token TTL on-prem (one hour by default). Repeated HTTP 401 errors mean the token needs refreshing.
 - Tools follow the connecting user's RBAC, so some Worker Groups or Datasets may return a permission error.
