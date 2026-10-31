@@ -50,13 +50,13 @@ check and why instead of calling the HTTP API another way.
 
 ### Analysis without cluster access
 
-The CLI check above gates _querying the cluster_ — it does not gate analysis. When the user has already supplied the
+The connected Elastic tools gate _querying the cluster_ — they do not gate analysis. When the user has already supplied the
 evidence in their question (metric values, counts, status reasons, log lines, alert payloads, configuration), reason
 from that evidence and deliver the conclusion.
 
 When you genuinely do need data the user has not provided, still say what you would check and how — name the specific
-query, index, and field that would settle the question — and then ask for CLI setup. An answer that names the check is
-useful without a cluster; one that only asks for setup is not.
+query, index, and field that would settle the question — and which Elastic tool would answer it. An answer that names
+the check is useful without a cluster; one that only asks for setup is not.
 
 Everything here is expressed in ES|QL (`POST /_query`) or the Kibana Observability APIs. Do not use Query DSL, and do
 not use the ES|QL `KQL` search function — express predicates natively (`WHERE service.name == "checkout"`).

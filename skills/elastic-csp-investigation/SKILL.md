@@ -10,16 +10,15 @@ description: >
   resource under investigation against its own baseline, classifies the failure mode,
   and rules out co-occurring but unrelated conditions.
 compatibility: >
-  Requires the `elastic` CLI (>= 0.2) with an Elasticsearch context, and cloud-provider
-  metrics ingested through EDOT (the OpenTelemetry `awscloudwatch` receiver) into
-  `metrics-aws.<service>.otel-*` data streams. The base floor is Elasticsearch 8.11
-  or later, or Serverless; every query is ES|QL. Alert-state and SLO lookups additionally
-  need a Kibana context on the same deployment. Read-only.
+  Reads Elastic through Agent Builder MCP tools. Requires cloud-provider metrics ingested
+  through EDOT (the OpenTelemetry `awscloudwatch` receiver) into `metrics-aws.<service>.otel-*`
+  data streams. Base floor is Elasticsearch 8.11 or later, or Serverless; every query is ES|QL.
+  Alert-state and SLO lookups access the Kibana Alerting and SLO APIs. Read-only.
 metadata:
   author: "Udayel"
   version: "1.0.0"
   tier: "partner-managed"
-  summary: "Investigate cloud security posture and compliance issues in Elastic."
+  summary: "Investigate AWS service issues (RDS, Lambda, SQS, ALB, EC2) from OpenTelemetry cloud metrics in Elastic."
   aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
 ---
 

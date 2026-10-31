@@ -1,7 +1,7 @@
 # Reading SLO and Alert State
 
 How to read SLO status and active alerting rules during triage. This is about **reading** state under time pressure —
-for authoring SLO definitions, burn-rate rules, and alert thresholds, use the **observability-service-reliability**
+for authoring SLO definitions, burn-rate rules, and alert thresholds, use the **elastic-service-reliability**
 skill.
 
 ## Why these rank first

@@ -248,7 +248,7 @@ receiver is not installed, not that no restarts happened.
 The container-level fields are the measure to use, and the pod-level pair `k8s.pod.cpu_limit_utilization` /
 `k8s.pod.memory_limit_utilization` is not a substitute for them. See
 [Container-level against pod-level limit utilization](#container-level-against-pod-level-limit-utilization) below for
-what separates them and why the container fields are the default. **observability-k8s-investigation** applies the same
+what separates them and why the container fields are the default. **elastic-k8s-investigation** applies the same
 rule.
 
 `k8s.container.cpu_limit_utilization` and `k8s.container.memory_limit_utilization` are only populated when the container
@@ -278,7 +278,7 @@ Both fall-backs sit on the pod-level documents, not the container-level ones, so
 rather than by `k8s.container.name`.
 
 Saturation is the mechanism, not the verdict. When the finding is a restart loop, an OOM kill to confirm, node pressure,
-an admission failure, or a stuck rollout, stop here and hand off to the **observability-k8s-investigation** skill, which
+an admission failure, or a stuck rollout, stop here and hand off to the **elastic-k8s-investigation** skill, which
 owns workload, node, and control-plane diagnosis.
 
 #### Container-level against pod-level limit utilization
