@@ -2,7 +2,7 @@
 name: cribl-investigation
 description: Investigate incidents that involve a Cribl observability pipeline. Decide whether Cribl caused the problem, witnessed it, or is not involved; trace missing or delayed telemetry from Source to Destination; and search the customer's ingested data with Cribl Search (KQL) and PromQL. Load this when an investigation involves Cribl, data-pipeline delivery, missing or delayed telemetry, or a Cribl-sourced alert.
 metadata:
-  author: criblio
+  author: "jphipps-cribl, rarcbl"
   version: "1.0.0"
   tier: partner-managed
   summary: "Investigate whether Cribl caused, witnessed, or is unrelated to an incident, and gather evidence from pipeline health, config, and Cribl Search data."
