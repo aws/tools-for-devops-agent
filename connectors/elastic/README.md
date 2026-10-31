@@ -103,11 +103,38 @@ If the connection fails, check:
 
 Before the key expires, create a replacement, update the connection with it, and confirm access before you invalidate the previous key.
 
-## 4. Trigger investigations from Elastic alerts (optional)
+## 4. Webhook Connector Setup — AWS DevOps Agent
 
-1. In Kibana, go to **Stack Management > Connectors** and create a **Webhook** connector, or create one while configuring a rule. Set the method to **POST**, paste the webhook URL AWS DevOps Agent shows, and select **None** for the connector's built-in authentication.
-2. Add the `Authorization` header with the value AWS DevOps Agent shows, stored as a **Secret** header where supported, and `Content-Type: application/json`. If `xpack.actions.allowedHosts` restricts outbound destinations, include the webhook hostname.
-3. Add the connector to the rule as a per-alert action (not an alert summary) on the rule's active-alert action group with **On status changes**, and paste the body AWS DevOps Agent shows. Do not attach it to the recovery action.
-4. Set `priority` for the rule, add service, host and environment details to `description` using the rule's variable picker, and send a test notification.
+### 1. Create the connector
+Navigate to: **Stack Management → Connectors → Create connector → Webhook**
+- **Method**: POST
+- **URL**: <WEBHOOK_URL>
+- **Authentication**: None
 
-`alert.uuid` remains stable while an alert is active. The rule URL may be empty if Kibana's public base URL is not configured.
+### 2. Add headers
+
+| Name | Value |
+|------|-------|
+| Authorization | Bearer <API_KEY> |
+| Content-Type | application/json |
+
+Note: Name must contain only the header name (no colon). Value contains the full value, including the Bearer prefix if required. Use the Secret header type for Authorization if available, to keep it encrypted.
+
+### 3. Save the connector
+
+### 4. Test the connector
+Open the connector → Create an action (test panel)
+
+Paste the following into Body:
+
+```json
+{
+  "test": true,
+  "message": "Test notification from Kibana"
+}
+```
+
+Click Run / Test. Expected: a successful response from the webhook endpoint confirms the connector is configured correctly.
+
+### 5. Rotate credentials
+Since <API_KEY> may have been shared outside of secure storage, regenerate it from the AWS DevOps Agent side and update the connector's Authorization header value before using it in production.
