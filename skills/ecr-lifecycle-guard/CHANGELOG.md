@@ -11,6 +11,10 @@ All notable changes to this skill are documented here. New entries go at the top
 - 14 fixed checks, protected tag heuristic for production like tags under a catch all rule, and a protective rule suggestion handed to the operator, never applied.
 - References for ECR lifecycle semantics with a worked 26 image example, API fields and error classification, and the report template. 10 evals.
 
+### Changed (2026-10-30, after functional eval v4, still 1.0.0)
+- Output Contract rewritten: the final message MUST be the full report from `report-template.md` verbatim, with the ten `##` headings in order; a parent agent that ran the procedure in a subagent relays the subagent's report unchanged; no conversational preface and no closing offer. The fixed vocabulary (`Healthy`/`Attention`/`AtRisk`/`Indeterminate`, `Expiring-InUse`/`Expiring-Unknown`/`Expiring-Unused`, `AUTHORITATIVE`/`SIMULATED`, 15 Check Matrix ids) is stated as literal and case sensitive. In v4, 30 of 30 triggered runs produced the report inside a subagent and the parent then paraphrased it ("Verdict: Unsafe", "a simulation", no headings, no Check Matrix).
+- Report template gains a one line `Bottom line` field under Repository Rating for the user's yes or no answer, and two pre render checks (message starts with the title; a subagent's report is relayed unchanged).
+- Catch all semantics: `ecr-lifecycle-semantics.md` step 3 and the worked example now spell out that a `tagStatus: any` rule with `imageCountMoreThan N` keeps the N newest of the whole repository, not of the pool left after higher rules claimed their images; the worked example is renumbered with every intermediate set written out and names the 9 image answer as the most frequent error. SKILL.md Step 4 and new Critical Rules 12 and 13 carry the one sentence forms. In v4 the five rule eval returned 9 instead of 12 in 2 of 3 runs.
 ### Changed (2026-10-27, after live test round 1, still 1.0.0)
 
 - In use evidence is now ranked: (a) `lastRecordedPullTime`, (b) a consumer reference in ECS, Batch, Lambda or App Runner, (c) CloudTrail pull events. Only tier (c) is filtered.

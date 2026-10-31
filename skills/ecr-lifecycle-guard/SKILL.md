@@ -37,23 +37,65 @@ next day ([README.md](README.md), "Gap measured against the base agent").
 
 ## Output Contract
 
-**The only acceptable output is the report defined in
-[report-template.md](references/report-template.md).** A prose summary, however
-accurate, is a failed run. Three failure modes that feel natural in chat:
+**The final message to the user MUST be the full report defined in
+[report-template.md](references/report-template.md), verbatim, with every `##`
+heading in order: Scope, Repository Rating, Source of Truth, Expiring Images,
+Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed,
+Next Steps.** It MUST NOT be summarized, shortened, reworded, restructured, or
+prefaced with a conversational answer. A prose summary, however accurate, is a
+failed run. The report is checked for the exact strings below; the vocabulary
+is literal and case sensitive:
 
-- **Do not say an image is "safe", "not a concern" or "currently fine" outside a
-  verdict row.** Every image in the expiring set gets exactly one verdict
-  (`Expiring-InUse`, `Expiring-Unknown`, `Expiring-Unused`) with its evidence.
-  Images outside the set are `Safe` and are listed once as survivors.
-- **Do not compress a casual question into a shorter answer.** "Is it safe to
-  leave the policy as is?" needs the same full report as "what will be deleted".
-- **Do not end with an offer to change the policy or clean up images.** The
-  suggested protective rule is already in the report as an operator action.
+- Repository Rating is exactly one of `Healthy`, `Attention`, `AtRisk`,
+  `Indeterminate`. Never "Unsafe", "Safe to leave", "Risky", "Not safe" or any
+  other word in its place.
+- Every row in Expiring Images carries exactly one of `Expiring-InUse`,
+  `Expiring-Unknown`, `Expiring-Unused`. Never "in use", "pull evidence",
+  "unconfirmed" or "unknown" in place of the verdict word.
+- The expiring set source is exactly `AUTHORITATIVE` or `SIMULATED`, in
+  capitals. Never "a simulation", "estimated" or "my own evaluation".
+- The Check Matrix lists all 15 rows, `P1` to `P4`, `E1`, `U1` to `U8`, `R1`,
+  `R2`, in that order, even when a row is `N/A` or `PASS`. The id is alone in
+  the first column (`| P1 | Lifecycle policy attached | PASS | ... |`), never
+  merged with the check name.
+- Headings are the template's `##` lines exactly, with no suffix: `## Expiring
+  Images`, not `## Expiring Images (9 of 26)`. The count goes in the first
+  line under the heading. The first line of the message is the template's
+  title, `# ECR Lifecycle Guard: <repositoryName>`.
+- The contract holds for a pasted policy and image list with no account access.
+  That run still renders all ten sections: in use sources are `NotChecked` in
+  Scope, Not Assessed and the U rows, every expiring image is
+  `Expiring-Unknown`, the Repository Rating is `Attention`, and Source of Truth
+  says `SIMULATED` because no preview ran.
+
+**Short answers go inside the report, never instead of it.** When the user
+asked a yes or no question ("is it safe to leave the policy as is?"), answer it
+in the one line `Bottom line` field directly under Repository Rating. Do not
+answer it in prose before the report, after the report, or as a replacement for
+the report. "Is it safe to leave the policy as is?" needs the same full report
+as "what will be deleted".
+
+**Delegation does not change the contract.** If the procedure runs in a
+subagent, a Context Gatherer, or any other delegated step, the parent agent MUST
+relay the subagent's report unchanged as the final message. Do not
+re-summarize it, do not extract "the short version", do not add an
+introduction, do not convert its tables to bullets. The report the subagent
+produced is the answer; the parent's only job is to pass it through.
+
+**The report ends at Next Steps.** Never end with an offer to modify the policy,
+delete images, draft an updated policy, "dig further", "take a closer look" or
+"want me to ...". The suggested protective rule is already in the report as an
+operator action.
+
+**Do not say an image is "safe", "not a concern" or "currently fine" outside a
+verdict row.** Every image in the expiring set gets exactly one verdict with its
+evidence. Images outside the set are `Safe` and are listed once as survivors.
 
 **Self check before responding.** The expiring image count is identical in
 Scope, Source of Truth, Expiring Images and the Rule by Rule total; the Check
 Matrix has exactly 15 rows; the rating appears once; every verdict row names its
-evidence tier. Fix the report before sending if any of these fail.
+evidence tier; the message starts with the report title and ends with Next
+Steps. Fix the report before sending if any of these fail.
 
 ## When to Use
 
@@ -208,8 +250,12 @@ Call shapes, fields, pagination, errors and known quirks are in
 - [ ] **Step 4. Fallback simulation (only if Step 3 did not complete).** Load
       [ecr-lifecycle-semantics.md](references/ecr-lifecycle-semantics.md) and
       run its numbered procedure exactly: rules in `rulePriority` order, each
-      rule's candidates computed independently, a higher rule's candidates
-      excluded from every lower rule, manifest list children protected. Label
+      rule's candidates computed independently over the full image list, a
+      higher rule's candidates excluded from every lower rule's expiring output,
+      manifest list children protected. Follow the Catch All Count section
+      below; it is the step most often done wrong. If the reference cannot be
+      read, retry once, then apply the Catch All Count section and the
+      documented rules quoted there rather than reasoning from memory. Label
       the result `SIMULATED`; P3 INFO with the reason the preview did not run.
 - [ ] **Step 5. In use inventory, once per Region.** Collect every image
       reference (fields and calls: API reference sections 5 and 6) from ECS
@@ -247,6 +293,33 @@ Call shapes, fields, pagination, errors and known quirks are in
       then full sections for every repository that is not Healthy. Run the
       template's pre render validation list before sending.
 
+## Catch All Count
+
+**The catch all keeps the N newest of the whole repository, not of the leftover
+pool. Do not shrink the pool before applying `imageCountMoreThan`.** ECR
+evaluates every rule over the full image list at the same time ("All rules are
+evaluated at the same time, regardless of rule priority"), then applies them by
+priority, and a lower rule "can never mark images that are marked by higher
+priority rules, but can still identify them as if they haven't been expired".
+So for a `tagStatus: any` rule with `imageCountMoreThan N`:
+
+1. Sort **every image in the repository** by `imagePushedAt`, newest first.
+2. Keep positions 1 to N. Mark positions N+1 onward, whatever their tags.
+3. From the marked set, remove each image whose tags match a higher priority
+   `tagged` rule (claimed, whether or not that rule expires it). What remains
+   is what the catch all expires.
+
+Wrong order, and the usual cause of an undercount: removing the images that
+higher rules selected first, then keeping the N newest of what is left. In a 10
+image repository with rule 1 `build-*` keep 3 (6 build images) and rule 2 `any`
+keep 4, the right answer sorts all 10, marks the 6 oldest, drops the build
+images rule 1 claimed, and expires the non build images older than the 4th
+newest overall. The wrong order keeps 4 of the 4 non build images and expires
+nothing. The Rule by Rule table shows this: Candidates for the `any` rule is the
+whole repository, Marked is Candidates minus N, Expires now is Marked minus
+claimed. Full 26 image walk through with every intermediate set:
+[ecr-lifecycle-semantics.md](references/ecr-lifecycle-semantics.md) section 3.
+
 ## Fixed Check Matrix
 
 Every run reports all 15 checks, in this order; a check that could not be
@@ -275,7 +348,9 @@ Render from [report-template.md](references/report-template.md) with its `##`
 headings in order, Scope through Next Steps; multi repository runs add Account
 Summary first. Expiring Images has one row per digest (Tags, Digest first 12 hex,
 Pushed, Last recorded pull, Claimed by rule, Action, Verdict, Evidence naming
-the tier); survivors are listed once below it. Nothing follows Next Steps.
+the tier); survivors are listed once below it. Nothing precedes the report
+title and nothing follows Next Steps. Send the rendered report itself as the
+final message; a paraphrase of it is not the report (see Output Contract).
 
 ## Critical Rules
 
@@ -307,6 +382,14 @@ the tier); survivors are listed once below it. Nothing follows Next Steps.
 10. **Customer facing text excludes internal tools, employee aliases, Agent
     Space ids and account ids other than the one under review.**
 11. **One approval ask per run** for the preview. Declined means simulate.
+12. **The catch all keeps the N newest of the whole repository, not of the
+    leftover pool.** A `tagStatus: any` rule with `imageCountMoreThan N` sorts
+    every image in the repository and marks all but the newest N; only then are
+    images a higher priority rule claimed removed from what it expires. Do not
+    shrink the pool before applying `imageCountMoreThan`.
+13. **The report is the final message.** Whoever renders it, parent or
+    subagent, the user receives it verbatim: no preface, no summary, no
+    closing offer.
 
 ## References
 

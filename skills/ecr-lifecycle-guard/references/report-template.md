@@ -5,6 +5,15 @@ Render every `##` heading below in this order, even when a section is empty. An
 empty section says why it is empty (no expiring images, no findings, source not
 assessed). Replace every `<placeholder>`. Never leave a placeholder in the output.
 
+The rendered report is the final message to the user, verbatim. It is not an
+internal artifact to be summarized afterwards. If a subagent or Context Gatherer
+rendered it, the parent agent relays it unchanged: no introduction before the
+title, no "short version", no closing offer after Next Steps. The headings,
+the rating word (`Healthy`, `Attention`, `AtRisk`, `Indeterminate`), the verdict
+words (`Expiring-InUse`, `Expiring-Unknown`, `Expiring-Unused`), the source
+label (`AUTHORITATIVE`, `SIMULATED`) and the 15 Check Matrix ids are matched
+literally by the evaluation; a synonym fails.
+
 ## Single repository report
 
 ```markdown
@@ -26,6 +35,8 @@ Expiring set source: <AUTHORITATIVE (GetLifecyclePolicyPreview) | SIMULATED (ski
 ## Repository Rating
 
 **<Healthy | Attention | AtRisk | Indeterminate>**: <one sentence stating the deciding rule, for example "one expiring image has a recorded pull inside the window" or "expiring set is simulated and Batch job definitions were not readable">.
+
+Bottom line: <one line answering the user's question in their terms, for example "No. v2.3.0 is still being pulled and the catch all rule expires it at the next evaluation." or "12 of 26 images expire; none has in use evidence." This line is the only place a short answer belongs.>
 
 ## Source of Truth
 
@@ -175,7 +186,14 @@ Check each item before sending. Fix the report, not the checklist.
 8. No mutating operation (`PutLifecyclePolicy`, `DeleteLifecyclePolicy`,
    `BatchDeleteImage`, `PutImage`, `PutImageTagMutability`, `DeleteRepository`)
    is named as performed. The suggested rule is marked as an operator action.
-9. The report ends after Next Steps. No offer to "apply", "clean up", "fix" or
-   "dig further" follows it.
+9. The report ends after Next Steps. No offer to "apply", "clean up", "fix",
+   "draft the updated policy", "dig further" or "want me to" follows it.
 10. Account ids, repository names, tags and digests come from API responses in
     this run. No internal tool names, team aliases or Agent Space ids appear.
+11. The message begins with the `# ECR Lifecycle Guard:` title line. No
+    conversational answer, "short version" or summary precedes it. The yes or
+    no answer, if the user asked one, is in the Bottom line field under
+    Repository Rating.
+12. If a subagent rendered the report, the parent sends the subagent's text
+    unchanged. Any rewording, shortening or restructuring by the parent fails
+    this check.

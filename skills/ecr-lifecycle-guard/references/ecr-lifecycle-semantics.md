@@ -39,9 +39,15 @@ Inputs: the policy JSON (`lifecyclePolicyText`), the full image list from
      starts with the entry. Pattern entries use `*` as a wildcard (up to four per
      entry) and match the whole tag.
    - `tagStatus: any`: every image in the repository.
-3. **Mark images inside each candidate set using the rule's count criterion:**
+3. **Mark images inside each candidate set using the rule's count criterion.**
+   The candidate set is the full set from step 2. It is never reduced by what
+   another rule selected or expired. Do not shrink the pool before applying
+   `imageCountMoreThan`.
    - `imageCountMoreThan N`: sort the candidate set by `imagePushedAt`
      descending (newest first). Images at position N+1 and later are marked.
+     For a `tagStatus: any` rule the candidate set is every image in the
+     repository, so the rule keeps the N newest of the whole repository, not
+     the N newest of whatever a higher rule left over.
      If an image was archived and later restored, use `lastActivatedAt` in place
      of `imagePushedAt`.
    - `sinceImagePushed N days`: mark when `now - imagePushedAt > N days`.
@@ -135,43 +141,111 @@ Policy (five rules, all `action.type: expire`):
 | 40 | tagged | tagPrefixList `rc-` | sinceImagePushed 14 days |
 | 100 | any | all images | imageCountMoreThan 6 |
 
-Step 2 and 3, per rule (evaluated independently, `now` = 2026-10-21 16:36 UTC):
+Evaluation time `now` = 2026-10-21 16:36 UTC. Work through the procedure in
+section 1 step by step, writing each intermediate set out in full.
 
-| Rule | Candidates | Marked |
-|---|---|---|
-| 10 | none (no untagged images) | none |
-| 20 | nightly-20261015, nightly-20261008, nightly-20261001 (3) | newest 2 kept; nightly-20261001 marked |
-| 30 | build-12 down to build-1 (12) | newest 5 kept (build-8 to build-12); build-1 to build-7 marked |
-| 40 | rc-0.1 to rc-0.4 (4) | none (all 0 days old, threshold 14 days) |
-| 100 | all 26 | newest 6 kept: latest, nightly-20261015, nightly-20261008, nightly-20261001, hotfix-2.3.1, v2.5.0; the other 20 marked |
+1. **Parse.** Priorities 10, 20, 30, 40, 100 are unique. The `any` rule (100)
+   carries the highest number. One untagged rule. Every rule's action is
+   `expire`.
 
-Step 4, apply in priority order:
+2. **Candidate set per rule, computed independently over all 26 images.** No
+   rule's set is reduced by another rule at this step.
+   - Rule 10 (`untagged`): {} (0 images; every image is tagged).
+   - Rule 20 (`tagPrefixList nightly-`): {nightly-20261001, nightly-20261008,
+     nightly-20261015} (3).
+   - Rule 30 (`tagPatternList build-*`): {build-1, build-2, build-3, build-4,
+     build-5, build-6, build-7, build-8, build-9, build-10, build-11, build-12}
+     (12).
+   - Rule 40 (`tagPrefixList rc-`): {rc-0.1, rc-0.2, rc-0.3, rc-0.4} (4).
+   - Rule 100 (`any`): all 26 images. Not "the 7 images no other rule
+     selected". `tagStatus: any` matches every image in the repository.
 
-| Rule | Claims (candidate set minus earlier claims) | Expires (marked and unclaimed) |
-|---|---|---|
-| 10 | nothing | nothing |
-| 20 | 3 nightly images | nightly-20261001 |
-| 30 | 12 build images | build-1, build-2, build-3, build-4, build-5, build-6, build-7 |
-| 40 | 4 rc images | nothing (claimed, so rule 100 can no longer touch them) |
-| 100 | the remaining 7: v2.1.0 to v2.5.0, hotfix-2.3.1, latest | v2.1.0, v2.2.0, v2.3.0, v2.4.0 (marked and unclaimed). The other 16 marked images were claimed by rules 20, 30 and 40 |
+3. **Marked set per rule, from each rule's full candidate set.**
+   - Rule 10, `sinceImagePushed 1 day`: {} (no candidates).
+   - Rule 20, `imageCountMoreThan 2`: sort the 3 nightly images newest first:
+     nightly-20261015, nightly-20261008, nightly-20261001. Keep 2. Marked:
+     {nightly-20261001} (1).
+   - Rule 30, `imageCountMoreThan 5`: sort the 12 build images newest first:
+     build-12, build-11, build-10, build-9, build-8, | build-7, build-6,
+     build-5, build-4, build-3, build-2, build-1. Keep 5. Marked: {build-1,
+     build-2, build-3, build-4, build-5, build-6, build-7} (7).
+   - Rule 40, `sinceImagePushed 14 days`: every rc image is about 3 minutes
+     old. Marked: {} (0).
+   - Rule 100, `imageCountMoreThan 6`: sort **all 26** images newest first:
+     latest, nightly-20261015, nightly-20261008, nightly-20261001,
+     hotfix-2.3.1, v2.5.0, | v2.4.0, v2.3.0, v2.2.0, v2.1.0, rc-0.4, rc-0.3,
+     rc-0.2, rc-0.1, build-12, build-11, build-10, build-9, build-8, build-7,
+     build-6, build-5, build-4, build-3, build-2, build-1. Keep the 6 newest
+     of the whole repository: {latest, nightly-20261015, nightly-20261008,
+     nightly-20261001, hotfix-2.3.1, v2.5.0}. Marked: the other 20 {v2.4.0,
+     v2.3.0, v2.2.0, v2.1.0, rc-0.4, rc-0.3, rc-0.2, rc-0.1, build-12,
+     build-11, build-10, build-9, build-8, build-7, build-6, build-5, build-4,
+     build-3, build-2, build-1} (20).
 
-Result, `SIMULATED`, 12 images expiring:
+4. **Apply in priority order, tracking the claimed set.** Claimed starts
+   empty. A rule claims its whole candidate set (marked or not) and expires
+   only the marked images not already claimed.
+   - Rule 10: claims {}. Expires {}. Claimed so far: {} (0).
+   - Rule 20: claims {nightly-20261001, nightly-20261008, nightly-20261015}.
+     Expires {nightly-20261001}. Claimed so far: 3 images.
+   - Rule 30: claims the 12 build images. Expires {build-1, build-2, build-3,
+     build-4, build-5, build-6, build-7}. Claimed so far: 15 images.
+   - Rule 40: claims {rc-0.1, rc-0.2, rc-0.3, rc-0.4}. Expires {} (nothing
+     marked). The 4 rc images are now claimed, so rule 100 can no longer
+     expire them even though rule 40 did not. Claimed so far: 19 images.
+   - Rule 100: marked set from step 3 is 20 images. Remove the ones already
+     claimed: nightly-20261001 (rule 20), build-1 to build-12 (rule 30),
+     rc-0.1 to rc-0.4 (rule 40), 16 images removed. Expires the 4 that remain:
+     {v2.1.0, v2.2.0, v2.3.0, v2.4.0}. Rule 100 also claims the remaining 7
+     unclaimed images (v2.1.0 to v2.5.0, hotfix-2.3.1, latest), but its keep
+     count was already applied over all 26 in step 3, not over these 7.
 
-- Rule 20: nightly-20261001
-- Rule 30: build-1, build-2, build-3, build-4, build-5, build-6, build-7
-- Rule 100: v2.1.0, v2.2.0, v2.3.0, v2.4.0
+5. **Manifest lists.** None in this fixture; nothing removed.
 
-Survivors, 14: build-8, build-9, build-10, build-11, build-12, rc-0.1, rc-0.2,
-rc-0.3, rc-0.4, v2.5.0, hotfix-2.3.1, nightly-20261008, nightly-20261015, latest.
+6. **Output.** `SIMULATED`, 12 images expiring:
+   - Rule 20: nightly-20261001 (1)
+   - Rule 30: build-1, build-2, build-3, build-4, build-5, build-6, build-7 (7)
+   - Rule 100: v2.1.0, v2.2.0, v2.3.0, v2.4.0 (4)
 
-This matches ECR's own `GetLifecyclePolicyPreview` output for the same fixture.
+   Survivors, 14: build-8, build-9, build-10, build-11, build-12, rc-0.1,
+   rc-0.2, rc-0.3, rc-0.4, v2.5.0, hotfix-2.3.1, nightly-20261008,
+   nightly-20261015, latest. 12 + 14 = 26.
+
+Rule by Rule table for the report, with the column meanings from
+report-template.md (Candidates: step 2; Marked: step 3; Expires now: step 4;
+Keeps: Candidates minus Expires now):
+
+| Priority | Selection | Candidates | Marked | Expires now | Keeps |
+|---|---|---|---|---|---|
+| 10 | untagged, sinceImagePushed 1 day | 0 | 0 | 0 | 0 |
+| 20 | tagged nightly-, imageCountMoreThan 2 | 3 | 1 | 1 | 2 |
+| 30 | tagged build-*, imageCountMoreThan 5 | 12 | 7 | 7 | 5 |
+| 40 | tagged rc-, sinceImagePushed 14 days | 4 | 0 | 0 | 4 |
+| 100 | any, imageCountMoreThan 6 | 26 | 20 | 4 | 22 |
+
+This matches ECR's own `GetLifecyclePolicyPreview` output for the same fixture,
+and the documented Example B on lifecycle_policy_examples.html, where the `any`
+rule "identifies images A, B, C, D, and E" (all of them), keeps the newest one,
+and "can't mark images A, B, C, or E because they were identified by higher
+priority rules", expiring only D.
+
 Common wrong answers, each caused by skipping a step above:
 
-- Listing rc-0.1 to rc-0.4 and build-8 to build-12 as expiring under rule 100
-  (skipped the claim rule in step 4).
-- Listing only the four v2.x images or only nine images (forgot that rule 100's
-  count runs across all 26 images, or dropped a rule).
-- Listing only one image (treated the policy as a single rule).
+- **9 images (the most frequent error).** Removing the nightly, build and rc
+  images from rule 100's pool first, then applying "keep 6" to the 7 leftover
+  images (v2.1.0 to v2.5.0, hotfix-2.3.1, latest), which expires only v2.1.0.
+  This shrinks the pool before applying `imageCountMoreThan`. The catch all
+  keeps the 6 newest of the whole repository, so v2.2.0, v2.3.0 and v2.4.0 are
+  outside the top 6 and expire. The right order is: mark over all 26 (step 3),
+  then remove claimed images from the marked set (step 4).
+- **More than 12**, listing rc-0.1 to rc-0.4 and build-8 to build-12 as
+  expiring under rule 100 (skipped the claim rule in step 4).
+- **Only the four v2.x images** (dropped rules 20 and 30), or **only one
+  image** (treated the policy as a single rule).
+
+If a future revision of the AWS documentation describes the catch all count
+differently from the reading above, follow the documentation, note the change
+in CHANGELOG.md and re-derive this example.
 
 ## 4. Protected tag patterns (heuristic, check P4)
 
