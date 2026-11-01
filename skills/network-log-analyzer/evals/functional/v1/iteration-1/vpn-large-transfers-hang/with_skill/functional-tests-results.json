@@ -1,0 +1,86 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "vpn-large-transfers-hang",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'network-log-analyzer' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's primary hypothesis correctly identifies the expected root cause: a Path MTU black hole on the Site-to-Site VPN tunnel, explicitly citing the AWS VPN MTU limit of 1446 bytes (MSS 1406, lower with AES-CBC+NAT-T), the lack of PMTUD support on Site-to-Site VPN, and DF-set packets exceeding the tunnel MTU causing no ICMP response - matching the expected root cause almost verbatim. The agent also correctly labels this as an inferred hypothesis (not confirmed in AWS), names the confirming measurement (MSS values in SYN handshake, DF pings of 1446 bytes or less), and suggests MSS clamping as a mitigation path in the second hypothesis about losing MSS clamp protection. This aligns with the expectation's requirement that the cause be labelled as inferred, name a confirming measurement, and lead toward MSS clamping rather than relying on ICMP.",
+      "evidence": "\"Most likely mechanism (not confirmed in AWS): the instance (likely 9001 MTU) and the on-prem file server negotiate an MSS of 1460 or more. The server sends full 1500-byte packets with DF set, which exceed the tunnel limit (MTU 1446 / MSS 1406; 1422 / 1382 with AES-CBC + NAT-T). Site-to-Site VPN does not support PMTUD, so no ICMP type 3 code 4 comes back and the transfers stall... Would be disproven if DF pings of 1446 bytes or less also fail, or if both SYNs already advertise MSS <= 1406 and transfers still stall.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Each candidate cause carries an evidence label such as Observed, Inferred, or Heuristic rather than being asserted as fact",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The hypotheses are labeled 'Hypothesis' and contain phrases like 'Most likely mechanism (not confirmed in AWS)' and 'Unverified candidates', but there is no explicit per-cause evidence label such as 'Observed', 'Inferred', or 'Heuristic' attached to each candidate cause.",
+          "reasoning": "While there is qualifying language distinguishing confirmed vs unconfirmed, the output does not use a structured evidence-label taxonomy (Observed/Inferred/Heuristic) for each candidate cause as the assertion requires.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response separates what the capture observed from what is inferred from documented AWS behavior",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly separates what was captured ('segments over 1500 bytes being retransmitted and no ICMP messages arriving' from the tshark capture) from what is inferred: 'Site-to-Site VPN does not support PMTUD, so no ICMP type 3 code 4 comes back' and 'Most likely mechanism (not confirmed in AWS)'.",
+          "reasoning": "The symptoms section reflects the capture observation, while the findings section is clearly framed as hypothesis/inference based on documented VPN behavior (tunnel MTU limits), with explicit caveats about what wasn't confirmed.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The fix is described as a recommendation, such as MSS clamping, allowing ICMP fragmentation-needed, or lowering the MTU for that path, and is not applied",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The description states the mechanism and implies fixes like MSS clamping without applying any change: 'MSS-clamp configuration and change history are also outside AWS' and 'Next step: connect that account... or run the VPN checks there.' No remediation action (e.g., modifying MTU/MSS settings) was executed by the agent.",
+          "reasoning": "The output discusses MSS clamp issues and recommends next steps/checks, but does not claim to have applied any fix such as changing MTU or MSS settings, satisfying the 'recommendation only, not applied' requirement. However, it's somewhat implicit rather than an explicit standalone 'Fix' section recommending MSS clamping/ICMP allowance/MTU lowering as actionable recommendation.",
+          "confidence": "high"
+        },
+        {
+          "text": "The VPN-specific MTU/MSS limit or MSS clamping is cited",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '1446'"
+        },
+        {
+          "text": "Path MTU discovery is named",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'Path MTU'"
+        },
+        {
+          "text": "The response does not rely on Path MTU Discovery or ICMP fragmentation-needed as the primary fix for the VPN path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'Site-to-Site VPN does not support PMTUD, so no ICMP type 3 code 4 comes back and the transfers stall,' explicitly indicating PMTUD/ICMP is not relied upon as the fix; instead the focus is on MSS clamping and tunnel MTU limits (1446/1406, 1422/1382).",
+          "reasoning": "The response explicitly notes that PMTUD does not work on VPN tunnels, and frames the fix around MSS clamping and MTU adjustments rather than relying on ICMP fragmentation-needed messages, satisfying this assertion.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.8333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m12s",
+    "cost": "$1.10",
+    "context_window": {
+      "utilization": "4.5%",
+      "compaction_count": 0
+    }
+  }
+}

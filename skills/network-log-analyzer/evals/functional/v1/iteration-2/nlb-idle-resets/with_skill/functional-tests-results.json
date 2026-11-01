@@ -1,0 +1,63 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "nlb-idle-resets",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'network-log-analyzer' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's Cause and Root Cause findings match the expected root cause closely: it identifies the NLB's 350-second TCP idle timeout as the mechanism that resets idle flows (matching the observed ~6 minute idle reset pattern), and recommends the fix as TCP keepalives or connection-pool idle settings below 350 seconds. It also explicitly labels this as inferred from documented NLB behavior and the observed idle pattern, and notes the gap that it isn't confirmed by this account's telemetry (no capture/metric confirmation available), which aligns with the expected labelling of 'inferred... with the capture or metric that would confirm it' being noted as a gap. Key identifying details (350s timeout, idle connection reset, keepalive fix) all align with the expected root cause description.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"Listener arn:...has tcp.idle_timeout.seconds = 350 (default, 5 min 50 s \u2248 the reported ~6 min). After 350 s without packets the NLB discards the flow and answers the next packet with an RST... Config-backed and inferred from documented NLB behavior; not confirmed by this account's telemetry.\" and \"The application's DB connection pool keeps connections idle longer than the NLB's 350 s timeout and does not send TCP keepalives more often than every 350 s...\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response recommends TCP keepalives or connection-pool idle settings shorter than the timeout",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Root Cause: DB connection pool idles longer than 350 s without keepalives ... does not send TCP keepalives more often than every 350 s (Linux default 7200 s; many drivers don't enable keepalive). This mismatch causes the resets...\" implies the fix is to set keepalives/pool idle settings shorter than the 350s timeout, i.e. the recommendation is clearly implied though the exact numeric recommendation ('set keepalive interval < 350s') is not explicitly spelled out as an action item.",
+          "reasoning": "The summary identifies the mismatch between pool idle duration and the 350s timeout and frames the fix target as keepalives/pool settings needing to be more frequent than 350s, satisfying the substance of the assertion even though it's phrased as a root cause description rather than an explicit recommendation.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states what evidence would confirm the cause, such as the idle gap before the RST in a capture",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Gaps section: 'Flow logs lack tcp-flags: VPCFlowLog uses the default v2 format without tcp-flags, so RSTs can't be matched in the flow logs.' and 'Telemetry can't confirm...no new flows and no ELB/Target/Client resets' - these indicate what telemetry (flow logs with tcp-flags, ELB/Target/Client reset metrics) would confirm the cause, though it doesn't explicitly mention a packet capture showing the idle gap before RST.",
+          "reasoning": "The output discusses what telemetry/evidence is missing and would be needed (tcp-flags in flow logs, NLB traffic/reset metrics) to confirm the cause, which substantively addresses the assertion even though it doesn't explicitly say 'a capture showing idle gap before RST'.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The 350-second timeout is cited",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '350'"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m21s",
+    "cost": "$2.17",
+    "context_window": {
+      "utilization": "7.6%",
+      "compaction_count": 0
+    }
+  }
+}
