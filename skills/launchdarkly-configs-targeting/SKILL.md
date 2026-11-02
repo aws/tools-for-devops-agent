@@ -3,8 +3,11 @@ name: launchdarkly-configs-targeting
 description: Configure config targeting rules to control which variations serve to different users. Enable percentage rollouts, attribute-based rules, segment targeting, and guarded rollouts.
 compatibility: Requires LaunchDarkly API access token with ai-configs:write permission.
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Choose which AgentControl config variation each context gets: default rule, percentage split, rules and individual targets."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "INCIDENT_MITIGATION, CHAT"
 ---
 
 # Config Targeting

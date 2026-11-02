@@ -4,8 +4,11 @@ description: "Create, track, retrieve, update, and delete custom business metric
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server to create and read metrics. Updating or deleting a metric needs a LaunchDarkly API token with the `writer` role. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Define custom business metrics for AgentControl configs, check that their events arrive and read the results."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # Custom Metrics for Configs

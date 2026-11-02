@@ -4,8 +4,11 @@ description: "Configure LaunchDarkly Release Autopilot settings (GitHub App auto
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Configure LaunchDarkly Release Autopilot for GitHub repositories, or find out why a pull request wasn't auto-flagged."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # LaunchDarkly Release Autopilot Settings

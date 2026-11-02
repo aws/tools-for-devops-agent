@@ -4,8 +4,11 @@ description: "Create and manage prompt snippets — reusable text blocks referen
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Create and manage reusable prompt snippets that keep instructions and guardrails consistent across AgentControl configs."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # Config Prompt Snippets

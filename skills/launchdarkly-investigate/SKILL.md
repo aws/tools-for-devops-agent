@@ -4,8 +4,11 @@ description: "Analyzes observability data — logs, traces, errors, sessions, an
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Find the root cause of a bug or anomaly in LaunchDarkly logs, traces, errors, sessions and metrics."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "INCIDENT_RCA, CHAT"
 ---
 
 # Investigate

@@ -4,8 +4,11 @@ description: "Configure guarded rollouts with progressive traffic increases, met
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Roll out a LaunchDarkly flag in guarded stages that watch metrics and roll back automatically on a regression."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # LaunchDarkly Guarded Rollouts

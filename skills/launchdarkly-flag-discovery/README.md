@@ -45,7 +45,6 @@ Is the `dark-mode` flag ready to be removed?
 ```
 launchdarkly-flag-discovery/
 ├── SKILL.md
-├── marketplace.json
 ├── README.md
 └── references/
     ├── flag-health-signals.md

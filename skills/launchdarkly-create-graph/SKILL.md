@@ -4,8 +4,11 @@ description: "Creates observability dashboards and graphs from logs, traces, err
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Chart LaunchDarkly logs, traces, errors, sessions and metrics, preview the graphs and save them to a dashboard."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # Create graphs and dashboards

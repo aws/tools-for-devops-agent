@@ -4,8 +4,11 @@ description: "Resolve `/flag` style requests into the right LaunchDarkly flag lo
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Find a LaunchDarkly flag by name or key, tell similar flags apart and summarize its state."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # LaunchDarkly Flag Command Router

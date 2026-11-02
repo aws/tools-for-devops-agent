@@ -3,8 +3,11 @@ name: launchdarkly-online-evals
 description: Attach judges to config variations for automatic LLM-as-a-judge evaluation. Create custom judges, configure sampling rates, and monitor quality scores.
 compatibility: Requires the remotely hosted LaunchDarkly MCP server. Scripted setup without MCP needs an API access token with ai-configs:write permission. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Attach LLM-as-a-judge evaluators to AgentControl config variations, set sampling rates and track quality scores."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # Config Online Evaluations

@@ -34,7 +34,6 @@ staging on merge, hold production until legal signs off.
 ```
 launchdarkly-flag-release/
 ├── SKILL.md
-├── marketplace.json
 ├── README.md
 └── references/
     └── auto-release.md

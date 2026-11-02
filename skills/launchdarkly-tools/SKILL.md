@@ -4,8 +4,11 @@ description: "Give your agents capabilities through tools (function calling). He
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Define tools (function calling) for AgentControl configs and attach them to config variations."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # Config Tools

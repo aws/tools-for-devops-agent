@@ -52,7 +52,6 @@ Copy the staging config for checkout-v2 to production
 ```
 launchdarkly-flag-targeting/
 ├── SKILL.md
-├── marketplace.json
 ├── README.md
 └── references/
     ├── targeting-patterns.md

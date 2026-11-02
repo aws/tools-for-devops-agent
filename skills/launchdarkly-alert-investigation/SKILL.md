@@ -4,8 +4,11 @@ description: "Investigates a triggered observability alert and returns a structu
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Diagnose a triggered LaunchDarkly observability alert: likely cause, scope and next steps."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA"
 ---
 
 # Alert investigation

@@ -4,8 +4,11 @@ description: "Set up and run experiments in LaunchDarkly. Create experiments wit
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Create, start and stop LaunchDarkly experiments with metrics, treatments and flag configuration, then pick a winner."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # LaunchDarkly Experiment Setup

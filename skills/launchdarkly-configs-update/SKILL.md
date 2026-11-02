@@ -4,8 +4,11 @@ description: "Update, archive, and delete LaunchDarkly configs and their variati
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Change, archive or delete a LaunchDarkly AgentControl config or variation, such as its model, parameters or prompts."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "INCIDENT_MITIGATION, CHAT"
 ---
 
 # Config Update & Lifecycle

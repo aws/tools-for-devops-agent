@@ -4,8 +4,11 @@ description: "Control LaunchDarkly feature flag targeting including toggling fla
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Turn LaunchDarkly flags on or off, change rollouts, rules and individual targets, or copy targeting between environments."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "INCIDENT_MITIGATION, CHAT"
 ---
 
 # LaunchDarkly Flag Targeting & Rollout

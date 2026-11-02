@@ -46,7 +46,6 @@ show me the new-checkout flag in staging
 ```
 launchdarkly-flag-command/
 ├── SKILL.md
-├── marketplace.json
 └── README.md
 ```
 

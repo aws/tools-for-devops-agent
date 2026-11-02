@@ -4,8 +4,11 @@ description: "Experiment with configs by creating and managing variations. Helps
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Add and compare AgentControl config variations to test models, prompts and parameters side by side."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # Config Variations

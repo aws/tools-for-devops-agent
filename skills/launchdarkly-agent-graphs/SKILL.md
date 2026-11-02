@@ -4,8 +4,11 @@ description: "Create and manage agent graphs — directed graphs of configs conn
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Build and manage LaunchDarkly agent graphs: AgentControl configs connected by edges that hand off between agents."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # Config Agent Graphs

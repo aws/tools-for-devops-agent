@@ -4,8 +4,11 @@ description: "Create and configure configs in LaunchDarkly. Helps you choose bet
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Create a LaunchDarkly AgentControl config in agent or completion mode, add its first variation and verify it."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # Create Config

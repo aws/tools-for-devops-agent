@@ -4,8 +4,11 @@ description: "Choose the right metrics for a LaunchDarkly experiment, guarded ro
 license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
-  author: launchdarkly
+  author: "nieblara"
   version: "1.0.0"
+  summary: "Pick the primary and guardrail metrics for a LaunchDarkly experiment, guarded rollout or release policy."
+  tier: "partner-managed"
+  aws-devops-agent-skills.agent-types: "CHAT"
 ---
 
 # LaunchDarkly Metric Choose
