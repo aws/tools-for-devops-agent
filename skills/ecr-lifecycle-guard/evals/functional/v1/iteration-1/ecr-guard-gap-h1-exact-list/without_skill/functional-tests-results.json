@@ -1,0 +1,117 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "ecr-guard-gap-h1-exact-list",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a very specific, highly structured \"ECR Lifecycle Guard report\" format with mandatory sections: Scope, Repository Rating, Source of Truth (explicitly stating AUTHORITATIVE via GetLifecyclePolicyPreview vs SIMULATED), an Expiring Images table with per-digest verdicts of Expiring-InUse/Expiring-Unknown/Expiring-Unused with evidence, a Rule by Rule table, Findings, a Suggested Protective Rule, a 15-row Check Matrix, Not Assessed section, and Next Steps. It also requires the agent to have attempted StartLifecyclePolicyPreview or explain guardrail cancellation/approval request before falling back to simulation.\n\nThe agent's actual response is a much simpler, conversational answer: a markdown table of 9 images with tag/pushed/matched rule columns, a prose summary of usage checks, and a caveat about non-AWS visibility. None of the required structural elements are present:\n- No 'Scope' section\n- No 'Repository Rating'\n- No explicit 'Source of Truth' statement declaring AUTHORITATIVE (via GetLifecyclePolicyPreview) vs SIMULATED - the agent doesn't mention whether it used the lifecycle policy preview API at all, nor does it mention any guardrail cancellation/approval flow\n- No per-digest verdict labels (Expiring-InUse / Expiring-Unknown / Expiring-Unused) - the agent just gives a blanket \"none of the 9 are in active use\" statement rather than row-by-row verdicts\n- No Rule by Rule table\n- No Findings section\n- No Suggested Protective Rule\n- No 15-row Check Matrix\n- No Not Assessed section\n- No Next Steps section\n- The agent also states \"none of the 9 are in active use\" as a blanket conclusion, and mentions v2.3.0 \"actually in rotation\" - sort of describing images as safe/not a concern outside a formal verdict row, which violates the constraint against describing images as safe outside a verdict row.\n\nThe response does cover the substantive question (which images will be deleted, and usage check) in a reasonable, useful way, but it completely lacks the specific mandated report structure and terminology required by the expected output. This is a significant mismatch against a very detailed, specific expected format.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"**9 images are slated for deletion:**\" table format vs required Scope/Repository Rating/Source of Truth/Expiring Images table with verdicts/Rule by Rule table/Findings/Suggested Protective Rule/15-row Check Matrix/Not Assessed/Next Steps. Also: \"On usage \u2014 none of the 9 are in active use\" lacks per-image verdict labels (Expiring-InUse/Expiring-Unknown/Expiring-Unused)."
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response is the full report, not a prose summary or an offer to produce one.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response includes a full table listing 9 images with tag, pushed date, and matched rule, plus a detailed usage analysis and retained list. This is a complete report, not a prose summary or offer to produce one.",
+          "reasoning": "The agent provides the exact list of 9 images with a table, along with retained images list and detailed usage check, fulfilling the request directly rather than deferring or summarizing vaguely.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states whether the expiring set is AUTHORITATIVE (from GetLifecyclePolicyPreview) or SIMULATED, and if SIMULATED gives the reason the preview did not run.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response never mentions GetLifecyclePolicyPreview, AUTHORITATIVE, or SIMULATED, nor does it state whether a preview API was used or why not.",
+          "reasoning": "The assertion requires explicit statement of authoritative vs simulated status with reasoning. The output omits this entirely, instead presenting the list as if it were definitive without clarifying the method used to derive it.",
+          "confidence": "high"
+        },
+        {
+          "text": "The agent attempted StartLifecyclePolicyPreview, or explicitly explains that the call was cancelled by the agent guardrail and that it asked the operator once for approval before simulating.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of StartLifecyclePolicyPreview, guardrail cancellation, or asking the operator for approval before simulating.",
+          "reasoning": "The response does not reference any attempt to start a lifecycle policy preview or any guardrail-related explanation, so this assertion is unmet.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every image listed as expiring carries exactly one verdict from Expiring-InUse, Expiring-Unknown or Expiring-Unused, together with the rule that claims it and the evidence for the verdict.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The table only has columns 'Tag', 'Pushed', 'Matched rule' - there is no verdict column with Expiring-InUse/Expiring-Unknown/Expiring-Unused labels for each image.",
+          "reasoning": "The assertion requires each image to have one of three specific verdict labels along with rule and evidence. The output's table lacks this verdict taxonomy entirely; it instead provides a blanket statement at the end that 'none of the 9 are in active use' without per-image verdicts in the structured taxonomy.",
+          "confidence": "high"
+        },
+        {
+          "text": "An image with a recorded lastRecordedPullTime inside the pull window is reported as Expiring-InUse, never as safe, unused or not a concern.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says 'contrast that with v2.3.0 (a retained image), which was pulled as recently as today' - but v2.3.0 is not in the expiring set, so this doesn't test the assertion directly. For the expiring set, the agent states 'None of the 9 candidates show a recent pull timestamp either' implying none are in-use, but doesn't flag any as Expiring-InUse.",
+          "reasoning": "Since no image in the expiring set is reported as having a recent pull time inside the pull window, this assertion can't be confirmed as satisfied - there's no instance where an expiring image with recent pull is labeled Expiring-InUse. If such a case existed and was mislabeled, that would fail; but since no such case is presented, the assertion's specific condition isn't demonstrated. However, the assertion is about correctness of handling such a case - since it's not present, this is somewhat moot but the agent's methodology/taxonomy for handling it is absent, which is a concern similar to assertion 3.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any in use source that returned AccessDenied or was cancelled is reported under Not Assessed and leads to Expiring-Unknown verdicts, never to Expiring-Unused or to a statement that no references exist.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'no ECS clusters or EKS clusters even exist here' and 'all 5 Lambda functions are zip-packaged' as definitive findings, not as AccessDenied/cancelled statuses. It does not mention any 'Not Assessed' category or AccessDenied errors.",
+          "reasoning": "The assertion requires that any source returning AccessDenied or cancelled be reported as Not Assessed leading to Expiring-Unknown. The output presents all checks as successfully completed with no access issues, and makes a definitive claim that 'none of the 9 are in active use' - which could violate the spirit of this assertion if any checks were actually denied/cancelled but not disclosed. Since the output provides no evidence of 'Not Assessed' sources, and also asserts no references exist as a conclusion, this fails the assertion requirement of avoiding statements that no references exist when there could be unassessed sources (the caveat about CloudTrail/non-AWS consumers partially addresses this).",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not state that any image inside the expiring set is safe, not a concern or currently fine outside a verdict row.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'None of the 9 candidates show a recent pull timestamp either' and concludes 'none of the 9 are in active use' - essentially declaring them safe/unused outside a structured verdict row format.",
+          "reasoning": "The assertion requires that no image in the expiring set be called safe/not a concern outside a proper verdict row. Since the response lacks a verdict-row structure entirely (per assertion 3's failure) and instead states in prose that none are in active use, this constitutes exactly the kind of blanket 'safe' statement outside a verdict framework that the assertion prohibits.",
+          "confidence": "high"
+        },
+        {
+          "text": "The report contains the required section headings in order",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The Repository Rating is one of the four fixed values",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The Check Matrix contains the 15 check rows P1 to P4, E1, U1 to U8, R1 and R2",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 0 match(es), required at least 15"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 9,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 11,
+        "pass_rate": 0.1818
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m2s",
+    "cost": "$1.02",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "version": "v6",
+  "iteration": 2,
+  "eval_id": "ecr-guard-gap-h1-exact-list",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tools_ready": {
+    "outcome": "ready",
+    "ready": true,
+    "waited_seconds": 307.8,
+    "probes": 5,
+    "summary": "Agent space tools ready after 5 probe(s) in 5m 7s"
+  },
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response addresses several parts of the expected output well: it lists specific images, groups them by the rule that claims each (CI builds keep-5, catch-all keep-6, nightly, release, RC catch-all), gives a count (20), checks usage via ECS/EKS/Lambda and notes a pull-time anomaly for v2.3.0, flags scope limitations (only one account/region checked), and performs no write actions.\n\nHowever, it fails several specific, material requirements of the expected output:\n\n1. It never states whether the list came from ECR's own lifecycle policy preview API or from the agent manually applying the rules itself. This is explicitly required (\"It says whether that list came from ECR's own lifecycle preview or from the agent applying the rules itself\"). The response gives no indication of methodology/source.\n2. Since it doesn't mention using the preview, there's no statement about why the preview wasn't used (guardrail cancellation or denied call) nor that the preview would be authoritative - both required if the preview didn't run.\n3. It does not mention AWS Batch job definitions as a possible usage source, nor App Runner. The expected output specifically calls out Batch job definitions as a usage source that might be denied, and requires that if that check was denied, the agent must say those images could not be cleared (not safe/unused). The agent's response confidently declares none of the 20 images are in use by ECS/EKS/Lambda, omitting Batch and App Runner, and does not address a denial scenario for Batch - instead it asserts \"None of the 20 are referenced... there are currently no ECS or EKS clusters at all\" and implies safety, without hedging per-image as \"could not be determined\" where applicable (e.g., it doesn't flag that for v2.3.0 due to the anomalous pull, usage status is uncertain rather than just \"flagged\" as an aside).\n4. It does not suggest a protective rule for the image that is in use or carries a production-like tag (v2.3.0 has unexplained recent pull activity, which should be flagged as \"in use\" and a protective rule suggested, per the expected output: \"It suggests a protective rule for any image that is in use or carries a production like tag, for the operator to apply, and performs no write.\") The agent only suggests confirming with whoever pulled it, but does not propose a protective lifecycle rule.\n5. No per-image usage status explicitly stated (\"still in use,\" \"could not be determined,\" \"no evidence of use\") \u2014 it's done in aggregate rather than individually, and the required evidence-naming (pull time, ECS/Batch/Lambda/App Runner reference, CloudTrail) is only partially given (pull time for v2.3.0) but not systematically per image.\n\nGiven these omissions \u2014 particularly the missing mention of the preview-vs-manual-rules source, Batch/App Runner coverage, handling of denied calls, and suggesting protective rules \u2014 the response does not fully satisfy the expected output's detailed criteria.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response lists the images the lifecycle policy would remove (or states that none would be removed), the list is consistent with the policy rules applied to the repository contents the agent observed, each listed image is attributed to the rule that claims it, and the agent states the count it found.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"20 images the current lifecycle policy will delete\" followed by groups like 'Build images (7, aged out by \"keep 5 CI builds\" rule)' and 'Release candidates (4, via catch-all \u2014 none aged past the 14-day RC rule yet)'.",
+          "reasoning": "The agent lists images grouped by rule (5 CI builds rule, catch-all 6 most recent rule, nightly, release versions, RC catch-all) and states a total count of 20. Each listed image is attributed to a rule.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response states whether the expiring list came from ECR's lifecycle preview or from the agent simulating the rules itself, and if simulated, gives the reason the preview did not run and says the preview would be the authoritative answer.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'lifecycle preview', 'StartLifecyclePolicyPreview', or simulation anywhere in the output; the agent just presents the list as fact.",
+          "reasoning": "The response never states whether the list came from ECR's StartLifecyclePolicyPreview or was simulated by the agent, nor does it give a reason the preview didn't run or note that the preview would be authoritative.",
+          "confidence": "high"
+        },
+        {
+          "text": "The agent attempted StartLifecyclePolicyPreview, or explicitly explains that the call was cancelled by the agent guardrail and that it asked for approval before falling back to simulation.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output contains no reference to 'StartLifecyclePolicyPreview', 'guardrail', or 'approval'.",
+          "reasoning": "There is no mention of attempting StartLifecyclePolicyPreview or any guardrail blocking it, nor any request for approval.",
+          "confidence": "high"
+        },
+        {
+          "text": "For each expiring image the response gives an in use judgement (still in use, could not be determined, or no evidence of use) together with the evidence it rests on or the source that could not be checked.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"None of the 20 are referenced by any ECS service, EKS workload, or Lambda container image in this account/region\" \u2014 a single blanket statement, not per-image judgements.",
+          "reasoning": "The agent gives a blanket usage statement for all 20 images collectively ('None of the 20 are referenced by any ECS service, EKS workload, or Lambda container image') rather than an individual in-use judgement per image with evidence/source for each one. Only v2.3.0 gets individual treatment.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Any expiring image with a recorded pull time inside the pull window is reported as still in use, citing that pull time, and is never described as safe or unused.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"`v2.3.0` shows a `lastRecordedPullTime` of 2026-11-02 02:38:43 \u2014 essentially just now... It won't block deletion, but since it's slated for expiration and was just pulled, I'd confirm with whoever/whatever did that pull before the policy runs next.\" This doesn't flatly state 'still in use' nor call it safe, but it also doesn't meet the strict requirement of being reported as still in use.",
+          "reasoning": "v2.3.0 has a lastRecordedPullTime essentially 'just now' but the agent explicitly says 'It won't block deletion' and frames it as a flag to confirm rather than asserting it is still in use within this account; it does not clearly state the image is 'still in use' nor avoid ambiguity - it says it 'won't block deletion' which could be read as downplaying concern, though it does not call it safe either. The assertion requires it be reported as still in use citing the pull time and never described as safe/unused - the agent does cite the pull time but frames it ambiguously ('That pull came from somewhere outside this account/region') rather than definitively stating it is in use.",
+          "confidence": "medium"
+        },
+        {
+          "text": "If an in use source such as batch:DescribeJobDefinitions was denied or cancelled, the response says so, says the expiring images could not be cleared against that source, and does not describe them as unused, safe or free of references.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'batch:DescribeJobDefinitions' or any denied/cancelled permission anywhere in the output.",
+          "reasoning": "There is no mention of batch:DescribeJobDefinitions or any denied/cancelled API call related to in-use sources; the agent only discusses ECS, EKS, Lambda, and cross-account access caveats.",
+          "confidence": "low"
+        },
+        {
+          "text": "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"It won't block deletion, but since it's slated for expiration and was just pulled, I'd confirm with whoever/whatever did that pull before the policy runs next.\" This implies the deletion is fine to proceed except for a soft recommendation to check, which downplays risk without full evidence that it's truly unused.",
+          "reasoning": "The agent states the pull on v2.3.0 'won't block deletion', which implies the image is fine to let expire despite the suspicious recent pull, representing an implicit 'safe' framing without full evidence that usage has ended. Additionally the blanket 'None of the 20 are referenced...' statement treats all 20 as having no evidence of use, but this is based on checks that explicitly didn't cover cross-account access, yet the agent does caveat this at the end, which is good. However the 'won't block deletion' phrasing for v2.3.0 undermines this assertion.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The entire response is informational/analytical (lists, usage check, flag, caveat) with no offer like 'Would you like me to delete these' or 'I can update the policy'.",
+          "reasoning": "The agent only reports findings and recommendations; it does not offer to modify the lifecycle policy, delete images, or perform any write action.",
+          "confidence": "high"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 6,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 9,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m29s",
+    "cost": "$1.24",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

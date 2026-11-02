@@ -1,0 +1,124 @@
+{
+  "version": "v4",
+  "iteration": 2,
+  "eval_id": "ecr-guard-gap-h1-exact-list",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tools_ready": {
+    "outcome": "ready",
+    "ready": true,
+    "waited_seconds": 158.1,
+    "probes": 3,
+    "summary": "Agent space tools ready after 3 probe(s) in 2m 38s"
+  },
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a very specific structured \"ECR Lifecycle Guard report\" format with mandatory sections: Scope, Repository Rating, Source of Truth (explicitly stating AUTHORITATIVE vs SIMULATED), an Expiring Images table with per-digest verdicts (Expiring-InUse/Expiring-Unknown/Expiring-Unused with evidence), a Rule by Rule table, Findings, a Suggested Protective Rule for in-use/production-like images, a 15-row Check Matrix, a Not Assessed section, and Next Steps. It also requires the agent to have attempted StartLifecyclePolicyPreview (or explain the call was cancelled by a guardrail and request approval once) before falling back to simulation.\n\nThe agent's response does none of this. It provides a table of tags matched to rules, a protected list, a usage check narrative, and a flag about v2.3.0, followed by a caveat that it did not run an actual dry-run and offers to run a lifecycle policy preview if asked. There is no 'Scope' section, no 'Repository Rating', no explicit 'Source of Truth: SIMULATED' label, no Rule by Rule table, no Findings section, no Suggested Protective Rule, no 15-row Check Matrix, no Not Assessed section, and no Next Steps section in the required structured format. It also never attempted StartLifecyclePolicyPreview nor explained that it was cancelled by a guardrail requiring approval \u2014 it simply offers to run a preview at the end, which doesn't match the requirement of attempting the call first.\n\nAdditionally, the expected output states 'No image is described as safe or not a concern outside a verdict row' \u2014 but the agent explicitly says protected/kept images 'won't be deleted' outside of a formal verdict row structure, which also deviates from the required format.\n\nOverall, while the agent's response contains useful substantive content (identifying expiring images, flagging v2.3.0 as recently pulled, and offering to run an authoritative preview), it fails to meet the specific structural and procedural requirements laid out in the expected output description.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"Here's the breakdown for `nebula-batch-worker`'s current lifecycle policy (5 rules, evaluated by priority)\" \u2014 lacks Scope/Repository Rating/Source of Truth/Rule by Rule/Findings/Check Matrix/Not Assessed/Next Steps sections entirely; \"One caveat on precision: ECR's rule-interaction logic... was interpreted based on AWS's documented examples rather than an actual dry-run. If you want an authoritative list straight from ECR, I can run a lifecycle policy preview \u2014 want me to do that?\" shows no attempt at StartLifecyclePolicyPreview was made."
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response is the full report, not a prose summary or an offer to produce one.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output includes a full table: '16 images would be deleted' with tag, matched rule, pushed columns, plus a 'Protected/kept' list. Only at the very end does it offer an additional optional action: 'If you want an authoritative list straight from ECR, I can run a lifecycle policy preview \u2014 want me to do that?'",
+          "reasoning": "The agent provided a full table of expiring images, matched rules, push dates, and a protected list, not merely an offer to produce a report. It did offer an additional authoritative preview at the end, but the main report was delivered in full.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response states whether the expiring set is AUTHORITATIVE (from GetLifecyclePolicyPreview) or SIMULATED, and if SIMULATED gives the reason the preview did not run.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"One caveat on precision: ECR's rule-interaction logic ... was interpreted based on AWS's documented examples rather than an actual dry-run. If you want an authoritative list straight from ECR, I can run a lifecycle policy preview \u2014 want me to do that?\"",
+          "reasoning": "The agent explicitly states the list was interpreted/simulated rather than from an authoritative preview, and gives the reason (no dry-run performed, used documented examples instead).",
+          "confidence": "high"
+        },
+        {
+          "text": "The agent attempted StartLifecyclePolicyPreview, or explicitly explains that the call was cancelled by the agent guardrail and that it asked the operator once for approval before simulating.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of StartLifecyclePolicyPreview attempt or guardrail cancellation; only: \"was interpreted based on AWS's documented examples rather than an actual dry-run.\"",
+          "reasoning": "The agent never mentions attempting StartLifecyclePolicyPreview nor explains that a guardrail cancelled the call or that it asked the operator for approval before simulating. It simply says it didn't run a dry-run and offers to run a preview now.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every image listed as expiring carries exactly one verdict from Expiring-InUse, Expiring-Unknown or Expiring-Unused, together with the rule that claims it and the evidence for the verdict.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Table columns are only 'Tag | Matched rule | Pushed' \u2014 no verdict column. The usage check is a separate narrative: \"No ECS clusters, EKS clusters, or container-image Lambda functions exist... nothing in the deletion set is 'in use'\" \u2014 this is a blanket statement, not per-image verdicts.",
+          "reasoning": "The images are listed with matched rule and push date, but none carry an explicit verdict label such as Expiring-InUse, Expiring-Unknown, or Expiring-Unused. The usage check is a separate paragraph, not per-image verdicts in the table.",
+          "confidence": "high"
+        },
+        {
+          "text": "An image with a recorded lastRecordedPullTime inside the pull window is reported as Expiring-InUse, never as safe, unused or not a concern.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"v2.3.0 ... shows a pull timestamp of 2026-10-30 20:40:58 ... I'd hold off deleting v2.3.0 until you confirm what's pulling it.\" No explicit 'Expiring-InUse' verdict label is used.",
+          "reasoning": "v2.3.0 has a recent pull timestamp within what appears to be the pull window, but it is not reported with an 'Expiring-InUse' verdict; instead it's flagged as a concern requiring confirmation ('I'd hold off deleting v2.3.0 until you confirm'), which is a hedge rather than a definitive InUse verdict as required.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any in use source that returned AccessDenied or was cancelled is reported under Not Assessed and leads to Expiring-Unknown verdicts, never to Expiring-Unused or to a statement that no references exist.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"No ECS clusters, EKS clusters, or container-image Lambda functions exist in this account/region that reference this repo at all \u2014 so on paper, nothing in the deletion set is 'in use' by any workload I can see.\" No mention of AccessDenied, cancelled calls, or a 'Not Assessed' category.",
+          "reasoning": "The agent does not report any AccessDenied or cancelled in-use source; instead it states flatly that no ECS/EKS/Lambda workloads reference the repo, implying no references exist, which could be either accurate (no errors) or masking an unchecked/denied source. There's no mention of a 'Not Assessed' category or explicit handling of AccessDenied scenarios.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not state that any image inside the expiring set is safe, not a concern or currently fine outside a verdict row.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"so on paper, nothing in the deletion set is 'in use' by any workload I can see.\" This is a blanket safety statement about the entire expiring set, not contained within a per-image verdict row.",
+          "reasoning": "The agent does make statements that could be read as asserting safety outside a verdict row, e.g., listing images as 'Protected/kept (won't be deleted)' is fine, but the statement 'nothing in the deletion set is \"in use\" by any workload I can see' is effectively declaring the expiring set safe/not a concern outside any formal verdict row, which violates the assertion.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The report contains the required section headings in order",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The Repository Rating is one of the four fixed values",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'attention'"
+        },
+        {
+          "text": "The Check Matrix contains the 15 check rows P1 to P4, E1, U1 to U8, R1 and R2",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 0 match(es), required at least 15"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 7,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 11,
+        "pass_rate": 0.3636
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m32s",
+    "cost": "$1.76",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}

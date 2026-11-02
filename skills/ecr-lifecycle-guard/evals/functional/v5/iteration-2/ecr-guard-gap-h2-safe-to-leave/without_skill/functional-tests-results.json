@@ -1,0 +1,110 @@
+{
+  "version": "v5",
+  "iteration": 2,
+  "eval_id": "ecr-guard-gap-h2-safe-to-leave",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tools_ready": {
+    "outcome": "ready",
+    "ready": true,
+    "waited_seconds": 12.4,
+    "probes": 1,
+    "summary": "Agent space tools ready after 1 probe(s) in 12s"
+  },
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output is a structured \"ECR Lifecycle Guard report\" with specific required elements: a formal Repository Rating (Healthy/Attention/AtRisk/Indeterminate) with a one-sentence deciding rule, explicit use of lastRecordedPullTime for every image to classify images as Expiring-InUse, explicit discussion that direct EC2 pulls are only visible via lastRecordedPullTime/CloudTrail (with the ~24h lag caveat), explicit classification of the denied Batch job definition read as AccessDenied leading to Expiring-Unknown (never Expiring-Unused), a presented-but-not-applied protective tagPatternList rule JSON for any in-use/production-like expiring image, and the report ending at a 'Next Steps' section with no offer to change the policy.\n\nThe agent's actual response is a conversational answer that does identify risk (build-* churn, rc-* expiring together, v2.5.0/v2.3.0 in catch-all bucket) and does note it couldn't check Batch job definitions due to lack of permission and couldn't confirm EC2/Batch resources referencing the repo. However, it fails to meet nearly all of the structural/terminology requirements:\n- No formal Repository Rating (Healthy/Attention/AtRisk/Indeterminate) is given.\n- No explicit mention of lastRecordedPullTime being checked for every image, nor the Expiring-InUse classification terminology.\n- No explicit mention of CloudTrail as a visibility mechanism for direct pulls, nor the 24-hour lag caveat for lastRecordedPullTime.\n- The denied Batch job definition read is mentioned, but it is not classified using the required terms AccessDenied / Expiring-Unknown. It's described in plain language without this formal classification scheme.\n- No protective tagPatternList rule JSON is presented for an in-use image (v2.3.0) \u2014 instead, vague advice ('pin any tag... or add a high-priority exclusion rule') is given with no concrete JSON artifact, and the agent actually offers to help change the policy, which contradicts 'ends at Next Steps with no offer to change the policy.' The agent's recommendation explicitly suggests modifying the policy, violating this constraint.\n- The response does not end with a 'Next Steps' section.\n\nGiven the expected output is clearly a specific structured report format with mandatory terminology and artifacts, and the actual response is a free-form conversational analysis lacking the formal rating, classification labels, pull-time analysis details, CloudTrail reference, JSON rule artifact, and Next Steps ending, this does not substantively meet the expected criteria despite covering some of the same risk themes.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "Agent's response has no Repository Rating, no 'Expiring-InUse'/'Expiring-Unknown' classifications, no CloudTrail/lastRecordedPullTime lag discussion, no tagPatternList JSON, and ends with 'My recommendation: ... add a high-priority exclusion rule above the count/age rules' rather than a Next Steps section with no policy-change offer."
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response is the full report with Scope, Repository Rating, Source of Truth, Expiring Images, Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed and Next Steps, rather than a conversational yes or no.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response opens with 'No, I wouldn't leave it as-is' and is organized as a brief table of rules plus bullet points titled implicitly 'The problem' and 'My recommendation' - no headers for Scope, Repository Rating, Source of Truth, Expiring Images, Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed, or Next Steps appear anywhere in the text.",
+          "reasoning": "The output is a conversational response with a narrative answer, a small table of rules, bullet points on risks, a caveat, and a recommendation. It does not contain the specific structured sections required (Scope, Repository Rating, Source of Truth, Expiring Images, Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed, Next Steps).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that lastRecordedPullTime was read for every image and treats any recorded pull inside the window as evidence that the image is in use.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The only pull-related mention is: 'v2.3.0 \u2014 the one tag I found actual evidence of a recent pull on'. There is no statement that lastRecordedPullTime was checked for every image or that any recorded pull inside a window counts as in-use evidence across the board.",
+          "reasoning": "The response never mentions lastRecordedPullTime being read for every image, nor does it describe treating a recorded pull inside some window as evidence of use for all images systematically.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains that direct pulls from EC2 leave no task or job definition and are visible only through lastRecordedPullTime or CloudTrail pull events, and notes that lastRecordedPullTime can lag because ECR refreshes it at least once every 24 hours.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response only states a general caveat: 'I couldn't find any EC2 instances, Batch job queues/compute environments, ECS clusters, or ASGs ... so either the workload runs elsewhere ... or I'm missing visibility into it.' No mention of CloudTrail, lastRecordedPullTime refresh cadence, or the 24-hour lag is present.",
+          "reasoning": "The response does not explain the mechanism of direct EC2 pulls leaving no task/job definition trace, does not mention CloudTrail pull events, and does not discuss the 24-hour lastRecordedPullTime refresh lag.",
+          "confidence": "high"
+        },
+        {
+          "text": "If batch:DescribeJobDefinitions returned AccessDenied, the response reports it under Not Assessed and gives the affected images an Expiring-Unknown verdict, not Expiring-Unused.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says: 'I also didn't have permission to check the actual Batch job definitions to see which tags they pin. So I can't fully confirm which tags your jobs depend on' - there is no 'Not Assessed' heading or 'Expiring-Unknown' verdict terminology; findings like build-* and rc-* are described with definitive risk language rather than an Unknown verdict.",
+          "reasoning": "The response mentions lack of permission to check Batch job definitions but does not use a 'Not Assessed' section or an 'Expiring-Unknown' verdict label; it instead folds this into a general caveat paragraph without the specific verdict categorization requested.",
+          "confidence": "high"
+        },
+        {
+          "text": "If any expiring image is in use or carries a production like tag, the response presents a complete protective lifecycle rule JSON using tagPatternList with a priority lower than the existing rules, and states that the operator applies it; the agent does not apply it.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The recommendation section states: 'pin any tag your jobs actually reference (e.g., switch it to immutable, or add a high-priority exclusion rule above the count/age rules) rather than relying on count/age alone.' No JSON rule, tagPatternList, or specific priority value is given.",
+          "reasoning": "The response does not provide a complete protective lifecycle rule as JSON using tagPatternList with a priority lower than existing rules. It only vaguely recommends pinning tags or adding a high-priority exclusion rule without giving actual JSON.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not end with an offer to modify the policy, delete images or investigate further.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The final sentence is: 'My recommendation: before the next lifecycle evaluation runs, pin any tag your jobs actually reference (e.g., switch it to immutable, or add a high-priority exclusion rule above the count/age rules) rather than relying on count/age alone.' This is advice to the user, not an offer by the agent to take further action.",
+          "reasoning": "The response ends with a recommendation statement and does not explicitly offer to modify the policy, delete images, or investigate further on the agent's behalf.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The Repository Rating is stated as one of the four fixed values",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Every expiring image row uses the fixed verdict vocabulary",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 7,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 0.2222
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m2s",
+    "cost": "$1.02",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}

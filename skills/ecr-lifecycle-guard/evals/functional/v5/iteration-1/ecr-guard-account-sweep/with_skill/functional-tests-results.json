@@ -1,0 +1,106 @@
+{
+  "version": "v5",
+  "iteration": 1,
+  "eval_id": "ecr-guard-account-sweep",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tools_ready": {
+    "outcome": "ready",
+    "ready": true,
+    "waited_seconds": 81.6,
+    "probes": 2,
+    "summary": "Agent space tools ready after 2 probe(s) in 1m 21s"
+  },
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ecr-lifecycle-guard' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output specifies a very particular structured report format: an \"Account Summary\" table with specific columns (Repository, Rating, Policy, Expiring, Expiring-InUse, Expiring-Unknown, Source) ordered by a specific rating priority (AtRisk, Indeterminate, Attention, Healthy), followed by detailed per-repository sections for every non-Healthy repo, with a consistent verdict/rating vocabulary used throughout, and an explicit statement that the in-use inventory was collected once for the region and reused.\n\nThe agent's actual response is a narrative/prose summary organized by repository headers (nebula-payments-api, nebula-batch-worker) with free-form text. It does not include any table, does not use a defined rating vocabulary (e.g., AtRisk/Indeterminate/Attention/Healthy terms), does not order repos by that rating scheme, and does not explicitly note that it reused a single region-wide in-use inventory. While the substance (noting one repo has no risk and the other has an unverified risk dependent on Batch) is directionally reasonable and arguably more nuanced/honest than a rigid template, it does not match the specific structural/format expectations required for this task. The expected output is clearly a specific reporting schema that the response does not follow at all - no table, no rating keywords, no explicit methodology statement about the in-use inventory being gathered once and reused.\n\nGiven the strictness of the expected format requirements (specific table columns, specific ordering, specific vocabulary, explicit full sections for non-healthy repos), the response fails to meet this structural bar, even though its content is informative and reasonable.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response contains an Account Summary table with one row per repository found by DescribeRepositories in us-east-1 and does not ask the user which account or Region to use.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Output states 'Here's the account-wide picture for us-east-1 (2 repositories, both have lifecycle policies):' followed by two markdown header sections (## nebula-payments-api, ## nebula-batch-worker) rather than a table with rows per repository.",
+          "reasoning": "The agent does not present a formal 'Account Summary table' with one row per repository. It lists 2 repositories in prose/header format ('nebula-payments-api' and 'nebula-batch-worker') with narrative sections, not a table structure. It does state '2 repositories, both have lifecycle policies' which implies DescribeRepositories was used and does not ask for account/region clarification.",
+          "confidence": "high"
+        },
+        {
+          "text": "Repositories are ordered with AtRisk first, then Indeterminate, then Attention, then Healthy.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Headers are '## nebula-payments-api \u2014 No deletions pending' and '## nebula-batch-worker \u2014 No *confirmed* in-use image at risk, but 11 images would expire with unverified status' \u2014 no AtRisk/Indeterminate/Attention/Healthy taxonomy or ordering is used.",
+          "reasoning": "There is no explicit categorization or ordering by AtRisk/Indeterminate/Attention/Healthy labels. The repos are presented as 'No deletions pending' and 'No confirmed in-use image at risk, but 11 images would expire with unverified status' without using or ordering by these specific category labels.",
+          "confidence": "high"
+        },
+        {
+          "text": "Repositories with no lifecycle policy attached are listed as Healthy with an INFO note, not omitted and not rated Attention.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The summary explicitly says 'both have lifecycle policies' meaning no repo lacks a lifecycle policy, so the specific Healthy+INFO note treatment for policy-less repos is not demonstrated anywhere in the output.",
+          "reasoning": "The output states both repositories have lifecycle policies ('2 repositories, both have lifecycle policies'), so there is no repository without a lifecycle policy to assess for this assertion. Since no such repo is mentioned, the assertion about how such repos should be listed cannot be satisfied.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Every repository that is not Healthy has a full per repository section with Expiring Images verdicts, a Check Matrix and Not Assessed.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "nebula-batch-worker section text: 'Of 26 images, 11 would be removed at the next policy evaluation... I couldn't verify against AWS Batch... because the Batch read permission was denied.' This is prose, not a structured Check Matrix or explicit 'Not Assessed' labeled section.",
+          "reasoning": "Neither repository section follows a structured format with 'Expiring Images verdicts', a 'Check Matrix', and 'Not Assessed' sections. The nebula-batch-worker section (which is not Healthy per the narrative) has some per-image mention (11 images, tags) and caveats about Batch not being checked, but no formal 'Check Matrix' or labeled 'Not Assessed' section structure.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that the in use inventory (ECS, Batch, Lambda, App Runner, EKS presence) was collected once for the Region and lists the status of each source.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Text states 'None of the 11 show evidence of being pulled or referenced by ECS, Lambda, or App Runner... I couldn't verify against AWS Batch... because the Batch read permission was denied.' EKS is never mentioned, and there's no explicit statement that inventory collection was done once for the region with a status list per source.",
+          "reasoning": "The agent does not state that the in-use inventory was collected once for the region, nor does it list the status of each source (ECS, Batch, Lambda, App Runner, EKS) explicitly. It mentions ECS, Lambda, App Runner, and Batch in passing for nebula-batch-worker only, and ECS for nebula-payments-api, but does not frame this as a single region-wide collection effort with a status list per source, and EKS is not mentioned at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "An Account Summary heading is present",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The rating vocabulary is used",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 7,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 8,
+        "pass_rate": 0.125
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m42s",
+    "cost": "$2.34",
+    "context_window": {
+      "utilization": "4.7%",
+      "compaction_count": 0
+    }
+  }
+}
