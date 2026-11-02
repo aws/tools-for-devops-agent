@@ -6,31 +6,16 @@
       "task_type": "chat",
       "prompt": "Which images in ECR repo nebula-batch-worker will be deleted by the current lifecycle policy? Give me the exact list, and tell me if any of them are still being used.",
       "should_trigger": true,
-      "expected_output": "The full ECR Lifecycle Guard report for repository nebula-batch-worker: Scope, Repository Rating, Source of Truth stating whether the expiring set is AUTHORITATIVE (from GetLifecyclePolicyPreview) or SIMULATED, an Expiring Images table with one row per expiring digest and a verdict of Expiring-InUse, Expiring-Unknown or Expiring-Unused with evidence, a Rule by Rule table, Findings, a Suggested Protective Rule when an in use or production like image is expiring, a 15 row Check Matrix, Not Assessed, and Next Steps. The agent attempted StartLifecyclePolicyPreview, or explains that the call was cancelled by the guardrail and asked for approval once, before falling back to simulation. No image is described as safe or not a concern outside a verdict row, and no policy change is performed or offered as the agent's own action.",
+      "expected_output": "The answer lists the images that the lifecycle policy currently attached to nebula-batch-worker would remove, derived from the repository contents the agent actually read, names the rule that claims each one, and states the count it found (zero is a valid count if ECR has already run the policy). It says whether that list came from ECR's own lifecycle preview or from the agent applying the rules itself, and if the preview did not run it gives the reason (guardrail cancellation or a denied call) and notes that the preview would be the authoritative answer. For every expiring image it says whether the image is still in use, could not be determined, or shows no evidence of use, and names the evidence: a recorded pull time, a reference in ECS, Batch, Lambda or App Runner, or a CloudTrail pull. Where an in use source such as Batch job definitions was denied, it says those images could not be cleared and does not describe them as safe or unused. It suggests a protective rule for any image that is in use or carries a production like tag, for the operator to apply, and performs no write.",
       "assertions": [
-        "The response is the full report, not a prose summary or an offer to produce one.",
-        "The response states whether the expiring set is AUTHORITATIVE (from GetLifecyclePolicyPreview) or SIMULATED, and if SIMULATED gives the reason the preview did not run.",
-        "The agent attempted StartLifecyclePolicyPreview, or explicitly explains that the call was cancelled by the agent guardrail and that it asked the operator once for approval before simulating.",
-        "Every image listed as expiring carries exactly one verdict from Expiring-InUse, Expiring-Unknown or Expiring-Unused, together with the rule that claims it and the evidence for the verdict.",
-        "An image with a recorded lastRecordedPullTime inside the pull window is reported as Expiring-InUse, never as safe, unused or not a concern.",
-        "Any in use source that returned AccessDenied or was cancelled is reported under Not Assessed and leads to Expiring-Unknown verdicts, never to Expiring-Unused or to a statement that no references exist.",
-        "The response does not state that any image inside the expiring set is safe, not a concern or currently fine outside a verdict row.",
-        {
-          "text": "The report contains the required section headings in order",
-          "evaluator": "regex",
-          "pattern": "(?sm)^## Scope.*^## Repository Rating.*^## Source of Truth.*^## Expiring Images.*^## Rule by Rule.*^## Findings.*^## Check Matrix.*^## Not Assessed.*^## Next Steps"
-        },
-        {
-          "text": "The Repository Rating is one of the four fixed values",
-          "evaluator": "regex",
-          "pattern": "(?i)\\b(Healthy|Attention|AtRisk|Indeterminate)\\b"
-        },
-        {
-          "text": "The Check Matrix contains the 15 check rows P1 to P4, E1, U1 to U8, R1 and R2",
-          "evaluator": "regex",
-          "pattern": "\\|\\s*(P[1-4]|E1|U[1-8]|R[12])\\s*\\|",
-          "min_count": 15
-        },
+        "The response lists the images the lifecycle policy would remove (or states that none would be removed), the list is consistent with the policy rules applied to the repository contents the agent observed, each listed image is attributed to the rule that claims it, and the agent states the count it found.",
+        "The response states whether the expiring list came from ECR's lifecycle preview or from the agent simulating the rules itself, and if simulated, gives the reason the preview did not run and says the preview would be the authoritative answer.",
+        "The agent attempted StartLifecyclePolicyPreview, or explicitly explains that the call was cancelled by the agent guardrail and that it asked for approval before falling back to simulation.",
+        "For each expiring image the response gives an in use judgement (still in use, could not be determined, or no evidence of use) together with the evidence it rests on or the source that could not be checked.",
+        "Any expiring image with a recorded pull time inside the pull window is reported as still in use, citing that pull time, and is never described as safe or unused.",
+        "If an in use source such as batch:DescribeJobDefinitions was denied or cancelled, the response says so, says the expiring images could not be cleared against that source, and does not describe them as unused, safe or free of references.",
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
           "text": "No write API is reported as having been called",
           "evaluator": "regex",
@@ -44,24 +29,15 @@
       "task_type": "chat",
       "prompt": "Is it safe to leave the lifecycle policy on nebula-batch-worker as is? Our batch jobs run on EC2 and pull images directly from ECR. I don't want anything we are still running to disappear.",
       "should_trigger": true,
-      "expected_output": "The full ECR Lifecycle Guard report for nebula-batch-worker, not a yes or no answer. The Repository Rating is one of Healthy, Attention, AtRisk or Indeterminate with one sentence giving the deciding rule. lastRecordedPullTime was read for every image and any recorded pull inside the window is in use evidence giving Expiring-InUse. Because the user pulls directly from EC2, the report explains that direct pulls leave no task definition and are visible only through lastRecordedPullTime or CloudTrail, and that lastRecordedPullTime can lag up to 24 hours. A Batch job definition read that was denied is reported as AccessDenied and produces Expiring-Unknown, never Expiring-Unused. If an in use or production like image is expiring, a protective tagPatternList rule JSON is presented for the operator and not applied. The report ends at Next Steps with no offer to change the policy.",
+      "expected_output": "The answer gives a clear judgement on whether the policy is safe to leave and ties it to the deciding fact: an expiring image that is still in use, an in use source that could not be checked, an expiring list that is only a simulation, or nothing expiring at all. It says that the recorded pull time was read for the images and that a pull inside the window counts as in use. Because the user pulls directly from EC2, it explains that direct pulls leave no ECS task or Batch job definition to find and are visible only through the recorded pull time or CloudTrail pull events, and that ECR can take up to 24 hours to refresh the recorded pull time. If the Batch job definition read was denied it says so and does not treat the affected images as unused. If an in use or production like image is expiring it presents a concrete protective rule for the operator to apply and does not apply it.",
       "assertions": [
-        "The response is the full report with Scope, Repository Rating, Source of Truth, Expiring Images, Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed and Next Steps, rather than a conversational yes or no.",
-        "The response states that lastRecordedPullTime was read for every image and treats any recorded pull inside the window as evidence that the image is in use.",
-        "The response explains that direct pulls from EC2 leave no task or job definition and are visible only through lastRecordedPullTime or CloudTrail pull events, and notes that lastRecordedPullTime can lag because ECR refreshes it at least once every 24 hours.",
-        "If batch:DescribeJobDefinitions returned AccessDenied, the response reports it under Not Assessed and gives the affected images an Expiring-Unknown verdict, not Expiring-Unused.",
-        "If any expiring image is in use or carries a production like tag, the response presents a complete protective lifecycle rule JSON using tagPatternList with a priority lower than the existing rules, and states that the operator applies it; the agent does not apply it.",
-        "The response does not end with an offer to modify the policy, delete images or investigate further.",
-        {
-          "text": "The Repository Rating is stated as one of the four fixed values",
-          "evaluator": "regex",
-          "pattern": "(?i)Repository Rating[\\s\\S]{0,80}(Healthy|Attention|AtRisk|Indeterminate)"
-        },
-        {
-          "text": "Every expiring image row uses the fixed verdict vocabulary",
-          "evaluator": "regex",
-          "pattern": "Expiring-(InUse|Unknown|Unused)"
-        },
+        "The response gives an overall judgement on whether the policy is safe to leave as is, and ties that judgement to the deciding fact (an in use image expiring, an in use source that could not be checked, a simulated expiring list, or nothing expiring).",
+        "The response states that the recorded pull time (lastRecordedPullTime) was checked for the images and treats a recorded pull inside the window as evidence that the image is in use.",
+        "The response explains that direct pulls from EC2 leave no ECS task or Batch job definition reference and are visible only through the recorded pull time or CloudTrail pull events, and notes that ECR may take up to 24 hours to refresh the recorded pull time.",
+        "If batch:DescribeJobDefinitions was denied, the response says so, says the expiring images could not be checked against Batch job definitions, and does not describe them as unused or safe.",
+        "If any expiring image is in use or carries a production like tag, the response presents a concrete protective lifecycle rule (matching that tag family, with a priority lower than the existing rules) and states that the operator applies it after a preview; the agent does not apply it.",
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
           "text": "No write API is reported as having been called",
           "evaluator": "regex",
@@ -75,23 +51,16 @@
       "task_type": "chat",
       "prompt": "Across every ECR repository in this account in us-east-1, will any lifecycle policy delete an image we are still running? Summarize by repository.",
       "should_trigger": true,
-      "expected_output": "A multi repository ECR Lifecycle Guard report for us-east-1: an Account Summary table with one row per repository (Repository, Rating, Policy, Expiring, Expiring-InUse, Expiring-Unknown, Source) ordered AtRisk, Indeterminate, Attention, Healthy, followed by a full single repository section for every repository that is not Healthy. Repositories without a lifecycle policy appear as Healthy with an INFO note. The in use inventory is collected once for the Region and reused. The same verdict and rating vocabulary is used throughout.",
+      "expected_output": "The answer covers every repository that DescribeRepositories returned in us-east-1 without asking which account or Region to use. For each repository it says whether a lifecycle policy is attached, how many images that policy would remove given the contents the agent read (zero is valid), and whether any of those images is still in use, could not be determined, or shows no evidence of use, with the basis for that call. Repositories without a policy are included and reported as having no lifecycle deletion risk. The repositories that need attention are clearly separated from those that do not. The answer names the in use sources it checked (ECS, Batch, Lambda, App Runner, EKS) and says which were denied, says whether the expiring lists came from the ECR preview or from simulation and why, and performs no write.",
       "assertions": [
-        "The response contains an Account Summary table with one row per repository found by DescribeRepositories in us-east-1 and does not ask the user which account or Region to use.",
-        "Repositories are ordered with AtRisk first, then Indeterminate, then Attention, then Healthy.",
-        "Repositories with no lifecycle policy attached are listed as Healthy with an INFO note, not omitted and not rated Attention.",
-        "Every repository that is not Healthy has a full per repository section with Expiring Images verdicts, a Check Matrix and Not Assessed.",
-        "The response states that the in use inventory (ECS, Batch, Lambda, App Runner, EKS presence) was collected once for the Region and lists the status of each source.",
-        {
-          "text": "An Account Summary heading is present",
-          "evaluator": "regex",
-          "pattern": "(?m)^## Account Summary"
-        },
-        {
-          "text": "The rating vocabulary is used",
-          "evaluator": "regex",
-          "pattern": "(?i)\\b(AtRisk|Attention|Healthy|Indeterminate)\\b"
-        },
+        "The response covers every ECR repository found in us-east-1 with a per repository summary, and does not ask the user which account or Region to use.",
+        "For every repository with a lifecycle policy, the response states how many images the policy would remove given the repository contents the agent observed (zero is acceptable) and whether any of them is in use, could not be determined, or shows no evidence of use, with the basis for that call.",
+        "Repositories with no lifecycle policy attached are included in the summary and reported as having no lifecycle deletion risk, not omitted.",
+        "The response clearly distinguishes repositories that need attention (an in use image expiring, or expiring images that could not be cleared) from repositories that do not, presenting the higher risk ones first or otherwise unmistakably.",
+        "The response names the in use sources it checked across the Region (ECS, Batch, Lambda, App Runner, EKS) and the status of each, including any that were denied.",
+        "The response states whether each expiring list came from ECR's lifecycle preview or from the agent simulating the rules, and if simulated, why the preview did not run.",
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
           "text": "No write API is reported as having been called",
           "evaluator": "regex",
@@ -105,23 +74,20 @@
       "task_type": "chat",
       "prompt": "Before I apply this lifecycle policy to repo example-api, tell me what it would delete and whether anything we use is affected: {\"rules\":[{\"rulePriority\":1,\"description\":\"keep newest 10\",\"selection\":{\"tagStatus\":\"any\",\"countType\":\"imageCountMoreThan\",\"countNumber\":10},\"action\":{\"type\":\"expire\"}}]}",
       "should_trigger": true,
-      "expected_output": "The full ECR Lifecycle Guard report for example-api evaluated against the draft policy. The Source of Truth section states whether the draft was previewed with StartLifecyclePolicyPreview using lifecyclePolicyText (AUTHORITATIVE) or simulated (SIMULATED). The Expiring Images table lists every image beyond the newest 10 by push time with a verdict and evidence. Because the only rule is a tagStatus any catch all, any production like tag (prod*, release*, semantic version, latest, stable, hotfix*) in the expiring set produces finding P4 at LOW and a suggested higher priority tagPatternList rule. The agent does not apply the draft or the suggestion.",
+      "expected_output": "The answer treats the JSON pasted in the prompt as the policy under evaluation, says so, and does not substitute whatever policy is currently attached to the repository. If example-api exists, the expiring set is every image beyond the newest 10 by push time regardless of tag, each with an in use judgement and its evidence, and the answer says whether the draft was previewed with ECR's lifecycle preview using the draft text or simulated by the agent and why. If example-api cannot be found in the account, the answer says so plainly, names the repositories it did find, and does not invent an image set or evaluate another repository as if it were example-api. In either case it explains that a tagStatus any catch all counts across every tag family, so production like tags such as prod, release, semantic versions, latest or stable are protected only while they remain among the newest 10, and it recommends a higher priority tag specific rule as the mitigation. The agent does not apply the draft or any suggested rule.",
       "assertions": [
-        "The response evaluates the draft policy supplied in the prompt rather than the policy currently attached to the repository, and says which one it evaluated.",
-        "The response states whether the draft was previewed through StartLifecyclePolicyPreview with lifecyclePolicyText or simulated, and labels the result AUTHORITATIVE or SIMULATED accordingly.",
-        "The expiring set consists of the images beyond the newest 10 by push time, each with a verdict and evidence.",
-        "If any expiring image carries a production like tag (prod*, release*, a semantic version, latest, stable or hotfix*), the response raises finding P4 at LOW and suggests a higher priority tagPatternList rule for that family.",
-        "The response does not apply the draft policy or the suggested rule and does not call PutLifecyclePolicy.",
+        "The response treats the lifecycle policy JSON pasted in the prompt as the policy under evaluation (the draft) rather than the policy currently attached to the repository, and says which one it evaluated.",
+        "If the repository example-api was found, the response identifies the expiring set as the images beyond the newest 10 by push time regardless of tag, each with an in use judgement and its evidence; if the repository was not found, the response says so plainly, names the repositories it did find, and does not invent an image set or evaluate a different repository as if it were example-api.",
+        "If the repository was found, the response states whether the draft was previewed through ECR's lifecycle preview using the draft policy text or simulated by the agent, and if simulated, why the preview did not run.",
+        "The response explains that a tagStatus any keep newest 10 rule counts across every tag family, so production like tags (prod, release, semantic versions, latest, stable, hotfix) are protected only while they remain among the newest 10 pushed images, and recommends a higher priority tag specific rule as the mitigation.",
+        "The response does not apply the draft policy or any suggested rule and does not call PutLifecyclePolicy.",
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
-          "text": "Source label is present",
+          "text": "No write API is reported as having been called",
           "evaluator": "regex",
-          "pattern": "\\b(AUTHORITATIVE|SIMULATED)\\b"
-        },
-        {
-          "text": "The Check Matrix contains 15 check rows",
-          "evaluator": "regex",
-          "pattern": "\\|\\s*(P[1-4]|E1|U[1-8]|R[12])\\s*\\|",
-          "min_count": 15
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(ecr[: ])?(PutLifecyclePolicy|DeleteLifecyclePolicy|BatchDeleteImage|PutImage|PutImageTagMutability|DeleteRepository)",
+          "match": "absent"
         }
       ]
     },
@@ -130,17 +96,15 @@
       "task_type": "chat",
       "prompt": "Our repo payments-api has a lifecycle policy that keeps the newest 10 images. Are our prod-* and release-* tags protected?",
       "should_trigger": true,
-      "expected_output": "The full ECR Lifecycle Guard report for payments-api. The Rule by Rule section explains that a tagStatus any keep newest 10 rule counts across every tag family, so prod-* and release-* images are protected only while they remain among the 10 most recently pushed images. Any prod-* or release-* image currently in the expiring set appears with a verdict and finding P4 at LOW (or R1 if it is in use). The Suggested Protective Rule section presents one tagPatternList rule per family (prod-* and release-*) with a priority lower than the existing rule, explains that two entries in one list would be ANDed, and states that the operator applies it. The agent does not change the policy.",
+      "expected_output": "The answer says directly that a keep newest 10 rule with tagStatus any does not protect prod-* and release-* tags: it counts across every tag family, so those images survive only while they remain among the 10 most recently pushed images, and a newer push of any other tag family can expire them. If payments-api exists, the answer reads the current images and says which prod-* or release-* images, if any, are in the expiring set today, each with an in use judgement and its evidence. If payments-api cannot be found in the account, the answer says so plainly, names the repositories it did find, and does not invent an image set. It presents protective rules, one per tag family with a priority lower than the existing rule, explains that putting both prefixes in one rule would require an image to carry both tags, and states that the operator applies them after a preview. The agent does not change the policy.",
       "assertions": [
-        "The response explains that a tagStatus any rule protects prod-* and release-* images only while they are among the newest 10 by push time, and that a newer push of any other tag family can expire them.",
-        "The response presents one protective rule per tag family using tagPatternList (not a single rule with both prefixes), with a rulePriority lower than the existing rule, and notes that multiple entries in one list are ANDed.",
-        "The response reads the current image set and reports which, if any, prod-* or release-* images are in the expiring set today, each with a verdict.",
-        "The response states that the operator applies the suggested rule after running a preview and does not apply it itself.",
-        {
-          "text": "A protective rule JSON with tagPatternList is present",
-          "evaluator": "regex",
-          "pattern": "tagPatternList"
-        },
+        "The response answers the question directly: a keep newest 10 rule with tagStatus any does not protect prod-* and release-* tags on its own.",
+        "The response explains that the rule counts across every tag family, so prod-* and release-* images survive only while they are among the newest 10 by push time, and a newer push of any other tag family can expire them.",
+        "The response presents a protective approach with one rule per tag family (prod-* and release-*), each with a priority lower than the existing rule, and explains that combining both prefixes in a single rule would require an image to match both (the entries are ANDed).",
+        "If the repository payments-api was found, the response reads the current image set and reports which prod-* or release-* images, if any, are in the expiring set today, each with an in use judgement; if the repository was not found, the response says so plainly, names the repositories it did find, and does not invent an image set.",
+        "The response states that the operator applies the suggested rules after running a preview, and the agent does not apply them.",
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
           "text": "No write API is reported as having been called",
           "evaluator": "regex",
@@ -154,21 +118,24 @@
       "task_type": "chat",
       "prompt": "An image tag v3.1.0 disappeared from our ECR repo checkout-service yesterday and our ECS service failed to start. Was it the lifecycle policy, and what else is at risk?",
       "should_trigger": true,
-      "expected_output": "The response identifies the evidence path for the deletion: ECR lifecycle actions appear in CloudTrail as PolicyExecutionEvent, which the agent looks up with LookupEvents if permitted, and GetLifecyclePolicy lastEvaluatedAt shows when the policy last ran. It then runs the full ECR Lifecycle Guard report on the current image set of checkout-service so the operator sees what else will be removed, with a verdict for every expiring image, the rule that claims it, and a protective rule for the version tag family. It does not restore, re-push or delete anything.",
+      "expected_output": "The answer names the evidence that settles whether the lifecycle policy removed v3.1.0: CloudTrail records lifecycle deletions as PolicyExecutionEvent, found through LookupEvents, and the policy's lastEvaluatedAt shows when it last ran. It reports what that evidence showed, or that the lookup was denied or cancelled, and does not blame the lifecycle policy without it. If checkout-service exists, it then evaluates the current image set and lists every remaining image the policy would remove next with an in use judgement and its evidence, identifies the rule that claimed v3.1.0 or would claim similar version tags, and suggests a protective rule for that tag family for the operator to apply. If checkout-service cannot be found in the account, the answer says so plainly, names the repositories it did find, and does not invent a policy, an image set or a deletion event. It does not restore, re push or delete anything and does not change the policy.",
       "assertions": [
-        "The response names PolicyExecutionEvent in CloudTrail (via LookupEvents) and the lifecycle policy's lastEvaluatedAt as the evidence for whether the lifecycle policy removed v3.1.0, and reports what it found or that the lookup was denied or cancelled.",
-        "The response runs the guard on the current image set of checkout-service and lists every remaining image that the policy will remove next, each with a verdict of Expiring-InUse, Expiring-Unknown or Expiring-Unused.",
-        "The response identifies the rule that claimed v3.1.0 or would claim similar version tags, and suggests a protective tagPatternList rule for that family as an operator action.",
-        "The response does not perform or offer to perform a re-push, restore, image deletion or policy change itself.",
+        "The response names CloudTrail PolicyExecutionEvent (looked up through LookupEvents) and the lifecycle policy's lastEvaluatedAt as the evidence that determines whether the lifecycle policy removed v3.1.0, and reports what it found or that the lookup was denied, cancelled or could not be run because the repository was not found.",
+        "The response does not assert that the lifecycle policy deleted v3.1.0 without evidence from CloudTrail or lastEvaluatedAt; absent that evidence it says the cause is unconfirmed.",
+        "If the repository checkout-service was found, the response lists every remaining image the policy would remove next with an in use judgement and its evidence, identifies the rule that claimed v3.1.0 or would claim similar version tags, and suggests a protective rule for that tag family as an operator action; if the repository was not found, the response says so plainly, names the repositories it did find, and does not invent a policy, image set or deletion event.",
+        "The response does not perform, and does not offer to perform itself, a re push, a restore, an image deletion or a policy change.",
         {
-          "text": "The full report headings are present",
-          "evaluator": "regex",
-          "pattern": "(?sm)^## Scope.*^## Repository Rating.*^## Expiring Images.*^## Check Matrix.*^## Next Steps"
-        },
-        {
-          "text": "PolicyExecutionEvent is mentioned",
+          "text": "PolicyExecutionEvent is named as the CloudTrail evidence",
           "evaluator": "regex",
           "pattern": "PolicyExecutionEvent"
+        },
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(ecr[: ])?(PutLifecyclePolicy|DeleteLifecyclePolicy|BatchDeleteImage|PutImage|PutImageTagMutability|DeleteRepository)",
+          "match": "absent"
         }
       ]
     },
@@ -197,44 +164,25 @@
       "task_type": "chat",
       "prompt": "No account access required. Evaluate this ECR lifecycle policy against the image set below and tell me exactly which images the policy expires and under which rule. Repository example-batch-worker in account 123456789012, us-east-1. Policy: {\"rules\":[{\"rulePriority\":10,\"description\":\"Expire untagged after 1 day\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\",\"countUnit\":\"days\",\"countNumber\":1},\"action\":{\"type\":\"expire\"}},{\"rulePriority\":20,\"description\":\"Keep 2 nightly builds\",\"selection\":{\"tagStatus\":\"tagged\",\"tagPrefixList\":[\"nightly-\"],\"countType\":\"imageCountMoreThan\",\"countNumber\":2},\"action\":{\"type\":\"expire\"}},{\"rulePriority\":30,\"description\":\"Keep 5 CI builds\",\"selection\":{\"tagStatus\":\"tagged\",\"tagPatternList\":[\"build-*\"],\"countType\":\"imageCountMoreThan\",\"countNumber\":5},\"action\":{\"type\":\"expire\"}},{\"rulePriority\":40,\"description\":\"Release candidates expire after 14 days\",\"selection\":{\"tagStatus\":\"tagged\",\"tagPrefixList\":[\"rc-\"],\"countType\":\"sinceImagePushed\",\"countUnit\":\"days\",\"countNumber\":14},\"action\":{\"type\":\"expire\"}},{\"rulePriority\":100,\"description\":\"Catch-all keep 6\",\"selection\":{\"tagStatus\":\"any\",\"countType\":\"imageCountMoreThan\",\"countNumber\":6},\"action\":{\"type\":\"expire\"}}]}. Images: 26, all tagged, zero untagged, one tag per image, all pushed on 2026-10-21. Push order oldest to newest with imagePushedAt (UTC): build-1 16:33:21, build-2 16:33:23, build-3 16:33:25, build-4 16:33:27, build-5 16:33:29, build-6 16:33:31, build-7 16:33:33, build-8 16:33:35, build-9 16:33:37, build-10 16:33:39, build-11 16:33:41, build-12 16:33:43, rc-0.1 16:33:45, rc-0.2 16:33:47, rc-0.3 16:33:49, rc-0.4 16:33:51, v2.1.0 16:33:53, v2.2.0 16:33:56, v2.3.0 16:33:58, v2.4.0 16:34:00, v2.5.0 16:34:02, hotfix-2.3.1 16:34:03, nightly-20261001 16:34:05, nightly-20261008 16:34:08, nightly-20261015 16:34:11, latest 16:34:13. Evaluation time 2026-10-21 16:36 UTC. No manifest lists.",
       "should_trigger": true,
-      "expected_output": "A SIMULATED result listing exactly 12 expiring images: nightly-20261001 under rule 20; build-1, build-2, build-3, build-4, build-5, build-6 and build-7 under rule 30; v2.1.0, v2.2.0, v2.3.0 and v2.4.0 under rule 100. Rule 10 expires nothing (no untagged images). Rule 40 expires nothing (rc images are 0 days old) but claims the four rc images so rule 100 cannot expire them. Rule 100 keeps the newest 6 overall (latest, nightly-20261015, nightly-20261008, nightly-20261001, hotfix-2.3.1, v2.5.0) and can only expire marked images not claimed by rules 20, 30 or 40, which leaves v2.1.0 to v2.4.0. Survivors: build-8 to build-12, rc-0.1 to rc-0.4, v2.5.0, hotfix-2.3.1, nightly-20261008, nightly-20261015, latest. The result is labelled SIMULATED and the response says a preview would confirm it.",
+      "expected_output": "The answer says exactly 12 images expire and names them: nightly-20261001 under rule 20; build-1 through build-7 under rule 30; v2.1.0, v2.2.0, v2.3.0 and v2.4.0 under rule 100. It explains that rule 10 expires nothing because there are no untagged images, that rule 40 expires nothing because the rc images are 0 days old but still claims them so rule 100 cannot touch them, and that rule 100 keeps the newest 6 overall and can only expire images not already claimed by rules 20, 30 or 40, which leaves v2.1.0 to v2.4.0. It lists the survivors: build-8 to build-12, rc-0.1 to rc-0.4, v2.5.0, hotfix-2.3.1, nightly-20261008, nightly-20261015 and latest. It makes clear the result is the agent's own simulation from the policy and image list, and that running ECR's lifecycle preview would give the authoritative answer. Because no in use data was supplied, it does not describe any expiring image as safe to delete or unused.",
       "assertions": [
-        "The response states that exactly 12 images expire.",
-        "The response explains that rule 100 expires only v2.1.0, v2.2.0, v2.3.0 and v2.4.0 because the build-*, rc-* and nightly- images are claimed by the higher priority rules 30, 40 and 20 even where those rules do not expire them.",
-        "The response lists build-8, build-9, build-10, build-11, build-12 and rc-0.1 to rc-0.4 as surviving, not expiring.",
-        "The response labels the result SIMULATED and notes that StartLifecyclePolicyPreview and GetLifecyclePolicyPreview would give the authoritative answer.",
+        "The response states that exactly 12 images expire and the set is exactly nightly-20261001, build-1, build-2, build-3, build-4, build-5, build-6, build-7, v2.1.0, v2.2.0, v2.3.0 and v2.4.0, with nothing added and nothing missing.",
+        "The response attributes nightly-20261001 to rule 20, build-1 through build-7 to rule 30, and v2.1.0 through v2.4.0 to rule 100.",
+        "The response explains that rule 100 expires only v2.1.0, v2.2.0, v2.3.0 and v2.4.0 because the build-*, rc-* and nightly- images are claimed by the higher priority rules 30, 40 and 20 even where those rules do not expire them, and that rule 10 expires nothing because there are no untagged images.",
+        "The response lists build-8, build-9, build-10, build-11, build-12 and rc-0.1 through rc-0.4 as surviving, not expiring.",
+        "The response makes clear that the result is the agent's own simulation from the policy and image list (not ECR's preview) and says that StartLifecyclePolicyPreview and GetLifecyclePolicyPreview would give the authoritative answer.",
         {
-          "text": "nightly-20261001 is listed as expiring",
+          "text": "nightly-20261001 is named",
           "evaluator": "regex",
           "pattern": "nightly-20261001"
         },
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence; no in use data was supplied, so no expiring image is called safe to delete or unused.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
-          "text": "build-1 through build-7 are listed",
+          "text": "No write API is reported as having been called",
           "evaluator": "regex",
-          "pattern": "\\bbuild-[1-7]\\b",
-          "min_count": 7
-        },
-        {
-          "text": "v2.1.0 through v2.4.0 are listed",
-          "evaluator": "regex",
-          "pattern": "\\bv2\\.[1-4]\\.0\\b",
-          "min_count": 4
-        },
-        {
-          "text": "The count 12 is stated as an image count, not as part of a tag name",
-          "evaluator": "regex",
-          "pattern": "(?i)(\\b12 (expiring )?images?\\b|\\bexactly 12\\b|\\btotal(:| of)? 12\\b|\\b12 of 26\\b)"
-        },
-        {
-          "text": "SIMULATED label is present",
-          "evaluator": "regex",
-          "pattern": "SIMULATED"
-        },
-        {
-          "text": "The rc images are mentioned (as survivors)",
-          "evaluator": "regex",
-          "pattern": "\\brc-0\\.[1-4]\\b",
-          "min_count": 4
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(ecr[: ])?(PutLifecyclePolicy|DeleteLifecyclePolicy|BatchDeleteImage|PutImage|PutImageTagMutability|DeleteRepository)",
+          "match": "absent"
         }
       ]
     },
@@ -243,47 +191,21 @@
       "task_type": "chat",
       "prompt": "No account access required. Using these API results, give me the verdict for each expiring image, the repository rating, and the rule that would protect anything in use. Repository example-batch-worker, account 123456789012, us-east-1. GetLifecyclePolicyPreview status COMPLETE, expiringImageTotalCount 12, previewResults: nightly-20261001 appliedRulePriority 20; build-1, build-2, build-3, build-4, build-5, build-6, build-7 appliedRulePriority 30; v2.1.0, v2.2.0, v2.3.0, v2.4.0 appliedRulePriority 100; all action.type expire. DescribeImages: 26 images, every image has imagePushedAt on 2026-10-21 between 16:33:21 and 16:34:13 UTC; v2.3.0 (digest sha256:0000000000000000000000000000000000000000000000000000000000000019) has lastRecordedPullTime 2026-10-21T16:34:17Z; no other image has lastRecordedPullTime. Evaluation time 2026-10-21 16:36 UTC, pull window 30 days. ecs:ListClusters returned no clusters. ecs:ListTaskDefinitions status ACTIVE returned no task definitions. batch:DescribeJobDefinitions returned AccessDeniedException. lambda:ListFunctions returned 3 functions, all PackageType Zip. apprunner:ListServices returned no services. eks:ListClusters returned no clusters. CloudTrail LookupEvents not attempted.",
       "should_trigger": true,
-      "expected_output": "An AUTHORITATIVE report (the preview completed). v2.3.0 is Expiring-InUse with evidence lastRecordedPullTime 2026-10-21T16:34:17Z inside the 30 day window, claimed by rule 100, severity HIGH. The other 11 expiring images are Expiring-Unknown because batch:DescribeJobDefinitions was AccessDenied, not Expiring-Unused. Repository Rating AtRisk because an image is Expiring-InUse. Finding P4 LOW for the semantic version tags v2.1.0 to v2.4.0 governed only by the tagStatus any rule. Suggested Protective Rule: a tagPatternList rule for v*.*.* (or v2.*) with rulePriority below 100 (for example 5) and imageCountMoreThan with a generous count, presented for the operator, not applied. Not Assessed lists Batch job definitions as AccessDenied and CloudTrail as NotChecked. v2.3.0 is never described as safe or not a concern.",
+      "expected_output": "The answer identifies v2.3.0 as still in use and about to be deleted by rule 100, citing its recorded pull time 2026-10-21T16:34:17Z inside the 30 day window, and never describes it as safe or unused. It says the other 11 expiring images could not be checked against Batch job definitions because that call was denied, so their status is unknown, and it does not call them safe, unused or clear; it also notes CloudTrail was not checked. Its overall judgement is that the policy is unsafe as it stands because an image in use is expiring. It presents a concrete protective rule for the version tag family (v*.*.* or v2.*) with a priority below 100 and a generous keep count, for the operator to apply, and does not apply it. No write is performed or offered.",
       "assertions": [
-        "v2.3.0 is given the verdict Expiring-InUse with lastRecordedPullTime 2026-10-21T16:34:17Z cited as the evidence.",
-        "The other eleven expiring images are given the verdict Expiring-Unknown because batch:DescribeJobDefinitions returned AccessDenied; none of them is Expiring-Unused.",
-        "The Repository Rating is AtRisk with the deciding rule that an expiring image is in use.",
-        "The response presents a protective rule JSON using tagPatternList for the v*.*.* or v2.* family with a rulePriority lower than 100 and states that the operator applies it.",
+        "The response identifies v2.3.0 as still in use and about to be removed by rule 100, citing its recorded pull time 2026-10-21T16:34:17Z inside the 30 day window as the evidence.",
+        "The response says the other eleven expiring images could not be checked against Batch job definitions because batch:DescribeJobDefinitions was denied (and notes CloudTrail was not checked), treats their status as unknown, and does not call any of them safe, unused or clear to delete.",
+        "The response gives an overall judgement that the policy is unsafe or needs attention as it stands because an image in use is in the expiring set.",
+        "The response presents a concrete protective lifecycle rule for the version tag family (v*.*.* or v2.*) with a priority lower than 100 and states that the operator applies it; the agent does not apply it.",
         "The response never describes v2.3.0 as safe, not a concern, currently fine or unused.",
-        "Batch job definitions appear under Not Assessed as AccessDenied and CloudTrail as NotChecked.",
-        {
-          "text": "v2.3.0 row carries Expiring-InUse",
-          "evaluator": "regex",
-          "pattern": "v2\\.3\\.0[^\\n]*Expiring-InUse"
-        },
-        {
-          "text": "Rating AtRisk is stated",
-          "evaluator": "regex",
-          "pattern": "AtRisk"
-        },
-        {
-          "text": "Expiring-Unknown is used for the Batch denied case",
-          "evaluator": "regex",
-          "pattern": "Expiring-Unknown",
-          "min_count": 1
-        },
-        {
-          "text": "No image is called Expiring-Unused",
-          "evaluator": "regex",
-          "pattern": "Expiring-Unused\\s*\\|",
-          "match": "absent"
-        },
-        {
-          "text": "A protective rule with tagPatternList is present",
-          "evaluator": "regex",
-          "pattern": "tagPatternList"
-        },
         {
           "text": "v2.3.0 is not called safe or not a concern",
           "evaluator": "regex",
-          "pattern": "(?i)v2\\.3\\.0[^\\n]{0,80}\\b(is safe|currently safe|not a concern|currently fine)\\b",
+          "pattern": "(?i)v2\\.3\\.0[^\\n]{0,80}\\b(is safe|currently safe|safe to expire|safe to delete|not a concern|currently fine)\\b",
           "match": "absent"
         },
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
           "text": "No write API is reported as having been called",
           "evaluator": "regex",
@@ -297,34 +219,15 @@
       "task_type": "chat",
       "prompt": "No account access required. Using these API results, give me the verdict for the expiring image, the evidence tier it rests on, and the repository rating. Repository example-api, account 123456789012, us-east-1. Policy: one rule, rulePriority 100, tagStatus any, imageCountMoreThan 10, action expire. GetLifecyclePolicyPreview status COMPLETE, expiringImageTotalCount 1, previewResults: build-41 (digest sha256:0000000000000000000000000000000000000000000000000000000000000041) imagePushedAt 2026-10-20T09:15:00Z appliedRulePriority 100 action.type expire. DescribeImages: 11 images, all tagged, none has a lastRecordedPullTime field. Evaluation time 2026-10-27 12:00 UTC, pull window 30 days. ecs:ListClusters returned no clusters. ecs:ListTaskDefinitions status ACTIVE returned no task definitions. batch:DescribeJobDefinitions status ACTIVE returned 0 job definitions. lambda:ListFunctions returned 2 functions, both PackageType Zip. apprunner:ListServices returned no services. eks:ListClusters returned no clusters. CloudTrail LookupEvents, 30 day window, events for repository example-api: PutImage imageTag build-41 eventTime 2026-10-20T09:15:00Z userIdentity arn:aws:sts::123456789012:assumed-role/ci-push-role/github-run-8812; BatchGetImage imageTag build-41 eventTime 2026-10-20T09:15:01Z userIdentity arn:aws:sts::123456789012:assumed-role/ci-push-role/github-run-8812. No other events.",
       "should_trigger": true,
-      "expected_output": "An AUTHORITATIVE report. build-41 is Expiring-Unused: no lastRecordedPullTime (tier (a) empty), no ECS, Batch, Lambda or App Runner reference (tier (b) empty, every source OK), and the only CloudTrail BatchGetImage event is 1 second after imagePushedAt from the same principal as the PutImage event, so the push correlation rule excludes it and tier (c) has no qualifying pull. The evidence cell says only push correlated events were found and that 1 event was excluded. Check U8 reports 1 CloudTrail event excluded as push correlated at LOW (informational). R1 is PASS. Repository Rating is Healthy (U8 does not move the rating, no production like tag, set is AUTHORITATIVE). The response does not call build-41 in use and does not propose a protective rule for it.",
+      "expected_output": "The answer concludes that build-41 shows no evidence of use: it has no recorded pull time, no ECS, Batch, Lambda or App Runner reference with every one of those sources returning successfully, and the only CloudTrail BatchGetImage event is 1 second after the push from the same principal that pushed it, so it is part of the push workflow and not a consumer pull. It states that one CloudTrail event was set aside for that reason. It explicitly does not call build-41 in use and does not treat its status as unknown, since every in use source was checked. Its overall judgement is that nothing in use is at risk in example-api. No write is performed or offered.",
       "assertions": [
-        "build-41 is given the verdict Expiring-Unused, not Expiring-InUse and not Expiring-Unknown.",
-        "The response explains that the BatchGetImage event at 2026-10-20T09:15:01Z is within 60 seconds of imagePushedAt and comes from the same principal as the PutImage, so it is part of the push workflow and does not count as a consumer pull.",
-        "The response states that one CloudTrail event was excluded as push correlated, in the evidence cell or in check U8 or both.",
-        "The response states that lastRecordedPullTime is absent for build-41 and that no ECS, Batch, Lambda or App Runner reference exists, with every in use source OK.",
-        "Check R1 is PASS and the Repository Rating is Healthy.",
-        {
-          "text": "build-41 row carries Expiring-Unused",
-          "evaluator": "regex",
-          "pattern": "build-41[^\\n]*Expiring-Unused"
-        },
-        {
-          "text": "Push correlation is named",
-          "evaluator": "regex",
-          "pattern": "(?i)push correlated"
-        },
-        {
-          "text": "No image is called Expiring-InUse",
-          "evaluator": "regex",
-          "pattern": "Expiring-InUse\\s*\\|",
-          "match": "absent"
-        },
-        {
-          "text": "Check U8 is present",
-          "evaluator": "regex",
-          "pattern": "\\|\\s*U8\\s*\\|"
-        },
+        "The response concludes that build-41 shows no evidence of use (expiring but unused), and does not call it in use or treat its status as unknown.",
+        "The response explains that the BatchGetImage event at 2026-10-20T09:15:01Z is 1 second after imagePushedAt and comes from the same principal as the PutImage, so it is part of the push workflow and does not count as a consumer pull.",
+        "The response states that one CloudTrail event was excluded or set aside as part of the push (push correlated, or equivalent wording) and that no qualifying pull remains.",
+        "The response states that lastRecordedPullTime is absent for build-41 and that no ECS, Batch, Lambda or App Runner reference exists, with every in use source checked successfully.",
+        "The response gives an overall judgement that nothing in use is at risk in example-api, and does not present a protective rule for build-41 as necessary.",
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence; the no use conclusion for build-41 is tied to the evidence above.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
           "text": "No write API is reported as having been called",
           "evaluator": "regex",
@@ -338,37 +241,20 @@
       "task_type": "chat",
       "prompt": "No account access required. Using these API results, give me the verdict for the expiring image, the evidence tier it rests on, and the repository rating. Repository example-api, account 123456789012, us-east-1. Policy: one rule, rulePriority 100, tagStatus any, imageCountMoreThan 10, action expire. GetLifecyclePolicyPreview status COMPLETE, expiringImageTotalCount 1, previewResults: build-41 (digest sha256:0000000000000000000000000000000000000000000000000000000000000041) imagePushedAt 2026-10-20T09:15:00Z appliedRulePriority 100 action.type expire. DescribeImages: 11 images, all tagged, none has a lastRecordedPullTime field. Evaluation time 2026-10-27 12:00 UTC, pull window 30 days. ecs:ListClusters returned no clusters. ecs:ListTaskDefinitions status ACTIVE returned no task definitions. batch:DescribeJobDefinitions status ACTIVE returned 0 job definitions. lambda:ListFunctions returned 2 functions, both PackageType Zip. apprunner:ListServices returned no services. eks:ListClusters returned no clusters. CloudTrail LookupEvents, 30 day window, events for repository example-api: PutImage imageTag build-41 eventTime 2026-10-20T09:15:00Z userIdentity arn:aws:sts::123456789012:assumed-role/ci-push-role/github-run-8812; BatchGetImage imageTag build-41 eventTime 2026-10-20T09:15:01Z userIdentity arn:aws:sts::123456789012:assumed-role/ci-push-role/github-run-8812; BatchGetImage imageTag build-41 eventTime 2026-10-23T09:15:04Z userIdentity arn:aws:sts::123456789012:assumed-role/batch-worker-instance-role/i-0abc123def456. No other events.",
       "should_trigger": true,
-      "expected_output": "An AUTHORITATIVE report. build-41 is Expiring-InUse at HIGH on tier (c): the BatchGetImage at 2026-10-23T09:15:04Z comes from a different role (batch-worker-instance-role) 3 days after imagePushedAt, so it survives the push correlation rule and is a qualifying consumer pull. The BatchGetImage at 2026-10-20T09:15:01Z from ci-push-role is excluded as push correlated (1 second after push, same principal as PutImage) and is counted in U8. The evidence cell names the tier, the event time, the role and the 3 day gap from push. R1 is HIGH, U8 is LOW with 1 excluded event, Repository Rating is AtRisk. A protective tagPatternList rule for build-* with a rulePriority below 100 is presented for the operator and not applied.",
+      "expected_output": "The answer concludes that build-41 is still in use and about to be deleted: the BatchGetImage at 2026-10-23T09:15:04Z comes from a different role, batch-worker-instance-role, 3 days after the push, so it is a genuine consumer pull recorded in CloudTrail rather than part of the push. It explains that the earlier BatchGetImage at 2026-10-20T09:15:01Z from ci-push-role is 1 second after the push from the pushing principal and was set aside as part of the push workflow. Its overall judgement is that the policy is unsafe as it stands because an image in use is expiring, and it names CloudTrail as the evidence the conclusion rests on. It presents a concrete protective rule for the build-* family with a priority below 100 for the operator to apply, and does not apply it. build-41 is never called safe or unused, and no write is performed or offered.",
       "assertions": [
-        "build-41 is given the verdict Expiring-InUse with the CloudTrail BatchGetImage at 2026-10-23T09:15:04Z by batch-worker-instance-role, about 3 days after push, cited as the evidence and the CloudTrail tier (tier (c)) named.",
-        "The response explains that the earlier BatchGetImage at 2026-10-20T09:15:01Z from ci-push-role was excluded as push correlated and did not contribute to the verdict.",
-        "The Repository Rating is AtRisk with the deciding rule that an expiring image is in use.",
-        "The response presents a protective rule JSON using tagPatternList for build-* with a rulePriority lower than 100 and states that the operator applies it.",
-        {
-          "text": "build-41 row carries Expiring-InUse",
-          "evaluator": "regex",
-          "pattern": "build-41[^\\n]*Expiring-InUse"
-        },
+        "The response concludes that build-41 is still in use, citing the CloudTrail BatchGetImage at 2026-10-23T09:15:04Z by batch-worker-instance-role about 3 days after the push as the evidence, and names CloudTrail (or the CloudTrail evidence tier) as what the conclusion rests on.",
+        "The response explains that the earlier BatchGetImage at 2026-10-20T09:15:01Z from ci-push-role was set aside as part of the push (push correlated, or equivalent wording) and did not contribute to the conclusion.",
+        "The response gives an overall judgement that the policy is unsafe or needs attention as it stands because an image in use is in the expiring set.",
+        "The response presents a concrete protective lifecycle rule for the build-* tag family with a priority lower than 100 and states that the operator applies it; the agent does not apply it.",
         {
           "text": "The consumer role is named as the evidence",
           "evaluator": "regex",
           "pattern": "batch-worker-instance-role"
         },
-        {
-          "text": "Push correlation is named",
-          "evaluator": "regex",
-          "pattern": "(?i)push correlated"
-        },
-        {
-          "text": "Rating AtRisk is stated",
-          "evaluator": "regex",
-          "pattern": "AtRisk"
-        },
-        {
-          "text": "A protective rule with tagPatternList is present",
-          "evaluator": "regex",
-          "pattern": "tagPatternList"
-        },
+        "The response never describes build-41 as safe, unused, not a concern or currently fine.",
+        "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+        "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
         {
           "text": "No write API is reported as having been called",
           "evaluator": "regex",
