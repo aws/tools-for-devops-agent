@@ -69,13 +69,13 @@ storagegateway:ListVolumes
 `sts:GetCallerIdentity` is also used and requires no IAM permission.
 
 Deploy them with the `EnableAwsBackupCoverageReview` parameter in
-[cloudformation/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml).
+[cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
 **Each Agent Space has its own IAM role, so apply this to the role of every space
 where the skill is installed** — use one stack per role:
 
 ```bash
 aws cloudformation deploy \
-  --template-file cloudformation/devops-agent-skill-policies.yaml \
+  --template-file cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml \
   --stack-name devops-agent-skill-policies-<role-suffix> \
   --parameter-overrides ExistingRoleName=<DevOpsAgentRole-AgentSpace-XXXX> \
       EnableAwsBackupCoverageReview=true \
@@ -245,14 +245,12 @@ at upload time):
 
 - **Chat tasks** — conversational, on-demand reviews ("what isn't being backed up
   in this account?", "audit my backup plans").
-- **Evaluation** — proactive, best-practices coverage and posture reviews against
-  the 23 checks.
 
 Agent type names differ between DevOps Agent releases — newer Agent Spaces present
-options such as **All agent types**, **Chat tasks**, **Incident
+options such as **All agents**, **Chat tasks**, **Incident
 mitigation/triage/RCA/UI**, **Improvement**, and **Release management/testing**,
 and do not offer **Evaluation** by that name. If the types above are not listed
-exactly, select **All agent types** (or **Generic** on older spaces) to make the
+exactly, select **All agents** to make the
 skill available everywhere. Nothing in the skill depends on a particular agent
 type.
 
@@ -278,13 +276,13 @@ If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsa
 2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
 3. Click **Add skill** → **Upload skill**.
 4. Drag and drop the `aws-backup-coverage-review.zip` file (max 6 MB).
-5. Select the agent types: **Chat tasks** and **Evaluation** — or **All agent
-   types** if your Agent Space presents a different set (see Agent Types above).
+5. Select the agent type: **Chat tasks** — or **All agents** if your Agent
+   Space presents a different set (see Agent Types above).
 6. Click **Upload**.
 
 **Option C: Upload via the Asset API**
 
-Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT` and `EVALUATION` agent types. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
+Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT` agent type. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
 
 For more details, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) in the AWS DevOps Agent User Guide.
 
@@ -300,9 +298,6 @@ Describe the task in natural language — you do not need to name the skill.
 - "Are my EBS volumes and RDS databases protected by AWS Backup?"
 - "Do a backup gap analysis for us-east-1 and eu-west-1."
 - "Which resources are in a backup plan but have no recovery points?"
-
-**Evaluation**
-
 - "Assess our AWS Backup posture against best practices."
 - "Review backup coverage, retention, and vault protection across all Regions."
 - "Check whether our backup plans meet a 35-day retention and daily frequency bar."

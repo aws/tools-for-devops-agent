@@ -1,0 +1,95 @@
+name: Validate PR checklist
+# Gates pull requests on the required checkboxes in the PR description being
+# checked. The rules — which items apply, the `n/a:` escape, and which PRs are
+# reported but not enforced — live in .github/scripts/check_pr_checklist.py, with
+# tests in tests/test_check_pr_checklist.py.
+#
+# The job lists unmet items in its step summary and publishes only the verdict
+# (pass, fail or error, and why) as an artifact. A companion workflow,
+# label-pr-checklist-result.yml, then applies or removes the `needs-checklist`
+# label and posts the comment. It has to be separate because GITHUB_TOKEN is
+# read-only for pull_request events from forks, which is where most contributions
+# here come from. This mirrors the validate-skill-evals.yml pair.
+#
+# NOTE: a red check does not block merge on its own. An admin must add this job's
+# name ("validate-pr-checklist") to the required status checks for `main` in
+# branch protection. Until then this workflow is advisory.
+on:
+  pull_request:
+    # `edited`: ticking a box edits the body and must re-run the check.
+    # `labeled` / `unlabeled`: applying or removing `enforce-checklist` takes effect
+    # at once, and labeling forces a run on a PR that has none. A label applied by
+    # GITHUB_TOKEN raises no event, so the companion cannot re-trigger this one.
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    # Not filtered with paths: a required status check that never runs is reported
+    # as pending forever, which would permanently block PRs. The job always runs.
+permissions:
+  contents: read
+concurrency:
+  group: validate-pr-checklist-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  # The job id and its display name are kept identical, because the display name
+  # is the status check context that branch protection matches on.
+  validate-pr-checklist:
+    name: validate-pr-checklist
+    runs-on: ubuntu-latest
+    # No `if:` guard on the job, on purpose. Skipping it would report the required
+    # check as "skipped", which branch protection can treat as satisfied — so a
+    # guard keyed on a label would let anyone unblock a failing PR by labeling it.
+    # Labels are read by the script instead, where they can only make the check
+    # stricter and the job still reports a real status.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history, so the script can diff against the merge base.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check the required checklist items
+        # Never fails the step: the verdict is published for the labeling workflow
+        # first and only then turned into a job failure. Without this the artifact
+        # would not upload on failure — the case that needs a label.
+        continue-on-error: true
+        # The PR body, labels and author are read from the event payload file by
+        # the script, never interpolated into this command.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          python3 .github/scripts/check_pr_checklist.py \
+            --event "$GITHUB_EVENT_PATH" \
+            --base-ref "origin/${BASE_REF}" \
+            --out checklist-result
+      - name: Publish the verdict for the labeling workflow
+        id: verdict
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Anything but a verdict the script wrote itself is an error: a failed
+          # fetch, a crash, or a script that never ran. An error is reported as the
+          # check not completing, never as the PR's checklist being incomplete.
+          mkdir -p checklist-result
+          outcome=$(cat checklist-result/outcome 2>/dev/null || true)
+          case "$outcome" in pass|fail|error) ;; *) outcome=error ;; esac
+          printf '%s\n' "$outcome" > checklist-result/outcome
+          printf '%s\n' "$PR_NUMBER" > checklist-result/pr-number
+          echo "outcome=${outcome}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checklist-check-result
+          path: checklist-result/
+          retention-days: 1
+      - name: Fail the job unless the checklist passed
+        if: steps.verdict.outputs.outcome != 'pass'
+        env:
+          OUTCOME: ${{ steps.verdict.outputs.outcome }}
+        run: |
+          if [ "$OUTCOME" = "fail" ]; then
+            echo "::error::PR checklist incomplete — the check summary lists the unmet items."
+          else
+            echo "::error::The PR checklist check did not complete. Nothing was concluded about this pull request — see the log above."
+          fi
+          exit 1

@@ -41,7 +41,82 @@ Follow these guidelines for each tool:
 
 #### Skill Metadata
 
-Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
+Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user, or your team as `org/team`) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
+
+#### Skill Publishing Rules
+
+Skills on `main` are published automatically, so a pull request check ([`.github/workflows/validate-skills.yml`](.github/workflows/validate-skills.yml)) applies these rules to **every** skill in `skills/`, not only to the ones your pull request changes. Errors fail the check. Warnings don't, and they're shown only for skills your pull request touches.
+
+`SKILL.md` frontmatter:
+
+| Field | Rule |
+|---|---|
+| `name` | Required. Lowercase letters, digits and single hyphens, at most 64 characters, and equal to the folder name. The folder path `skills/<name>` is the skill's permanent identity. `index` is reserved. |
+| `description` | Required. 1 to 1,024 characters, counted as Unicode code points. |
+| `title` | Optional display name. Non-empty, one line, at most 100 characters. |
+| `license`, `compatibility`, `allowed-tools` | Optional. When present, non-empty text; `compatibility` is at most 500 characters. |
+| `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `deprecated: "true"`. A key that isn't listed below is a warning, with the nearest known key when there is one. |
+| `metadata.author` | Required. One or more GitHub usernames or teams (`org/team`, such as `octo-org/octo-team`) separated by commas, without a leading `@`. |
+| `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix, suffix or leading zeros, at most 32 characters and at most 10 digits in each part. |
+| `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing or empty summary is a warning for now; it becomes required once every skill has one. |
+| `metadata.deprecated` | Optional. `"true"` or `"false"`. |
+| `metadata.tier` | Optional. `"aws-managed"` or `"partner-managed"`: who maintains the skill. |
+| `metadata.aws-devops-agent-skills.agent-types` | The agents that load the skill, as comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json), such as `"INCIDENT_RCA"`. An unknown value is an error, because this key decides which agents load the skill rather than only how catalogs filter it. `GENERIC` loads the skill for every agent, so it is an error to combine it with another value. Without the key the skill installs as `GENERIC` and loads for every agent, which is a warning. |
+| `metadata.aws-devops-agent-skills.*` | Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. Any other key under this prefix, or a misspelling of the prefix, is an error, so a typo can't drop the skill from a filter. For `aws-services` and `technical-domains`, a value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is a warning, with the approved spelling when there is one. |
+
+The frontmatter must be plain YAML that every parser reads the same way. These are rejected: tabs; a byte order mark at the start of the file; line breaks other than newlines (U+0085, U+2028, U+2029); `---` anywhere but the closing line; anchors (`&`), aliases (`*`), tags (`!`), directives (`%`) and document markers; flow collections (`[...]` or `{...}`); keys that aren't plain text, and duplicate keys, at any depth; and unquoted values that some parsers read as numbers, such as `1e3`. A top-level key other than the Agent Skills specification's fields and `title` is a warning.
+
+A `SKILL.md` body over 500 lines is a warning, as it is in the skill evaluation tool: move reference material into `references/` and link to it.
+
+Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). `README.md` and `images/` are published too. For the published files:
+
+- At most 100 files, each at most 1 MiB, and their zip at most 4,128,768 bytes (4 MiB less a margin, because zip sizes vary by tool). The check warns past 90% of each of these limits. The `SKILL.md` frontmatter is at most 32 KiB.
+- Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a new extension takes effect only after the `skills/.gitignore` change that adds it has merged.
+- Paths use only letters, digits, `.`, `_` and `-`, are at most 512 characters, have no hidden parts (such as `.DS_Store` or `.gitignore`), no part named `__proto__`, no Windows-reserved names (such as `CON` or `COM1`) and no part ending in a period. No two files or folders differ only in case, and no file has the same path as a folder, ignoring case.
+- No file starts with `#!`.
+
+Anywhere in the skill folder, `evals/` included:
+
+- Only regular files: no executable bits, symbolic links or submodules. Remove an executable bit with `git update-index --chmod=-x <path>`.
+- No `scripts/` folders.
+- No AWS access key IDs or private keys (PEM, OpenSSH, PGP or PuTTY).
+- No `cli_debug/` or `sdk_debug/` folders, and no `evals/functional/*/_metadata.json`. The skill evaluation tool writes these unredacted; the run metadata names the AWS account the run used. `skills/.gitignore` already skips them.
+- A warning when a pull request adds a line that names an internal host or tool ([`internal-names.json`](.github/scripts/skill-rules/internal-names.json)), since this repository is public.
+
+In published text files, invisible characters are errors, because they can hide instructions from a reviewer while the model still reads them: zero-width and other invisible characters (such as U+200B, U+00AD, U+3164 or U+180B), bidirectional controls, a byte order mark, Unicode tag characters, and variation selectors, except a single U+FE0E or U+FE0F after a character, as emoji use. In published Markdown, active HTML elements (`script`, `iframe`, `embed`, `form`, `style`, `link`, `meta`, `object` and `img`) and links to `javascript:` or `http://` targets are warnings, and so is a `<script>` element in a published `.html` or `.svg` file.
+
+Outside `skills/`: skills are published from GitHub's archive of the whole repository, which must hold exactly what Git holds. So no symbolic link may sit anywhere in the repository, and no root `.gitattributes` line may change how Git archives files under `skills/`: `export-ignore`, `export-subst`, `ident`, `filter`, `working-tree-encoding`, or an `eol`, `text` or `crlf` setting other than `text`, `text=auto`, `eol=lf`, `crlf` or `crlf=input`, which only normalize line endings when files are committed. A macro (`[attr]name ...`) that sets one of these is an error wherever it's defined. Scope such a line to another folder, such as `mcp/**`.
+
+Identity and versions, compared with the base branch:
+
+- A skill folder is never removed or renamed, because installed copies point at its path. To retire a skill, set `metadata.deprecated: "true"` and bump its version. To rename one, deprecate the old folder and add a new one.
+- There's no exception, even in an emergency such as malicious content: deprecate the skill; the DevOps Agent team can hide it from the catalog while the change publishes. Deleting the folder wouldn't remove the versions already published.
+- A path that belonged to a skill removed earlier can't be reused.
+- A published version is immutable. A change to any published file, `README.md` and `images/` included, needs a higher `metadata.version`. Changes only to `evals/`, `.skilleval.yaml` or `CHANGELOG.md` need no bump.
+- The version goes up one step at a time: from `3.4.0` to `3.4.1`, `3.5.0` or `4.0.0`. It never goes down.
+- The step is counted from the base branch, not from your last commit, so set `metadata.version` once, at the end. Bumping again for each round of review feedback (`1.0.0` to `1.0.1`, then `1.0.2`) fails the check.
+- A new skill starts at `1.0.0`.
+- When the version goes up, add a `CHANGELOG.md` entry for it. A bump without one is a warning.
+
+Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list. A `connector.yaml` that can't be read is a warning.
+
+The check is exact only for the base commit it ran on. Two pull requests that each pass on an older base can break the rules together, for example by both bumping a skill to the same version, so a later push to `main` can still fail. [`validate-skills-main.yml`](.github/workflows/validate-skills-main.yml) runs the check again after every push to `main` and reports such a break.
+
+If the check is wrong about a pull request, a maintainer can add the `skip-validate-skills` label: the check still runs and reports, but it no longer blocks the merge. If the check itself breaks and blocks every pull request, an admin removes `validate-skills` from the required status checks for `main` until the fix merges, then adds it back.
+
+Once branch protection requires it, changes under `.github/` and `tests/`, and to the root `.gitattributes`, need a code owner's approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)). A separate check, `build-docs`, runs `mkdocs build --strict` on every pull request; to run it locally, in the virtual environment below, `python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict`.
+
+Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
+
+```bash
+python3 -m venv venv && . venv/bin/activate
+python3 -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
+git remote add upstream https://github.com/aws/tools-for-devops-agent.git
+git fetch upstream main
+python3 .github/scripts/validate_skills.py --base-ref upstream/main
+```
+
+Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
 
 #### Test Your Skill
 
@@ -74,7 +149,7 @@ skills/<name>/evals/
     └── v<N>/
         ├── benchmark.json                            # scores for the run
         ├── evals.json                                # the evals this run executed
-        ├── _metadata.json                            # run metadata
+        ├── _metadata.json                            # gitignored; validate-skills rejects it
         └── iteration-<n>/
             └── <scenario-name>/                      # one per scenario in evals.json
                 ├── with_skill/
@@ -103,7 +178,7 @@ A pull request check ([`.github/workflows/validate-skill-evals.yml`](.github/wor
 
 | Required | |
 | --- | --- |
-| `evals/evals.json` | must exist |
+| `evals/evals.json` | must exist, unless the `functional` results are exempted (see "When a test type can't be run") |
 | `evals/structure/` | at least one `structure-tests-results-v<N>.json` |
 | `evals/best-practices/` | at least one **complete** `v<N>/`: `benchmark.json` **and** an `iteration-<n>/best-practices-tests-results.json` |
 | `evals/functional/` | at least one **complete** `v<N>/`: `benchmark.json`, `evals.json`, **and** an `iteration-<n>/<scenario-name>/` directory holding both `with_skill/functional-tests-results.json` and `without_skill/functional-tests-results.json` |
@@ -140,7 +215,21 @@ Some skills genuinely can't produce results for one of the test types. The two c
 }
 ```
 
-The exempted test type is then not checked. It's reported as a warning instead, so the check goes green while still showing what's missing and why. Keys are `structure`, `best-practices`, and `functional`; `evals.json` is hand-written rather than tool output, so it can't be exempted.
+The exempted test type is then not checked. It's reported as a warning instead, so the check goes green while still showing what's missing and why. Keys are `structure`, `best-practices`, and `functional`.
+
+`evals.json` isn't one of the keys, because you write it rather than the tool. It's the input to the functional tests, though — the tool reads it for that run, and the scenario directories a functional run writes are named from it — so exempting `functional` waives `evals.json` too. There's no run left for it to feed, and the check never reads the file, so requiring it would only ask for eval definitions nobody is going to execute. Exempting `structure` or `best-practices` doesn't waive it: those runs don't read it. If you've already written your definitions, commit them anyway — a maintainer running the tool later starts from them.
+
+**Partner-managed skills.** A skill whose `SKILL.md` sets `metadata.tier: "partner-managed"` commits an `evals/exemptions.json` with this reason for all three test types, which waives `evals/evals.json` along with the results, per the rule above:
+
+```json
+{
+  "structure":      { "reason": "Partner-managed skill: skill evaluation tool results aren't produced for partner-managed skills." },
+  "best-practices": { "reason": "Partner-managed skill: skill evaluation tool results aren't produced for partner-managed skills." },
+  "functional":     { "reason": "Partner-managed skill: skill evaluation tool results aren't produced for partner-managed skills." }
+}
+```
+
+This is the standing agreement for partner-managed skills, so it needs no separate sign-off from a maintainer, and the pull request doesn't need the manual testing evidence described below: the partner tests its skill, and a maintainer checks that it installs and loads before the connector that recommends it is promoted. The `enforce-evals` label still withdraws the exemption, and then `evals.json` is required too.
 
 Write a reason that explains the blocker and what *was* run — a future maintainer needs to know whether to revisit it. If the exemption is temporary, such as an agent type the tool will support later, say so, so it gets removed when the limitation goes away.
 
@@ -152,7 +241,7 @@ An exemption is a claim about what can't be produced, and a maintainer who doesn
 
 The label is all-or-nothing for the whole pull request: it withdraws every exempted test type on every skill the PR touches, not just the claim a maintainer means to refuse. On a PR where one exemption is unfounded and another is legitimate, applying the label requires the results for both, and the legitimate one has to be settled in review — either by producing those results too, or by splitting the skills across separate PRs.
 
-Everything below that depth is left unchecked, so `outputs/`, `_metadata.json`, `cli_debug/`, `sdk_debug/`, iteration counts, and scenario names are all free to vary, as are any extra files.
+Everything below that depth is left unchecked, so `outputs/`, `_metadata.json`, `cli_debug/`, `sdk_debug/`, iteration counts, and scenario names are all free to vary, as are any extra files. The separate skill publishing check still rejects a committed `_metadata.json` and any `cli_debug/` or `sdk_debug/` folder; see "Skill Publishing Rules".
 
 The check is rolling out gradually, so whether a violation fails the check or is only reported depends on the skill:
 
@@ -186,6 +275,68 @@ If an issue lands with you, verify the skill against the checklist in it. When i
 #### Test Your Custom Agent
 
 Test relevant scenarios with and without the custom agent, multiple times. Focus on quality and consistency of the output, compared to asking DevOps Agent the same question using chat. When checking consistency, the output doesn't have to be the same verbatim - focus on the substance
+
+## Domain SME Sign-Off
+
+**Every tool contribution needs a named subject-matter expert, other than the
+author, to review it for technical correctness and say so in the pull request.**
+It is the one required item a maintainer cannot do for you.
+
+Maintainers review what is reviewable from the repository: layout, the publishing
+rules, the eval evidence, whether the content is safe to publish, and whether the
+tool fits the catalog. What they cannot do, across every AWS service this
+repository covers, is tell you that an OpenSearch shard-count threshold is right,
+that an EKS upgrade order is safe, or that an RDS failover procedure matches how
+the service actually behaves. A skill that is well-formed and confidently wrong is
+worse than no skill, because the agent will act on it during an incident. The SME
+is the only check on that, which is why a PR waits for one.
+
+### Who qualifies
+
+Someone with hands-on operational experience of the service or domain the tool
+covers, who did not write it. They do not need to be a maintainer of this
+repository, and they do not need to be an AWS employee. A colleague who runs the
+service in production, the service team itself, or a specialist from your own
+organisation all count.
+
+What does not count: the author, a reviewer who checked only spelling and
+structure, or an unnamed group. "Reviewed internally" is not a sign-off, because a
+future maintainer reading the PR cannot tell what was checked or by whom.
+
+### How to record it
+
+The SME needs to leave something in the pull request that names what they
+verified. Either is fine:
+
+- A **GitHub review** on the PR, approving it, with a line on what they checked.
+- A **comment** on the PR saying they reviewed it and what they looked at —
+  useful when the SME has no write access to the repository.
+
+Then tick the box. The box is what the checklist check reads; a note beside an
+unticked box does not clear it, so a PR whose description says "SME review
+pending" stays on hold whatever the prose says.
+
+**An SME sign-off is not the same as the approving review the branch requires.**
+`main` requires one approving review from a maintainer before a PR can merge.
+That is a separate gate, about whether the change should land in this repository
+at all. An SME who is not a maintainer satisfies the checklist item without
+satisfying branch protection, and a maintainer approving on structure does not
+satisfy the checklist item. A PR usually needs both, from different people.
+
+### If you cannot find one
+
+Say so, and ask — do not tick the box and do not leave it pending indefinitely.
+Raise it in your [tool request issue](https://github.com/aws/tools-for-devops-agent/issues/new?template=community-request.yml),
+or comment on the PR asking a maintainer to help route it. Maintainers can often
+reach the relevant service team or an internal specialist. A PR held up on a
+sign-off nobody has been asked for is the most common reason a good contribution
+stalls.
+
+The one exception is a change that alters no technical claim — a typo, a link, a
+label renamed across many skills. Mark the item `n/a:` with that reason, as
+described under "The Pull Request Checklist", and the reviewer judges whether it
+holds. A new tool, or any change to what a tool tells the agent to do, still
+needs the sign-off.
 
 ## Redacting AWS Identifiers
 
@@ -301,6 +452,108 @@ The exit code tells the two failure modes apart: `1` means identifiers were foun
 A failing check puts a `needs-id-redact` label on the pull request, which is removed automatically once the check passes. That label is written only by automation and only reflects the last result — it isn't something to add or remove by hand.
 
 NOTE: a red check does not block merging on its own. An admin must add the job's name (`scan-aws-identifiers`) to the required status checks for `main` in branch protection. Until then this check is advisory.
+
+## The Pull Request Checklist
+
+The pull request template carries a set of required items, and a check
+([`.github/workflows/validate-pr-checklist.yml`](.github/workflows/validate-pr-checklist.yml))
+reads your PR description and fails when a required box is unchecked. A failing
+check puts a `needs-checklist` label on the PR and a comment pointing to what is
+outstanding. A PR carrying that label is on hold and is not reviewed until it
+clears.
+
+Nothing about this check judges your tool. It checks that the work the template
+asks for has been done and said to have been done.
+
+### Which items apply to your PR
+
+Scope comes from the **files the PR changes**, not from the "Type of change"
+boxes — those are for a human reader, and "Update to an existing skill, agent, or
+MCP server" names three types at once, so they cannot decide it.
+
+| Your PR changes | Items enforced |
+| --- | --- |
+| Nothing under `skills/`, `mcp/` or `custom-agents/` | Only the two items that apply to every contribution, in Required before review and License confirmation: no internal-only content, and the licence confirmation |
+| Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
+| Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
+| Anything under `custom-agents/` | The same, with the Custom agents section |
+
+So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
+a CHANGELOG or an SME sign-off, because none of it means anything for that change.
+A PR touching more than one tool directory is held to each of their sections.
+
+Eval evidence is **not** re-checked here. `validate-skill-evals` already gates
+that, and the two checks are independent — the checklist item is about whether you
+included the evidence, and the eval check is about whether the evidence is there
+and well-formed.
+
+### When an item genuinely does not apply
+
+Inside a tool contribution an individual item can still be moot — an MCP server
+with no IAM to scope, say. Write `n/a:` and a reason on the item instead of
+ticking it:
+
+```markdown
+- [ ] **Least-privilege IAM** — n/a: this server calls no AWS APIs, only the vendor's HTTPS endpoint with a customer-supplied token.
+```
+
+The item is then treated as met, and the reason stays in the description where a
+reviewer can judge it.
+
+Two things about the form. A bare `n/a` with no reason does not count — the reason
+is the part being judged. And **it has to be on the same line as the checkbox**:
+the check reads line by line, so a reason wrapped onto the next line leaves the
+box looking plainly unchecked. Keep the item on one line however long it gets.
+
+Two items can never be waived this way:
+
+- **no internal-only or proprietary content**, because this repository is public
+  and the claim is about every file in the PR
+- the **licence confirmation**, which is a statement only you can make
+
+Use the escape rather than either of the alternatives. Ticking something untrue is
+caught at review and sends the PR back. Deleting the line is worse: the check
+treats a missing required section as unmet and names it, precisely so that
+removing an inconvenient item is not a way past it.
+
+### The labels
+
+| Label | Who sets it | Meaning |
+| --- | --- | --- |
+| `needs-checklist` | automation only | The last run found required items unmet. Removed automatically when the check passes. Not something to add or remove by hand |
+| `enforce-checklist` | a maintainer | Requires the checklist on a pull request that would otherwise be exempt because it predates the check. Stays once applied, so the requirement does not lapse on the next push |
+
+### What is not enforced
+
+Three cases report their findings in the check's step summary and pass:
+
+- **A draft pull request.** A draft is not submitted for review, which is what the
+  checklist gates. Marking it ready for review re-runs the check and enforces it
+  from then on, so nothing is lost by the check staying quiet until you say ready.
+- **A pull request opened by a bot.** Dependabot and similar write their own
+  description and never carry the template.
+- **A pull request opened before this check existed**, meaning before
+  `2026-10-13T07:33:08Z`, when the template's review gates reached `main`. Those
+  authors contributed against the template as it stood at the time, so the check
+  reports warnings rather than failing. The cutoff is the moment the gated
+  template became visible to contributors rather than the day this check merged,
+  so a PR opened in between is enforced — its author had the checklist in front of
+  them. A maintainer can hold one of these to the full requirement with
+  `enforce-checklist`.
+
+### Seeing the result
+
+The check's summary on the workflow run page lists every item it found unmet,
+which applied and why, and anything you marked `n/a:` with its reason — including
+for the cases above that pass. The comment on the PR links to that summary rather
+than repeating it, so the bot never posts text taken from a PR description.
+
+If the check itself cannot run — a failed fetch, say — it fails saying so, and
+leaves the label and comment as they were: nothing was concluded about your PR.
+
+The check runs on the PR being opened, edited, pushed to, reopened, marked ready
+for review, labelled, and unlabelled. Ticking a box edits the description, so the check
+re-runs and clears on its own; there is nothing to ask a maintainer to re-trigger.
 
 ## Reporting Bugs/Feature Requests
 

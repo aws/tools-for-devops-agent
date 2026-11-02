@@ -18,8 +18,8 @@ description: Read-only SLA-readiness, availability, and cost review of Amazon FS
   troubleshooting.
 metadata:
   author: benlec
-  version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation, Incident RCA"
+  version: "1.0.2"
+  aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "Amazon FSx for Windows File Server"
   aws-devops-agent-skills.technical-domains: "Storage"
 ---

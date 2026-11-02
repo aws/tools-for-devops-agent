@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.3] - 2026-10-22
+- Updated the link to the skill IAM policies template, which moved to `cloudformation/devops-agent-skill-policies/`.
+
+## [2.5.2] - 2026-10-21
+- README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
+
+## [2.5.1] - 2026-10-21
+- Agent types now use the API values in `metadata.aws-devops-agent-skills.agent-types` (`CHAT`, `INCIDENT_RCA`, `INCIDENT_TRIAGE`), the field that sets which agents load the skill.
+
 ## [2.5.0] - 2026-09-24
 
 Review feedback from PR #42 (70 baseline checks, up from 69):
