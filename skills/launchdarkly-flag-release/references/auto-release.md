@@ -33,7 +33,7 @@ It returns the `winningPolicy`, the `winningReleaseMethod` (immediate / progress
 
 **If nothing matches**, `policy` falls back to project defaults (often an immediate release). Tell the user — they may want to pick `simple` instead, or set up a release policy first.
 
-**A guarded release is only as good as its metrics.** If a `policy` env resolves to a **guarded** method, check that `autoAttachedMetricKeys` is non-empty and actually relevant to this change — a guarded rollout with no meaningful metric guards nothing. Watch for the **net-new path** case (from `launchdarkly-should-flag-change`'s output, if present): when the flag-off control renders nothing, feature-specific before/after comparisons are "one-armed" and can't detect a regression, so a guarded release must lean on existing global/service metrics. If the attached metrics can't compare treatment vs. control for this change, say so and recommend `simple` for that env (or point the user at metric setup) rather than presenting a guarded rollout that can't actually guard.
+**A guarded release is only as good as its metrics.** If a `policy` env resolves to a **guarded** method, check that `autoAttachedMetricKeys` is non-empty and actually relevant to this change — a guarded rollout with no meaningful metric guards nothing. Watch for the **net-new path** case: when the flag-off control renders nothing, feature-specific before/after comparisons are "one-armed" and can't detect a regression, so a guarded release must lean on existing global/service metrics. If the attached metrics can't compare treatment vs. control for this change, say so and recommend `simple` for that env (or point the user at metric setup) rather than presenting a guarded rollout that can't actually guard.
 
 ## Precedence
 

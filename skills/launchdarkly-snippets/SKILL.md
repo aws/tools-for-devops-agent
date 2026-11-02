@@ -27,7 +27,7 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 **Optional MCP tools:**
 - `update-prompt-snippet` -- edit a snippet's text, name, or tags
 - `delete-prompt-snippet` -- permanently remove a snippet
-- `update-ai-config-variation` -- update variation prompts to reference snippets
+- `update-agentcontrol-config-variation` -- update variation prompts to reference snippets
 
 ## Core Concepts
 
@@ -67,7 +67,7 @@ When a snippet is updated, a new version is created. Config variations that refe
 
 Before creating snippets, understand what's shared:
 
-1. List existing configs in the project using `get-ai-config` for each
+1. List existing configs in the project using `get-agentcontrol-config` for each
 2. Look for repeated text across variation prompts
 3. Identify text that should stay consistent (guardrails, personas, formats)
 4. Check existing snippets with `list-prompt-snippets` to avoid duplicates

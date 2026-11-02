@@ -1,7 +1,7 @@
 ---
 name: launchdarkly-online-evals
 description: Attach judges to config variations for automatic LLM-as-a-judge evaluation. Create custom judges, configure sampling rates, and monitor quality scores.
-compatibility: Requires the remotely hosted LaunchDarkly MCP server. Scripted setup without MCP needs an API access token with ai-configs:write permission. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
+compatibility: Requires the remotely hosted LaunchDarkly MCP server. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
 metadata:
   author: "nieblara"
   version: "1.0.0"
@@ -23,7 +23,7 @@ Attach judges to config variations for automatic quality scoring using LLM-as-a-
 
 ## API Access
 
-Use the LaunchDarkly MCP server tools for every step in the workflow: they authenticate via OAuth and need no token. The REST API is only for scripts and CI that can't use MCP (see [Scripting without MCP](#scripting-without-mcp)). In that case, ask the user to paste an API access token for this session and substitute it for `{api_token}` in the examples below. Do not search environment variables, `.env` files, or agent/MCP config files for credentials.
+Use the LaunchDarkly MCP server tools for every step in the workflow: they authenticate with the connection the customer set up. If a step has no MCP tool, tell the user which change to make in the LaunchDarkly UI instead. Never ask the user for an API access token.
 
 ## Core Concepts
 
@@ -134,149 +134,6 @@ Each judge config needs its fallthrough set to the enabled variation in every en
 ```
 
 Then run `get-agentcontrol-config-health` on the judge to confirm it's targetable.
-
-## Scripting without MCP
-
-For CI or scripts that can't use the MCP server, the same three steps through the REST API. `turnTargetingOn` does not work for configs, so `set_fallthrough` sends `updateFallthroughVariationOrRollout`:
-
-```python
-import requests
-import os
-from typing import Optional
-
-class AIConfigJudges:
-    """Manager for config judge attachments"""
-
-    def __init__(self, api_token: str, project_key: str):
-        self.api_token = api_token
-        self.project_key = project_key
-        self.base_url = "https://app.launchdarkly.com/api/v2"
-        self.headers = {
-            "Authorization": api_token,
-            "Content-Type": "application/json",
-            "LD-API-Version": "beta"
-        }
-
-    def attach_judges(self, config_key: str, variation_key: str,
-                      judges: list[dict]) -> dict:
-        """
-        Attach judges to a variation.
-
-        Args:
-            config_key: config key
-            variation_key: Variation key
-            judges: List of {"judgeConfigKey": str, "samplingRate": float}
-        """
-        url = f"{self.base_url}/projects/{self.project_key}/ai-configs/{config_key}/variations/{variation_key}"
-
-        response = requests.patch(url, headers=self.headers, json={
-            "judgeConfiguration": {"judges": judges}
-        })
-
-        if response.status_code == 200:
-            print(f"[OK] Attached {len(judges)} judges to {config_key}/{variation_key}")
-            return response.json()
-        print(f"[ERROR] {response.status_code}: {response.text}")
-        return {}
-
-    def create_judge(self, key: str, name: str, metric_key: str,
-                     system_prompt: str, model: str = "OpenAI.gpt-4o-mini",
-                     is_inverted: bool = False) -> dict:
-        """
-        Create a judge config.
-
-        Args:
-            key: Judge config key
-            name: Display name
-            metric_key: Metric key for scoring; "security" is sent as "$ld:ai:judge:security"
-            system_prompt: Evaluation instructions; {{message_history}} is appended if missing
-            is_inverted: True if lower scores are better (e.g., toxicity)
-        """
-        # The API rejects a bare metric key
-        if not metric_key.startswith("$ld:ai:judge:"):
-            metric_key = f"$ld:ai:judge:{metric_key}"
-
-        # Create config
-        config_url = f"{self.base_url}/projects/{self.project_key}/ai-configs"
-        response = requests.post(config_url, headers=self.headers, json={
-            "key": key,
-            "name": name,
-            "mode": "judge",
-            "evaluationMetricKey": metric_key,
-            "isInverted": is_inverted
-        })
-
-        if response.status_code not in [200, 201]:
-            print(f"[ERROR] Creating config: {response.text}")
-            return {}
-
-        # Without {{message_history}} the judge never sees the conversation it scores
-        if "{{message_history}}" not in system_prompt:
-            system_prompt = f"{system_prompt}\n\n{{{{message_history}}}}"
-
-        # Create variation
-        var_url = f"{self.base_url}/projects/{self.project_key}/ai-configs/{key}/variations"
-        response = requests.post(var_url, headers=self.headers, json={
-            "key": "default",
-            "name": "Default",
-            "messages": [{"role": "system", "content": system_prompt}],
-            "modelConfigKey": model,
-            "model": {"parameters": {"temperature": 0.3}}
-        })
-
-        if response.status_code in [200, 201]:
-            print(f"[OK] Created judge: {key}")
-            return response.json()
-        print(f"[ERROR] Creating variation: {response.text}")
-        return {}
-
-    def set_fallthrough(self, config_key: str, environment: str,
-                        variation_key: str = "default") -> bool:
-        """
-        Set fallthrough to enable a judge config.
-
-        Note: turnTargetingOn doesn't work for configs. Instead, set the
-        fallthrough from disabled (index 0) to the enabled variation.
-        """
-        # Get variation ID
-        url = f"{self.base_url}/projects/{self.project_key}/ai-configs/{config_key}/targeting"
-        response = requests.get(url, headers=self.headers)
-
-        if response.status_code != 200:
-            print(f"[ERROR] {response.status_code}: {response.text}")
-            return False
-
-        targeting = response.json()
-        variation_id = None
-        for var in targeting.get("variations", []):
-            # The variation key is in value._ldMeta.variationKey, not on the item itself
-            meta_key = ((var.get("value") or {}).get("_ldMeta") or {}).get("variationKey")
-            if meta_key == variation_key or var.get("name") == variation_key:
-                variation_id = var.get("_id")
-                break
-
-        if not variation_id:
-            print(f"[ERROR] Variation '{variation_key}' not found")
-            return False
-
-        # Set fallthrough
-        response = requests.patch(url, headers={
-            **self.headers,
-            "Content-Type": "application/json; domain-model=launchdarkly.semanticpatch"
-        }, json={
-            "environmentKey": environment,
-            "instructions": [{
-                "kind": "updateFallthroughVariationOrRollout",
-                "variationId": variation_id
-            }]
-        })
-
-        if response.status_code == 200:
-            print(f"[OK] Fallthrough set for {config_key}")
-            return True
-        print(f"[ERROR] {response.status_code}: {response.text}")
-        return False
-```
 
 ## SDK: Inline Evaluation
 
@@ -430,7 +287,7 @@ Evaluation metrics integrate with:
 |--------|-------|----------|
 | 404 | Config/variation not found | Verify keys exist |
 | 400 | Invalid judge config | Check judgeConfigKey exists |
-| 403 | Insufficient permissions | Reconnect the MCP server, or check the API token's permissions |
+| 403 | Insufficient permissions | Ask the user to reconnect the LaunchDarkly connector as a member who can change AgentControl configs |
 | 422 | Duplicate metric key | Cannot attach multiple judges with same metric key |
 
 ## Next Steps

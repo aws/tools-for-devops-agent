@@ -47,7 +47,7 @@ A systematic safety check to determine whether a feature flag can be safely remo
 
 ### 4. Code References
 
-**Check:** If available, use `check-removal-readiness` which includes code reference statistics. Otherwise, use `get-code-references` to find repositories that reference this flag.
+**Check:** Use `check-removal-readiness`, which includes code reference statistics.
 
 **Pass criteria:**
 - No code references found, or references only exist in the current repository (about to be cleaned up)
@@ -83,7 +83,7 @@ After running the checklist, categorize the result:
 
 ### Safe
 All checks pass. No blockers or warnings.
-- Recommend proceeding with code removal using the [flag cleanup skill](../../launchdarkly-flag-cleanup/SKILL.md)
+- Recommend removing the flag from the code
 - Suggest archival in LaunchDarkly after code changes are deployed
 
 ### Caution

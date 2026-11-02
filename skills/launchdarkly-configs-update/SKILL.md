@@ -20,14 +20,14 @@ You're using a skill that will guide you through updating, archiving, and deleti
 This skill requires the remotely hosted LaunchDarkly MCP server to be configured in your environment.
 
 **Required MCP tools:**
-- `get-ai-config-health` -- assess config health before making changes (detects missing models, orphaned tools, empty configs)
-- `get-ai-config` -- understand current state before making changes
-- `update-ai-config` -- update config metadata (name, description, tags, archive)
-- `update-ai-config-variation` -- update variation model, prompts, or parameters
+- `get-agentcontrol-config-health` -- assess config health before making changes (detects missing models, orphaned tools, empty configs)
+- `get-agentcontrol-config` -- understand current state before making changes
+- `update-agentcontrol-config` -- update config metadata (name, description, tags, archive)
+- `update-agentcontrol-config-variation` -- update variation model, prompts, or parameters
 
 **Optional MCP tools:**
-- `delete-ai-config` -- permanently delete a config (irreversible)
-- `delete-ai-config-variation` -- permanently delete a variation (irreversible)
+- `delete-agentcontrol-config` -- permanently delete a config (irreversible)
+- `delete-agentcontrol-config-variation` -- permanently delete a variation (irreversible)
 
 ## Core Principles
 
@@ -39,7 +39,7 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 
 ### Step 1: Assess Health and Understand Current State
 
-Start with `get-ai-config-health` to get a structured health assessment. This detects:
+Start with `get-agentcontrol-config-health` to get a structured health assessment. This detects:
 - Variations with no model (show as "NO MODEL" in the UI)
 - Variations with neither instructions nor messages
 - Orphaned tool references (tools attached that don't exist in the project)
@@ -47,7 +47,7 @@ Start with `get-ai-config-health` to get a structured health assessment. This de
 
 The health verdict (`healthy`, `warning`, `unhealthy`) helps you prioritize what to fix.
 
-Then use `get-ai-config` to review the full detail:
+Then use `get-agentcontrol-config` to review the full detail:
 - Current mode (agent or completion)
 - Existing variations and their models
 - Current instructions or messages
@@ -55,28 +55,28 @@ Then use `get-ai-config` to review the full detail:
 
 ### Step 2: Make the Update
 
-**Update config metadata** -- Use `update-ai-config`:
+**Update config metadata** -- Use `update-agentcontrol-config`:
 - Change name or description
 - Add or replace tags
 - Archive with `archived: true` (reversible)
 
-**Update a variation** -- Use `update-ai-config-variation`:
+**Update a variation** -- Use `update-agentcontrol-config-variation`:
 - Switch model (provide new `modelConfigKey` and `modelName`)
 - Change instructions or messages
 - Tune parameters (temperature, max_tokens, etc.)
 - Attach or detach tools via the parameters object
 
-**Archive a config** -- Use `update-ai-config` with `archived: true`. Archiving is the **preferred** way to retire a config:
+**Archive a config** -- Use `update-agentcontrol-config` with `archived: true`. Archiving is the **preferred** way to retire a config:
 - It is reversible (unarchive with `archived: false`)
 - The config is hidden from active lists but preserved
 - After calling the archive, treat a successful response as confirmation and proceed to verification
 - When a user says "remove", "retire", "decommission", or "no longer need", default to archiving unless they explicitly say "delete permanently"
 
-**Delete** -- Use `delete-ai-config` or `delete-ai-config-variation` (irreversible, requires `confirm: true`). **Always suggest archiving first.** Only proceed with deletion if the user explicitly confirms they want permanent, irreversible removal.
+**Delete** -- Use `delete-agentcontrol-config` or `delete-agentcontrol-config-variation` (irreversible, requires `confirm: true`). **Always suggest archiving first.** Only proceed with deletion if the user explicitly confirms they want permanent, irreversible removal.
 
 ### Step 3: Verify
 
-Use `get-ai-config` to confirm the response shows your updated values.
+Use `get-agentcontrol-config` to confirm the response shows your updated values.
 
 **Report results:**
 - Update applied successfully
@@ -89,7 +89,7 @@ Use `get-ai-config` to confirm the response shows your updated values.
 - Don't change multiple things at once -- make incremental changes
 - Don't skip verification
 - Don't delete without explicit user confirmation -- always suggest archiving first
-- Don't retry an update because the API response doesn't echo back the exact values you sent -- verify with `get-ai-config` instead
+- Don't retry an update because the API response doesn't echo back the exact values you sent -- verify with `get-agentcontrol-config` instead
 
 ## More resources
 

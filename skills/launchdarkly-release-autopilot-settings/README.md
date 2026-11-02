@@ -37,7 +37,6 @@ Which GitHub repos are mapped for Release Autopilot, and which can I map?
 
 ## Related
 
-- [LaunchDarkly Flag Create](../../feature-flags/launchdarkly-flag-create/): Create flags after Release Autopilot is mapped
 - [LaunchDarkly MCP Server](https://github.com/launchdarkly/mcp-server)
 - [LaunchDarkly Docs](https://docs.launchdarkly.com)
 

@@ -6,8 +6,8 @@ An Agent Skill for creating and managing config variations to experiment with di
 
 This skill teaches agents how to:
 - Design experiments (model comparison, prompt optimization, parameter tuning)
-- Create variations using `clone-ai-config-variation` (recommended) or `create-ai-config-variation`
-- Verify variations exist with correct configuration via `get-ai-config`
+- Create variations using `clone-agentcontrol-config-variation` (recommended) or `create-agentcontrol-config-variation`
+- Verify variations exist with correct configuration via `get-agentcontrol-config`
 
 ## Installation (Local)
 

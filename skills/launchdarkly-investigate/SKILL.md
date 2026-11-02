@@ -52,7 +52,7 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 - **Prefer aggregation over pagination.** If you want to list unique users, count distinct values, or summarize, use `query-aggregations` with `group_by` — don't paginate through individual records. Use `get-keys` to discover the right grouping dimension first.
 - **Call `get-keys` before attribute filters.** Attribute names vary across product types and services (`spanName` vs `span_name`, `hasErrors` vs `has_errors`). One `get-keys` call upfront prevents wasted queries with wrong field names.
 - **Cite specific identifiers.** Every recommendation should reference the exact flag key, service name, session ID, trace ID, or file path you pulled from the data. The user should be able to act on your summary without redoing your investigation.
-- **Handle large tool outputs.** When a tool result is persisted to a file (you'll see "Output too large ... Full output saved to: <path>"), do NOT use Read — it has the same token limit. Use Bash with `python3` or `jq` to extract the specific slice you need.
+- **Handle large tool outputs.** When a result is too large to use, don't page through it. Narrow the query instead: shorten the time range, add attribute filters, or summarize with `query-aggregations`.
 - **Graceful degradation on tool failure.** If a tool call fails (buffer overflow, timeout, server error), don't end silently. Try an alternative tool or approach. If nothing works, deliver what you've found so far plus concrete next steps the user can take manually.
 - **Handling vague requests.** "Investigate this" or "what's going on" is an invitation to dig, not to summarize. Iterate tool calls until you have a root cause or have exhausted the available data.
 

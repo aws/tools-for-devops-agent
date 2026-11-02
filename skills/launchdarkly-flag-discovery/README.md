@@ -53,7 +53,6 @@ launchdarkly-flag-discovery/
 
 ## Related
 
-- [LaunchDarkly Flag Cleanup](../launchdarkly-flag-cleanup/): Remove flags from code after discovery identifies candidates
 - [LaunchDarkly MCP Server](https://github.com/launchdarkly/mcp-server)
 - [LaunchDarkly Docs](https://docs.launchdarkly.com)
 

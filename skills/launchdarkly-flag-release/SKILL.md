@@ -19,11 +19,11 @@ This is the **release step** of the PR flag workflow, and it's deliberately atom
 
 | Step | Owned by |
 |------|----------|
-| Decide *whether* to flag | [`launchdarkly-should-flag-change`](../launchdarkly-should-flag-change/SKILL.md) (advisory) |
-| Create the flag + wire the code | [`launchdarkly-flag-create`](../launchdarkly-flag-create/SKILL.md) |
+| Decide *whether* to flag | Done before this skill runs (advisory) |
+| Create the flag + wire the code | Done before this skill runs, in the pull request |
 | **Record the release** | **this skill** |
 
-By the time this skill runs, the flag exists (OFF) and the guarding code is wired and pushed. This skill only records the rollout — it never creates flags or edits code. It can be driven directly by an automation harness, or as the final step of the [`launchdarkly-flag-and-release-change`](../launchdarkly-flag-and-release-change/SKILL.md) orchestrator.
+By the time this skill runs, the flag exists (OFF) and the guarding code is wired and pushed. This skill only records the rollout — it never creates flags or edits code. It can be driven directly by an automation harness, or as the final step of a larger flag workflow.
 
 **The deploy is not the release.** The merge ships the control path (flag OFF); the *release* is the flag operation this rollout performs afterward, governed by the environment's policy.
 
@@ -47,7 +47,7 @@ Full release model — `simple` vs `policy`, precedence, previewing, prerequisit
 
 **Record nothing in this phase.**
 
-1. **Confirm the flag.** `get-flag` to verify the guarding flag exists and is OFF. If it doesn't exist yet, stop — creation is [`launchdarkly-flag-create`](../launchdarkly-flag-create/SKILL.md)'s job, and recording a rollout for a missing flag fails confusingly.
+1. **Confirm the flag.** `get-flag` to verify the guarding flag exists and is OFF. If it doesn't exist yet, stop — the flag has to be created and wired into the code first, and recording a rollout for a missing flag fails confusingly.
 2. **Pick the target environments.** Use the environments named by the user or harness. Don't hardcode a set — a given change can't always release to every environment. If none are named, enumerate the project's real keys and confirm the set rather than assuming.
 3. **Preview each environment's policy.** Call `match-release-policies` (by `flagKey` + `environmentKey`) to resolve, deterministically, what a `policy` release will do per environment — `winningReleaseMethod` (immediate / progressive / guarded / none). Don't reason about policy scope by hand. For a **guarded** winner, check the auto-attached metrics can actually compare this change (see the metric-adequacy note in [references/auto-release.md](references/auto-release.md)).
 4. **Capture the human's release intent.** Ask (briefly, only if not already stated): release **on merge**, **hold** (recorded but not released yet), or wait until a **`notBefore`** date? A **cohort/segment** to target first? A **prerequisite** parent flag this must not precede? Intent sits above the policy in precedence and is **honored or explicitly held — never silently dropped**.
@@ -90,7 +90,7 @@ Only after confirmation:
 
 | Situation | Action |
 |-----------|--------|
-| Flag doesn't exist yet | Stop — creation is `launchdarkly-flag-create`. Recording a rollout for a missing flag fails confusingly. |
+| Flag doesn't exist yet | Stop — the flag has to be created first. Recording a rollout for a missing flag fails confusingly. |
 | A rollout config already exists for this flag + PR | Don't record a second one — a duplicate confuses the scheduler. Point the user at the existing config to change the plan. |
 | Registering before the PR exists | `simple` envs work without a PR, but `policy` envs need `repoFullName`/`prNumber` to trigger on merge. Prefer recording *after* the PR is open; if you record early, say `policy` won't fire until the PR is wired. |
 | No release policy matches an env | `policy` falls back to defaults (often immediate). Tell the user; offer `simple`, or point at release-policy setup. |
@@ -100,7 +100,7 @@ Only after confirmation:
 
 ## What NOT to Do
 
-- **Don't create the flag or edit code** — that's `launchdarkly-flag-create`. This skill only records the release.
+- **Don't create the flag or edit code.** This skill only records the release.
 - **Don't turn the flag on yourself, or toggle it after recording the config.** The rollout owns that; double-toggling causes audit noise and confuses the scheduler.
 - **Don't skip `match-release-policies`.** Proposing `policy` without knowing what it resolves to is guessing.
 - **Don't silently release against a stated hold/`notBefore`.** Honor intent or hold — never drop it.

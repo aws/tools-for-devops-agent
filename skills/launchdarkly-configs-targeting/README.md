@@ -1,15 +1,15 @@
 # LaunchDarkly Config Targeting Skill
 
-An Agent Skill for configuring config targeting rules via the LaunchDarkly API.
+An Agent Skill for configuring config targeting rules through the LaunchDarkly MCP server.
 
 ## Overview
 
 This skill teaches agents how to:
-- Turn targeting on/off for configs
-- Add attribute-based targeting rules
-- Configure percentage rollouts for A/B testing
 - Set fallthrough (default) variations
+- Split default traffic by percentage for A/B testing
+- Add attribute-based targeting rules
 - Target individual contexts or segments
+- Roll a config back to an earlier variation
 
 ## Installation (Local)
 
@@ -17,9 +17,8 @@ Copy `skills/agentcontrol/configs-targeting/` into your agent client's skills pa
 
 ## Prerequisites
 
-- LaunchDarkly API access token with `ai-configs:write` permission
+- The LaunchDarkly MCP server, connected as a member who can change config targeting
 - Existing config with variations (use `launchdarkly-configs-create` skill)
-- Understanding of contexts (see `context-basic` skill)
 
 ## Usage
 

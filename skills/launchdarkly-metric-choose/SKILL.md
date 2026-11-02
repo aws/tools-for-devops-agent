@@ -171,8 +171,8 @@ ADDITIONAL — recommended for this rollout:
 ```
 
 Then close with next steps:
-- If a metric the user needs doesn't exist → use the **metric-create** skill
-- If an event isn't flowing → use the **metric-instrument** skill
+- If a metric the user needs doesn't exist → create it with `create-metric`
+- If an event isn't flowing → the application doesn't send it yet: tell the user which event key needs a `track()` call
 - Once the list is confirmed → configure the guarded rollout or experiment (via the LaunchDarkly UI or API)
 
 ## Important Context
@@ -185,5 +185,5 @@ Then close with next steps:
 
 ## Related Skills
 
-- [`launchdarkly-metric-create`](../launchdarkly-metric-create/SKILL.md) — create a metric that doesn't exist yet
-- [`launchdarkly-metric-instrument`](../launchdarkly-metric-instrument/SKILL.md) — add a `track()` call so events start flowing
+- [`launchdarkly-experiment-setup`](../launchdarkly-experiment-setup/SKILL.md) — create and run an experiment with the chosen metrics
+- [`launchdarkly-guarded-rollout`](../launchdarkly-guarded-rollout/SKILL.md) — start a guarded rollout that watches them

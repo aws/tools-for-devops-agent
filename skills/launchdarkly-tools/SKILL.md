@@ -21,8 +21,8 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 
 **Required MCP tools:**
 - `create-ai-tool` -- create a new tool definition with a schema
-- `update-ai-config-variation` -- attach tools to a config variation
-- `get-ai-config` -- verify tools are attached to the variation
+- `update-agentcontrol-config-variation` -- attach tools to a config variation
+- `get-agentcontrol-config` -- verify tools are attached to the variation
 
 **Optional MCP tools:**
 - `list-ai-tools` -- browse existing tools in the project
@@ -48,8 +48,8 @@ What should the agent be able to do?
 If the user asks to check existing tools first, or you have no codebase context about what tools exist, follow this exact order:
 1. `list-ai-tools` -- explore what exists
 2. `create-ai-tool` -- create the new tool (with a key different from existing ones)
-3. `update-ai-config-variation` -- attach it
-4. `get-ai-config` -- verify
+3. `update-agentcontrol-config-variation` -- attach it
+4. `get-agentcontrol-config` -- verify
 
 Call `list-ai-tools` as your **first** tool call before any creation. Never stop after listing alone -- always proceed through all four steps.
 
@@ -73,7 +73,7 @@ Use `create-ai-tool` with:
 
 ### Step 3: Attach to Variation
 
-Use `update-ai-config-variation` to attach tools. **Pass only the `tools` field.** Do not bundle `instructions`, `messages`, `model`, or `parameters` into this PATCH unless the user has explicitly asked you to also update those fields. Those fields may have been edited in the LaunchDarkly UI since the variation was created, and including them in a tool-attachment PATCH will silently clobber the UI edits.
+Use `update-agentcontrol-config-variation` to attach tools. **Pass only the `tools` field.** Do not bundle `instructions`, `messages`, `model`, or `parameters` into this PATCH unless the user has explicitly asked you to also update those fields. Those fields may have been edited in the LaunchDarkly UI since the variation was created, and including them in a tool-attachment PATCH will silently clobber the UI edits.
 
 ```json
 {
@@ -86,12 +86,12 @@ Use `update-ai-config-variation` to attach tools. **Pass only the `tools` field.
 }
 ```
 
-If you observe a UI-clear bug where attaching tools wipes other fields, **do not work around it by re-sending those fields from the previous `get-ai-config` response** — that masks the bug and can resurrect stale values that the user has since edited. Report the bug instead.
+If you observe a UI-clear bug where attaching tools wipes other fields, **do not work around it by re-sending those fields from the previous `get-agentcontrol-config` response** — that masks the bug and can resurrect stale values that the user has since edited. Report the bug instead.
 
 ### Step 4: Verify
 
 1. Use `get-ai-tool` to confirm the tool exists with a valid schema
-2. Use `get-ai-config` to confirm the tool is attached to the variation (check `tools` in the variation's output)
+2. Use `get-agentcontrol-config` to confirm the tool is attached to the variation (check `tools` in the variation's output)
 
 **Report results:**
 - Tool created with valid schema
@@ -213,14 +213,6 @@ for _ in range(MAX_STEPS):
         })
     messages.append({"role": "user", "content": tool_results})
 ```
-
-Per-provider tool-call payload shapes live in the `launchdarkly-built-in-metrics` references:
-
-- [openai-tracking.md](../launchdarkly-built-in-metrics/references/openai-tracking.md) — Chat Completions + Responses API
-- [anthropic-tracking.md](../launchdarkly-built-in-metrics/references/anthropic-tracking.md) — `tool_use` blocks and `tool_result` payloads
-- [bedrock-tracking.md](../launchdarkly-built-in-metrics/references/bedrock-tracking.md) — `toolUse` / `toolResult` Converse format
-- [gemini-tracking.md](../launchdarkly-built-in-metrics/references/gemini-tracking.md) — `functionCalls` / `functionResponse` parts
-- [langchain-tracking.md](../launchdarkly-built-in-metrics/references/langchain-tracking.md) — LangGraph tool loop inherits from `create_react_agent`
 
 ## Orchestrator Note
 

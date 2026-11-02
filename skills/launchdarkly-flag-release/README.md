@@ -10,7 +10,7 @@ This skill teaches agents how to:
 - Capture the human's **release intent** (release on merge / hold / `notBefore` / segment / prerequisite) and honor it — recording only the environments the intent clears, holding the rest
 - Record the rollout with `create-automated-rollout-config`
 
-It operates entirely through the LaunchDarkly MCP tools: it never creates flags or edits code. It's the **release step** of the PR flag workflow — after [`launchdarkly-flag-create`](../launchdarkly-flag-create/) has created and wired the flag.
+It operates entirely through the LaunchDarkly MCP tools: it never creates flags or edits code. It's the **release step** of the PR flag workflow, after the flag has been created and wired into the code.
 
 ## Installation (Local)
 
@@ -41,9 +41,6 @@ launchdarkly-flag-release/
 
 ## Related
 
-- [Should Flag Change](../launchdarkly-should-flag-change/): Decide whether a change needs a flag
-- [LaunchDarkly Flag Create](../launchdarkly-flag-create/): Create + wire the flag
-- [Flag & Release a PR Change](../launchdarkly-flag-and-release-change/): The end-to-end orchestrator that composes this skill
 - [LaunchDarkly Guarded Rollout](../launchdarkly-guarded-rollout/): Drive a bespoke rollout by hand
 - [LaunchDarkly Docs](https://docs.launchdarkly.com)
 

@@ -1,7 +1,7 @@
 ---
 name: launchdarkly-configs-targeting
-description: Configure config targeting rules to control which variations serve to different users. Enable percentage rollouts, attribute-based rules, segment targeting, and guarded rollouts.
-compatibility: Requires LaunchDarkly API access token with ai-configs:write permission.
+description: Configure AgentControl config targeting to control which variation each context receives. Set the default rule or a percentage split, add attribute and segment rules, target individual contexts, and roll a config back to an earlier variation.
+compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: "nieblara"
   version: "1.0.0"
@@ -17,13 +17,28 @@ Configure targeting rules for configs to control which variations serve to diffe
 ## Prerequisites
 
 - LaunchDarkly account with AgentControl enabled
-- API access token with write permissions
+- The LaunchDarkly MCP server, connected as a member who can change config targeting in the environment
 - Project key and environment key
 - Existing config with variations (use `launchdarkly-configs-create` skill)
 
 ## API Access
 
 Use the LaunchDarkly MCP server tools: they authenticate with the connection the customer set up. If a step has no MCP tool, tell the user which change to make in the LaunchDarkly UI instead. Never ask the user for an API access token.
+
+## Tools
+
+| Tool | Use it to |
+|------|-----------|
+| `get-agentcontrol-config-targeting` | Read the variations, individual targets, rules, default rule and off variation in one environment (read-only) |
+| `get-agentcontrol-config` | Read variation keys and what each variation contains (read-only) |
+| `get-agentcontrol-config-status-envs` | See where the config is active before you change it (read-only) |
+| `update-agentcontrol-config-rollout` | Set the default rule: one variation, or a percentage split |
+| `update-agentcontrol-config-targeting` | Add, remove, reorder or replace custom rules and their clauses |
+| `update-agentcontrol-config-targets` | Add or remove individual contexts |
+| `create-agentcontrol-config-approval` | Submit a change for review when the environment requires approval |
+| `query-change-history` | Find earlier targeting changes, with `resourceKind: "aiconfig"` (read-only) |
+
+The update tools change what live traffic receives. Before calling one, tell the user what the config serves now and what will change, and wait for their confirmation.
 
 ## Core Concepts
 
@@ -32,320 +47,109 @@ Use the LaunchDarkly MCP server tools: they authenticate with the connection the
 Targeting rules evaluate in this order (same as feature flags):
 
 1. **Individual targets** - Specific context keys (highest priority)
-2. **Segment rules** - Pre-defined segments
-3. **Custom rules** - Attribute-based conditions (evaluated in order)
-4. **Default rule** - Fallthrough for all others
-5. **Off variation** - When targeting is disabled
+2. **Custom rules** - Attribute or segment conditions, top to bottom; the first match wins
+3. **Default rule** - Fallthrough for all others
 
-### Semantic Patch API
-
-config targeting uses semantic patch instructions:
-
-```
-PATCH /api/v2/projects/{projectKey}/ai-configs/{configKey}/targeting
-Content-Type: application/json; domain-model=launchdarkly.semanticpatch
-```
+Targeting for a config is always on. `toggle-agentcontrol-config` and the `turnTargetingOn` instruction always fail; to start serving a variation, change the default rule.
 
 ### Key Concepts
 
-- **variationId**: UUIDs, not keys. Always fetch targeting first to get IDs.
-- **Weights**: Thousandths (50000 = 50%, 100000 = 100%)
+- **variationKey**: Every update tool takes a variation key from `get-agentcontrol-config`, or a variation name from `get-agentcontrol-config-targeting`. You don't need variation UUIDs or indexes.
+- **Percentages**: `update-agentcontrol-config-rollout` takes whole percentages that sum to 100.
 - **Clause logic**: Multiple clauses = AND, multiple values = OR
 - **Null attributes**: Rules with null/missing attributes are skipped
+- **Approvals**: When the environment requires approval, an update tool makes no change and returns `requiresApproval: true` with the instructions to submit (Step 5).
 
 ## Workflow
 
-### Step 1: Get Targeting (with Variation IDs)
+### Step 1: Read the Current Targeting
 
-```bash
-curl -X GET "https://app.launchdarkly.com/api/v2/projects/{projectKey}/ai-configs/{configKey}/targeting" \
-  -H "Authorization: {api_token}" \
-  -H "LD-API-Version: beta"
-```
-
-Response includes `variations` array with `_id` (UUID) for each variation.
+Call `get-agentcontrol-config-targeting` with the project key, config key and environment key. Note the variation names, each rule's `ruleId` and `clauseId` values, and what the default rule serves. Call `get-agentcontrol-config` if you need variation keys.
 
 ### Step 2: Edit the Default Rule
 
-Edit the default rule to serve the variation you created.
+Call `update-agentcontrol-config-rollout`:
 
-> **Important:** The `turnTargetingOn` instruction does not work for configs. Use `updateFallthroughVariationOrRollout` instead.
+- To serve one variation to every context no rule matches: `rolloutType: "variation"` and `variationKey`.
+- To split that traffic: `rolloutType: "percentage"` with weights, for example `[{ "variationKey": "v1-gpt4o", "percent": 80 }, { "variationKey": "v2-claude", "percent": 20 }]`.
 
-```bash
-# First, get variation IDs from Step 1 response
-# Then set fallthrough to the enabled variation (e.g., "Default" variation)
-curl -X PATCH "https://app.launchdarkly.com/api/v2/projects/{projectKey}/ai-configs/{configKey}/targeting" \
-  -H "Authorization: {api_token}" \
-  -H "Content-Type: application/json; domain-model=launchdarkly.semanticpatch" \
-  -H "LD-API-Version: beta" \
-  -d '{
-    "environmentKey": "production",
-    "instructions": [{
-      "kind": "updateFallthroughVariationOrRollout",
-      "variationId": "your-enabled-variation-uuid"
-    }]
-  }'
-```
+> **Important:** A new config's default rule serves an auto-generated disabled variation. Until you point the default rule at a real variation, the SDK returns `enabled=False` to every context.
+
+The response returns the stored default rule and `previousFallthrough`. Tell the user both, so they can undo the change.
 
 ### Step 3: Add Targeting Rules
 
+Call `update-agentcontrol-config-targeting` with one or more instructions. The kinds are `addRule`, `removeRule`, `addClauses`, `removeClauses`, `reorderRules`, `replaceRules`, `updateRuleDescription`, `addValuesToClause`, `removeValuesFromClause` and `updateClause`. Take `ruleId` and `clauseId` from Step 1.
+
 **Attribute-based rule:**
 
-```bash
-curl -X PATCH "https://app.launchdarkly.com/api/v2/projects/{projectKey}/ai-configs/{configKey}/targeting" \
-  -H "Authorization: {api_token}" \
-  -H "Content-Type: application/json; domain-model=launchdarkly.semanticpatch" \
-  -H "LD-API-Version: beta" \
-  -d '{
-    "environmentKey": "production",
-    "instructions": [{
-      "kind": "addRule",
-      "clauses": [{
-        "contextKind": "user",
-        "attribute": "selectedModel",
-        "op": "contains",
-        "values": ["sonnet"],
-        "negate": false
-      }],
-      "variation": 0
-    }]
-  }'
+```json
+{
+  "kind": "addRule",
+  "variationKey": "sonnet",
+  "clauses": [{
+    "contextKind": "user",
+    "attribute": "selectedModel",
+    "op": "contains",
+    "values": ["sonnet"],
+    "negate": false
+  }]
+}
 ```
 
-**Percentage rollout:**
+**Segment rule:**
 
-```bash
-curl -X PATCH "..." \
-  -d '{
-    "environmentKey": "production",
-    "instructions": [{
-      "kind": "addRule",
-      "clauses": [{
-        "contextKind": "user",
-        "attribute": "tier",
-        "op": "in",
-        "values": ["premium"],
-        "negate": false
-      }],
-      "percentageRolloutConfig": {
-        "contextKind": "user",
-        "bucketBy": "key",
-        "variations": [
-          {"variation": 0, "weight": 60000},
-          {"variation": 1, "weight": 40000}
-        ]
-      }
-    }]
-  }'
+```json
+{
+  "kind": "addRule",
+  "variationKey": "experimental",
+  "clauses": [{
+    "contextKind": "",
+    "attribute": "segmentMatch",
+    "op": "segmentMatch",
+    "values": ["beta-testers"],
+    "negate": false
+  }]
+}
 ```
 
-**Set fallthrough (default rule):**
+Leave `contextKind` blank for segment clauses.
 
-```bash
-curl -X PATCH "..." \
-  -d '{
-    "environmentKey": "production",
-    "instructions": [{
-      "kind": "updateFallthroughVariationOrRollout",
-      "variationId": "fallback-variation-uuid"
-    }]
-  }'
+To change which variation an existing rule serves, send `replaceRules` with every rule in order, each with its `variationKey` and clauses. `replaceRules` overwrites all rules, so build the list from the rules Step 1 returned.
+
+Each rule serves one variation. For a percentage split inside a rule, or a progressive or guarded rollout of a config, tell the user to make the change in the LaunchDarkly UI.
+
+### Step 4: Target Individual Contexts
+
+Call `update-agentcontrol-config-targets`. The kinds are `addTargets`, `removeTargets`, `clearTargets` and `replaceTargets`:
+
+```json
+{
+  "kind": "addTargets",
+  "variationKey": "v1-gpt4o",
+  "contextKind": "user",
+  "values": ["user-key-1"]
+}
 ```
 
-## Python Implementation
+Individual targets override every rule.
 
-```python
-import requests
-import os
-from typing import Dict, List, Optional
+### Step 5: Submit for Approval When Required
 
-class AIConfigTargeting:
-    """Manager for config targeting rules"""
+If an update tool returns `requiresApproval: true`, the change wasn't made. Ask the user who should review it; if they name a person, find their member ID with `find-members`. Then call `create-agentcontrol-config-approval` with the environment key, the reviewers and the returned instructions. A person approves the request in LaunchDarkly; once it's approved, `apply-agentcontrol-config-approval` applies it. `list-agentcontrol-config-approvals` shows its progress.
 
-    def __init__(self, api_token: str, project_key: str):
-        self.api_token = api_token
-        self.project_key = project_key
-        self.base_url = "https://app.launchdarkly.com/api/v2"
+### Step 6: Verify
 
-    def get_targeting(self, config_key: str) -> Optional[Dict]:
-        """Get current targeting with variation IDs."""
-        url = f"{self.base_url}/projects/{self.project_key}/ai-configs/{config_key}/targeting"
+Call `get-agentcontrol-config-targeting` again and confirm that the default rule, rules and individual targets match the request. `get-agentcontrol-config-health` reports, for each environment, whether the config serves a variation that isn't disabled.
 
-        response = requests.get(url, headers={
-            "Authorization": self.api_token,
-            "LD-API-Version": "beta"
-        })
+## Roll Back a Config
 
-        if response.status_code == 200:
-            return response.json()
-        print(f"[ERROR] {response.status_code}: {response.text}")
-        return None
+When a variation misbehaves, for example after a model or prompt change:
 
-    def get_variation_id(self, config_key: str, variation_key: str) -> Optional[str]:
-        """Look up variation UUID from key or name."""
-        targeting = self.get_targeting(config_key)
-        if targeting:
-            for var in targeting.get("variations", []):
-                if var.get("key") == variation_key or var.get("name") == variation_key:
-                    return var.get("_id")
-        return None
-
-    def update_targeting(self, config_key: str, environment: str,
-                         instructions: List[Dict], comment: str = "") -> Optional[Dict]:
-        """Send semantic patch instructions."""
-        url = f"{self.base_url}/projects/{self.project_key}/ai-configs/{config_key}/targeting"
-
-        payload = {"environmentKey": environment, "instructions": instructions}
-        if comment:
-            payload["comment"] = comment
-
-        response = requests.patch(url, headers={
-            "Authorization": self.api_token,
-            "Content-Type": "application/json; domain-model=launchdarkly.semanticpatch",
-            "LD-API-Version": "beta"
-        }, json=payload)
-
-        if response.status_code == 200:
-            return response.json()
-        print(f"[ERROR] {response.status_code}: {response.text}")
-        return None
-
-    def enable_config(self, config_key: str, environment: str,
-                      variation_key: str = "default") -> bool:
-        """
-        Enable a config by setting fallthrough to an enabled variation.
-
-        Note: turnTargetingOn doesn't work for configs. Instead, set the
-        fallthrough from the disabled variation (index 0) to an enabled one.
-        """
-        variation_id = self.get_variation_id(config_key, variation_key)
-        if not variation_id:
-            print(f"[ERROR] Variation '{variation_key}' not found")
-            return False
-        return self.set_fallthrough(config_key, environment, variation_id)
-
-    def add_rule(self, config_key: str, environment: str,
-                 clauses: List[Dict], variation: int,
-                 description: str = "") -> bool:
-        """Add targeting rule serving a specific variation index."""
-        instruction = {
-            "kind": "addRule",
-            "clauses": clauses,
-            "variation": variation
-        }
-        if description:
-            instruction["description"] = description
-
-        result = self.update_targeting(config_key, environment,
-            [instruction], f"Add rule: {description}")
-        if result:
-            print(f"[OK] Rule added")
-            return True
-        return False
-
-    def add_rollout_rule(self, config_key: str, environment: str,
-                         clauses: List[Dict],
-                         weights: List[Dict],
-                         bucket_by: str = "key") -> bool:
-        """
-        Add percentage rollout rule.
-
-        weights: [{"variation": 0, "weight": 50000}, {"variation": 1, "weight": 50000}]
-        """
-        result = self.update_targeting(config_key, environment, [{
-            "kind": "addRule",
-            "clauses": clauses,
-            "percentageRolloutConfig": {
-                "contextKind": "user",
-                "bucketBy": bucket_by,
-                "variations": weights
-            }
-        }], "Add percentage rollout")
-        if result:
-            print(f"[OK] Rollout rule added")
-            return True
-        return False
-
-    def set_fallthrough(self, config_key: str, environment: str,
-                        variation_id: str) -> bool:
-        """Set default (fallthrough) variation by UUID."""
-        result = self.update_targeting(config_key, environment, [{
-            "kind": "updateFallthroughVariationOrRollout",
-            "variationId": variation_id
-        }], "Set fallthrough")
-        if result:
-            print(f"[OK] Fallthrough set")
-            return True
-        return False
-
-    def target_individuals(self, config_key: str, environment: str,
-                          context_keys: List[str], variation: int,
-                          context_kind: str = "user") -> bool:
-        """Target specific context keys."""
-        result = self.update_targeting(config_key, environment, [{
-            "kind": "addTargets",
-            "variation": variation,
-            "contextKind": context_kind,
-            "values": context_keys
-        }], f"Target {len(context_keys)} individuals")
-        if result:
-            print(f"[OK] Individual targets added")
-            return True
-        return False
-
-    def target_segment(self, config_key: str, environment: str,
-                      segment_keys: List[str], variation: int) -> bool:
-        """Target a segment."""
-        result = self.update_targeting(config_key, environment, [{
-            "kind": "addRule",
-            "clauses": [{
-                "attribute": "segmentMatch",
-                "contextKind": "",  # Leave blank for segments
-                "op": "segmentMatch",
-                "values": segment_keys,
-                "negate": False
-            }],
-            "variation": variation
-        }], f"Target segments: {segment_keys}")
-        if result:
-            print(f"[OK] Segment targeting added")
-            return True
-        return False
-
-    def clear_rules(self, config_key: str, environment: str) -> bool:
-        """Remove all targeting rules."""
-        result = self.update_targeting(config_key, environment,
-            [{"kind": "replaceRules", "rules": []}], "Clear all rules")
-        if result:
-            print(f"[OK] All rules cleared")
-            return True
-        return False
-```
-
-## Instruction Reference
-
-> **Note:** `turnTargetingOn` and `turnTargetingOff` do not work for configs. Configs have targeting enabled by default. To "enable" a config, set the fallthrough to an enabled variation using `updateFallthroughVariationOrRollout`.
-
-### Rules
-| Kind | Description |
-|------|-------------|
-| `addRule` | Add rule with clauses and variation/rollout |
-| `removeRule` | Remove by ruleId |
-| `replaceRules` | Replace all rules |
-| `reorderRules` | Change evaluation order |
-| `updateRuleVariationOrRollout` | Update what a rule serves |
-
-### Fallthrough
-| Kind | Description |
-|------|-------------|
-| `updateFallthroughVariationOrRollout` | Set default variation or rollout |
-
-### Individual Targets
-| Kind | Description |
-|------|-------------|
-| `addTargets` | Target specific context keys |
-| `removeTargets` | Remove specific targets |
-| `replaceTargets` | Replace all targets |
+1. Call `get-agentcontrol-config-targeting` to find what serves the variation: individual targets, a rule or the default rule.
+2. Find the variation that served before with `query-change-history` (`resourceKind: "aiconfig"`, `resourceKey` set to the config key, and the environment). If the history doesn't show it, ask the user which variation to restore.
+3. If the default rule serves it, call `update-agentcontrol-config-rollout` with `rolloutType: "variation"` and the earlier variation's key. If a rule or individual targets serve it, change that rule (Step 3) or those targets (Step 4).
+4. Verify as in Step 6, and tell the user what you changed.
 
 ## Operators Reference
 
@@ -377,110 +181,15 @@ class AIConfigTargeting:
 - Multiple values = OR (any can match)
 - `negate: true` inverts the operator
 
-## Rollout Types
-
-### Manual Percentage Rollout
-```json
-{
-  "percentageRolloutConfig": {
-    "contextKind": "user",
-    "bucketBy": "key",
-    "variations": [
-      {"variation": 0, "weight": 50000},
-      {"variation": 1, "weight": 50000}
-    ]
-  }
-}
-```
-
-### Progressive Rollout
-```json
-{
-  "progressiveRolloutConfig": {
-    "contextKind": "user",
-    "controlVariation": 1,
-    "endVariation": 0,
-    "steps": [
-      {"rolloutWeight": 1000, "duration": {"quantity": 4, "unit": "hour"}},
-      {"rolloutWeight": 5000, "duration": {"quantity": 4, "unit": "hour"}},
-      {"rolloutWeight": 10000, "duration": {"quantity": 4, "unit": "hour"}}
-    ]
-  }
-}
-```
-
-### Guarded Rollout
-```json
-{
-  "guardedRolloutConfig": {
-    "randomizationUnit": "user",
-    "stages": [
-      {"rolloutWeight": 1000, "monitoringWindowMilliseconds": 17280000},
-      {"rolloutWeight": 5000, "monitoringWindowMilliseconds": 17280000}
-    ],
-    "metrics": [{
-      "metricKey": "error-rate",
-      "onRegression": {"rollback": true},
-      "regressionThreshold": 0.01
-    }]
-  }
-}
-```
-
-## Common Patterns
-
-### Model Routing by Attribute
-```python
-# Route based on selectedModel context attribute
-targeting.add_rule(
-    config_key="model-selector",
-    environment="production",
-    clauses=[{
-        "contextKind": "user",
-        "attribute": "selectedModel",
-        "op": "contains",
-        "values": ["sonnet"],
-        "negate": False
-    }],
-    variation=0,  # Sonnet variation index
-    description="Route sonnet requests"
-)
-```
-
-### Tier-Based Variation
-```python
-targeting.add_rule(
-    config_key="chat-assistant",
-    environment="production",
-    clauses=[{
-        "contextKind": "user",
-        "attribute": "tier",
-        "op": "in",
-        "values": ["premium", "enterprise"],
-        "negate": False
-    }],
-    variation=0  # Premium model variation
-)
-```
-
-### Segment Targeting
-```python
-targeting.target_segment(
-    config_key="chat-assistant",
-    environment="production",
-    segment_keys=["beta-testers"],
-    variation=1  # Experimental variation
-)
-```
-
 ## Error Handling
 
-| Status | Cause | Solution |
+| Result | Cause | Solution |
 |--------|-------|----------|
-| 400 | Invalid semantic patch | Check instruction format, ops must be lowercase |
-| 403 | Insufficient permissions | Check API token |
-| 404 | Config not found | Verify projectKey and configKey |
-| 422 | Invalid variation | Use index (0, 1, 2...) or UUID from targeting response |
+| `requiresApproval: true` | The environment requires approval | Submit the change for review (Step 5) |
+| 400 | Invalid instruction | Check the instruction kind and the clause `op`, which is case-sensitive |
+| 403 | The connected member can't change this config's targeting | Ask the user to reconnect the LaunchDarkly connector as a member with that access |
+| 404 | Config not found | Verify projectKey and configKey with `list-agentcontrol-configs` |
+| Unknown variation | `variationKey` matches no variation | Use a key from `get-agentcontrol-config` or a name from `get-agentcontrol-config-targeting` |
 
 ## Next Steps
 
@@ -489,20 +198,16 @@ After configuring targeting:
    ```
    https://app.launchdarkly.com/projects/{projectKey}/ai-configs/{configKey}
    ```
-2. **Monitor performance** with `launchdarkly-built-in-metrics`
+2. **Check health** with `get-agentcontrol-config-health`
 3. **Attach judges** with `launchdarkly-online-evals`
-4. **Set up guarded rollouts** for automatic regression detection
 
 ## Related Skills
 
 - `launchdarkly-configs-create` - Create configs with variations
 - `launchdarkly-configs-variations` - Manage variations
 - `launchdarkly-online-evals` - Attach judges
-- `segments` - Create segments for targeting
 
 ## Other Resources
 
 - [Target with AgentControl](https://docs.launchdarkly.com/home/ai-configs/target.md)
 - [Targeting Rules](https://docs.launchdarkly.com/home/flags/target-rules.md)
-- [JSON Targeting](https://docs.launchdarkly.com/home/flags/json-targeting.md)
-- [Guarded Rollouts](https://docs.launchdarkly.com/home/releases/guarded-rollouts.md)

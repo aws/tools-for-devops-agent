@@ -53,7 +53,6 @@ launchdarkly-flag-command/
 
 - [LaunchDarkly Flag Discovery](../launchdarkly-flag-discovery/) — Audit and assess flag health
 - [LaunchDarkly Flag Targeting](../launchdarkly-flag-targeting/) — Change rollouts and targeting
-- [LaunchDarkly Flag Cleanup](../launchdarkly-flag-cleanup/) — Remove stale flags safely
 - [LaunchDarkly MCP Server](https://github.com/launchdarkly/mcp-server)
 - [LaunchDarkly Docs](https://docs.launchdarkly.com)
 

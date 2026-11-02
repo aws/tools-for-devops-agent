@@ -60,7 +60,6 @@ launchdarkly-flag-targeting/
 
 ## Related
 
-- [LaunchDarkly Flag Create](../launchdarkly-flag-create/): Create flags before targeting them
 - [LaunchDarkly Flag Discovery](../launchdarkly-flag-discovery/): Audit flags and understand the landscape
 - [LaunchDarkly MCP Server](https://github.com/launchdarkly/mcp-server)
 - [LaunchDarkly Docs](https://docs.launchdarkly.com)

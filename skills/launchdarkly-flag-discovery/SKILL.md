@@ -83,7 +83,7 @@ Use `get-flag-status-across-envs` to check if a flag is consistent across enviro
 
 Group flags into actionable categories:
 
-1. **Ready to remove**: Inactive everywhere, temporary, no dependencies. Direct the user to the [flag cleanup skill](../launchdarkly-flag-cleanup/SKILL.md) for code removal.
+1. **Ready to remove**: Inactive everywhere, temporary, no dependencies. Tell the user to remove the flag from their code, then archive it in LaunchDarkly.
 2. **Likely safe, needs verification**: Launched (fully rolled out), no rule changes recently. The user should confirm the rollout is intentionally complete.
 3. **Needs investigation**: Active in some environments but not others, or has complex targeting. Don't recommend action without more context.
 4. **Leave alone**: Active flags doing their job, or permanent flags that are intentionally long-lived.
@@ -114,7 +114,7 @@ Structure your response based on what the user asked for:
 - **"Inactive" doesn't always mean safe to remove.** The flag might be used in code that hasn't shipped yet, or referenced as a prerequisite by another flag.
 - **Permanent flags can be inactive on purpose.** Some flags are designed to be dormant until needed (kill switches, emergency toggles). Don't automatically flag these for cleanup.
 - **Weights are scaled by 1000 in the API.** A weight of `60000` means 60%. Always convert to human-readable percentages.
-- **This skill is for discovery, not action.** If the user wants to remove a flag from code, direct them to the [flag cleanup skill](../launchdarkly-flag-cleanup/SKILL.md). If they want to change targeting, direct them to the [flag targeting skill](../launchdarkly-flag-targeting/SKILL.md).
+- **This skill is for discovery, not action.** If the user wants to remove a flag from code, that's a change to their repository, which this skill doesn't make. If they want to change targeting, direct them to the [flag targeting skill](../launchdarkly-flag-targeting/SKILL.md).
 
 ## References
 

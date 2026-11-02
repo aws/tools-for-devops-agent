@@ -2,7 +2,7 @@
 name: launchdarkly-custom-metrics
 description: "Create, track, retrieve, update, and delete custom business metrics for configs. Covers full lifecycle: define metrics with the LaunchDarkly MCP server, emit events via SDK, and query results."
 license: Apache-2.0
-compatibility: Requires the remotely hosted LaunchDarkly MCP server to create and read metrics. Updating or deleting a metric needs a LaunchDarkly API token with the `writer` role. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
+compatibility: Requires the remotely hosted LaunchDarkly MCP server to create and read metrics. Updating or deleting a metric is done in the LaunchDarkly UI. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
 metadata:
   author: "nieblara"
   version: "1.0.0"
@@ -13,18 +13,16 @@ metadata:
 
 # Custom Metrics for Configs
 
-Full lifecycle management of custom business metrics: create metric definitions with the MCP server, track events via SDK, retrieve metric data, and manage metrics programmatically.
+Full lifecycle management of custom business metrics: create metric definitions with the MCP server, track events via SDK, retrieve metric data, and update or delete metrics.
 
 ## Prerequisites
 
-- LaunchDarkly AI SDK initialized (see `sdk-install`). The SDK reads `LD_SDK_KEY` from the environment.
+- LaunchDarkly AI SDK initialized in the application that sends the events. The SDK reads `LD_SDK_KEY` from the environment.
 - The remotely hosted LaunchDarkly MCP server configured in your environment
-- A LaunchDarkly API token with the `writer` role, only to update or delete metrics, or for scripts that can't use MCP
-- Understanding of built-in agent metrics (see `launchdarkly-built-in-metrics`)
 
 ## API Access
 
-Use the LaunchDarkly MCP server tools wherever one exists: they authenticate via OAuth and need no token. Create metrics with `create-metric`, check that events are arriving with `list-metric-events`, and read definitions with `get-metric` and `list-metrics`. The MCP server can't update or delete metrics, so those steps use the REST API. For them, or for scripts that can't use MCP, ask the user to paste an API access token for this session and substitute it for `{api_token}` in the examples below. Do not search environment variables, `.env` files, or agent/MCP config files for credentials.
+Use the LaunchDarkly MCP server tools: they authenticate with the connection the customer set up. Create metrics with `create-metric`, check that events are arriving with `list-metric-events`, and read definitions with `get-metric` and `list-metrics`. The MCP server can't update or delete metrics, so tell the user which change to make in the LaunchDarkly UI instead. Never ask the user for an API access token.
 
 ## Metrics Lifecycle Overview
 
@@ -32,9 +30,9 @@ Use the LaunchDarkly MCP server tools wherever one exists: they authenticate via
 |------|--------|---------|
 | 1. Create | MCP `create-metric` | Define metric in LaunchDarkly |
 | 2. Track | SDK | Send events to the metric |
-| 3. Get | MCP `get-metric`, `list-metrics` | Retrieve metric definition/data |
-| 4. Update | API | Modify metric properties |
-| 5. Delete | API | Remove metric |
+| 3. Get | MCP `get-metric`, `list-metrics`, `list-metric-events` | Retrieve metric definition/data |
+| 4. Update | LaunchDarkly UI | Modify metric properties |
+| 5. Delete | LaunchDarkly UI | Remove metric |
 
 ## 1. Create Metric
 
@@ -56,71 +54,6 @@ Call `create-metric`. `eventKey` must match the key your code passes to `track()
 ```
 
 `measureType` is `count` (how many times the event fired), `occurrence` (whether each user fired it at all), or `value` (a number sent with the event). Then confirm with `get-metric`.
-
-### Scripts without MCP
-
-The REST API equivalent:
-
-**Required fields for numeric custom metrics:**
-- `successCriteria` - Must be one of: `"HigherThanBaseline"`, `"LowerThanBaseline"`
-- `unit` - e.g., `"count"`, `"percent"`, `"milliseconds"`
-
-The API will return `400 Bad Request` if these are missing for numeric metrics.
-
-```python
-import requests
-import os
-
-def create_metric(
-    project_key: str,
-    metric_key: str,
-    name: str,
-    kind: str = "custom",
-    is_numeric: bool = True,
-    unit: str = "count",
-    success_criteria: str = "HigherThanBaseline",
-    event_key: str = None,
-    description: str = None
-):
-    """Create a new metric definition in LaunchDarkly."""
-    API_TOKEN = "{api_token}"  # token the user provided for this session
-
-    url = f"https://app.launchdarkly.com/api/v2/metrics/{project_key}"
-
-    payload = {
-        "key": metric_key,
-        "name": name,
-        "kind": kind,
-        "isNumeric": is_numeric,
-        "eventKey": event_key or metric_key
-    }
-
-    # Unit and successCriteria are required for numeric custom metrics
-    if is_numeric and kind == "custom":
-        payload["unit"] = unit
-        payload["successCriteria"] = success_criteria
-
-    if description:
-        payload["description"] = description
-
-    headers = {
-        "Authorization": API_TOKEN,
-        "Content-Type": "application/json"
-    }
-
-    response = requests.post(url, json=payload, headers=headers)
-
-    if response.status_code == 201:
-        print(f"[OK] Created metric: {metric_key}")
-        return response.json()
-    elif response.status_code == 409:
-        print(f"[INFO] Metric already exists: {metric_key}")
-        return None
-    else:
-        print(f"[ERROR] Failed to create metric: {response.status_code}")
-        print(f"        {response.text}")
-        return None
-```
 
 **Metric Kinds:**
 - `custom` - Track any event (most common for agent metrics)
@@ -251,177 +184,15 @@ def track_revenue(ld_client, user_id: str, revenue: float, source: str):
 
 ## 3. Get Metrics
 
-Use `get-metric` for one metric and `list-metrics` for all of them. After you start tracking, `list-metric-events` shows which event keys have arrived and when, which is the fastest way to catch an `eventKey` that doesn't match `track()`. The REST equivalents for scripts:
+Use `get-metric` for one metric and `list-metrics` for all of them. After you start tracking, `list-metric-events` shows which event keys have arrived and when, which is the fastest way to catch an `eventKey` that doesn't match `track()`.
 
-### Get Single Metric
+## 4. Update Metric
 
-```python
-def get_metric(project_key: str, metric_key: str):
-    """Get a single metric definition."""
-    API_TOKEN = "{api_token}"  # token the user provided for this session
+The MCP server has no tool to update a metric. Tell the user to open the metric on the **Metrics** page in the LaunchDarkly UI and change it there, then confirm the result with `get-metric`.
 
-    url = f"https://app.launchdarkly.com/api/v2/metrics/{project_key}/{metric_key}"
+## 5. Delete Metric
 
-    headers = {"Authorization": API_TOKEN}
-
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        metric = response.json()
-        print(f"[OK] Metric: {metric['key']}")
-        print(f"     Name: {metric.get('name', 'N/A')}")
-        print(f"     Kind: {metric.get('kind', 'N/A')}")
-        print(f"     Numeric: {metric.get('isNumeric', False)}")
-        print(f"     Event Key: {metric.get('eventKey', 'N/A')}")
-        return metric
-    elif response.status_code == 404:
-        print(f"[INFO] Metric not found: {metric_key}")
-        return None
-    else:
-        print(f"[ERROR] Failed to get metric: {response.status_code}")
-        return None
-```
-
-### List All Metrics
-
-```python
-def list_metrics(project_key: str, limit: int = 20):
-    """List all metrics in a project."""
-    API_TOKEN = "{api_token}"  # token the user provided for this session
-
-    url = f"https://app.launchdarkly.com/api/v2/metrics/{project_key}"
-
-    headers = {"Authorization": API_TOKEN}
-    params = {"limit": limit}
-
-    response = requests.get(url, headers=headers, params=params)
-
-    if response.status_code == 200:
-        data = response.json()
-        metrics = data.get("items", [])
-        print(f"[OK] Found {len(metrics)} metrics:")
-        for metric in metrics:
-            numeric = "numeric" if metric.get("isNumeric") else "non-numeric"
-            print(f"     - {metric['key']} ({metric.get('kind', 'custom')}, {numeric})")
-        return metrics
-    else:
-        print(f"[ERROR] Failed to list metrics: {response.status_code}")
-        return None
-```
-
-## 4. Update Metric (API)
-
-```python
-def update_metric(project_key: str, metric_key: str, updates: list):
-    """
-    Update a metric using JSON Patch operations.
-
-    Args:
-        updates: List of patch operations, e.g.:
-            [{"op": "replace", "path": "/name", "value": "New Name"}]
-    """
-    API_TOKEN = "{api_token}"  # token the user provided for this session
-
-    url = f"https://app.launchdarkly.com/api/v2/metrics/{project_key}/{metric_key}"
-
-    headers = {
-        "Authorization": API_TOKEN,
-        "Content-Type": "application/json"
-    }
-
-    response = requests.patch(url, json=updates, headers=headers)
-
-    if response.status_code == 200:
-        print(f"[OK] Updated metric: {metric_key}")
-        return response.json()
-    elif response.status_code == 404:
-        print(f"[ERROR] Metric not found: {metric_key}")
-        return None
-    else:
-        print(f"[ERROR] Failed to update metric: {response.status_code}")
-        print(f"        {response.text}")
-        return None
-
-# Example: Update metric name and description
-def rename_metric(project_key: str, metric_key: str, new_name: str, new_description: str = None):
-    """Rename a metric and optionally update description."""
-    updates = [
-        {"op": "replace", "path": "/name", "value": new_name}
-    ]
-    if new_description:
-        updates.append({"op": "replace", "path": "/description", "value": new_description})
-
-    return update_metric(project_key, metric_key, updates)
-```
-
-## 5. Delete Metric (API)
-
-```python
-def delete_metric(project_key: str, metric_key: str):
-    """Delete a metric from the project."""
-    API_TOKEN = "{api_token}"  # token the user provided for this session
-
-    url = f"https://app.launchdarkly.com/api/v2/metrics/{project_key}/{metric_key}"
-
-    headers = {"Authorization": API_TOKEN}
-
-    response = requests.delete(url, headers=headers)
-
-    if response.status_code == 204:
-        print(f"[OK] Deleted metric: {metric_key}")
-        return True
-    elif response.status_code == 404:
-        print(f"[INFO] Metric not found: {metric_key}")
-        return False
-    else:
-        print(f"[ERROR] Failed to delete metric: {response.status_code}")
-        return False
-```
-
-## Complete Workflow Example
-
-```python
-import asyncio
-from ldclient import Context
-from launchdarkly_ai_server import get_client, init_client, shutdown
-
-API_TOKEN = "{api_token}"  # token the user provided for this session
-PROJECT_KEY = "support-ai"
-
-async def main():
-    # 1. Create metric
-    create_metric(
-        PROJECT_KEY,
-        "ai.task.completion",
-        name="Agent Task Completion Rate",
-        kind="custom",
-        is_numeric=True,
-        description="Tracks successful agent task completions"
-    )
-
-    # 2. Track events
-    await init_client()  # reads LD_SDK_KEY
-    ld_client = get_client()
-    context = Context.builder("user-123").build()
-    ld_client.track("ai.task.completion", context, metric_value=1.0)
-    ld_client.track("ai.task.completion", context, metric_value=1.0)
-    ld_client.track("ai.task.completion", context, metric_value=0.0)  # failure
-    await shutdown()  # flushes events, then closes the client
-
-    # 3. Get metric definition
-    metric = get_metric(PROJECT_KEY, "ai.task.completion")
-
-    # 4. Update metric name
-    rename_metric(PROJECT_KEY, "ai.task.completion", "Agent Task Success Rate")
-
-    # 5. List all metrics
-    list_metrics(PROJECT_KEY)
-
-    # 6. Delete metric (when no longer needed)
-    # delete_metric(PROJECT_KEY, "ai.task.completion")
-
-asyncio.run(main())
-```
+The MCP server has no tool to delete a metric either. Call `get-metric` first: it reports how many flags the metric is attached to. Tell the user what depends on it, then have them delete it on the **Metrics** page in the LaunchDarkly UI.
 
 ## Session Metrics Tracker
 
@@ -505,8 +276,8 @@ class SessionMetricsTracker:
 ## Best Practices
 
 1. **Create Before Track** - Metric must exist before tracking events
-2. **Use Numeric Metrics** - Set `isNumeric=True` for aggregation
-3. **Consistent Keys** - Use same key in `create_metric()` and `ld_client.track()`
+2. **Use Numeric Metrics** - Set `measureType` to `value` in `create-metric` for aggregation
+3. **Consistent Keys** - Use the same key as `eventKey` in `create-metric` and in `ld_client.track()`
 4. **Always shut down cleanly** - Call `await shutdown()` before your process exits. It flushes pending events and then closes the client. Trailing events are at risk of being lost otherwise, in short-lived scripts and long-running services alike. This is not a serverless-only rule; it applies to any process that exits.
 5. **Rate Limit** - Don't track on every keystroke
 
@@ -516,12 +287,9 @@ Custom metrics appear in:
 - **Metrics** page in LaunchDarkly UI
 - **Monitoring tab** of your config
 - From the agent with the `get-metric`, `list-metrics`, and `list-metric-events` MCP tools
-- From scripts with `get_metric()` or `list_metrics()`
 
 ## Related Skills
 
-- `sdk-install` - SDK setup
-- `launchdarkly-built-in-metrics` - Built-in agent metrics (tokens, duration, cost)
 - `launchdarkly-online-evals` - Quality metrics via judges
 
 ## References

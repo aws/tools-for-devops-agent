@@ -16,7 +16,7 @@ Copy `skills/agentcontrol/online-evals/` into your agent client's skills path.
 
 ## Prerequisites
 
-- LaunchDarkly API access token with `ai-configs:write` permission
+- The LaunchDarkly MCP server, connected as a member who can change AgentControl configs
 - Existing config with variations (use `launchdarkly-configs-create` skill)
 - For custom judges: understanding of LLM-as-a-judge methodology
 

@@ -99,9 +99,8 @@ After returning the summary, check whether the user's request implies a deeper w
 
 | User intent | Route to |
 |---|---|
-| Create or modify a flag | [flag create skill](../launchdarkly-flag-create/SKILL.md) |
 | Change targeting or rollout | [flag targeting skill](../launchdarkly-flag-targeting/SKILL.md) |
-| "Is this safe to remove?", "Is this stale?", cleanup | [flag discovery](../launchdarkly-flag-discovery/SKILL.md) / [flag cleanup](../launchdarkly-flag-cleanup/SKILL.md) |
+| "Is this safe to remove?", "Is this stale?", cleanup | [flag discovery](../launchdarkly-flag-discovery/SKILL.md) |
 
 For removal/staleness questions specifically: follow the Scope Boundary instructions above — summary table only, then route. No verdict.
 

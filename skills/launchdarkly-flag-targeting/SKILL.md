@@ -129,7 +129,7 @@ When any mutation tool returns `requiresApproval: true`, the direct change was b
 - **Weights must sum to 100.** For percentage rollouts, the weights across all variations must total exactly 100.
 - **Rule ordering matters.** Rules evaluate top-to-bottom. Reordering rules can change behavior without changing any individual rule.
 - **Individual targets are highest priority.** They override all rules and the default. Adding someone as an individual target means rules don't apply to them.
-- **"Launched" flags are still ON.** A flag with status "launched" is serving a single variation to everyone. If you want to remove the flag, use the [cleanup skill](../launchdarkly-flag-cleanup/SKILL.md), not targeting changes.
+- **"Launched" flags are still ON.** A flag with status "launched" is serving a single variation to everyone. To remove the flag, remove it from the code and then archive it; targeting changes don't remove a flag.
 
 ## References
 

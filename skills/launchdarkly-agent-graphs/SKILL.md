@@ -27,8 +27,8 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 **Optional MCP tools:**
 - `update-agent-graph` -- modify edges, root config, or description
 - `delete-agent-graph` -- permanently remove a graph
-- `get-ai-config` -- inspect individual configs that serve as nodes
-- `create-ai-config` -- create new configs to use as graph nodes
+- `get-agentcontrol-config` -- inspect individual configs that serve as nodes
+- `create-agentcontrol-config` -- create new configs to use as graph nodes
 
 ## Core Concepts
 
@@ -81,14 +81,14 @@ Before creating anything:
 3. Define handoff data: what context does each edge carry?
 4. Identify the root config: which agent receives initial input?
 5. Check existing graphs with `list-agent-graphs` to avoid duplicates
-6. Check existing configs with `get-ai-config` to see what nodes already exist
+6. Check existing configs with `get-agentcontrol-config` to see what nodes already exist
 
 ### Step 2: Ensure Nodes Exist
 
 Each node in the graph must be an existing config. If configs don't exist yet:
-1. Use `create-ai-config` to create each agent config
+1. Use `create-agentcontrol-config` to create each agent config
 2. Set up variations with appropriate models and prompts for each agent's role
-3. Verify each config exists with `get-ai-config`
+3. Verify each config exists with `get-agentcontrol-config`
 
 ### Step 3: Create the Graph
 
@@ -140,7 +140,7 @@ Use `create-agent-graph` with:
 
 | Situation | Action |
 |-----------|--------|
-| Config doesn't exist yet | Create it first with `create-ai-config` before referencing in a graph |
+| Config doesn't exist yet | Create it first with `create-agentcontrol-config` before referencing in a graph |
 | Circular routing | Allowed but warn user — ensure there's a termination condition in the agent logic |
 | Single-node graph | Valid but unusual — consider if a graph is actually needed |
 | Updating edges | Use `update-agent-graph` — provide the complete new edge list |
