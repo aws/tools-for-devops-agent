@@ -10,7 +10,8 @@
     "trigger": null,
     "expected_output": {
       "result": "passed",
-      "reasoning": "The investigation's main hypothesis matches the expected root cause: NLB TCP idle timeout (350s/5m50s) matching the ~6 min idle pattern reported, with busy connections unaffected because traffic resets the timer. This aligns with the expected root cause of the documented 350-second TCP idle timeout causing resets, with the fix being keepalives/pool settings below 350s. The investigation appropriately labels this as an inferred hypothesis (\"almost certainly\" but not confirmed on live data), consistent with the expected output's note that it should be \"labelled as inferred... with the capture or metric that would confirm it.\" The investigation also notes the specific metric (TCP_ELB_Reset_Count) that would confirm it, matching the expected output's mention of a confirming metric.",
+      "reasoning": "The investigation's main hypothesis/root cause exactly matches the expected root cause: the NLB's 350-second TCP idle timeout (default) causes idle connections to be reset with TCP RST after ~6 minutes of inactivity, while busy connections survive. The agent correctly identifies the mechanism (idle flow tracking expiry leading to RST on next packet), notes the exact 350s value, and explicitly labels this as an unconfirmed hypothesis inferred from the pattern, along with what would be needed to confirm it (NLB ARN, reset count metrics, idle_timeout setting) - matching the expected output's framing of 'labelled as inferred... with the capture or metric that would confirm it.' Although the agent couldn't verify against the actual production NLB (due to account/region access issues), the causal mechanism identified is identical to the expected root cause.",
+      "evidence": "\"A Network Load Balancer stops tracking a TCP flow that is idle for 350 s (5 min 50 s, the default). The next packet on that connection gets a TCP RST. This matches resets after ~6 min idle while busy connections survive. Not confirmed: the database NLB, its TCP_ELB_Reset_Count metric and its tcp.idle_timeout.seconds setting were not reachable.\"",
       "confidence": "high"
     },
     "assertions": {
@@ -19,16 +20,16 @@
           "text": "The response recommends TCP keepalives or connection-pool idle settings shorter than the timeout",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The summary does not mention TCP keepalives or connection-pool idle settings anywhere. It only discusses the NLB's 350s idle timeout, the unhealthy target, and gaps in confirming the hypothesis (CloudTrail not permitted, database NLB not found). No remediation/recommendation section is present.",
-          "reasoning": "The assertion requires a recommendation of TCP keepalives or shorter connection-pool idle settings. The output contains no such recommendation; it is purely a diagnostic investigation summary with no remediation suggestions.",
+          "evidence": "The output's only recommendation-adjacent text is 'Next step: share its ARN or connect its account and region.' There is no mention of TCP keepalives or connection-pool idle timeout settings being shorter than the NLB idle timeout anywhere in the summary.",
+          "reasoning": "The assertion requires an explicit recommendation of TCP keepalives or shortening connection-pool idle settings below the NLB timeout. The output discusses the hypothesis that the 350s NLB idle timeout causes resets, and mentions the setting is configurable (60-6000s), but never recommends keepalives or adjusting pool idle settings as a remediation.",
           "confidence": "high"
         },
         {
           "text": "The response states what evidence would confirm the cause, such as the idle gap before the RST in a capture",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The Gaps section states 'the cause could not be confirmed on live data (e.g. TCP_ELB_Reset_Count rising when the resets happen)' which mentions a metric but not a packet-capture-based idle-gap-before-RST confirmation. No mention of capturing the idle gap before the RST in a network capture.",
-          "reasoning": "The assertion specifically calls out evidence like 'the idle gap before the RST in a capture' as an example of confirming evidence. The output only references TCP_ELB_Reset_Count metric rising as confirming evidence, not a packet capture showing the idle gap before the RST. This is a related but distinct type of evidence, so it does not satisfy the specific assertion about capture-based confirmation.",
+          "evidence": "The Gaps section lists 'Database NLB not found', 'CloudTrail not available', and 'AWS Config history access denied' with next steps like 'share its ARN or connect its account and region', but there is no statement describing what evidence (e.g., a packet capture showing the idle gap before the RST, or the TCP_ELB_Reset_Count metric correlating with ~350s idle) would confirm the hypothesis.",
+          "reasoning": "The assertion asks for an explicit statement of what evidence would confirm the cause, such as an idle gap before RST in a capture. The output mentions metrics and settings that 'were not reachable' but does not articulate what specific evidence (e.g., packet capture timing, metric correlation) would validate the hypothesis if it were obtained.",
           "confidence": "medium"
         },
         {
@@ -49,10 +50,10 @@
     }
   },
   "metrics": {
-    "runtime": "3m15s",
-    "cost": "$1.63",
+    "runtime": "2m6s",
+    "cost": "$1.05",
     "context_window": {
-      "utilization": "3.6%",
+      "utilization": "4.2%",
       "compaction_count": 0
     }
   }

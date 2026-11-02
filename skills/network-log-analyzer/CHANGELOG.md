@@ -38,13 +38,21 @@
 - `skill-eval` on the final files:
   - structure 100%;
   - best-practices 100% in 3 of 3 iterations;
-  - functional (3 iterations): expected output 29/30 with the skill vs 21/30 without, and
-    assertions 94/105 vs 62/105. The skill triggered on 30/30 positive runs and 0/12 negative
-    runs.
+  - functional (3 iterations, 10 positive and 5 negative evals): expected output 28/30 with
+    the skill vs 18/30 without, and assertions 87/105 vs 56/105. The skill triggered on 27/30
+    positive runs and 0/15 negative runs. The three misses are `dns-not-in-flow-logs`, a
+    boundary case with `aws-vpc-dns-investigation` that the agent answers correctly without
+    loading either skill.
 
   Results are committed with real resource IDs and names redacted.
 - Rules added after the first functional run: say when a flow log needs re-creating to add
   `pkt-*` fields, and always recommend keepalives for idle resets.
+- Scoped DNS to evidence only, so this skill doesn't compete with `aws-vpc-dns-investigation`:
+  - "DNS queries time out" removed from the description, which now excludes name-resolution
+    failures (NXDOMAIN, SERVFAIL, wrong answers);
+  - playbook 7 reads only DNS packets and flow-log gaps, and hands resolution problems off;
+  - a `should_trigger: false` eval for a private hosted zone NXDOMAIN, plus three negative
+    trigger queries.
 - Flow log references extended:
   - NODATA isn't activity;
   - a checklist for when nothing is logged in either direction;

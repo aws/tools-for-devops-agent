@@ -13,8 +13,8 @@
       "skill_loads_found": 1
     },
     "expected_output": {
-      "result": "failed",
-      "reasoning": "The expected output describes a specific technical explanation: on a zonal NAT gateway, traffic actually involves two flow log legs. The instance-to-NAT leg has srcaddr = instance IP and dstaddr = NAT private IP (10.0.0.9), which is visible even in the default log format without needing pkt-srcaddr/pkt-dstaddr. The key insight is that the user should look at records where dstaddr=10.0.0.9 (not srcaddr=10.0.0.9) to find the originating instance, since on the NAT-to-internet leg srcaddr is also the NAT IP (not useful). It also notes that flow log format cannot be modified in place; a new flow log is needed for pkt-dstaddr fields.\n\nThe agent's response instead went down an unrelated path: it tried to look up 10.0.0.9 as if it were an ENI's private IP, found no matching ENI, and concluded the instance might be terminated or in another account/region. It also incorrectly suggested checking pkt-srcaddr/pkt-dstaddr via extended format as a solution, but never explained the critical point that the user should instead query the instance-to-NAT leg (where dstaddr, not srcaddr, equals 10.0.0.9) which is visible in default format. The agent fundamentally misunderstood the question \u2014 it treated 10.0.0.9 as an IP to search for in ENI attachments rather than recognizing it as the NAT gateway's own private IP, which is the key to solving the problem (look at records with dstaddr=10.0.0.9 to find srcaddr = originating instance).\n\nThe response does mention the extended flow log format point somewhat (point 3), but misapplies it NAT-to-internet direction and doesn't correctly state that pkt-srcaddr on that leg is NOT the instance (it actually says this in an EKS/ECS context, not as the general case). It never clarifies that srcaddr=10.0.0.9 appearing for \"all internet traffic\" is expected because that's the outbound NAT leg, and that the instance would be found via the instance-to-NAT leg instead. This is a core misunderstanding of the NAT gateway flow log architecture that the expected output specifically addresses.\n\nOverall, the agent's response does not match the expected technical explanation and reaches different troubleshooting conclusions (ENI not found, suggests checking other regions) rather than correctly explaining the zonal NAT gateway dual-leg traffic pattern.",
+      "result": "passed",
+      "reasoning": "The agent's response correctly explains the two-leg flow log behavior on a zonal NAT gateway ENI: the instance\u2192NAT leg has srcaddr=instance, dstaddr=NAT IP (10.0.0.9), pkt-dstaddr=internet destination; the NAT\u2192internet leg has both srcaddr and pkt-srcaddr equal to the NAT IP, so pkt-srcaddr doesn't identify the instance on that leg. It correctly instructs to filter dstaddr=10.0.0.9 to find the instance on the default/v2 format (matching 'even in the default v2 log format \u2014 no custom fields needed'). It also notes a caveat about regional vs zonal NAT gateways, which is an appropriate nuance. The only point not explicitly addressed is the statement that 'the format of an existing flow log cannot be changed; adding pkt-dstaddr needs a new flow log' \u2014 but the agent does mention pkt-dstaddr is already present in default v2 format, which aligns with not needing format changes, and implicitly supports that no new flow log is needed since the default format already has what's needed. This is a close match substantively, covering all key technical conclusions expected.",
       "confidence": "high"
     },
     "assertions": {
@@ -22,49 +22,49 @@
         {
           "text": "The response identifies the instance as srcaddr on the instance-to-NAT leg (records whose dstaddr is the NAT private IP)",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "The response never explains the two-leg flow log concept (instance-to-NAT leg where srcaddr is the instance's private IP, vs NAT-to-internet leg). Instead it focuses on running describe-network-interfaces to find an ENI with private IP 10.0.0.9, discusses CloudTrail, pod/ECS networking, and flow log scope. There is no mention of filtering flow log records where dstaddr equals the NAT's private IP to find the originating instance's srcaddr.",
-          "reasoning": "The assertion requires the agent to identify that the instance can be found via records on the instance-to-NAT leg where dstaddr is the NAT's private IP. The agent's response does not contain this explanation at all; it takes a different approach entirely (looking up the ENI owning 10.0.0.9 directly).",
+          "passed": true,
+          "evidence": "\"To find the real instance, query the same NAT ENI's logs for the instance \u2192 NAT leg instead: filter dstaddr = 10.0.0.9. The srcaddr on those records is the instance.\"",
+          "reasoning": "The response explicitly identifies the instance as the srcaddr on records where dstaddr equals the NAT's private IP (the instance-to-NAT leg).",
           "confidence": "high"
         },
         {
           "text": "The response does not claim that pkt-srcaddr on the NAT-to-internet leg reveals the instance",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The response does mention pkt-srcaddr/pkt-dstaddr fields only in the context of 'a secondary layer of NAT (EKS pod networking, ECS awsvpc tasks)' and says 'it won't have the pkt-srcaddr/pkt-dstaddr fields needed to see the pre-translation address; you'd need a new flow log with the extended v5+ fields to catch that.' It does not claim that pkt-srcaddr on the NAT-to-internet leg itself reveals the instance's address in the primary scenario being discussed (finding an EC2 instance directly, not behind pod/ECS NAT).",
-          "reasoning": "The agent does not assert that pkt-srcaddr on the NAT-to-internet leg reveals the EC2 instance's address for the primary case. It only discusses pkt-srcaddr in the context of a secondary NAT layer (pods/containers) where it says the field is needed for pre-translation visibility, which is a different, more nuanced claim than directly claiming pkt-srcaddr reveals the instance on the standard leg.",
-          "confidence": "medium"
+          "evidence": "\"NAT \u2192 internet leg: srcaddr and pkt-srcaddr are both the NAT's own IP (10.0.0.9). The instance never appears on this leg \u2014 grouping by pkt-srcaddr here just returns the NAT again, every time.\"",
+          "reasoning": "The response explicitly states that pkt-srcaddr on the NAT-to-internet leg does NOT reveal the instance, contradicting the claim that it would. It directly addresses and refutes this misconception.",
+          "confidence": "high"
         },
         {
           "text": "The response notes the format of an existing flow log cannot be changed and a new flow log is required to add fields",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The response states 'you'd need a new flow log with the extended v5+ fields to catch that' but does not explicitly state that the format of an existing flow log cannot be changed and that a new flow log must therefore be created. It implies a new flow log is needed for extended fields, but never explicitly states that an existing flow log's format is immutable.",
-          "reasoning": "While the response hints at needing a new flow log for extended fields, it does not explicitly note that an existing flow log's format cannot be changed/edited - this specific point about immutability of existing flow log configuration is not addressed.",
-          "confidence": "medium"
+          "evidence": "The response does not mention that flow log format is immutable or that a new flow log must be created to add fields like pkt-srcaddr/pkt-dstaddr. It states 'This works even in the default v2 log format \u2014 no custom fields needed.'",
+          "reasoning": "The assertion requires the response to note that existing flow log format cannot be changed and a new one is needed to add fields. The agent instead claims no custom fields are needed at all, and never discusses modifying/creating flow logs to add fields. This substance is entirely absent.",
+          "confidence": "high"
         },
         {
           "text": "The NAT private IP is used as the destination filter",
           "evaluator": "regex",
-          "passed": false,
-          "evidence": "Pattern not found in the output"
+          "passed": true,
+          "evidence": "Matched 'dstaddr = 10.0.0.9'"
         }
       ],
       "summary": {
-        "passed": 1,
-        "failed": 3,
+        "passed": 3,
+        "failed": 1,
         "errored": 0,
         "low_confidence": 0,
         "total": 4,
-        "pass_rate": 0.25
+        "pass_rate": 0.75
       }
     }
   },
   "metrics": {
-    "runtime": "32s",
-    "cost": "$0.27",
+    "runtime": "21s",
+    "cost": "$0.18",
     "context_window": {
-      "utilization": "4.6%",
+      "utilization": "5.6%",
       "compaction_count": 0
     }
   }

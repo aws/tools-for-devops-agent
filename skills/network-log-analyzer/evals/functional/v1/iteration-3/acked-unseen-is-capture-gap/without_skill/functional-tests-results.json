@@ -10,7 +10,7 @@
     "trigger": null,
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent's response correctly explains that 'ACKed segment that wasn't captured' means the receiver ACKed data the capture process never saw, confirming capture-side loss rather than network loss. It explicitly states that few retransmissions alongside these warnings is 'the classic fingerprint of capture loss, not network loss' - directly matching the expected conclusion. It also recommends increasing the capture ring buffer size ('Increase capture ring buffer size (dumpcap -B 128 or larger)') which matches the 'larger capture buffer' suggestion, and implicitly touches on filtering/offload tuning (disabling GRO/LRO/TSO) which is in the spirit of 'tighter filter' recommendations. The only point not explicitly mentioned is that both warnings are 'common at capture start' - this specific nuance is missing, but the core substance (ACKed-unseen = capture miss, few retransmissions = not network loss, suggests larger buffer) is well covered.",
+      "reasoning": "The agent correctly concludes this is capture loss, not network loss, explaining that 'ACKed segment that wasn't captured' means the receiver ACKed data the capture never saw, and that few retransmissions indicates the data arrived fine (not network loss). It also discusses causes (offloads, capture buffer drops) and remedies, though it frames the primary cause as offloads/capture buffer rather than specifically 'capture start' timing, and suggests checking capture tool drop counters and disabling offloads rather than explicitly recommending a larger capture buffer or tighter filter. However, the core diagnostic conclusion matches closely: ACKed-unseen = capture miss, few retransmits = not network loss. The suggestion to check dumpcap/tshark drop stats implicitly points toward buffer issues, and disabling offloads is a reasonable alternative remedy. The essential reasoning aligns well with the expected output's key claims.",
       "confidence": "medium"
     },
     "assertions": {
@@ -19,24 +19,24 @@
           "text": "The response explains these warnings indicate the capture missed packets rather than network loss",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"These two expert-info warnings almost always mean the capture process missed packets, not that the network dropped them.\" and \"Few retransmissions alongside hundreds of these gap warnings is the classic fingerprint of capture loss, not network loss\"",
-          "reasoning": "The response explicitly and repeatedly states that these warnings indicate capture loss, not actual network packet loss, and explains the mechanism clearly.",
+          "evidence": "'this pattern is the classic signature of capture loss, not network loss' and 'TShark/Wireshark inferring a gap in the sequence numbers it recorded... they don't mean a gap occurred on the wire' and 'your capture just didn't see it.'",
+          "reasoning": "The response explicitly and repeatedly explains that the warnings indicate the capture tool missed packets rather than actual network loss, with clear reasoning tied to the low retransmission count.",
           "confidence": "high"
         },
         {
           "text": "The response suggests improving the capture, such as a larger buffer, a tighter filter, or a different capture point",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Increase capture ring buffer size (dumpcap -B 128 or larger) and re-run; if warnings shrink, it confirms buffer-overflow capture loss.\" Also: \"Try disabling offloads before capturing: ethtool -K eth0 gro off lro off tso off gso off\" and mentions capturing on the wrong point (bridge/veth/ENI) as a root cause.",
-          "reasoning": "The response explicitly suggests a larger buffer (-B 128), disabling offloads, and notes capturing at the wrong point (interface choice) as potential fixes, satisfying the assertion's examples of buffer size and capture point.",
+          "evidence": "'Capture buffer drops... if tshark/dfcap can't keep up, the kernel capture buffer (libpcap) drops packets' and 'Capturing on the wrong interface/point: e.g. capturing on a bonded/virtual interface or before offload reassembly, so you only see reassembled or partial frames.' Also suggests disabling offloads: 'disable them temporarily (ethtool -K eth0 lro off gro off tso off gso off) and recapture'.",
+          "reasoning": "The response discusses capture buffer limitations (implying need for larger buffer/better capture setup) and explicitly suggests checking/changing the capture point (wrong interface/point) as well as disabling offloads which is a capture-improvement action. This satisfies the assertion about suggesting improved capture setup, buffer, filter, or capture point.",
           "confidence": "high"
         },
         {
           "text": "The response does not conclude that the network is dropping packets",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Bottom line: with hundreds of these gaps but almost no real retransmissions, I'd bet this is tshark/dumpcap/NIC-ring capture loss on a loaded instance, not actual network packet loss.\"",
-          "reasoning": "The response explicitly concludes the opposite of network packet loss, attributing the issue to capture loss, and never asserts the network itself is dropping packets.",
+          "evidence": "'Short answer: probably not' (in response to 'Is the network dropping packets?') and 'if those are near zero, the NIC/network isn't dropping anything.'",
+          "reasoning": "The response directly answers 'probably not' to the question of whether the network is dropping packets, and throughout concludes the issue is capture-side, not network-side. It never concludes the network is dropping packets.",
           "confidence": "high"
         }
       ],

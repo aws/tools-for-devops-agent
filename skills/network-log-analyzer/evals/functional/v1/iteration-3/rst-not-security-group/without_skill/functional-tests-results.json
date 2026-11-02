@@ -10,8 +10,8 @@
     "trigger": null,
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent correctly answers \"No\" to opening the security group, explains that security groups silently drop traffic (no RST) whereas a RST,ACK indicates the packet reached the host and was actively refused (no listener on port or host firewall reject), and recommends checking the listener/bind address on 10.0.4.40. This matches the expected output precisely.",
-      "evidence": "\"when a security group blocks traffic, the packet is silently dropped at the VPC level \u2014 the client just sees a timeout... What you're seeing (RST,ACK coming back from 10.0.4.40 itself) means the SYN made it through... A RST,ACK on connect almost always means one of: Nothing is listening on port 8080... The service is bound to 127.0.0.1 only, not the 10.0.4.40 interface...\"",
+      "reasoning": "The agent correctly answered 'No' to opening the security group, explained that security groups drop traffic silently (causing timeouts) rather than sending RST, and that the observed RST,ACK indicates the host is reachable but either nothing is listening on port 8080 or a host-based firewall actively rejected the connection. It also suggests checking the listener/bind config, matching all key points of the expected output.",
+      "evidence": "\"security groups act as a silent packet filter... packets would be dropped before they ever reached the instance. What you're seeing is the opposite: an immediate RST,ACK from 10.0.4.40 itself... Nothing is listening on port 8080 on that host... A host-based firewall... Want me to check whether there's actually a process listening on port 8080 on that instance...\"",
       "confidence": "high"
     },
     "assertions": {
@@ -20,24 +20,24 @@
           "text": "The response explains that a security group does not send RST and drops traffic silently",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"when a security group blocks traffic, the packet is silently dropped at the VPC level \u2014 the client just sees a timeout, with no response at all from the remote host.\"",
-          "reasoning": "The agent explicitly states that security groups silently drop traffic (no RST), contrasting with the RST,ACK observed, which fulfills the assertion.",
+          "evidence": "\"security groups act as a silent packet filter. If a security group were blocking traffic to port 8080, your connection attempt would just hang and eventually time out \u2014 you'd see nothing come back, because the packets would be dropped before they ever reached the instance.\"",
+          "reasoning": "The response explicitly states that security groups silently drop traffic and would not produce an RST, directly addressing the assertion.",
           "confidence": "high"
         },
         {
           "text": "The response points to the listening service, bind address, or host firewall",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Nothing is listening on port 8080 on that host... A host-based firewall (iptables/nftables/firewalld) on 10.0.4.40 is explicitly rejecting... The service is bound to 127.0.0.1 only, not the 10.0.4.40 interface\"",
-          "reasoning": "The response explicitly lists all three possible causes: no listener, host firewall rejecting, and bind address issue, directly satisfying the assertion.",
+          "evidence": "\"1. Nothing is listening on port 8080 on that host... 2. A host-based firewall (iptables/nftables/firewalld on Linux, Windows Firewall, etc.) is configured to explicitly reject...\" and later \"Want me to check whether there's actually a process listening on port 8080 on that instance, or look at its security group / host firewall config to confirm?\"",
+          "reasoning": "The response explicitly identifies both the listening service possibility and host-based firewall as likely causes, satisfying the assertion.",
           "confidence": "high"
         },
         {
           "text": "The response does not recommend changing the security group as the fix",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"No, a security group change won't fix this\" and \"Opening the security group wider will have no effect since the SG isn't in the path of the problem.\"",
-          "reasoning": "The agent explicitly advises against changing the security group as the fix, directly satisfying the assertion.",
+          "evidence": "\"No \u2014 a security group change wouldn't fix this... So opening the security group wouldn't change anything \u2014 traffic is already getting through the SG layer. The problem is on the host itself.\"",
+          "reasoning": "The response explicitly advises against opening the security group as a fix, instead pointing to host-level issues.",
           "confidence": "high"
         }
       ],

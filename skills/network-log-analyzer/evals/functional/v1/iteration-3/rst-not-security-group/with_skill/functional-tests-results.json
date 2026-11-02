@@ -14,8 +14,8 @@
     },
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent correctly concluded \"No\" to opening the security group, explained that security groups/NACLs drop traffic silently (no response) while an RST,ACK indicates the packet reached the host and was actively refused at the TCP stack level \u2014 either because nothing is listening on port 8080 or a host-level firewall is rejecting it. It also recommended checking the listener (ss -ltnp | grep 8080) and host firewall rules. This matches the expected output's core claims: RST implies reachability and no listener/host firewall rejection, SGs drop silently without RST, and the fix is to check the listener/bind address.",
-      "evidence": "\"Security groups and NACLs drop blocked traffic *silently* \u2014 no response packet at all. An RST,ACK coming back from 10.0.4.40 means the SYN reached the host... and was *refused at the TCP stack level* \u2014 almost always because nothing is listening on port 8080, or a host-level firewall... check if a process is actually bound to 8080 (e.g. `ss -ltnp | grep 8080`)\"",
+      "reasoning": "The agent correctly answered \"No\" to opening the security group, explained that RST,ACK indicates the host was reached (reachable) and that security groups/NACLs drop silently without sending RST (matching the expected explanation), and identified the likely causes as nothing listening on the port or a host-based firewall rejecting it. This directly aligns with the expected output's core points: no SG change needed, RST implies reachability, SG drops silently, and the issue is likely a missing listener or host firewall. It also suggests checking for a listener, consistent with 'Check the listener and bind address.'",
+      "evidence": "\"No \u2014 don't touch the security group. An RST,ACK coming back from 10.0.4.40 means the packet *reached* that host and something there actively tore down the connection... Security groups and NACLs *drop silently*... Nothing is listening on port 8080 on 10.0.4.40 (most common cause of an immediate RST,ACK)\"",
       "confidence": "high"
     },
     "assertions": {
@@ -24,24 +24,24 @@
           "text": "The response explains that a security group does not send RST and drops traffic silently",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Security groups and NACLs drop blocked traffic *silently* \u2014 no response packet at all. An RST,ACK coming back from 10.0.4.40 means the SYN reached the host ... SG/NACL rejects never generate a packet back to the source.\"",
-          "reasoning": "The response explicitly states that security groups (and NACLs) silently drop traffic without sending any response packet, directly contrasting this with the RST,ACK behavior observed, which satisfies the assertion.",
+          "evidence": "\"Security groups and NACLs *drop silently* \u2014 a block on either one produces no response at all (you'd see a timeout, not an RST). A reset only comes from the host itself, a host-based firewall, or a router/LB in the path, never from an SG/NACL reject.\"",
+          "reasoning": "The response explicitly and clearly explains that SGs/NACLs drop silently (no RST) and that RST comes from the host/firewall, directly satisfying the assertion.",
           "confidence": "high"
         },
         {
           "text": "The response points to the listening service, bind address, or host firewall",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"almost always because nothing is listening on port 8080, or a host-level firewall (iptables/nftables/security agent) is rejecting it\" and later \"check if a process is actually bound to 8080 (e.g. `ss -ltnp | grep 8080`) and check host firewall rules\"",
-          "reasoning": "The response explicitly points to the listening service/bind address (via the ss -ltnp command to check if something is bound to port 8080) and host firewall as likely causes, satisfying this assertion clearly.",
+          "evidence": "\"Nothing is listening on port 8080 on 10.0.4.40 (most common cause of an immediate RST,ACK)\" and \"A host-based firewall (iptables/firewalld/Windows Firewall) on 10.0.4.40 explicitly rejecting the port\"",
+          "reasoning": "The response explicitly lists the listening service (nothing listening on the port) and host-based firewall as likely causes, satisfying the assertion.",
           "confidence": "high"
         },
         {
           "text": "The response does not recommend changing the security group as the fix",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"No \u2014 opening the security group won't fix this, and here's why.\" and \"adjusting the SG has nothing to act on here.\"",
-          "reasoning": "The response explicitly and directly states that opening the security group will not fix the issue and explains why, never recommending it as the fix. Instead it recommends checking the host-level listening process and firewall.",
+          "evidence": "\"No \u2014 don't touch the security group.\"",
+          "reasoning": "The response explicitly opens with a direct statement advising against changing the security group, and instead recommends read-only checks and investigating the host/service, never recommending opening the SG as the fix.",
           "confidence": "high"
         }
       ],
@@ -56,8 +56,8 @@
     }
   },
   "metrics": {
-    "runtime": "19s",
-    "cost": "$0.17",
+    "runtime": "12s",
+    "cost": "$0.11",
     "context_window": {
       "utilization": "4.4%",
       "compaction_count": 0

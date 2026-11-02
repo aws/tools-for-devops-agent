@@ -38,7 +38,9 @@ commands, so the agent reaches a consistent, evidence-backed root cause.
 - Locate the capture point from handshake timing, and separate capture artifacts from network
   faults
 - Diagnose path MTU black holes, idle-timeout resets (NLB and connection tracking), DNS
-  failures, and NAT/EKS original source IPs
+  packets that go unanswered in a capture, and NAT/EKS original source IPs. Name-resolution
+  failures (NXDOMAIN, SERVFAIL, wrong answers) are left to the `aws-vpc-dns-investigation`
+  skill.
 - Guide the user to export a small, header-only evidence set when the data isn't directly
   queryable
 

@@ -10,12 +10,12 @@
     "trigger": {
       "result": "passed",
       "message": "Skill 'network-log-analyzer' was triggered as expected",
-      "skill_loads_found": 2,
-      "warning": "Skill 'network-log-analyzer' was triggered 2 times"
+      "skill_loads_found": 1
     },
     "expected_output": {
       "result": "passed",
-      "reasoning": "The investigation correctly identifies the root cause as a Path MTU black hole on the Site-to-Site VPN tunnel, matching the expected root cause. It explains that full-size DF-set packets exceed the tunnel MTU and are silently dropped because no PMTUD/ICMP feedback returns, which aligns with the observed symptoms (large segments retransmitted, no ICMP, small calls working). It also references the AWS VPN MTU limits (1446/1406) as the basis for the inference, and names the confirming measurement (SYN MSS value, e.g., 1460/8961) exactly as expected. It also appropriately flags uncertainty about whether this specific tunnel is AWS-managed VPN vs. self-managed, but still arrives at the same underlying causal mechanism (PMTU black hole due to VPN overhead reducing effective MTU, with no ICMP feedback). This matches the expected root cause closely, including the key diagnostic signal cited (MSS in handshake) and the general mechanism described in the expectation.",
+      "reasoning": "The investigation's primary hypothesis/finding matches the expected root cause closely: it identifies a Path MTU black hole on the Site-to-Site VPN path, cites the AWS VPN MTU limit of 1446 bytes / MSS 1406 (adjusted for AES-CBC+NAT-T), explains that VPN has no PMTUD support so ICMP frag-needed messages don't arrive, and ties this to the observed symptoms (small calls succeed, large segments >1500B retransmitted, no ICMP). It also names a verification measurement (checking SYN MSS values or a DF ping at 1446) consistent with the expected 'names the measurement that would confirm it' criterion. While the investigation could not verify against actual AWS resources due to malformed instance ID and missing VPN connection info, the core causal hypothesis labeled explicitly as inferred matches the expected root cause description essentially verbatim in substance.",
+      "evidence": "\"Site-to-Site VPN supports at most 1446-byte packets / MSS 1406 (1422/1382 with AES-CBC + NAT-T), has no jumbo frames and no PMTUD, so missing ICMP is expected... Disproved if both SYNs advertise MSS \u22641406 or a DF ping at 1446 fails.\"",
       "confidence": "high"
     },
     "assertions": {
@@ -24,31 +24,31 @@
           "text": "Each candidate cause carries an evidence label such as Observed, Inferred, or Heuristic rather than being asserted as fact",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The hypothesis is explicitly labeled 'Hypothesis: Path MTU black hole on the Site-to-Site VPN tunnel' and presented in prose without per-claim labels like Observed/Inferred/Heuristic tags on individual sub-claims.",
-          "reasoning": "While the overall finding is framed as a 'Hypothesis', there is no systematic labeling scheme applied to each candidate cause (e.g., 'Observed', 'Inferred', 'Heuristic'). The text mixes observed capture details and inferred triggers ('likely trigger this morning was removed or changed MSS clamping, a tunnel failover, an encryption or NAT-T change, or an instance MTU change') without distinct evidence labels for each.",
+          "evidence": "The finding is titled 'Hypothesis: Path MTU black hole on the VPN path' with a free-text description mixing observed facts (e.g., 'Segments over 1500 B are retransmitted') and inferred AWS documentation facts (e.g., 'Site-to-Site VPN supports at most 1446-byte packets...') without explicit per-statement labels like Observed/Inferred/Heuristic.",
+          "reasoning": "The output does not use consistent evidence labels such as 'Observed', 'Inferred', or 'Heuristic' attached to each candidate cause. It presents a single hypothesis with a description and caveats, but does not tag individual claims with such labels.",
           "confidence": "medium"
         },
         {
           "text": "The response separates what the capture observed from what is inferred from documented AWS behavior",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The text explicitly separates capture observations ('over-1500-byte segments retransmitted, no ICMP arriving... small calls work') from documented AWS behavior ('The quoted 1446/1406 AWS VPN limits therefore may not apply') and notes the AWS VPN connection couldn't be verified, so documented limits may not apply.",
-          "reasoning": "The output distinguishes the tshark-observed symptoms from AWS-documented MTU/MSS values, explicitly flagging that the documented AWS limits (1446/1406) may not be applicable since the VPN itself wasn't confirmed to be an AWS Site-to-Site VPN.",
+          "evidence": "'Symptoms match a path MTU black hole: small calls succeed, large transfers hang, segments over 1500 B are retransmitted, and no ICMP frag-needed arrives. Site-to-Site VPN supports at most 1446-byte packets / MSS 1406 ... has no jumbo frames and no PMTUD, so missing ICMP is expected.' This separates capture-observed symptoms from documented AWS VPN behavior.",
+          "reasoning": "The text does distinguish between what was captured/observed (small calls succeed, large transfers hang, segments >1500B retransmitted, no ICMP) and what is inferred from AWS documented behavior (VPN MTU limits, MSS values, no PMTUD support).",
           "confidence": "medium"
         },
         {
           "text": "The fix is described as a recommendation, such as MSS clamping, allowing ICMP fragmentation-needed, or lowering the MTU for that path, and is not applied",
           "evaluator": "llm",
-          "passed": true,
-          "evidence": "The 'likely trigger this morning was removed or changed MSS clamping' is mentioned as a possible cause but there's no explicit recommendation section stating 'enable MSS clamping' or 'allow ICMP' as action items the agent is proposing to take; it says 'Confirm by checking the SYN MSS in the capture' as a next step rather than applying a fix.",
-          "reasoning": "The output does not claim to have applied any fix - it presents hypotheses and gaps requiring further investigation (e.g., 'Confirm by checking the SYN MSS in the capture (1460/8961 supports it)'), which aligns with recommending verification/action rather than executing a fix. However, the specific fix recommendations (MSS clamping, ICMP allowance, lowering MTU) are only implied via the hypothesis description, not explicitly stated as actionable recommendations.",
-          "confidence": "low"
+          "passed": false,
+          "evidence": "The 'Hypothesis' section discusses MTU/MSS values and caveats but contains no explicit recommendation like 'apply MSS clamping' or 'lower MTU to 1406'. No 'Fix' or 'Recommendation' section appears in the output.",
+          "reasoning": "The output does not explicitly state a recommended fix such as MSS clamping, allowing ICMP fragmentation-needed, or lowering MTU. It only describes the hypothesis and caveats, with gaps noting verification was not completed; no remediation recommendation section is present.",
+          "confidence": "high"
         },
         {
           "text": "The VPN-specific MTU/MSS limit or MSS clamping is cited",
           "evaluator": "regex",
           "passed": true,
-          "evidence": "Matched 'MSS clamp'"
+          "evidence": "Matched '1446'"
         },
         {
           "text": "Path MTU discovery is named",
@@ -60,24 +60,24 @@
           "text": "The response does not rely on Path MTU Discovery or ICMP fragmentation-needed as the primary fix for the VPN path",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The write-up notes 'no ICMP arriving' as part of the problem diagnosis (a symptom) rather than proposing to fix the issue by enabling PMTUD/ICMP; the mention of 'removed or changed MSS clamping' as a likely trigger implies MSS clamping, not ICMP-based PMTUD, as the appropriate fix.",
-          "reasoning": "The response identifies lack of ICMP as symptomatic of the black hole, but when discussing probable triggers/fixes, it points to MSS clamping as the key mechanism, not restoring ICMP/PMTUD as the primary remedy. This aligns with not relying on PMTUD/ICMP as the primary fix.",
+          "evidence": "'has no jumbo frames and no PMTUD, so missing ICMP is expected' \u2014 this acknowledges PMTUD/ICMP won't work, and no recommendation elsewhere relies on it.",
+          "reasoning": "The response explicitly states that Site-to-Site VPN has 'no jumbo frames and no PMTUD, so missing ICMP is expected', implying the fix should not rely on ICMP frag-needed or PMTUD since those don't work on this VPN path; it doesn't propose PMTUD/ICMP as the primary fix.",
           "confidence": "medium"
         }
       ],
       "summary": {
-        "passed": 5,
-        "failed": 1,
+        "passed": 4,
+        "failed": 2,
         "errored": 0,
-        "low_confidence": 1,
+        "low_confidence": 0,
         "total": 6,
-        "pass_rate": 0.8333
+        "pass_rate": 0.6667
       }
     }
   },
   "metrics": {
-    "runtime": "3m27s",
-    "cost": "$1.72",
+    "runtime": "1m41s",
+    "cost": "$0.84",
     "context_window": {
       "utilization": "4.0%",
       "compaction_count": 0

@@ -173,19 +173,24 @@ timeout, or set the ENI idle connection-tracking timeout `TcpEstablishedTimeout`
 432000 s). It can be set at launch or changed on an existing, non-requester-managed ENI
 ("Modify network interface attributes"). That's a mutating change: recommend it, don't run it.
 
-## 7. DNS failures
+## 7. DNS in flow logs and captures (evidence only)
 
-**FL:** usually shows nothing. Traffic to the Amazon DNS server is **not logged**. A custom DNS
-server's traffic is logged.
-**PCAP:** unanswered queries, NXDOMAIN or SERVFAIL, slow answers.
-- NXDOMAIN for a private name: private hosted zone not associated with the VPC, or a Resolver
-  forwarding rule shadowing it.
-- Unanswered queries to VPC+2: check `linklocal_allowance_exceeded` (per-ENI PPS cap to the
-  Amazon DNS server). Add local caching if it's increasing.
-- Timeouts to on-prem resolvers: outbound Resolver endpoint SG, routes, DX/VPN path.
+**Scope:** this playbook only reads DNS *evidence*. A name-resolution problem (NXDOMAIN,
+SERVFAIL, a name resolving to the wrong address, private hosted zone associations, Resolver
+rules, hybrid forwarding) belongs to `aws-vpc-dns-investigation`. Hand off to it when it's
+available, and don't diagnose resolution configuration here.
 
-If an `aws-vpc-dns-investigation` skill and its MCP server are available, hand off to it for
-live resolver probing and pre-change simulation.
+**FL:** usually shows nothing. Traffic to the Amazon DNS server is **not logged**, so its
+absence proves nothing. A custom DNS server's traffic is logged.
+
+**PCAP:** what crossed the wire.
+- Queries with no response: a transport problem. For queries to the Amazon DNS server, check
+  `linklocal_allowance_exceeded` (per-ENI PPS cap to the Amazon DNS server) and add local
+  caching if it's increasing. For a custom or on-premises resolver, check the path: SGs, NACLs
+  and routes to it, or the outbound Resolver endpoint and the DX/VPN path.
+- Slow answers: measure the query-to-response time in the capture (`dns.time`).
+- A response arrived (NXDOMAIN, SERVFAIL, or an unexpected address): the network delivered it.
+  The cause is resolution configuration, so hand off.
 
 ## 8. Traffic through NAT gateway, NLB, or EKS: "whose traffic is this?"
 

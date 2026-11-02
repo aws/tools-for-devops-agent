@@ -10,8 +10,7 @@
     "trigger": null,
     "expected_output": {
       "result": "passed",
-      "reasoning": "The investigation's primary hypothesis exactly matches the expected root cause: the NLB's 350-second TCP idle timeout (tcp.idle_timeout.seconds = 350, the AWS default) drops idle flows, causing TCP resets on connections idle longer than that window, while busy connections avoid this because they reset the timer with each packet. The summary explicitly labels this as the likely cause but notes it 'couldn't be observed' directly (since no traffic was seen on this particular NLB), consistent with the expected answer's framing of being 'inferred from the documented timeout and the observed idle pattern' rather than directly confirmed. It also correctly ties the fix to keepalives/pool idle settings below 350s via the complementary hypothesis about the app DB pool. The agent appropriately flagged uncertainty about which NLB is truly in the data path, but the core causal mechanism identified (350s idle timeout causing resets) matches the expected root cause precisely.",
-      "evidence": "\"The `example-lb` TCP:80 listener ... has `tcp.idle_timeout.seconds = 350`, the AWS default and about 5 min 50 s. When a flow sends no packets for that long, the NLB forgets it, and the next packet either side sends gets a TCP reset. Busy connections restart the timer with every packet, which explains why only idle ones fail.\" and \"The application's connection pool most likely holds idle connections for longer than 350 s without sending TCP keepalives often enough.\"",
+      "reasoning": "The investigation's primary hypothesis correctly identifies the NLB's 350-second TCP idle timeout (tcp.idle_timeout.seconds) as the cause of the ~6-minute idle connection resets, matching the expected root cause exactly. It correctly notes this is inferred (not directly confirmed) from the documented timeout value matching the observed idle pattern, and identifies the appropriate fix path (keepalives/pool settings) implicitly by noting gaps around app keepalive/pool settings. It also transparently flags that it could not fully confirm this on the specific NLB found (traffic/account mismatch), consistent with the expected answer's framing as 'inferred... with the capture or metric that would confirm it.' This aligns well with the expected root cause, including appropriate honesty about confidence level.",
       "confidence": "high"
     },
     "assertions": {
@@ -20,16 +19,16 @@
           "text": "The response recommends TCP keepalives or connection-pool idle settings shorter than the timeout",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The text states: 'The application's connection pool most likely holds idle connections for longer than 350 s without sending TCP keepalives often enough. Linux's default first keepalive comes after 7200 s, far beyond the NLB's window.' This explains the problem but does not recommend a specific fix such as 'set keepalive interval to under 350s' or 'reduce pool idle timeout below 350s'.",
-          "reasoning": "The output identifies the mismatch between NLB idle timeout (350s) and app pool idle settings as a hypothesis, and notes Linux default keepalive (7200s) is far beyond the NLB window, but it does not explicitly recommend setting TCP keepalives or pool idle timeouts to a value shorter than 350s. It only diagnoses the issue, not prescribe a remediation with specific values.",
-          "confidence": "medium"
+          "evidence": "The output describes gaps ('App connection pool and keepalive settings not visible... could not confirm idle connections outlive the 350 s timeout') but nowhere does it recommend setting TCP keepalives or connection-pool idle timeouts shorter than the 350s NLB timeout. No remediation/recommendation section exists.",
+          "reasoning": "The assertion requires an explicit recommendation to use keepalives or shorter idle settings. The output only notes this as an unverified gap, not as a recommendation to implement such settings.",
+          "confidence": "high"
         },
         {
           "text": "The response states what evidence would confirm the cause, such as the idle gap before the RST in a capture",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The 'Gaps' sections mention inability to access CloudTrail events, Config history, and application-tier configuration, but no mention of a packet capture or specific confirming evidence like 'the idle gap before the RST matches 350s in a capture'.",
-          "reasoning": "The output does not mention any specific evidence (e.g., packet captures showing the idle gap before the RST, or NLB flow logs) that would confirm the hypothesized cause. It discusses gaps in data access (CloudTrail, Config history) but does not state what observation would validate the idle-timeout hypothesis, such as capturing the exact idle duration before the RST.",
+          "evidence": "The 'Gaps' sections mention missing CloudTrail access, missing app pool/keepalive visibility, and the unidentified NLB, but there is no statement like 'a packet capture showing idle time before RST would confirm this' or similar language about what evidence (e.g., idle gap duration before RST in a tcpdump) would confirm the hypothesis.",
+          "reasoning": "The assertion requires a specific statement about what evidence (e.g., idle gap before RST in a capture) would confirm the cause. The output lists gaps in data access but does not specify a confirming evidence method such as packet capture timing analysis.",
           "confidence": "medium"
         },
         {
@@ -50,10 +49,10 @@
     }
   },
   "metrics": {
-    "runtime": "3m59s",
-    "cost": "$1.99",
+    "runtime": "4m9s",
+    "cost": "$2.07",
     "context_window": {
-      "utilization": "6.4%",
+      "utilization": "4.1%",
       "compaction_count": 0
     }
   }

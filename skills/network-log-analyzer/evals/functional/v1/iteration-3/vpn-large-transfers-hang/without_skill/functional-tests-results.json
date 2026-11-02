@@ -10,9 +10,9 @@
     "trigger": null,
     "expected_output": {
       "result": "passed",
-      "reasoning": "The investigation correctly identified the PMTUD black hole as the root cause, matching the expected root cause. It explicitly states the Site-to-Site VPN carries ~1446 B (consistent with the expected 1446 byte MTU limit), identifies that large segments over this limit get fragmented/dropped while ICMP Fragmentation Needed messages fail to reach the sender (matching 'no ICMP reaches the sender'), and ties this to the observed symptom of large-segment retransmissions with no ICMP arriving. It also appropriately labels this as an unconfirmed hypothesis inferred from documented VPN MTU limits plus the retransmission evidence, and notes the caveat about NIC offload affecting tshark readings, which aligns with the expected framing of the cause being inferred rather than directly confirmed. While the investigation didn't explicitly lead with MSS clamping as the fix (due to being blocked by invalid instance ID preventing further investigation), the core causal mechanism and reasoning align well with the expected root cause.",
-      "evidence": "\"Symptoms fit a Path MTU Discovery black hole: the instance likely uses jumbo frames (MTU 9001), but the Site-to-Site VPN carries ~1446 B on a VGW (~1500 B on a TGW)... Possible reasons ICMP Fragmentation Needed (type 3, code 4) is lost... Caveat: tshark can show >1500 B segments due to NIC offload, but the retransmissions are a real signal. Unconfirmed, because no resources could be inspected.\"",
-      "confidence": "medium"
+      "reasoning": "The investigation's \"Path MTU black hole on Site-to-Site VPN\" hypothesis correctly identifies the expected root cause: it explicitly states the VPN MTU limit (1446, MSS 1406), notes VPN does not support PMTUD, and explains that large packets are dropped silently without ICMP because MSS clamping (normally done by the customer gateway) is not being applied. This matches the expected root cause almost exactly in content, including the mention of MSS clamping on the customer gateway as the fix and the inference from documented limits plus observed symptoms (oversized segment retransmission, no ICMP). The agent was unable to verify against live resources due to malformed instance ID and missing VPN connection, but the causal mechanism identified matches the expected root cause precisely.",
+      "evidence": "\"EC2 usually defaults to MTU 9001, but Site-to-Site VPN carries at most 1446 (MSS 1406) and does not support PMTUD. Large packets need the customer gateway to clamp the MSS, so if that stops applying, large segments are dropped with no notice.\"",
+      "confidence": "high"
     },
     "assertions": {
       "assertion_results": [
@@ -20,25 +20,25 @@
           "text": "Each candidate cause carries an evidence label such as Observed, Inferred, or Heuristic rather than being asserted as fact",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The finding is titled 'Hypothesis: PMTUD black hole' and described as 'Unconfirmed, because no resources could be inspected.' No explicit per-cause labels like Observed/Inferred/Heuristic are used throughout the text.",
-          "reasoning": "The output does not use explicit evidence labels like 'Observed', 'Inferred', or 'Heuristic' for its candidate causes. It uses terms like 'Hypothesis' and 'Unconfirmed' but does not label each candidate cause distinctly with such terminology.",
+          "evidence": "The hypothesis section is labeled only as 'Hypothesis' at the top level, but within the description, individual claims (e.g., 'EC2 usually defaults to MTU 9001, but Site-to-Site VPN carries at most 1446... and does not support PMTUD') are stated as fact without per-claim evidence labels like Observed/Inferred/Heuristic. Only the overall finding is tagged 'Hypothesis' and ends with 'Not verified against real resources.'",
+          "reasoning": "There is no granular labeling distinguishing which specific causes are observed vs inferred vs heuristic; it's a single blended narrative with one blanket caveat at the end.",
           "confidence": "medium"
         },
         {
           "text": "The response separates what the capture observed from what is inferred from documented AWS behavior",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The response states 'tshark can show >1500 B segments due to NIC offload, but the retransmissions are a real signal' (observed) versus 'a Transit Gateway in the path, which does not send it' (inferred from documented AWS behavior), and 'Site-to-Site VPN carries ~1446 B on a VGW (~1500 B on a TGW)' as inferred AWS network behavior.",
-          "reasoning": "The response distinguishes what tshark observed (retransmissions of segments >1500B, no ICMP arriving) from what is inferred based on AWS VPN/TGW documented behavior (MTU limits, lack of ICMP Frag Needed forwarding by TGW).",
-          "confidence": "medium"
+          "evidence": "The text separates 'Small requests work while large transfers hang, oversized segments are retransmitted and no ICMP arrives' (observed from the capture) from 'EC2 usually defaults to MTU 9001, but Site-to-Site VPN carries at most 1446 (MSS 1406) and does not support PMTUD' (inferred from documented AWS behavior), and explicitly states 'Not verified against real resources.'",
+          "reasoning": "The description clearly distinguishes the tshark-observed symptoms from the AWS documented MTU/PMTUD behavior used to form the hypothesis, and flags the overall conclusion as unverified.",
+          "confidence": "high"
         },
         {
           "text": "The fix is described as a recommendation, such as MSS clamping, allowing ICMP fragmentation-needed, or lowering the MTU for that path, and is not applied",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "The 'Findings' section only states the hypothesis and gaps ('Valid instance ID needed...') without any explicit fix recommendation like MSS clamping or enabling ICMP traffic.",
-          "reasoning": "The output does not explicitly describe a fix recommendation such as MSS clamping, allowing ICMP fragmentation-needed, or lowering MTU. It only diagnoses the probable cause (PMTUD black hole) without proposing any remediation steps.",
-          "confidence": "high"
+          "passed": true,
+          "evidence": "'Large packets need the customer gateway to clamp the MSS, so if that stops applying, large segments are dropped with no notice.' This is phrased as an explanation of the likely fix (MSS clamping) rather than an action taken; no tool calls or changes are shown to have been applied.",
+          "reasoning": "MSS clamping is mentioned as the mechanism needed/recommended, not as something actually executed in the investigation, and the gaps section confirms no remediation was performed due to inability to access resources.",
+          "confidence": "medium"
         },
         {
           "text": "The VPN-specific MTU/MSS limit or MSS clamping is cited",
@@ -50,32 +50,32 @@
           "text": "Path MTU discovery is named",
           "evaluator": "regex",
           "passed": true,
-          "evidence": "Matched 'PMTUD'"
+          "evidence": "Matched 'Path MTU'"
         },
         {
           "text": "The response does not rely on Path MTU Discovery or ICMP fragmentation-needed as the primary fix for the VPN path",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "The finding states: 'Symptoms fit a Path MTU Discovery black hole... Possible reasons ICMP Fragmentation Needed (type 3, code 4) is lost: a security group or NACL change this morning, or a Transit Gateway in the path, which does not send it.' This frames ICMP/PMTUD as the central mechanism without proposing MSS clamping or other definitive fix independent of ICMP.",
-          "reasoning": "The response's core hypothesis explicitly relies on PMTUD and ICMP Fragmentation Needed packets as the central explanatory and implied fix mechanism, rather than presenting an alternative fix (e.g., MSS clamping) as primary.",
+          "passed": true,
+          "evidence": "The write-up states 'Site-to-Site VPN carries at most 1446 (MSS 1406) and does not support PMTUD' and frames the fix around MSS clamping by the customer gateway, not on restoring ICMP PMTUD as the primary fix.",
+          "reasoning": "The response explicitly notes the VPN path does not support PMTUD and centers its proposed cause/fix on MSS clamping rather than relying on ICMP fragmentation-needed or PMTUD as the primary remediation.",
           "confidence": "high"
         }
       ],
       "summary": {
-        "passed": 3,
-        "failed": 3,
+        "passed": 5,
+        "failed": 1,
         "errored": 0,
         "low_confidence": 0,
         "total": 6,
-        "pass_rate": 0.5
+        "pass_rate": 0.8333
       }
     }
   },
   "metrics": {
-    "runtime": "1m23s",
-    "cost": "$0.69",
+    "runtime": "1m38s",
+    "cost": "$0.82",
     "context_window": {
-      "utilization": "2.3%",
+      "utilization": "2.4%",
       "compaction_count": 0
     }
   }

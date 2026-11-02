@@ -1,10 +1,10 @@
 ---
 name: network-log-analyzer
-description: 'Use this skill when a user is troubleshooting AWS network connectivity: a connection times out, is refused, or resets; traffic flows only one way; flow logs show REJECT and they need to know whether a security group or network ACL caused it; TCP handshakes fail; transfers are slow or retransmit; large packets hang; idle connections drop; DNS queries time out; or they want top talkers or the real source behind a NAT gateway or EKS pod. Also use it whenever the user shares VPC Flow Logs, a packet capture, or tcpdump, Wireshark, or tshark output, even if they don''t name the problem.'
+description: 'Use this skill when a user is troubleshooting AWS network connectivity: a connection times out, is refused, or resets; traffic flows only one way; flow logs show REJECT and they need to know whether a security group or network ACL caused it; TCP handshakes fail; transfers are slow or retransmit; large packets hang; idle connections drop; or they want top talkers or the real source behind a NAT gateway or EKS pod. Also use it whenever the user shares or describes VPC Flow Logs or a packet capture (tcpdump, Wireshark, tshark), including traffic that is missing from flow logs or unexpected packet sizes in a capture, even if they don''t name the problem. Not for name-resolution failures such as NXDOMAIN, SERVFAIL, or a name resolving to the wrong address; use the VPC DNS investigation skill for those.'
 metadata:
   version: "1.0.0"
   author: midakin
-  summary: "Troubleshoots connectivity from VPC Flow Logs and packet captures: SG vs NACL rejects, TCP handshake and retransmission analysis, MTU, idle resets, DNS."
+  summary: "Troubleshoots connectivity from VPC Flow Logs and packet captures: SG vs NACL rejects, TCP handshake and retransmission analysis, MTU, idle resets."
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "Amazon VPC, Amazon EC2, Amazon CloudWatch, Amazon S3"
   aws-devops-agent-skills.technical-domains: "Networking, Observability"
@@ -125,7 +125,7 @@ signatures, MTU values, and ENA counters. The core rules:
 **Symptoms.** Load
 [references/troubleshooting-playbooks.md](references/troubleshooting-playbooks.md) when the
 symptom is a timeout, refusal, one-way traffic, slow transfer, large packets hanging, idle
-resets, DNS, or a NAT/EKS source question. It maps each to evidence, causes, and confirmation,
+resets, DNS packets in a capture, or a NAT/EKS source question. It maps each to evidence, causes, and confirmation,
 including the MTU and idle-timeout values to compare against.
 
 ## Step 4: Confirm with read-only checks
@@ -143,8 +143,11 @@ even when you ran them yourself, or when the resource isn't in the account you c
 the user can repeat the check.
 
 For why a route was chosen (TGW, Cloud WAN, Direct Connect path selection), use the
-`aws-routing` skill if it's available. For live VPC resolver probing, use
-`aws-vpc-dns-investigation` if it's available.
+`aws-routing` skill if it's available. Name-resolution problems (NXDOMAIN, SERVFAIL, a name
+resolving to the wrong address, private hosted zones, Resolver rules) belong to
+`aws-vpc-dns-investigation`: hand off to it when it's available. This skill covers DNS only as
+evidence: DNS packets in a capture, and the fact that flow logs never record traffic to the
+Amazon DNS server.
 
 ## Step 5: Self-check before answering
 
