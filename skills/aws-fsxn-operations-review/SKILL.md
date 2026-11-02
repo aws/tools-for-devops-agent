@@ -13,7 +13,8 @@ description: >
   "assess my ONTAP file system".
 metadata:
   author: "aneeshamz"
-  version: "1.6.0"
+  version: "1.0.0"
+  summary: "Read-only, automated FSx for NetApp ONTAP operational review — 46 checks across Backup, Observability, Operations, Performance, and Security via public AWS APIs."
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon FSx for NetApp ONTAP, Amazon CloudWatch, AWS Backup, Amazon EC2"
   aws-devops-agent-skills.technical-domains: "Storage"
