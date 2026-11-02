@@ -125,7 +125,7 @@ skills/aws-fsxn-operations-review/
 │   ├── performance-checks.md             # Performance pillar (17 checks)
 │   └── security-checks.md                # Security pillar (8 checks)
 ├── assets/
-│   └── report-template.md                # full tabular report format (Evaluation agent / on request)
+│   └── report-template.md                # full tabular report format (on request)
 └── evals/
     ├── evals.json                        # functional eval definitions (skill-eval tool input)
     ├── additional-permissions.json       # read-only perms for the functional eval's agent spaces
@@ -170,8 +170,8 @@ unzip -l ../../aws-fsxn-operations-review.zip
 
 (`README.md` and `evals/` are repo artifacts, excluded from the uploaded skill.)
 
-Upload the zip via the Agent Space Operator Web App Skills page. Target the **Chat tasks** and
-**Evaluation** agent types for on-demand and scheduled review runs.
+Upload the zip via the Agent Space Operator Web App Skills page. Target the **Chat tasks** agent type
+for on-demand and scheduled review runs.
 
 ## Non-production disclaimer
 
@@ -179,7 +179,3 @@ Upload the zip via the Agent Space Operator Web App Skills page. Target the **Ch
 > It performs read-only operational analysis and makes no changes to your AWS resources, but you are
 > responsible for reviewing the IAM permissions you grant and for validating the findings and
 > recommendations it produces before acting on them.
-
-## License
-
-MIT-0

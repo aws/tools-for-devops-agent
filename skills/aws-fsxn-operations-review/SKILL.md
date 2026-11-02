@@ -12,9 +12,9 @@ description: >
   "audit my FSx ONTAP", "check my FSxN posture", "FSx ONTAP best-practices audit", "FSxN health check",
   "assess my ONTAP file system".
 metadata:
-  author: "Aneesh Varghese (aneeshamz)"
+  author: "aneeshamz"
   version: "1.6.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
+  aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon FSx for NetApp ONTAP, Amazon CloudWatch, AWS Backup, Amazon EC2"
   aws-devops-agent-skills.technical-domains: "Storage"
 ---
@@ -147,7 +147,7 @@ Work through this ordered, dependent procedure and check each item off as you co
 
 - **Chat task (default):** the prioritized findings report above — concise, evidence-first, keyed to
   check IDs. This is the normal output and is what most requests want.
-- **Full tabular report (Evaluation agent, or when the user explicitly asks for the "full report"):**
+- **Full tabular report (when the user explicitly asks for the "full report"):**
   load `assets/report-template.md` and render the complete layout — H1 title, the account/region/date
   header, the **AI Disclaimer** blockquote verbatim, the Executive Summary, and one `##` section per
   pillar with a `###` + **Data table** per check. Use this when a complete, archivable document is
