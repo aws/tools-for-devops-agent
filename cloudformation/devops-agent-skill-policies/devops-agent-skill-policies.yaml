@@ -32,6 +32,7 @@ Metadata:
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
+          - EnableDrStartingPoint
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -157,6 +158,12 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableDrStartingPoint:
+    Type: String
+    Description: DR starting point skill (adds drs:DescribeSourceServers and lambda:GetFunction read-only).
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -196,6 +203,7 @@ Conditions:
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
+  SkillDrStartingPoint: !Equals [!Ref EnableDrStartingPoint, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -640,6 +648,29 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # dr-starting-point: only the read actions NOT already granted by
+  # AIDevOpsAgentAccessPolicy. Checked with iam:SimulateCustomPolicy against the
+  # managed policy: 60 of the 62 actions the skill uses are already allowed.
+  # drs:DescribeSourceServers shows whether AWS Elastic Disaster Recovery replicates
+  # the servers; lambda:GetFunction shows where function code lives. Both are
+  # optional: without them the skill says what it could not read.
+  PolicyDrStartingPoint:
+    Type: AWS::IAM::Policy
+    Condition: SkillDrStartingPoint
+    Properties:
+      PolicyName: DevOpsAgentSkill-DrStartingPoint
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DrStartingPointRead
+            Effect: Allow
+            Action:
+              - drs:DescribeSourceServers
+              - lambda:GetFunction
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -670,6 +701,7 @@ Outputs:
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
+        - dr-starting-point: ${EnableDrStartingPoint} (drs:DescribeSourceServers, lambda:GetFunction)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)

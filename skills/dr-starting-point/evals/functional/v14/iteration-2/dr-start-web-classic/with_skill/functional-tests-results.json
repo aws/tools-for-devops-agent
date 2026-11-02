@@ -1,0 +1,134 @@
+{
+  "version": "v14",
+  "iteration": 2,
+  "eval_id": "dr-start-web-classic",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'dr-starting-point' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'dr-starting-point' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The report covers all required elements: starts with a \"Where you stand today\" summary, then follows six sections (Scenario and scope, Targets, Strategy, Roadmap, First tests, Next decision). It identifies the ASG as min=desired=max=1 in a single AZ, Aurora cluster orders-web-db with a single instance and 1-day backup retention, EFS with no backup policy (automatic backups off) and no replication, S3 uploads bucket versioning disabled, and notes the ALB/load balancer has no DNS/failover routing in front of it (Regional, no Route 53 failover found). The shared core-network VPC is explicitly treated as a configuration dependency, not as part of the in-scope stack. The full report content is included in the response. All expected findings are substantively present and accurate.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response starts with a short 'Where you stand today' summary, and the scenario table marks each of the four scenarios as covered today, partly or not.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response opens with '**Where you stand today:** The orders website (CloudFormation stack `orders-web`...' followed by a scenario table with columns 'In scope?' and 'Covered today?' marked yes/partly/no for each of the four scenarios: 'One service fails' (partly), 'One Availability Zone fails' (no), 'A whole Region fails' (no), 'Bad data' (no).",
+          "reasoning": "The summary is present at the start and the table correctly categorizes all four scenarios with covered/partly/not covered status.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Auto Scaling group orders-web-asg runs a single instance in one subnet or Availability Zone, so one instance or one AZ failure takes the web tier down.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'Auto Scaling group orders-web-asg | Min=Desired=Max=1, single AZ (eu-west-1a)' and also 'The Auto Scaling group (min=desired=max=1) replaces a crashed EC2 instance automatically' and 'The ASG, the sole Aurora instance, and the sole EFS mount target each sit in exactly one AZ; losing that AZ takes down compute...'",
+          "reasoning": "The response explicitly identifies the single-instance, single-AZ ASG configuration and ties it to AZ failure risk.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Aurora cluster orders-web-db has only one instance (no replica in another Availability Zone), so there is no automatic failover inside the Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'the Aurora cluster has one instance and no reader to fail over to' and in the roadmap table: 'Aurora cluster orders-web-db | 1 instance, no reader, MultiAZ: false | Add a reader instance in a second AZ with automatic failover'",
+          "reasoning": "This directly confirms the single-instance Aurora cluster lacks a replica/reader for automatic failover.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports the 1-day backup retention of orders-web-db and says it limits recovery from bad data.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'a bad write or accidental delete could only be undone for the last 24 hours' and in the roadmap: 'Automated backup retention is 1 day | Raise retention (up to 35 days)... | Fixes: Bad data'",
+          "reasoning": "The 1-day retention is explicitly reported and tied to limited recovery from bad data.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports that the EFS file system has no replication to another Region and that its automatic backups are off.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states EFS has 'no backup policy at all' and 'No backup policy set \u2014 AWS Backup automatic backups are off', and separately notes 'No copy or replica of the database, file system, uploads bucket... exists outside eu-west-1' and 'EFS, S3 uploads bucket | No copy outside eu-west-1'",
+          "reasoning": "While the response does report EFS automatic backups are off, and does mention no replication outside eu-west-1 for EFS, these two facts are stated (backups off is explicit; no cross-region replication for EFS is explicitly mentioned under 'No copy outside eu-west-1' row and in the bad-data scenario table). Actually both pieces are present, so this should pass. Reconsidering: the assertion requires both facts - backups off (confirmed) and no replication to another region (confirmed in long-term roadmap row 'EFS, S3 uploads bucket | No copy outside eu-west-1'). Both are present, so this passes.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports that the uploads S3 bucket has versioning off, so overwritten or deleted objects cannot be recovered.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'the S3 uploads bucket has versioning turned off' and in the quick wins table: 'S3 bucket orders-web-uploads-012345678901_1 | Versioning not enabled | Turn on versioning... | Fixes: Bad data'",
+          "reasoning": "The response explicitly reports versioning is off and ties it to the bad data / recovery scenario, implying lost ability to recover overwritten/deleted objects, consistent with the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the recovery Region would need its own load balancer and a way to route traffic to it, since there is no DNS failover today.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'Entry point | No DNS/failover routing found pointing at the ALB in this account | Once a recovery Region is live, add failover routing (Route 53 or ARC) in front of both Regions, plus a second ALB and certificate in the recovery Region'",
+          "reasoning": "This explicitly states the need for a second load balancer and failover routing mechanism in the recovery region, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response checks whether the launch template's image and the orders-web stack could start the web tier in another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'The launch template resolves its AMI from a public SSM parameter path, so compute can be rebuilt in any Region from IaC without manually copying an AMI' and also notes under 'Not checked': 'Whether the orders-web CloudFormation template has ever been deployed to a second Region via a StackSet \u2014 only its existence in eu-west-1 was confirmed.'",
+          "reasoning": "The response explicitly checked the launch template's AMI source and its portability, and also checked/noted the stack's deployment status regarding other regions, satisfying the assertion that this was examined.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the booking-api, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'booking-api', 'telemetry-pipeline', 'catalog-k8s', 'database-1', or a 'metrics stack' appears anywhere in the response. The scope section explicitly limits itself to 'orders-web CloudFormation stack... plus resources it depends on by configuration' and notes 'Other workloads that may also depend on the shared core-network VPC \u2014 out of scope for this report.'",
+          "reasoning": "The response confines itself to the orders-web stack and its direct dependencies, explicitly excluding other workloads, with no mention of the named unrelated resources.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The complete report is in the response itself (all six sections), not only a pointer to a file.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response includes a file pointer ('I saved this as a shareable report... and the full content is below') followed by all six sections fully written out: '1. Scenario and scope', '2. Targets', '3. Strategy', '4. Roadmap', '5. First tests', '6. Next decision'.",
+          "reasoning": "The complete report with all six numbered sections is present in the response body itself, not merely referenced as a file.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | partly | The Auto Scaling group (min=desired=max=1) replaces a crashed EC2 insta\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 11,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 12,
+        "pass_rate": 0.9167
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m6s",
+    "cost": "$3.04",
+    "context_window": {
+      "utilization": "7.7%",
+      "compaction_count": 0
+    }
+  }
+}

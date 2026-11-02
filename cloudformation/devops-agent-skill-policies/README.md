@@ -55,6 +55,7 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableAgentCoreOpsReview` | `agentcore-ops-review` | `bedrock-agentcore` read-only List/Get for runtimes, memories, gateways, browsers, code interpreters and workload identities; `bedrock-agentcore:ListMemoryRecords`; `ec2:DescribeSubnets` |
 | `EnableSageMakerAIOpsReview` | `sagemaker-ai-ops-review` | `savingsplans:DescribeSavingsPlans` |
 | `EnableLiveStreamingEventReadinessReview` | `live-streaming-event-readiness-review` | `mediatailor:ListPlaybackConfigurations`, `mediatailor:GetPlaybackConfiguration`, `mediatailor:ListPrefetchSchedules`, `route53-recovery-cluster:ListRoutingControls` |
+| `EnableDrStartingPoint` | `dr-starting-point` | `drs:DescribeSourceServers`, `lambda:GetFunction` |
 | `EnableEksOperationReview` | `aws-eks-operations-review` | None — already covered by the managed policy |
 | `EnableEnrichWithSecurityAgent` | `enrich-with-aws-security-agent` | None — already covered by the managed policy |
 | `EnableCrmInvestigationGuidelines` | `crm-production-investigation-guidelines` | None — already covered by the managed policy |

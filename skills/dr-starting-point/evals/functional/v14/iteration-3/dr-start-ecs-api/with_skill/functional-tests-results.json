@@ -1,0 +1,96 @@
+{
+  "version": "v14",
+  "iteration": 3,
+  "eval_id": "dr-start-ecs-api",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'dr-starting-point' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'dr-starting-point' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response delivers a structured six-section DR plan matching the expected outline:\n1. \"Scenario and scope\" - maps the workload by layer (ECS cluster, service, task definition, image, secret, IAM role, VPC/subnet/SG), explicitly flags the service runs a single task in a single subnet/AZ (\"Service is pinned to one subnet in eu-central-1a only; no second AZ in play\").\n2. \"Targets\" - correctly leaves RPO/RTO unspecified and poses clarifying questions rather than inventing targets, satisfying \"Targets are not invented.\"\n3. \"Strategy\" - compares backup/restore vs pilot light and recommends backup/restore as the starting point.\n4. \"Roadmap\" - lists quick wins/fixes/long-term items.\n5. \"First tests\" - proposes a restore test (RDS/DynamoDB PITR) and a named AWS FIS test (\"Cross-Region: Connectivity\" and \"AZ: Power Interruption\" scenarios from the FIS scenario library).\n6. \"Next decision\" - final decision section.\n\nIt also reports on the container image location (pull-through cache) and whether the recovery Region can pull it, explicitly flagging \"Image comes from a public-registry pull-through cache with no replication rule\" and proposing replication. It flags the secret `dr-demo/api-key` is \"Not replicated to any other Region\" and proposes Secrets Manager replication. It notes \"No load balancer, DNS record, or API Gateway found anywhere in front of this 'public API'\" and \"No CloudFormation, CDK, or other readable IaC manages this cluster/service\" \u2014 both matching the expected flags on load balancer/failover routing and IaC absence.\n\nAll required elements are present in the correct six-section order, with targets appropriately left open rather than invented. This substantively satisfies the expected output description.</reasoning>\n<parameter name=\"evidence\">\"Service is pinned to one subnet in `eu-central-1a` only; no second AZ in play\" ... \"ECR pull-through cache image | Image comes from a public-registry pull-through cache with no replication rule\" ... \"Secret `dr-demo/api-key` | Not replicated to any other Region\" ... \"No load balancer, DNS record, or API Gateway found anywhere in front of this 'public API'\" ... \"No CloudFormation, CDK, or other readable IaC manages this cluster/service/security groups\" ... \"Restore test: ... time an actual restore\" ... \"run the AWS Fault Injection Service scenario-library scenario Cross-Region: Connectivity\" ... \"No RPO or RTO was given, so here are the questions to agree before picking a strategy\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The Roadmap section groups the actions under Quick wins, Quick fixes and Long-term, and every action names a specific resource and change.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Quick wins table lists 'Secret `dr-demo/api-key`' and 'ECR pull-through cache image' with specific actions; Quick fixes lists 'ECS service `dr-demo-api`' and 'Entry point'; Long-term lists 'Infrastructure-as-code'. Each row names a specific resource and a specific change (e.g., 'Raise desiredCount to 2+ tasks spread across 2+ subnets/AZs... and put an Application Load Balancer in front').",
+          "reasoning": "The Roadmap section has three subsections: Quick wins, Quick fixes, and Long-term, each with a table listing resource, finding, action, scenario, and cost.",
+          "confidence": "high"
+        },
+        {
+          "text": "Quick wins and quick fixes do not depend on RPO or RTO targets the business has not agreed; Region-level work whose size depends on the targets is under Long-term.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Long-term table column 'strategy it needs' shows 'Backup and restore (minimum) / Pilot light (if pre-deployed)' \u2014 sizing depends on targets, while quick wins/fixes (secret replication, ECR cache, multi-AZ ECS, ALB) have no RPO/RTO dependency listed.",
+          "reasoning": "Quick wins/fixes are actions that don't require RPO/RTO (replicating secret, image cache, scaling ECS tasks, adding ALB/entry point) \u2014 none depend on targets. The Long-term item (IaC to deploy into eu-west-1) is tied to strategy selection which depends on targets ('strategy it needs: Backup and restore (minimum) / Pilot light (if pre-deployed)'), consistent with the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the ECS service runs a single task in a single Availability Zone.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'It runs as a single Fargate task in a single subnet/AZ with no load balancer or DNS in front of it' and in the table: 'Service is pinned to one subnet in eu-central-1a only; no second AZ in play'.",
+          "reasoning": "The response explicitly states the service runs single task in single AZ.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the Secrets Manager secret used by the task is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Quick wins table: 'Secret `dr-demo/api-key` | Not replicated to any other Region | Use Secrets Manager's replicate-to-Region feature to replicate it to eu-west-1'.",
+          "reasoning": "The response flags secret non-replication explicitly in roadmap and elsewhere.",
+          "confidence": "high"
+        },
+        {
+          "text": "The First tests section contains both a restore or rebuild test and a failure test that names an AWS FIS scenario.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Restore test: once the data-layer scope is confirmed, time an actual restore...' and 'Failure test: ... run the AWS Fault Injection Service scenario-library scenario Cross-Region: Connectivity ... Also worth an AZ: Power Interruption run...'.",
+          "reasoning": "First tests section includes a restore test and a failure test naming an AWS FIS scenario.",
+          "confidence": "high"
+        },
+        {
+          "text": "Resources linked to the ECS service only by a shared tag (for example dr-demo-mysql, dr-demo-valkey, dr-demo-players, dr-demo-events) get no roadmap actions. Because the user limited the scope, listing them as possible members to confirm is optional.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Scoped to the confirmed workload only (ECS service, task definition, image, secret, IAM role, network)... If any of these turn out to be dr-demo-api's real backend, they'd each need their own line in the roadmap \u2014 I've left them out of it until that's confirmed'.",
+          "reasoning": "The possible-member resources (RDS, DynamoDB, ElastiCache, SQS, Lambda) are explicitly excluded from the roadmap, listed only as 'possible members, please confirm' and not given roadmap actions; roadmap is scoped only to the confirmed ECS workload.",
+          "confidence": "high"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "8m3s",
+    "cost": "$4.01",
+    "context_window": {
+      "utilization": "6.8%",
+      "compaction_count": 0
+    }
+  }
+}

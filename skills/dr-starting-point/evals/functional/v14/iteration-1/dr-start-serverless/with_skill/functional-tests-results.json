@@ -1,0 +1,111 @@
+{
+  "version": "v14",
+  "iteration": 1,
+  "eval_id": "dr-start-serverless",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'dr-starting-point' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'dr-starting-point' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response comprehensively covers all the components specified in the expected output: API Gateway (noted as Regional with no custom domain), Lambda function, DynamoDB table (correctly identifies PITR is off, and notes single-Region KMS key 'DataKey'), SQS queue with DLQ (correctly notes DLQ already in place), SNS topic, EventBridge bus/rule, Step Functions state machine ('ConfirmationFlow'), Cognito user pool (correctly notes no replica in another region - deletion protection off), Secrets Manager secret (correctly notes not replicated), and the Receipts S3 bucket (correctly notes versioning on, no replication). The report is scoped specifically to the booking-api stack, is structured as a DR readiness report with scenarios, targets, strategy, and roadmap, and matches all the technical details called out in the expected output almost exactly (PITR off, single-region KMS key, DLQ already in place, versioning on/no replication, no custom domain, no secret replication, no Cognito replica).",
+      "evidence": "\"DynamoDB point-in-time recovery is off\" / \"Secrets Manager `ProviderKey` | No replica Region configured\" / \"S3 `Receipts` | No replication configured... keep versioning on\" / \"a dead-letter queue on the `Notifications` SQS queue\" / \"No custom domain, no Route 53/CloudFront in front of it\" / \"KMS `DataKey` | Single-Region key only\" / \"Cognito `Users` pool | Deletion protection is `INACTIVE`\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the table is encrypted with a customer managed KMS key that exists only in eu-west-1, and that a copy or replica in another Region needs a key there (for example a multi-Region key).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"KMS `DataKey` | Single-Region key only | Create a matching key (or multi-Region key) in the recovery Region, so restores there can decrypt | Region failure\" and earlier: \"Every resource (table, bucket, KMS key, secret, Cognito pool, CloudFormation stack) exists only in eu-west-1\"",
+          "reasoning": "The response explicitly notes the KMS key DataKey is single-Region and recommends creating a matching/multi-Region key in the recovery Region. It doesn't explicitly say it's a 'customer managed' key but it implies a KMS key tied to the stack, which is customer managed by context.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Cognito user pool booking-api-users has no replica in another Region, so users could not sign in to a recovery Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Cognito `Users` pool | Deletion protection is `INACTIVE` | Turn on deletion protection | Bad data\" and \"Every resource (table, bucket, KMS key, secret, Cognito pool, CloudFormation stack) exists only in eu-west-1 \u2014 confirmed no match in eu-central-1.\"",
+          "reasoning": "The response states the Cognito pool exists only in eu-west-1 with no replica elsewhere, implying users could not sign in to a recovery region, though it doesn't explicitly use the exact pool name 'booking-api-users' or explicitly state the sign-in consequence in those exact terms.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says the HTTP API is Regional and has no custom domain name, so clients are tied to the eu-west-1 endpoint.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"API Gateway `Api` | No custom domain, no Route 53/CloudFront in front of it | Add a custom domain with Route 53 failover records...\" and \"There's also no custom domain, Route 53, or CloudFront in front of the API, so even a copy elsewhere couldn't receive traffic.\"",
+          "reasoning": "The response explicitly states the API has no custom domain and is tied to the eu-west-1 endpoint essentially, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the secret booking-api/payment-provider-key is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Secrets Manager `ProviderKey` | No replica Region configured | Replicate the secret to the chosen recovery Region | Region failure\"",
+          "reasoning": "The response directly states the secret ProviderKey has no replica Region configured, matching the assertion about the secret not being replicated (though referred to as ProviderKey, not literally booking-api/payment-provider-key, likely the same resource by context).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits what is already in place, such as the dead-letter queue on booking-api-notifications and versioning on the receipts bucket.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Already in place:** S3 versioning on `Receipts`; a dead-letter queue on the `Notifications` SQS queue; DynamoDB account-level \"advanced features\" opted in to AWS Backup (ready to use once a plan exists, but none does yet).\"",
+          "reasoning": "The response explicitly credits existing protections: S3 versioning and SQS DLQ, matching the assertion directly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response covers the Step Functions state machine and the EventBridge bus and rule, saying they are Regional and must exist in the recovery Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"In scope:** API Gateway (`Api`), Lambda (`Handler`), Step Functions (`ConfirmationFlow`), DynamoDB (`Bookings`), S3 (`Receipts`), KMS key (`DataKey`), Secrets Manager secret (`ProviderKey`), Cognito pool (`Users`), EventBridge bus/rule, SNS topic, SQS queue + DLQ, IAM roles \u2014 all from the `booking-api` stack.\" and \"Every resource (table, bucket, KMS key, secret, Cognito pool, CloudFormation stack) exists only in eu-west-1\"",
+          "reasoning": "The response lists Step Functions and EventBridge bus/rule as in scope and states that every resource exists only in eu-west-1, implying they are regional and must exist in the recovery region. However, it does not explicitly call out that these specific resources individually must exist in the recovery region with specific action items in the roadmap tables (the roadmap focuses on DynamoDB, Cognito, Secrets Manager, KMS, S3, API Gateway but not explicitly Step Functions or EventBridge as action items). The general statement about 'nothing exists anywhere else' covers it at a high level but lacks specific action items for these two resources.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of orders-web, telemetry-pipeline, catalog-k8s, database-1 (Aurora), or a metrics stack appears anywhere in the response.",
+          "reasoning": "The response stays scoped to the booking-api stack and its resources (API Gateway, Lambda, Step Functions, DynamoDB, S3, KMS, Secrets Manager, Cognito, EventBridge, SNS, SQS, IAM) with no mention of other workloads' resources.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | yes | Every component (API Gateway, Lambda, Step Functions, DynamoDB, S3, SQS/SN\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 9,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m25s",
+    "cost": "$2.21",
+    "context_window": {
+      "utilization": "6.4%",
+      "compaction_count": 0
+    }
+  }
+}
