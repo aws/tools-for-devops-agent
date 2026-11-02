@@ -1,0 +1,94 @@
+{
+  "version": "v5",
+  "iteration": 3,
+  "eval_id": "ecr-guard-unexpected-deletion-postmortem",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tools_ready": {
+    "outcome": "ready",
+    "ready": true,
+    "waited_seconds": 153.2,
+    "probes": 3,
+    "summary": "Agent space tools ready after 3 probe(s) in 2m 33s"
+  },
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ecr-lifecycle-guard' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'ecr-lifecycle-guard' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to actually investigate the checkout-service repo: check CloudTrail for PolicyExecutionEvent entries, call GetLifecyclePolicy to see lastEvaluatedAt, and run a full ECR Lifecycle Guard report on the current image set showing a verdict per expiring image, the rule claiming it, and a protective rule recommendation for the version tag family. The agent's actual response instead reports that no checkout-service repository exists in the connected account/region, lists the two repos that do exist, states CloudTrail has zero relevant events, and asks the user to confirm the correct account/region. While it does correctly avoid restoring/deleting anything, it never produces the lifecycle guard report, verdicts per image, claiming rules, or a protective rule recommendation \u2014 the core substantive deliverable is entirely missing. Even if the repo truly doesn't exist in this environment, the expected output describes a specific analytical deliverable that was not produced at all, so the response does not meet the expected criteria.",
+      "evidence": "\"There's no `checkout-service` repository in this agent space's AWS account (012345678901_1), in any region... So I can't confirm or rule out the lifecycle policy as the cause... Can you confirm the account ID and region where `checkout-service` actually lives?\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names PolicyExecutionEvent in CloudTrail (via LookupEvents) and the lifecycle policy's lastEvaluatedAt as the evidence for whether the lifecycle policy removed v3.1.0, and reports what it found or that the lookup was denied or cancelled.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent states 'CloudTrail has zero DeleteRepository, BatchDeleteImage, or lifecycle PolicyExecutionEvent records naming it' - it does name PolicyExecutionEvent as a lookup target, but it does not reference the lifecycle policy's lastEvaluatedAt field at all, nor does it describe a LookupEvents call explicitly or report whether the lookup was denied/cancelled vs simply empty.",
+          "reasoning": "The response mentions PolicyExecutionEvent and reports a result (zero records), partially satisfying the first part, but it never mentions lastEvaluatedAt as corroborating evidence, which the assertion requires as a combined evidentiary basis. Since the repo doesn't exist in this account, the agent couldn't have checked lastEvaluatedAt. The assertion requires both pieces of evidence to be named, which is not fully satisfied.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response runs the guard on the current image set of checkout-service and lists every remaining image that the policy will remove next, each with a verdict of Expiring-InUse, Expiring-Unknown or Expiring-Unused.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response never runs any guard/simulation on an image set, nor does it list any images with verdicts like 'Expiring-InUse', 'Expiring-Unknown', or 'Expiring-Unused'. Instead it states the repo does not exist in this account: 'There's no checkout-service repository in this agent space's AWS account'.",
+          "reasoning": "No such analysis was performed since the repository could not be found at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response identifies the rule that claimed v3.1.0 or would claim similar version tags, and suggests a protective tagPatternList rule for that family as an operator action.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent does not identify any lifecycle rule or claim about which rule removed v3.1.0, nor does it suggest any tagPatternList protective rule. It only lists generic possibilities like 'naming mismatch' or 'repo in different account'.",
+          "reasoning": "No rule identification or protective rule suggestion is present in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not perform or offer to perform a re-push, restore, image deletion or policy change itself.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent does not perform or offer to perform any re-push, restore, deletion, or policy change. It only asks for clarification: 'Can you confirm the account ID and region where checkout-service actually lives?' and offers to re-run checks, not to modify anything.",
+          "reasoning": "The response strictly avoids any destructive or corrective action, limiting itself to diagnostic questions.",
+          "confidence": "high"
+        },
+        {
+          "text": "The full report headings are present",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "PolicyExecutionEvent is mentioned",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'PolicyExecutionEvent'"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m47s",
+    "cost": "$1.89",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

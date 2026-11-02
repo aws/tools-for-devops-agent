@@ -1,0 +1,104 @@
+{
+  "version": "v2",
+  "iteration": 1,
+  "eval_id": "ecr-guard-gap-h2-safe-to-leave",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a full \"ECR Lifecycle Guard report\" with a specific structure: a Repository Rating (Healthy/Attention/AtRisk/Indeterminate) with a deciding rule sentence, analysis of lastRecordedPullTime for every image to classify Expiring-InUse, explicit discussion of direct EC2 pulls being invisible except via lastRecordedPullTime/CloudTrail (with up to 24h lag caveat), handling of AccessDenied on Batch job definition reads mapping to Expiring-Unknown (not Expiring-Unused), a protective tagPatternList rule JSON presented (not applied) if in-use/production images are expiring, and ending at 'Next Steps' without offering to change the policy.\n\nThe agent's actual response does none of this. It simply states that the tool service is unavailable, so it could not pull the lifecycle policy or check tag usage, and provides a generic list of three things it would check once available, asking the user to retry later. There is no Repository Rating, no lastRecordedPullTime analysis, no mention of CloudTrail visibility for direct EC2 pulls, no AccessDenied/Expiring-Unknown classification, no protective tagPatternList JSON, and no 'Next Steps' section matching the expected format. This is a complete miss against the detailed expected output \u2014 the agent essentially punted due to a tool outage rather than producing the structured Lifecycle Guard report.",
+      "evidence": "\"The tool service that queries AWS directly is unavailable right now, so I wasn't able to pull the actual lifecycle policy or check which image tags your Batch job definitions reference... Could you retry in a couple of minutes?\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response is the full report with Scope, Repository Rating, Source of Truth, Expiring Images, Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed and Next Steps, rather than a conversational yes or no.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output is a conversational explanation stating the tool service is unavailable, with a short bullet list of what to check later. There is no Scope, Repository Rating, Source of Truth, Expiring Images, Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed, or Next Steps sections.",
+          "reasoning": "The assertion requires a full structured report with specific named sections; the agent instead gave a conversational response explaining a tool outage and asking to retry.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that lastRecordedPullTime was read for every image and treats any recorded pull inside the window as evidence that the image is in use.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of lastRecordedPullTime anywhere in the response.",
+          "reasoning": "The agent never retrieved or discussed lastRecordedPullTime at all since it could not query AWS; the field is not mentioned.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains that direct pulls from EC2 leave no task or job definition and are visible only through lastRecordedPullTime or CloudTrail pull events, and notes that lastRecordedPullTime can lag because ECR refreshes it at least once every 24 hours.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response only generically mentions 'currently running/runnable jobs on EC2 compute environments' and does not mention lastRecordedPullTime, CloudTrail, or the 24-hour refresh lag.",
+          "reasoning": "The specific technical explanation about direct pulls leaving no task/job definition trace and the 24-hour lastRecordedPullTime refresh caveat is absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "If batch:DescribeJobDefinitions returned AccessDenied, the response reports it under Not Assessed and gives the affected images an Expiring-Unknown verdict, not Expiring-Unused.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "There is no mention of batch:DescribeJobDefinitions, AccessDenied, Not Assessed section, or an Expiring-Unknown verdict anywhere in the response.",
+          "reasoning": "The agent could not query AWS at all, so no such permission-specific handling or verdict labeling occurred.",
+          "confidence": "high"
+        },
+        {
+          "text": "If any expiring image is in use or carries a production like tag, the response presents a complete protective lifecycle rule JSON using tagPatternList with a priority lower than the existing rules, and states that the operator applies it; the agent does not apply it.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No JSON lifecycle rule, no tagPatternList, no priority value, and no statement that the operator must apply it rather than the agent is present. The agent only lists conceptual things to check (tagStatus, tagPrefixList, countNumber/countUnit) without any concrete rule or JSON.",
+          "reasoning": "The response never reaches a point of proposing a protective rule because it could not assess the policy; no JSON rule or applying/not-applying language is given.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not end with an offer to modify the policy, delete images or investigate further.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response ends with: 'Could you retry in a couple of minutes? I'll run the full check as soon as the tool connection is back.' This is a request to retry, not an offer to modify the policy, delete images, or investigate further beyond what was already stated.",
+          "reasoning": "While the agent does say it will run the check once reconnected, this is a continuation of the stated plan (checking) rather than offering to modify/delete/investigate as new unsolicited actions. It does not explicitly offer to modify the policy or delete images.",
+          "confidence": "high"
+        },
+        {
+          "text": "The Repository Rating is stated as one of the four fixed values",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Every expiring image row uses the fixed verdict vocabulary",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 7,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 0.2222
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "57s",
+    "cost": "$0.48",
+    "context_window": {
+      "utilization": "3.7%",
+      "compaction_count": 0
+    }
+  }
+}

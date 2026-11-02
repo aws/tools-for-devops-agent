@@ -1,0 +1,109 @@
+{
+  "version": "v3",
+  "iteration": 1,
+  "eval_id": "ecr-guard-gap-h2-safe-to-leave",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": {
+    "outcome": "timed_out",
+    "found": false,
+    "waited_seconds": 3624.7,
+    "polls": 120,
+    "summary": "Skill 'understanding-agent-space' was not generated within 60m 0s \u2014 proceeded without it"
+  },
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a very specific structured \"ECR Lifecycle Guard report\" format: a Repository Rating (Healthy/Attention/AtRisk/Indeterminate) with a one-sentence deciding rule, explicit use of lastRecordedPullTime for every image to classify images as Expiring-InUse vs Expiring-Unused vs Expiring-Unknown, specific handling of the AccessDenied Batch job definition read (must map to Expiring-Unknown, never Expiring-Unused), an explanation that direct EC2 pulls are only visible via lastRecordedPullTime or CloudTrail (with up to 24h lag caveat), a protective tagPatternList JSON rule presented (not applied) if an in-use/production-like image is expiring, and the report ending at 'Next Steps' with no offer to change the policy.\n\nThe agent's actual response is a conversational narrative answer. It does discuss the catch-all rule 100 problem, mentions the AccessDenied on batch:DescribeJobDefinitions, and notes tag mutability risks \u2014 but it does not include: a formal Repository Rating label, a lastRecordedPullTime-based check per image, the Expiring-InUse/Expiring-Unused/Expiring-Unknown classification terminology, the CloudTrail/24-hour lag explanation framed around direct EC2 pulls, a protective tagPatternList JSON snippet, or a \"Next Steps\" section. Instead, the agent explicitly makes a recommendation to fix the policy (\"fix rule 100... either raise its count... or scope it with a tagPrefixList\"), which directly contradicts the requirement that the report should not offer to change the policy itself (it should present a protective rule JSON for the operator, not conflate this with just recommending a policy edit as the ending). Also it says \"I found none currently active\" for EC2 instances, which doesn't align with reading lastRecordedPullTime per image.\n\nOverall, the response fails to meet the structured, specific reporting requirements of the expected output despite covering some relevant substantive points (AccessDenied, catch-all rule risk, tag mutability).",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response is the full report with Scope, Repository Rating, Source of Truth, Expiring Images, Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed and Next Steps, rather than a conversational yes or no.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Response opens with 'Short answer: no, I wouldn't leave it as-is' and continues as prose/bullets like 'The policy on nebula-batch-worker:' and 'My recommendation:' with no headers like Scope, Repository Rating, Source of Truth, Expiring Images, Rule by Rule, Findings, Suggested Protective Rule, Check Matrix, Not Assessed, Next Steps.",
+          "reasoning": "The output is a conversational narrative with a short answer, bullet lists, and a recommendation, not structured into the required sections.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that lastRecordedPullTime was read for every image and treats any recorded pull inside the window as evidence that the image is in use.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response discusses EC2 instances, ASGs, Batch compute environments/queues/jobs, and ECS clusters being absent, but never mentions 'lastRecordedPullTime' or treats recorded pulls as evidence of use.",
+          "reasoning": "There is no mention of lastRecordedPullTime at all in the response.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains that direct pulls from EC2 leave no task or job definition and are visible only through lastRecordedPullTime or CloudTrail pull events, and notes that lastRecordedPullTime can lag because ECR refreshes it at least once every 24 hours.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'lastRecordedPullTime', 'CloudTrail', or a 24-hour refresh caveat. The closest related caveat is about tag-mutable repos and digest caching, which is a different concept.",
+          "reasoning": "The response does not explain the lastRecordedPullTime/CloudTrail mechanism or the 24-hour refresh lag; it instead discusses checking for running resources and digest/tag mutability risk.",
+          "confidence": "high"
+        },
+        {
+          "text": "If batch:DescribeJobDefinitions returned AccessDenied, the response reports it under Not Assessed and gives the affected images an Expiring-Unknown verdict, not Expiring-Unused.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states: 'I was denied access to Batch job definitions (batch:DescribeJobDefinitions), so I couldn't check what image tags are hardcoded there even if no jobs are running right now.' This is presented as a caveat bullet, not as a 'Not Assessed' section, and there is no 'Expiring-Unknown' or 'Expiring-Unused' verdict terminology anywhere in the response.",
+          "reasoning": "The AccessDenied for batch:DescribeJobDefinitions is mentioned but not placed under a 'Not Assessed' section, and no explicit 'Expiring-Unknown' vs 'Expiring-Unused' verdict labeling is used.",
+          "confidence": "high"
+        },
+        {
+          "text": "If any expiring image is in use or carries a production like tag, the response presents a complete protective lifecycle rule JSON using tagPatternList with a priority lower than the existing rules, and states that the operator applies it; the agent does not apply it.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The recommendation section says: 'either raise its count well above 6, or scope it with a tagPrefixList so it stops overriding your per-family rules' \u2014 no JSON policy snippet, no tagPatternList, no priority value specified, and no explicit statement that the operator (not the agent) must apply it.",
+          "reasoning": "No JSON lifecycle rule is provided anywhere in the response; the recommendation is described only in prose ('either raise its count well above 6, or scope it with a tagPrefixList').",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not end with an offer to modify the policy, delete images or investigate further.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The final sentence is: 'That's really the whole risk here; the family-specific rules are fine on their own.' This is a closing statement of fact/recommendation, not an offer to take further action.",
+          "reasoning": "The response ends with a recommendation statement and does not explicitly offer to modify the policy, delete images, or investigate further on the agent's behalf.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The Repository Rating is stated as one of the four fixed values",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Every expiring image row uses the fixed verdict vocabulary",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 7,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 0.2222
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m56s",
+    "cost": "$1.47",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}
