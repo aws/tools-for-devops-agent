@@ -20,7 +20,7 @@ Configure targeting rules for configs to control which variations serve to diffe
 
 ## API Access
 
-Prefer the LaunchDarkly MCP server tools: they authenticate via OAuth and need no token. If a step has no MCP equivalent and you must call the REST API directly, ask the user to paste an API access token for this session and substitute it for `{api_token}` in the examples below. Do not search environment variables, `.env` files, or agent/MCP config files for credentials.
+Use the LaunchDarkly MCP server tools: they authenticate with the connection the customer set up. If a step has no MCP tool, tell the user which change to make in the LaunchDarkly UI instead. Never ask the user for an API access token.
 
 ## Core Concepts
 
