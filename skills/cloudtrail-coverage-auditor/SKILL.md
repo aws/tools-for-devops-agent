@@ -10,11 +10,11 @@ description: >
   invocation, asks which resources have no data events, what visibility gaps a
   trail has, what an organization trail contributes to a member account, or
   whether Event history is enough for an audit. Also use when the user pastes
-  trail configuration, event selector or trail status output, even with no
-  account access, and asks what it covers or misses. Do not use for CloudTrail
-  cost questions, for finding who performed an action or searching logged
-  events, for CIS or Security Hub control scoring, or to change any trail or
-  selector.
+  trail, event selector or trail status output with no account access and
+  asks what it covers or misses. Do not use for CloudTrail
+  cost, bill, duplicate trail waste or data event charge questions, for finding
+  who performed an action or searching logged events, for CIS or Security Hub
+  control scoring, or to change any trail or selector.
 metadata:
   author: matt-emara
   version: "1.0.0"
@@ -86,34 +86,38 @@ Activate when the user asks to:
 
 ### Do NOT activate for
 
-- CloudTrail cost, spend, duplicate trail savings or Lake pricing; use
-  `cloudtrail-cost-optimization`
 - "Who did X", searching events, or reading log content; that is the base
   agent's infrastructure change investigation, not a configuration audit
 - CIS, FSBP or Security Hub control scoring; use Security Hub
 - Any request to create, change, start, stop or delete a trail or selector
+- **Hand off to `cloudtrail-cost-optimization`** when the user asks what
+  CloudTrail costs, whether duplicate trails are waste, or about data event
+  volume or Lake charges. That skill answers what CloudTrail costs and where
+  the waste is; this skill answers what CloudTrail is not recording.
+  `unified-security-cost-optimizer` is the custom agent that routes to the
+  cost skills; this skill is not part of it and never estimates a saving.
+  Here a second trail recording the same events is a count in the evidence
+  ("recorded by N trails; coverage is not affected"), never a finding.
 
 For these, say which skill or tool applies and stop; never run the audit as a
 side task.
 
 ## Why This Skill Exists
 
-Measured against a test account with a single Region trail, a management trail
-and an organization trail, the base agent knew the APIs but: produced 5 checks
-in one run and 15 in the next for the same prompt; in 0 of 6 runs listed which
-buckets, functions or tables had no data event record; in 0 of 6 mentioned the
-90 day Event history limit or how service activity is attributed; queried the
-organization trail by name, got a not found error, and called its selectors
-opaque from a member account; and never distinguished "covered by the
+Measured on a test account, the base agent knew the APIs but produced 5 checks
+in one run and 15 in the next for the same prompt, in 0 of 6 runs listed which
+buckets, functions or tables had no data event record or mentioned the 90 day
+Event history limit, queried the organization trail by name and called it
+opaque after the not found error, and never separated "covered by the
 organization trail, not verified" from "covered nowhere". Details:
 [README.md](README.md), "Gap measured against the base agent".
 
 ## Required Permissions
 
-Every call is a read and every one is granted by the AWS managed
-`AIDevOpsAgentAccessPolicy`; no inline policy or delta is needed. Action table
-and denied call handling: [permissions.md](references/permissions.md), loaded
-on `AccessDenied`. A denied or cancelled read is never evidence of absence.
+Every call is a read granted by the AWS managed `AIDevOpsAgentAccessPolicy`;
+no inline policy or delta is needed. Action table and denied call handling:
+[permissions.md](references/permissions.md), loaded on `AccessDenied`. A
+denied or cancelled read is never evidence of absence.
 
 ## Account Scope Resolution
 1. Account from `sts:GetCallerIdentity`; enabled Regions from
@@ -141,8 +145,7 @@ on `AccessDenied`. A denied or cancelled read is never evidence of absence.
    not found in inventory is a row with state `Unknown` and note "not found in
    account", never dropped.
 6. **Region scope from the prompt** limits the resource rows; resources
-   elsewhere are `NotApplicable` and Scope says so. Otherwise sweep every
-   enabled Region.
+   elsewhere are `NotApplicable` and Scope says so. Otherwise sweep every Region.
 
 ## Coverage Model
 
@@ -162,6 +165,7 @@ scope resource resolves to exactly one state, first match wins:
    is visible and the full ARN selector read failed. May be covered. Caps at
    `Attention`.
 5. `Uncovered`: every readable trail and store was evaluated and none matches.
+A second matching source is noted as "also recorded by <trail>", never a finding.
 
 Selector summary: basic values `arn:aws:s3`, `arn:aws:lambda`, `arn:aws:dynamodb`
 match every resource of that type; a bucket ARN with trailing slash matches all
@@ -222,14 +226,14 @@ and the severity scale: [check-matrix.md](references/check-matrix.md).
 - T1: a logging multi Region trail or store records management events (CRITICAL)
 - T2: global service events captured by a multi Region or us-east-1 trail (HIGH)
 - M1: management events read and write (HIGH)
-- M2: management event sources excluded, KMS or RDS Data API (MEDIUM)
+- M2: a management event source, KMS or RDS Data API, excluded on every management trail (MEDIUM; INFO when another trail records it)
 - M3: service initiated or service linked role events excluded (MEDIUM)
 - D1: S3 object data events for every in scope bucket (HIGH, CRITICAL in list mode)
 - D2: Lambda invoke data events for every in scope function (HIGH / CRITICAL)
 - D3: DynamoDB item level data events for every in scope table (HIGH / CRITICAL)
 - D4: selector precision: read or write only, incomplete eventName list, prefix, dangling ARN (MEDIUM, dangling LOW)
 - I1: Insights enabled on a trail logging write management events (LOW)
-- L1: every trail is logging (HIGH, CRITICAL on the only management trail)
+- L1: a stopped trail has not removed coverage (CRITICAL on the only management trail, HIGH when it was the only source of something, INFO when another trail records it)
 - L2: no delivery or digest delivery error (HIGH, CRITICAL on the only management trail)
 - L3: recent delivery, 24 h HIGH, 1 h INFO, recent start INFO
 - L4: log file validation enabled (MEDIUM)
@@ -253,11 +257,11 @@ First match wins:
 
 ## Report Format
 
-Render from [report-template.md](references/report-template.md) at Step 9.
-Trail Inventory has one row per unique trail and store; Resource Coverage one
-row per in scope resource; Findings are severity ordered with field, value and
-operator change; Not Assessed lists every denied, cancelled or unknown item
-with its call. Nothing precedes the title; nothing follows Next Steps.
+Render from [report-template.md](references/report-template.md) at Step 9:
+one Trail Inventory row per unique trail and store, one Resource Coverage row
+per in scope resource, Findings severity ordered with field, value and operator
+change, Not Assessed listing every denied, cancelled or unknown item with its
+call. Nothing precedes the title; nothing follows Next Steps.
 
 ## Critical Rules
 1. **READ ONLY. Never call** `CreateTrail`, `UpdateTrail`, `DeleteTrail`,
@@ -295,8 +299,7 @@ Full table with sources: API reference section 7.
   independent of trails; it never answers a data event or retention question.
 - Service activity carries `userIdentity.invokedBy`; service linked role
   sessions show a `sessionIssuer` under `aws-service-role/`; `eventType
-  AwsServiceEvent` marks service originated events. An "exclude AWS service
-  initiated events" selector drops them (M3).
+  AwsServiceEvent` marks service events; an exclusion selector drops them (M3).
 - Multi Region and organization trails appear in every Region as shadow trails;
   de duplicate by `TrailARN`. Organization trail status, configuration and
   selectors are readable from a member only with the full trail ARN.
@@ -305,19 +308,18 @@ Full table with sources: API reference section 7.
 - S3 multipart uploads emit `CreateMultipartUpload`, `UploadPart`,
   `CompleteMultipartUpload`, not `PutObject`; bulk deletes emit `DeleteObjects`.
   An `eventName` allowlist without them misses writes and deletes (D4).
-- Global service events deliver only through a multi Region trail or a single
-  Region trail homed in us-east-1 (T2). `GetBucketLocation` returns null for
-  us-east-1; a single Region trail logs only buckets located in its Region.
+- Global service events deliver only through a multi Region trail or one homed
+  in us-east-1 (T2). `GetBucketLocation` returns null for us-east-1; a single
+  Region trail logs only buckets located in its Region.
 
 ## References
 
 - [cloudtrail-api-reference.md](references/cloudtrail-api-reference.md): calls,
   fields, hard denials, full ARN rule, errors, pagination, quirks. Step 1.
-- [coverage-model.md](references/coverage-model.md): states, resource types,
-  selector semantics with sources, Region scope, Lake, worked examples. Step 6.
-- [check-matrix.md](references/check-matrix.md): 20 checks, severity scale,
-  rating roll up. Step 8.
-- [report-template.md](references/report-template.md): report skeleton, list
-  and supplied data variants, pre render validation. Step 9.
-- [permissions.md](references/permissions.md): IAM actions, cautions, forbidden
-  actions, denied call handling. On `AccessDenied`.
+- [coverage-model.md](references/coverage-model.md): states, selector
+  semantics with sources, Region scope, Lake, worked examples. Step 6.
+- [check-matrix.md](references/check-matrix.md): 20 checks, severities, rating. Step 8.
+- [report-template.md](references/report-template.md): skeleton, list and
+  supplied data variants, pre render validation. Step 9.
+- [permissions.md](references/permissions.md): IAM actions, forbidden actions,
+  denied call handling. On `AccessDenied`.

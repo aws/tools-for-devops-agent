@@ -45,7 +45,7 @@ Bottom line: <N> of <M> in scope resources have a data event record; <K> have no
 <N> of <M> in scope resources are Covered. One row per in scope bucket, function and table.
 | Region | Type | Resource | State | Covering trail or store | Selector note |
 |---|---|---|---|---|---|
-| <region> | <S3 bucket | Lambda function | DynamoDB table> | <name> | <Covered | CoveredByOrgTrail-Unverified | Uncovered | Unknown | NotApplicable> | <trail name | none | unreadable: <trail ARN>> | <all objects | prefix <p> only | write only | eventName <list> | basic selector arn:aws:s3 | advanced StartsWith <arn> | not found in account | ->
+| <region> | <S3 bucket | Lambda function | DynamoDB table> | <name> | <Covered | CoveredByOrgTrail-Unverified | Uncovered | Unknown | NotApplicable> | <trail name | none | unreadable: <trail ARN>> | <all objects | prefix <p> only | write only | eventName <list> | basic selector arn:aws:s3 | advanced StartsWith <arn> | also recorded by <trail> | not found in account | ->
 <One line when any table has a stream: "DynamoDB stream events are logged with the table's data events.">
 
 ## Findings
@@ -60,14 +60,14 @@ Ordered by severity. Each names the field and value it rests on and the operator
 | T1 | Multi Region management logging | <PASS | FAIL <severity> | AccessDenied | ToolingFailure | NotApplicable> | <trail and field> |
 | T2 | Global service events | ... | ... |
 | M1 | Management read and write | ... | ... |
-| M2 | Management sources excluded | ... | ... |
+| M2 | Management sources recorded | ... | ... |
 | M3 | Service initiated events excluded | ... | ... |
 | D1 | S3 object data events | ... | ... |
 | D2 | Lambda invoke data events | ... | ... |
 | D3 | DynamoDB data events | ... | ... |
 | D4 | Selector precision | ... | ... |
 | I1 | Insights | ... | ... |
-| L1 | Every trail logging | ... | ... |
+| L1 | Stopped trail has not removed coverage | ... | ... |
 | L2 | No delivery error | ... | ... |
 | L3 | Recent delivery | ... | ... |
 | L4 | Log file validation | ... | ... |
@@ -83,7 +83,8 @@ Ordered by severity. Each names the field and value it rests on and the operator
 - Automated systems: <how AWS service and service linked role activity is attributed in events, and whether any selector in this account excludes it (M3)>.
 - Organization trail: <read from this account with the full ARN and what it contributes | not readable from this account; confirm from the management account <id>>.
 - CloudTrail Lake: <stores counted as coverage sources, with retention | none>.
-- Not covered by this review: CIS or Security Hub control scoring, log content, cost.
+- Not covered by this review: CIS or Security Hub control scoring, log content, and cost. <When more than one trail records the same events: "N trails record <management events | data events for <resources>>; coverage is not affected. What the extra copies cost is answered by cloudtrail-cost-optimization.">
+
 
 ## Not Assessed
 | Item | Call | Status |
@@ -135,3 +136,6 @@ Ordered by severity. Each names the field and value it rests on and the operator
 9. The data source label is present and matches how the data was obtained.
 10. No internal tool names, employee aliases, Agent Space ids, or account ids
     other than the one under review and its management account.
+11. No dollar figure, saving estimate, or the words "redundant", "paid copy"
+    or "wasteful" about any trail or store. A second copy is stated as a count
+    and handed to `cloudtrail-cost-optimization`.

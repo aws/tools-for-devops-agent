@@ -74,9 +74,10 @@ quote.
   allowlists including the multipart upload and `DeleteObjects` gap)
 - Fixed 20 check matrix: management scope, global services, read and write,
   source and service event exclusions, data events per type, selector
-  precision, Insights, logging state, delivery errors and recency, log file
-  validation, KMS, destination bucket posture, organization trail readability
-  and management coverage, Event history and attribution notes
+  precision, Insights, stopped trails that removed coverage, delivery errors
+  and recency, log file validation, KMS, destination bucket posture,
+  organization trail readability and management coverage, Event history and
+  attribution notes
 - Required list mode: the user names buckets, functions and tables; each is
   reported as captured, not captured, or not found
 - Inline data mode: paste trail, selector or status output with no account
@@ -181,14 +182,24 @@ what was not assessed, and next steps.
 
 ## Scope boundary versus adjacent skills
 
-- `cloudtrail-cost-optimization` covers CloudTrail cost and waste: duplicate
-  management event copies, paid read events, data event scope as a cost lever,
-  Lake pricing. This skill never estimates cost and never recommends reducing
-  logging. The two are complementary: run the cost skill to cut spend, this one
-  to confirm nothing an auditor needs was cut.
-- The `unified-security-cost-optimizer` custom agent reduces spend on
-  CloudTrail, Config and GuardDuty by routing to their cost skills. This skill
-  is not part of that agent and does not estimate savings.
+- `cloudtrail-cost-optimization` answers what CloudTrail costs and where the
+  waste is; this skill answers what CloudTrail is not recording. The two read
+  the same trail and selector fields and ask opposite questions: the cost skill
+  finds the paid second copy and the scope that can be narrowed, this one
+  confirms that at least one copy of every class of activity still exists and
+  is delivered. Run the cost skill to cut spend, this one to confirm nothing
+  an auditor needs was cut.
+- `unified-security-cost-optimizer` is the custom agent that reduces spend on
+  CloudTrail, Config and GuardDuty by routing to their cost skills; this skill
+  is not part of that agent and never estimates a saving.
+- Hand off: when the user asks about cost, whether duplicate trails are waste,
+  or data event volume charges, the agent should use
+  `cloudtrail-cost-optimization` instead of this skill. Inside this skill a
+  second trail recording the same events is reported as a count ("recorded by
+  N trails; coverage is not affected"), never as a finding, with no dollar
+  figure. A stopped trail or a KMS or RDS source exclusion whose events another
+  trail records is INFO here, not a gap, so a customer who followed the cost
+  skill's advice does not get it reversed by this one.
 - CIS and FSBP control scoring is Security Hub's job. This skill does not score
   controls; it reports configuration and per resource coverage.
 - Log content analysis ("who deleted this bucket", "find the event") is the

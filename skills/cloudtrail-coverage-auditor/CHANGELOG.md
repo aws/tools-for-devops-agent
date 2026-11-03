@@ -2,6 +2,12 @@
 
 All notable changes to this skill are documented here. New entries go at the top.
 
+## [1.0.0] - 2026-11-03
+
+- Boundary with `cloudtrail-cost-optimization` made explicit after the SME's overlap review. README and SKILL.md name the cost skill and `unified-security-cost-optimizer` with a one sentence boundary each and a hand off rule for cost, duplicate trail waste and data event charge questions; the description's negative trigger names them.
+- L1 reworded as a coverage question: a stopped trail is CRITICAL or HIGH only when it was the only source of some coverage, INFO when another logging trail records the same events. M2 fires only when a KMS or RDS source is excluded on every management trail; an exclusion covered elsewhere is INFO. T1 evidence and the Resource Coverage selector note state "recorded by N trails" as a fact, never a finding, with no saving estimate. M1 is evaluated across trails that record management events. D4's operator change is "widen, or record that the audit accepts the exclusion".
+- permissions.md: dropped unused `s3:GetBucketPolicy`; `sqs:ListQueues` and `sqs:GetQueueAttributes` confirmed in `AIDevOpsAgentAccessPolicy` v12 (`sqs:List*`, explicit), caveat removed.
+
 ## [1.0.0] - 2026-11-02
 
 - Initial release for AWS DevOps Agent. Draft pending SME review.
