@@ -1,0 +1,61 @@
+{
+  "version": "v2",
+  "iteration": 1,
+  "eval_id": "transcribe-caller-creds-vs-role",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected output requires the agent to identify that for the OutputBucketName batch path, Transcribe uses the CALLER's own credentials (not the passed service role), so the caller needs s3:PutObject (and KMS permission if applicable), and that DataAccessRoleArn is a separate path unrelated to this scenario (role hops NOT_APPLICABLE here).\n\nThe agent's response correctly states: \"The caller's own IAM identity (the user/role that invokes StartTranscriptionJob) needs s3:PutObject / s3:GetObject on the bucket(s) involved. This is a normal identity-based policy attached to whoever calls the API \u2014 not a role Transcribe assumes.\" It further clarifies that \"A separate 'data access role' is only used if you explicitly wire it in via JobExecutionSettings.DataAccessRoleArn\" \u2014 distinguishing this as a different path, matching the expected output's point that DataAccessRoleArn is a different path and the service role is irrelevant to the caller-credentials path.\n\nThe agent also mentions KMS permission needed if the bucket has SSE-KMS encryption, matching \"and output-KMS permission if set.\"\n\nThe agent's conclusion explicitly states the likely issue: \"the role you built [service role]... Transcribe isn't using that role to do the write, and the permission that actually matters is the one on whatever identity made the StartTranscriptionJob call, not the role you built\" \u2014 this correctly identifies that the service role is irrelevant unless explicitly wired via DataAccessRoleArn, and that the caller's permission is what matters.\n\nThis substantively matches the expected output: identifying the caller as needing the permission, service role being irrelevant unless DataAccessRoleArn is used, and KMS consideration. The core diagnostic conclusion aligns well with the expected output's intent.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "States the OutputBucketName batch path uses the caller's own credentials, so the service-role hops are NOT_APPLICABLE for this path",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent says: 'Or the role was never actually referenced via JobExecutionSettings.DataAccessRoleArn in your StartTranscriptionJob call at all \u2014 in which case Transcribe isn't using that role to do the write, and the permission that actually matters is the one on whatever identity made the StartTranscriptionJob call, not the role you built.' This is presented as one of two possibilities, not a definitive statement that the OutputBucketName batch path always uses caller's own credentials with service-role hops being NOT_APPLICABLE.",
+          "reasoning": "The agent never claims that the caller's own credentials path makes service-role hops NOT_APPLICABLE. Instead, it says that if the caller never set JobExecutionSettings.DataAccessRoleArn, the role is irrelevant for THAT call, but it frames this as one of two 'likely culprits' and still heavily emphasizes the trust policy / DataAccessRoleArn route as the primary issue, rather than definitively stating NOT_APPLICABLE as the user's described scenario.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies the missing grant as the caller's s3:PutObject on the output bucket (and output-KMS if set), and states the service role is irrelevant on this path",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent's primary diagnosis is: 'Where your setup is almost certainly breaking: you gave the \"Transcribe service role\" an S3 permission policy, but that's only half of what a role needs to be usable by Transcribe. Two likely culprits: The role has no trust policy entry for transcribe.amazonaws.com... Or the role was never actually referenced via JobExecutionSettings.DataAccessRoleArn...' This does not clearly and definitively identify the caller's own s3:PutObject as the missing grant, nor does it clearly state the service role is irrelevant - it hedges between two explanations.",
+          "reasoning": "The agent does not identify the missing grant as specifically the caller's s3:PutObject on the output bucket and output-KMS. Instead it primarily leads with the trust policy issue on the 'Transcribe service role' as the main likely culprit, treating the DataAccessRoleArn path as the most likely explanation first, before mentioning the caller identity as an alternative. It does not state the service role is irrelevant on this path as a definitive conclusion - it presents it as one of two possibilities and asks for more info to determine which.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes this caller-credentials path from the separate DataAccessRoleArn path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'The caller's own IAM identity (the user/role that invokes StartTranscriptionJob) needs s3:PutObject / s3:GetObject on the bucket(s) involved... A separate \"data access role\" is only used if you explicitly wire it in via JobExecutionSettings.DataAccessRoleArn (and that field only exists together with AllowDeferredExecution \u2014 you can't set one without the other).' This does distinguish the two paths, though it doesn't definitively conclude which one applies to the user's specific scenario.",
+          "reasoning": "The agent does distinguish between the caller's own IAM identity path (used by default for StartTranscriptionJob) and the separate DataAccessRoleArn path (used only when explicitly wired in via JobExecutionSettings). This distinction is clearly laid out in points 1 and 2 of the chain.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m16s",
+    "cost": "$1.13",
+    "context_window": {
+      "utilization": "6.6%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -2,6 +2,28 @@
 
 All notable changes to this skill are documented here. New entries go at the top.
 
+## [2.0.0] - 2026-10-30
+
+### Added
+
+- Diagnostics for eight additional AI/ML services, each as its own `references/svc-*.md`
+  with applicable hops, actions and resource ARNs, failure modes, role requirements, and a
+  diagnostic sequence: Amazon Comprehend, Lex V2, Textract, Q Business, Personalize,
+  Forecast, Rekognition, and Transcribe. The skill now covers ten services.
+- A non-denial root-cause form, `Not an access denial`, for causes that resemble access
+  errors but are not an authorization decision in the six-hop chain (for example a VPC with
+  no network path to S3, an S3/API region mismatch, or a cross-account validation rejection).
+  Every hop keeps its own evidence-based verdict; no new verdict token is added. See
+  `references/finding-logic.md` (root-cause case 3b) and `references/report-format.md`.
+
+### Changed
+
+- The SKILL.md orchestrator (Step 1 classification, the supported-services table, the
+  reference-routing list, the error-handling table, and the References section) now spans all
+  ten services rather than Bedrock and SageMaker only.
+- `references/report-format.md` and `references/finding-logic.md` extended to carry the
+  non-denial root-cause form and the widened pre-render checks.
+
 ## [1.2.4] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

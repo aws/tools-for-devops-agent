@@ -1,0 +1,61 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "comprehend-read-vs-write",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identifies that the input bucket permissions (s3:GetObject + s3:ListBucket) are present and sufficient, explaining why all documents were processed successfully during the 20-minute window. It then correctly identifies the denying hop as the missing s3:PutObject permission on the output bucket/prefix, which occurs at job completion when Comprehend attempts to write the output.tar.gz results. This matches the expected output's core requirement: marking the role-permissions hop as DENIED_BY due to missing s3:PutObject on the OUTPUT prefix, distinguishing it from the (present) input read grant, and correctly reasoning that the 'processed everything then failed' timing indicates a write-time failure rather than a read-time issue. This is a genuine permission gap (not a non-denial cause like throttling or quota). The agent also adds a reasonable secondary consideration about KMS permissions, which doesn't detract from the correct primary diagnosis.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Marks the role-permissions hop with DENIED_BY for a missing s3:PutObject on the output prefix (a write failure, not a read failure)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Your role only has the read/list pair, not s3:PutObject. That's exactly the hop that denies: Comprehend can enumerate and read every input object fine, but when it tries to PutObject the results archive to the output prefix at job completion, IAM denies it'",
+          "reasoning": "The agent explicitly identifies the missing s3:PutObject permission on the output prefix as the denying hop, framing it as a write failure rather than a read failure.",
+          "confidence": "high"
+        },
+        {
+          "text": "Uses the 'processed everything then failed at the end' timing as the signal that it is a write-time failure",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Job lifecycle explains the timing... that part succeeds, which is why you see every document get processed. Only at the very end does Comprehend try to write the consolidated output.tar.gz results file to the output S3 location \u2014 that's the step that fails.' Also: 'the job fails right after finishing all processing, which matches your symptom precisely.'",
+          "reasoning": "The agent explicitly uses the 'processed everything then failed at the end' timing pattern as evidence that the failure occurs at the write stage, directly tying the symptom to the write-time failure diagnosis.",
+          "confidence": "high"
+        },
+        {
+          "text": "Classifies it as a genuine permission gap (DENIED_BY), explicitly not the non-denial form",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'That's exactly the hop that denies'... 'IAM denies it' ... 'Your role only has the read/list pair, not s3:PutObject' \u2014 explicitly identified as a missing permission causing denial, not an ambiguous or non-denial issue.",
+          "reasoning": "The agent clearly frames this as a genuine permission gap (missing s3:PutObject) that causes an explicit IAM denial, not some other non-denial failure mode (e.g., a timeout or quota issue). The language 'IAM denies it' and 'that's exactly the hop that denies' explicitly supports a DENIED_BY classification.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "17s",
+    "cost": "$0.14",
+    "context_window": {
+      "utilization": "4.5%",
+      "compaction_count": 0
+    }
+  }
+}

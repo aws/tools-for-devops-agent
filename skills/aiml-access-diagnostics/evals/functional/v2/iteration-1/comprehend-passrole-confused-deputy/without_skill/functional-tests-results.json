@@ -1,0 +1,62 @@
+{
+  "version": "v2",
+  "iteration": 1,
+  "eval_id": "comprehend-passrole-confused-deputy",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output identifies the denying hop as the caller's iam:PassRole call (hop 2), specifically due to a PassRole condition scoping iam:PassedToService to textract.amazonaws.com, which blocks passing the role to comprehend.amazonaws.com. The agent instead concluded that PassRole passes fine and that the actual denying hop is the trust policy on the role (Comprehend's AssumeRole via STS), recommending a fix to the trust policy rather than the PassRole condition. This is a different diagnosis than expected \u2014 the agent explicitly states 'the caller-side permissions (PassRole, StartEntitiesDetectionJob) are already correct and not the problem,' which directly contradicts the expected answer that the PassRole condition is the gap.",
+      "evidence": "\"Caller \u2192 IAM (iam:PassRole on the role) \u2014 passes.\" and \"the caller-side permissions (PassRole, StartEntitiesDetectionJob) are already correct and not the problem\" vs expected \"Marks the PassRole hop (hop 2) as denying because the caller's iam:PassRole condition scopes iam:PassedToService to textract.amazonaws.com\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the denying hop as iam:PassRole and attributes it to the iam:PassedToService condition scoped to textract.amazonaws.com, not to the Comprehend action permissions",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Agent states: 'Caller \u2192 IAM (iam:PassRole on the role) \u2014 passes. Caller has this permission too, so the role gets handed to the service.' and identifies the denying hop as 'Comprehend service \u2192 STS (sts:AssumeRole...) \u2014 this is the denying hop.'",
+          "reasoning": "The agent identified the trust policy's sts:AssumeRole for comprehend.amazonaws.com as the denying hop, not iam:PassRole with a PassedToService condition. The assertion requires the denial be attributed to PassRole being scoped to textract.amazonaws.com via iam:PassedToService condition, which the agent explicitly states passes ('Caller \u2192 IAM (iam:PassRole on the role) \u2014 passes').",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains the shared role's PassRole must also allow comprehend.amazonaws.com as a passed-to service",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Agent explicitly says PassRole 'passes' and recommends 'adding a trust statement for comprehend.amazonaws.com (sts:AssumeRole) to the role's trust policy' rather than modifying PassRole conditions.",
+          "reasoning": "The agent does not mention that PassRole could be scoped via iam:PassedToService condition to only allow passing to textract.amazonaws.com. Instead it concludes PassRole 'passes' and the issue is the trust policy's principal list, not PassRole itself needing to allow comprehend.amazonaws.com as a passed-to service.",
+          "confidence": "high"
+        },
+        {
+          "text": "Presents the finding as a specific hop verdict, not generic prose about checking permissions",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response lists hops 1-4 with explicit verdicts: 'passes', 'passes', 'this is the denying hop', '(Never reached)', and concludes with a specific fix recommendation rather than generic guidance to 'check your permissions'.",
+          "reasoning": "The output presents a specific numbered hop-by-hop chain with explicit pass/fail verdicts for each hop, culminating in a specific verdict naming the denying hop, rather than generic advice.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "13s",
+    "cost": "$0.11",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

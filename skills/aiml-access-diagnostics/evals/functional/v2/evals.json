@@ -1,0 +1,291 @@
+{
+  "skill_name": "aiml-access-diagnostics",
+  "evals": [
+    {
+      "id": "inv-chain-hops",
+      "task_type": "chat",
+      "prompt": "For an AI/ML access-denied error, what authorization chain do you walk, and in what order?",
+      "expected_output": "Names the six hops in order: caller action, iam:PassRole, role trust policy, role permissions, resource policy, organization SCP. Treats PassRole and the role trust policy as distinct hops with different fixes.",
+      "should_trigger": true,
+      "assertions": [
+        "Lists the six authorization hops in order: caller action, iam:PassRole, role trust policy, role permissions, resource policy, organization SCP",
+        "Treats iam:PassRole and the role trust policy as two distinct hops with fixes in different places"
+      ]
+    },
+    {
+      "id": "inv-verdict-vocabulary",
+      "task_type": "chat",
+      "prompt": "When you diagnose an AI/ML access failure, what verdicts can each hop get, and why is there no plain 'allowed' verdict?",
+      "expected_output": "Names the closed verdict vocabulary — DENIED_BY, WOULD_ALSO_DENY, ALLOWED_BUT_UNVERIFIABLE, CANNOT_DETERMINE, plus NOT_APPLICABLE and NOT_EVALUATED — and explains that no verdict asserts a definitive allow because a policy read cannot see session policies, SCP conditions, or service-side gates outside IAM.",
+      "should_trigger": true,
+      "assertions": [
+        "Names the closed verdict vocabulary including DENIED_BY, WOULD_ALSO_DENY, ALLOWED_BUT_UNVERIFIABLE, and CANNOT_DETERMINE as the specific token set",
+        "Explains there is no definitive 'allowed' verdict because a policy read cannot account for session policies, SCP conditions, or service-side gates outside IAM"
+      ]
+    },
+    {
+      "id": "bedrock-inference-profile-dual-resource",
+      "task_type": "chat",
+      "prompt": "Bedrock Converse returns AccessDeniedException calling us.amazon.nova-micro-v1:0; the caller's role grants bedrock:InvokeModel on the inference-profile ARN and the policy looks correct. Walk the authorization chain hop by hop and give me the structured diagnosis.",
+      "expected_output": "Renders a hop-by-hop authorization chain, identifies the gap at the permissions hop as the missing underlying foundation-model ARN grant (the us. prefix is a cross-region inference profile requiring permission on BOTH the profile ARN and the foundation-model ARN in every destination region), and notes an SCP blocking any single destination region fails the whole request. Not just prose.",
+      "should_trigger": true,
+      "assertions": [
+        "Presents the diagnosis as a hop-by-hop authorization chain with an explicit verdict per hop, not only prose advice",
+        "Identifies the missing underlying foundation-model ARN grant (across every destination region the profile routes to) as the cause, not the profile grant",
+        "Notes that an SCP denying any single destination region fails the entire Converse request"
+      ]
+    },
+    {
+      "id": "sagemaker-passrole-vs-trust",
+      "task_type": "chat",
+      "prompt": "SageMaker CreateTrainingJob fails: User arn:aws:sts::111122223333:assumed-role/dev/jane is not authorized to perform: iam:PassRole on resource: arn:aws:iam::111122223333:role/sm-exec-role. The sm-exec-role has full S3 access and a trust policy for sagemaker.amazonaws.com. Walk the chain hop by hop and give me the structured diagnosis.",
+      "expected_output": "Renders the chain and marks hop 2 (iam:PassRole, caller's identity policy) as the denying hop with DENIED_BY, explicitly distinguishing it from hop 3 (the execution role's trust policy, already correct here) and noting the role's S3 access is irrelevant to this denial.",
+      "should_trigger": true,
+      "assertions": [
+        "Presents a hop-by-hop chain and marks the iam:PassRole hop (hop 2) as the denying hop with a closed-vocabulary verdict such as DENIED_BY",
+        "Explicitly separates the PassRole hop from the execution-role trust-policy hop and states the trust policy is already correct here",
+        "States the execution role's S3 permissions are irrelevant to this denial"
+      ]
+    },
+    {
+      "id": "comprehend-vpc-network-path",
+      "task_type": "chat",
+      "prompt": "My Comprehend StartSentimentDetectionJob submits fine but fails minutes later with an S3 access error. The data access role has s3:GetObject and s3:ListBucket, and the job runs in a VPC (subnet-aaa, subnet-bbb). Walk the authorization chain and classify the root cause.",
+      "expected_output": "Reports that no authorization hop denied the call (every hop keeps its evidence-based verdict) and classifies the root cause in the skill's non-denial form - 'Not an access denial' - the VPC subnet has no network path to S3 (no gateway endpoint/NAT), so adding S3 permissions will not help. Not framed as an IAM denial.",
+      "should_trigger": true,
+      "assertions": [
+        "Reports that no authorization hop in the chain denied the call",
+        "Classifies the root cause using the skill's explicit non-denial label ('Not an access denial'), not as an IAM/permission denial",
+        "States that adding S3 permissions will not help because the VPC subnet has no network path to S3, and the data access role needs no EC2 permissions"
+      ]
+    },
+    {
+      "id": "comprehend-read-vs-write",
+      "task_type": "chat",
+      "prompt": "A Comprehend entities job ran 20 minutes, processed every document, then failed at the very end. The data access role has s3:GetObject and s3:ListBucket. Walk the chain and classify the denying hop.",
+      "expected_output": "Marks the role-permissions hop DENIED_BY for a missing s3:PutObject on the OUTPUT prefix (a write-time failure, which the processed-everything-then-failed timing indicates), distinct from the input read grant that is present. A genuine permission gap, not a non-denial cause.",
+      "should_trigger": true,
+      "assertions": [
+        "Marks the role-permissions hop with DENIED_BY for a missing s3:PutObject on the output prefix (a write failure, not a read failure)",
+        "Uses the 'processed everything then failed at the end' timing as the signal that it is a write-time failure",
+        "Classifies it as a genuine permission gap (DENIED_BY), explicitly not the non-denial form"
+      ]
+    },
+    {
+      "id": "comprehend-passrole-confused-deputy",
+      "task_type": "chat",
+      "prompt": "One IAM role is shared by Textract and Comprehend. Textract works; Comprehend StartEntitiesDetectionJob returns AccessDeniedException. The caller has comprehend:StartEntitiesDetectionJob and iam:PassRole on the role. Walk the chain and name the denying hop.",
+      "expected_output": "Marks the PassRole hop (hop 2) as denying because the caller's iam:PassRole condition scopes iam:PassedToService to textract.amazonaws.com, which blocks passing the role to comprehend.amazonaws.com. The Comprehend action permissions are fine; the PassRole CONDITION is the gap.",
+      "should_trigger": true,
+      "assertions": [
+        "Identifies the denying hop as iam:PassRole and attributes it to the iam:PassedToService condition scoped to textract.amazonaws.com, not to the Comprehend action permissions",
+        "Explains the shared role's PassRole must also allow comprehend.amazonaws.com as a passed-to service",
+        "Presents the finding as a specific hop verdict, not generic prose about checking permissions"
+      ]
+    },
+    {
+      "id": "lex-bot-alias-arn-implicit-deny",
+      "task_type": "chat",
+      "prompt": "lex:RecognizeText returns AccessDeniedException; the caller's policy allows lex:RecognizeText on arn:aws:lex:us-east-1:111122223333:bot/ABCDEFGHIJ. Walk the chain, state whether the denial is explicit or implicit, and give the fix.",
+      "expected_output": "Marks hop 1 (caller action) as an IMPLICIT deny: Lex runtime actions require the bot-alias ARN, and a statement scoped to the bot/<id> ARN matches no bot-alias resource, so IAM finds no covering allow. Not an explicit deny. Fix: scope the allow to the bot-alias/ ARN.",
+      "should_trigger": true,
+      "assertions": [
+        "Classifies the denial specifically as an IMPLICIT deny (no covering allow statement), explicitly not an explicit deny",
+        "Identifies that Lex runtime actions require the bot-alias ARN, so a statement on the bot/<id> ARN never matches the resource",
+        "Recommends scoping the allow to the bot-alias ARN"
+      ]
+    },
+    {
+      "id": "lex-lambda-codehook-mode3",
+      "task_type": "chat",
+      "prompt": "Lex conversation fails with: DependencyFailedException: Invalid Bot Configuration: Access denied while invoking lambda function arn:aws:lambda:us-east-1:111122223333:function:fulfillment from arn:aws:lex:us-east-1:111122223333:bot-alias/ABCDEFGHIJ/TSTALIASID. Please check the policy on this function. The Lambda has no CloudWatch logs for the failed calls. Diagnose it.",
+      "expected_output": "Identifies the missing Lambda resource-based policy granting lexv2.amazonaws.com lambda:InvokeFunction, diagnoses directly from the DependencyFailedException message, and explicitly states the empty Lambda log group is EXPECTED (a resource-policy-denied invoke never reaches the function) rather than evidence against this cause - a counter-intuitive point the base model often gets wrong.",
+      "should_trigger": true,
+      "assertions": [
+        "Identifies the missing Lambda resource-based policy granting lexv2.amazonaws.com lambda:InvokeFunction as the cause",
+        "States affirmatively that the empty Lambda log group is consistent with this failure because a resource-policy-denied invoke never reaches the function, not evidence against it",
+        "Notes that attaching the code hook via the API does not create the permission"
+      ]
+    },
+    {
+      "id": "lex-cross-account-not-supported",
+      "task_type": "chat",
+      "prompt": "A caller in account 222222222222 needs to call lex:RecognizeText on a bot in account 111122223333. What bot resource-based policy should I add to the bot to allow that cross-account access?",
+      "expected_output": "States that Lex V2 does NOT support cross-account resource policies and rejects them at create time, so there is no valid cross-account bot policy to add - a correction to the premise. Cross-account access must be brokered another way (the caller assumes a role in the bot's account).",
+      "should_trigger": true,
+      "assertions": [
+        "Corrects the premise: states Lex V2 does not support cross-account resource policies and rejects them at create time",
+        "Does NOT provide a cross-account bot resource-based policy as the fix",
+        "Recommends brokering cross-account access another way, such as the caller assuming a role in the bot's account"
+      ]
+    },
+    {
+      "id": "textract-sns-managed-policy-scope",
+      "task_type": "chat",
+      "prompt": "Textract StartDocumentAnalysis returns a JobId but the SNS completion notification never arrives. The service role uses the AmazonTextractServiceRole managed policy and the topic is arn:aws:sns:us-east-1:111122223333:doc-complete. Walk the chain and classify whether this is a denial.",
+      "expected_output": "Marks the service-role SNS hop DENIED_BY as an IMPLICIT deny: the managed AmazonTextractServiceRole policy scopes sns:Publish to arn:aws:sns:*:*:AmazonTextract*, and doc-complete does not match, so the role cannot publish. Explicitly states this is a real IAM denial, NOT a Textract API naming rule.",
+      "should_trigger": true,
+      "assertions": [
+        "Classifies it as a real IAM denial (implicit deny / DENIED_BY) caused by the managed policy scoping sns:Publish to AmazonTextract* topics, and explicitly states it is NOT a Textract API naming requirement",
+        "Attributes the deny to the AmazonTextractServiceRole managed policy's resource scope not matching the topic name",
+        "Offers both fixes: rename the topic to start with AmazonTextract, or grant sns:Publish on the exact topic ARN"
+      ]
+    },
+    {
+      "id": "textract-region-mismatch",
+      "task_type": "chat",
+      "prompt": "Textract StartDocumentAnalysis in us-east-1 fails with InvalidS3ObjectException; the document bucket is in us-west-2 and the service role has s3:GetObject. Walk the chain and classify the root cause.",
+      "expected_output": "Reports that no authorization hop denied the call and classifies the root cause in the non-denial form ('Not an access denial') - a region mismatch, since Textract requires the bucket and API endpoint in the same region. No hop is marked DENIED_BY.",
+      "should_trigger": true,
+      "assertions": [
+        "Reports that no authorization hop denied the call and uses the skill's explicit non-denial label ('Not an access denial')",
+        "Identifies the cause as a region mismatch between the S3 bucket and the Textract API endpoint",
+        "Recommends aligning the regions rather than changing IAM"
+      ]
+    },
+    {
+      "id": "textract-sync-vs-async-caller-creds",
+      "task_type": "chat",
+      "prompt": "Textract AnalyzeDocument (the synchronous call) returns AccessDenied reading my S3 document. I already created a Textract service role with s3:GetObject and it still fails. Walk the chain and tell me whose permission is actually missing.",
+      "expected_output": "Determines that synchronous Textract reads S3 with the CALLER's credentials (no service role in the chain for sync), so hops 2-4 are NOT_APPLICABLE and the missing grant is the caller's own s3:GetObject - the service role is irrelevant to the sync path.",
+      "should_trigger": true,
+      "assertions": [
+        "States that the synchronous call uses the caller's own credentials and marks the role hops NOT_APPLICABLE for this path",
+        "Identifies the missing grant as the CALLER's s3:GetObject, and states the service role is irrelevant to the synchronous path",
+        "Distinguishes the synchronous permission model from the asynchronous service-role model"
+      ]
+    },
+    {
+      "id": "qbusiness-iam-necessary-not-sufficient",
+      "task_type": "chat",
+      "prompt": "qbusiness:ChatSync returns AccessDeniedException; the caller's IAM allows qbusiness:ChatSync on the application ARN and SimulatePrincipalPolicy says allowed. Walk the chain and tell me what else could deny this.",
+      "expected_output": "States IAM is necessary but not sufficient for Q Business: after hop 1 passes, two non-IAM gates (Identity Center application assignment, then active subscription) can still deny with a 403 that policy analysis/simulation cannot see; reports them as service-specific DENIED_BY, and warns SimulatePrincipalPolicy allowed does not mean success.",
+      "should_trigger": true,
+      "assertions": [
+        "States that passing IAM (and SimulatePrincipalPolicy) is necessary but not sufficient for Q Business, and that a passing simulation does not mean the call will succeed",
+        "Names the two additional non-IAM gates: IAM Identity Center application assignment and an active subscription, evaluated after IAM",
+        "Reports those gates as genuine (service-specific) denials rather than prose, and recommends checking them outside IAM"
+      ]
+    },
+    {
+      "id": "qbusiness-crossregion-idc-supported",
+      "task_type": "chat",
+      "prompt": "Our Q Business application is in us-east-1 but our IAM Identity Center is an organization-level instance in us-west-2. Could that cross-region Identity Center setup be why users cannot chat? Diagnose it.",
+      "expected_output": "States that a cross-region integration with an ORGANIZATION-LEVEL Identity Center instance is a SUPPORTED configuration (documented latency caveat) and must NOT be reported as the cause - correcting the premise. It is only a real failure for an account-level instance in a different region, or when the application's own components are split across regions.",
+      "should_trigger": true,
+      "assertions": [
+        "Corrects the premise: a cross-region integration with an organization-level Identity Center instance is supported and is not the cause",
+        "Distinguishes the supported org-level case from the genuinely-failing account-level or split-components cases",
+        "Directs the investigation elsewhere (assignment, subscription, or IAM) rather than at the org-level cross-region setup"
+      ]
+    },
+    {
+      "id": "qbusiness-subscription-tier",
+      "task_type": "chat",
+      "prompt": "A Q Business user gets a 403 opening Amazon Q Apps, but regular chat works and their IAM and Identity Center assignment both check out. Diagnose the 403.",
+      "expected_output": "Identifies a subscription-tier licensing constraint, NOT an IAM problem: Q Apps is a Pro (Q_BUSINESS) feature and a Lite (Q_LITE) user gets a 403 that looks like permissions but is licensing. Fix is upgrading the tier, not IAM.",
+      "should_trigger": true,
+      "assertions": [
+        "Identifies the cause as a subscription-tier (Lite vs Pro) licensing constraint, explicitly not an IAM permission problem",
+        "States Q Apps is a Pro-tier (Q_BUSINESS) feature a Lite (Q_LITE) user cannot access",
+        "Recommends upgrading the subscription tier rather than changing IAM"
+      ]
+    },
+    {
+      "id": "personalize-bucket-policy-required",
+      "task_type": "chat",
+      "prompt": "My Amazon Personalize CreateDatasetImportJob fails with 'Insufficient privileges for accessing data in S3'; the Personalize service role already has s3:GetObject and s3:ListBucket on the input bucket. Walk the chain and name the denying hop.",
+      "expected_output": "Marks the resource-policy hop (hop 5) DENIED_BY: Personalize requires a bucket policy naming the service principal personalize.amazonaws.com in addition to the role's S3 policy, and a correct role with no such bucket policy is the silent failure. Both sides are required.",
+      "should_trigger": true,
+      "assertions": [
+        "Marks the resource-policy hop (the S3 bucket policy) as the denying hop, not the service role which is already correct",
+        "States Personalize uniquely requires a bucket policy naming personalize.amazonaws.com in addition to the role's S3 policy (both sides required)",
+        "Presents this as a specific hop verdict rather than generic 'check your S3 permissions' prose"
+      ]
+    },
+    {
+      "id": "forecast-cross-account-role-invalidinput",
+      "task_type": "chat",
+      "prompt": "Amazon Forecast CreateDatasetImportJob returns InvalidInputException; the RoleArn I passed in S3Config is arn:aws:iam::444455556666:role/forecast-role but my Forecast dataset is in account 111122223333. Walk the chain and classify this.",
+      "expected_output": "Reports that no authorization hop denied the call and classifies it in the non-denial form ('Not an access denial'): Forecast forbids passing a cross-account role and returns InvalidInputException, not AccessDenied. Fix is using a role in the calling account, not an IAM change.",
+      "should_trigger": true,
+      "assertions": [
+        "Reports that no authorization hop denied and uses the non-denial label ('Not an access denial'), distinguishing InvalidInputException from AccessDenied",
+        "Identifies that Forecast forbids passing a role from another account as the cause",
+        "Recommends using a role in the calling account rather than an IAM policy change"
+      ]
+    },
+    {
+      "id": "rekognition-sns-managed-policy-scope",
+      "task_type": "chat",
+      "prompt": "Amazon Rekognition StartLabelDetection completes but no SNS notification arrives; the service role uses the AmazonRekognitionServiceRole managed policy and the topic is arn:aws:sns:us-east-1:111122223333:video-done. Walk the chain and classify whether this is a denial.",
+      "expected_output": "Marks the service-role SNS hop DENIED_BY as an implicit deny: the managed AmazonRekognitionServiceRole policy scopes sns:Publish to AmazonRekognition* topics and video-done does not match. A real IAM denial, not a Rekognition naming rule.",
+      "should_trigger": true,
+      "assertions": [
+        "Classifies it as a real IAM denial (implicit deny / DENIED_BY) from the managed AmazonRekognitionServiceRole policy scoping sns:Publish to AmazonRekognition* topics, not a naming rule",
+        "Attributes the deny to the managed policy's resource scope not matching the topic name video-done",
+        "Offers both fixes: rename the topic to start with AmazonRekognition, or grant sns:Publish on the exact topic ARN"
+      ]
+    },
+    {
+      "id": "transcribe-caller-creds-vs-role",
+      "task_type": "chat",
+      "prompt": "My Amazon Transcribe StartTranscriptionJob fails writing output to the bucket I set in OutputBucketName. I gave a Transcribe service role s3:PutObject on that bucket but it still fails. Walk the chain and tell me whose permission is actually missing.",
+      "expected_output": "Determines the OutputBucketName batch path runs on the CALLER's credentials (no passed service role on this path, so role hops are NOT_APPLICABLE), so the principal that invoked StartTranscriptionJob needs s3:PutObject (and output-KMS permission if set) - the service role is irrelevant here. The DataAccessRoleArn is a different path.",
+      "should_trigger": true,
+      "assertions": [
+        "States the OutputBucketName batch path uses the caller's own credentials, so the service-role hops are NOT_APPLICABLE for this path",
+        "Identifies the missing grant as the caller's s3:PutObject on the output bucket (and output-KMS if set), and states the service role is irrelevant on this path",
+        "Distinguishes this caller-credentials path from the separate DataAccessRoleArn path"
+      ]
+    },
+    {
+      "id": "no-trigger-general-iam-audit",
+      "task_type": "chat",
+      "prompt": "Review my IAM roles for least privilege and tell me which ones are too permissive",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-bedrock-throttling",
+      "task_type": "chat",
+      "prompt": "Bedrock InvokeModel is returning ThrottlingException, how do I raise my quota?",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-s3-accessdenied-non-aiml",
+      "task_type": "chat",
+      "prompt": "My Lambda function gets AccessDenied writing to an S3 bucket",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-policy-authoring",
+      "task_type": "chat",
+      "prompt": "Write me an IAM policy that allows Bedrock model invocation",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-unsupported-aiml-service",
+      "task_type": "chat",
+      "prompt": "Amazon Rekognition is returning AccessDenied when I call DetectFaces",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-sagemaker-endpoint-latency",
+      "task_type": "chat",
+      "prompt": "My SageMaker endpoint has high p99 latency during peak traffic",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-qbusiness-answer-quality",
+      "task_type": "chat",
+      "prompt": "My Amazon Q Business answers are irrelevant and low quality, how do I improve retrieval?",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-lex-intent-accuracy",
+      "task_type": "chat",
+      "prompt": "My Lex bot keeps misrecognizing intents and picking the wrong one",
+      "should_trigger": false
+    }
+  ]
+}

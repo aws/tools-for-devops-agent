@@ -1,0 +1,62 @@
+{
+  "version": "v2",
+  "iteration": 5,
+  "eval_id": "comprehend-passrole-confused-deputy",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires identifying Hop 2 (iam:PassRole with a PassedToService condition scoped to textract.amazonaws.com) as the denying hop, since the caller does have iam:PassRole but the condition restricts it to Textract only. The agent instead marked Hop 2 as allowed ('\u2705 Allowed \u2014 caller can hand the role to the Comprehend service') and claimed the denial occurs at Hop 3, the role's trust policy (AssumeRolePolicyDocument) not trusting comprehend.amazonaws.com. This is a different root cause diagnosis than expected: the agent focused on the trust policy principal rather than the PassRole condition key scoping PassedToService. The agent did not mention iam:PassedToService condition at all, which is the core of the expected answer. Therefore the response does not match the expected output's key conclusion.",
+      "evidence": "\"Hop 2 \u2014 Caller \u2192 iam:PassRole \u2705 Allowed \u2014 caller can hand the role to the Comprehend service.\" and \"Hop 3 \u2014 Comprehend service \u2192 sts:AssumeRole (the role's trust policy) \u274c This is the denying hop.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Identifies the denying hop as iam:PassRole and attributes it to the iam:PassedToService condition scoped to textract.amazonaws.com, not to the Comprehend action permissions",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Agent states 'Hop 2 \u2014 Caller \u2192 iam:PassRole \u2705 Allowed' and identifies the denying hop as 'Comprehend service \u2192 sts:AssumeRole (the role's trust policy)', attributing the denial to a missing trust statement for comprehend.amazonaws.com in the role's AssumeRolePolicyDocument, not to iam:PassRole or a PassedToService condition.",
+          "reasoning": "The assertion requires the agent to identify PassRole itself (specifically the iam:PassedToService condition scoped to textract.amazonaws.com) as the denying hop. The agent instead explicitly marks PassRole as allowed and pins the failure on the trust policy/AssumeRole step, which is the opposite attribution.",
+          "confidence": "high"
+        },
+        {
+          "text": "Explains the shared role's PassRole must also allow comprehend.amazonaws.com as a passed-to service",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent's fix recommends 'add a trust statement for comprehend.amazonaws.com to the role' in the AssumeRolePolicyDocument, e.g. '{\"Effect\": \"Allow\", \"Principal\": { \"Service\": \"comprehend.amazonaws.com\" }, \"Action\": \"sts:AssumeRole\" }' \u2014 it never mentions the caller's PassRole policy needing an iam:PassedToService condition allowing comprehend.amazonaws.com.",
+          "reasoning": "The assertion specifically calls for explaining that the PassRole permission (the caller's IAM policy, likely with a PassedToService condition) must allow comprehend.amazonaws.com as a passed-to service. The agent's explanation and fix are entirely about the role's trust policy, not about the PassRole grant needing to cover comprehend as a passed-to service.",
+          "confidence": "high"
+        },
+        {
+          "text": "Presents the finding as a specific hop verdict, not generic prose about checking permissions",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output is structured as 'Hop 1 \u2014 Caller \u2192 Comprehend API \u2705 Allowed', 'Hop 2 \u2014 Caller \u2192 iam:PassRole \u2705 Allowed', 'Hop 3 \u2014 Comprehend service \u2192 sts:AssumeRole (the role's trust policy) \u274c This is the denying hop.' with a specific causal explanation naming the exact failing principal condition.",
+          "reasoning": "Regardless of whether the diagnosis is correct, the output clearly presents each hop with an explicit pass/fail verdict and pinpoints hop 3 as the specific denying hop with concrete reasoning, rather than generic advice to 'check your permissions.'",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "9s",
+    "cost": "$0.08",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

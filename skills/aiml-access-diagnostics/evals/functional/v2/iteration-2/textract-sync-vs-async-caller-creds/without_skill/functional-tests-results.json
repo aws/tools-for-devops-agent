@@ -1,0 +1,62 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "textract-sync-vs-async-caller-creds",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identifies that synchronous AnalyzeDocument does not use a Textract service role (no RoleArn parameter), that Textract reads the S3 object using the caller's own IAM credentials, and that the service role created by the user is irrelevant for the sync path (only relevant for async operations). It pinpoints the missing permission as the caller identity's own s3:GetObject (and potentially kms:Decrypt for SSE-KMS). This matches the expected output's core determination: hops involving the service role are not applicable, and the actual missing grant is the caller's own s3:GetObject.",
+      "evidence": "\"Synchronous `AnalyzeDocument` doesn't use a Textract service role at all... So the chain for sync calls is: 1. Caller identity... needs s3:GetObject... The service role you created with s3:GetObject is irrelevant here \u2014 Textract never assumes it for the synchronous path.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "States that the synchronous call uses the caller's own credentials and marks the role hops NOT_APPLICABLE for this path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Synchronous AnalyzeDocument doesn't use a Textract service role at all... Caller identity (the IAM user/role whose credentials you used to invoke textract:AnalyzeDocument) \u2192 needs s3:GetObject on that bucket/key.\" and \"The service role you created with s3:GetObject is irrelevant here \u2014 Textract never assumes it for the synchronous path.\"",
+          "reasoning": "The agent explicitly states the sync call uses the caller's own credentials, and explicitly marks the role as irrelevant/not applicable to this path, satisfying the assertion's substance even though it doesn't use the literal phrase NOT_APPLICABLE.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies the missing grant as the CALLER's s3:GetObject, and states the service role is irrelevant to the synchronous path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"the AccessDenied means the IAM principal making the API call itself (whatever user/role is running your sync code) lacks s3:GetObject on the bucket/object\" and \"The service role you created with s3:GetObject is irrelevant here.\"",
+          "reasoning": "The agent directly identifies the missing grant as the caller's s3:GetObject and explicitly states the service role is irrelevant to the synchronous path.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes the synchronous permission model from the asynchronous service-role model",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"it's only present on the async operations (StartDocumentAnalysis, StartDocumentTextDetection, etc.)\" contrasted with the sync caller-credential model described throughout; also \"That role only matters for async jobs.\"",
+          "reasoning": "The agent clearly distinguishes the two permission models, explaining that sync relies on caller credentials while async uses a service role (RoleArn/DataAccessRoleArn).",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "10s",
+    "cost": "$0.09",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

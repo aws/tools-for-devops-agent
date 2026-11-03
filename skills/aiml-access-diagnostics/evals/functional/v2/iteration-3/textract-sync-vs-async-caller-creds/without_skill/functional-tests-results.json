@@ -1,0 +1,62 @@
+{
+  "version": "v2",
+  "iteration": 3,
+  "eval_id": "textract-sync-vs-async-caller-creds",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identified that for synchronous AnalyzeDocument, Textract has no mechanism to assume a separate service role (no RoleArn parameter exists in the sync API), and that S3 access is performed using the credentials of the caller (IAM user, Lambda execution role, EC2 instance profile, etc.) invoking the API. It explicitly states the service role the user created is disconnected/irrelevant to this call, and pinpoints the missing permission as s3:GetObject (plus kms:Decrypt if applicable) attached to the actual calling principal, not the standalone service role. This matches the expected output: sync Textract uses caller's credentials, service role is irrelevant/not applicable, and the fix is granting the caller's own identity s3:GetObject.",
+      "evidence": "\"Textract fetches the object using the permissions of whatever IAM principal is making the API call... The role you built with s3:GetObject is never assumed by anything \u2014 it's just sitting there, disconnected from the call.\" and \"attach s3:GetObject (+ kms:Decrypt if encrypted) directly to the IAM role/user that's making the AnalyzeDocument call \u2014 not to the standalone 'Textract service role.'\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "States that the synchronous call uses the caller's own credentials and marks the role hops NOT_APPLICABLE for this path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Textract fetches the object using the permissions of whatever IAM principal is making the API call\" and \"The role you built with s3:GetObject is never assumed by anything \u2014 it's just sitting there, disconnected from the call.\" Also: \"the Document.S3Object field only has Bucket, Name, and Version. There's no RoleArn or DataAccessRoleArn anywhere in the synchronous API.\"",
+          "reasoning": "The agent explicitly states that for synchronous AnalyzeDocument, Textract uses the credentials of the calling IAM principal, and explains that the role hop (RoleArn/DataAccessRoleArn) doesn't exist for this API, effectively marking role hops as not applicable.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies the missing grant as the CALLER's s3:GetObject, and states the service role is irrelevant to the synchronous path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"That identity needs, directly attached to it: s3:GetObject on the exact object...\" and \"Why your service role didn't help: Textract also doesn't support resource-based policies or service-linked roles for this flow... it genuinely comes down to the caller's own identity-based permissions.\" Fix section: \"attach s3:GetObject (+ kms:Decrypt if encrypted) directly to the IAM role/user that's making the AnalyzeDocument call \u2014 not to the standalone 'Textract service role.'\"",
+          "reasoning": "The agent clearly identifies the missing permission as belonging to the caller's identity (s3:GetObject) and explicitly states the service role is irrelevant/disconnected for the synchronous path.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes the synchronous permission model from the asynchronous service-role model",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"the Document.S3Object field only has Bucket, Name, and Version. There's no RoleArn or DataAccessRoleArn anywhere in the synchronous API.\" This explicitly contrasts synchronous (no RoleArn) with the async model where DataAccessRoleArn would be used, and the agent clarifies 'For synchronous AnalyzeDocument/DetectDocumentText' specifically to distinguish from async calls like StartDocumentAnalysis.",
+          "reasoning": "The agent distinguishes between the synchronous model (caller's own credentials, no RoleArn parameter) and implies the asynchronous model differs by mentioning the lack of RoleArn in synchronous API, and references DataAccessRoleArn which is used in async calls, contrasting the two models.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "47s",
+    "cost": "$0.39",
+    "context_window": {
+      "utilization": "5.4%",
+      "compaction_count": 0
+    }
+  }
+}
