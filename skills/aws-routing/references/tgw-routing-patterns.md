@@ -22,11 +22,18 @@ This document captures key routing mechanics, ECMP behavior, failover characteri
 
 ## ECMP Behavior
 
+### DXGW Advertises Only ONE Best Path Per Prefix to TGW
+
+A **single DX Gateway advertises only one best path per prefix** to the TGW, regardless of how many VIFs are attached to that DXGW. The DXGW acts as a BGP aggregator between on-prem and the TGW: it runs its own internal best-path selection across its VIFs and propagates only the single winner per prefix to the TGW attachment. This is the same "DXGW propagates one path per prefix" behavior seen on the Cloud WAN side (DXGW → CNE); the downstream being a TGW does not change it.
+
+Consequences:
+- **No active/active ECMP across multiple VIFs on the *same* DXGW** — the TGW sees one path per prefix from that DXGW attachment, so redundant VIFs on one DXGW behave **active/passive** (DXGW fails over VIF-to-VIF internally; TGW only ever sees the current winner).
+- **To get multiple paths per prefix at the TGW, use multiple DXGWs** — each DXGW is a separate TGW attachment and contributes its own one-best-path-per-prefix. TGW then has one candidate per DXGW and can ECMP across them (subject to the same-ASN requirement below).
+
 ### Supported ECMP Scenarios
 
 - **VPN attachments**: TGW supports ECMP across VPN attachments. A TGW-level toggle ("VPN ECMP support") must be enabled.
-- **Multiple DX-GW attachments** (within the same DX-GW): TGW will ECMP across matching prefixes
-- **Multiple different DX-GWs**: TGW will ECMP across matching prefixes received from different DX Gateways
+- **Multiple different DX-GWs**: TGW will ECMP across the per-DXGW best paths received from different DX Gateways for a matching prefix — **but only when the AS-paths are identical, which requires the DXGWs to advertise with the SAME ASN** (see "Same-ASN requirement" below). Note this is ECMP across *separate DXGW attachments*, not across VIFs within one DXGW (one DXGW only ever offers a single path per prefix — see above).
 - **Multiple TGW Connect attachments**: TGW will ECMP across matching prefixes
 
 ### NOT Supported
@@ -34,6 +41,13 @@ This document captures key routing mechanics, ECMP behavior, failover characteri
 - **ECMP across different attachment types** — TGW does NOT ECMP between, for example, a DX-GW attachment and a VPN attachment for the same prefix. Instead, the Route evaluation order determines the winner.
 - **Multipath AS-path relaxed** — ECMP for paths with different AS-paths is NOT supported. If matching prefixes are received with different AS-paths, only the **oldest route is installed** (not load-balanced).
 - If prefixes match but ECMP conditions aren't met, the **oldest route** is installed.
+
+### Same-ASN Requirement for TGW ECMP Across DXGWs
+
+- Because TGW does **not** support AS-path relax, ECMP across multiple DXGW attachments requires the AS-paths to be **truly identical — same length AND same ASNs**. Equal *length* alone is not sufficient if the ASNs differ.
+- In practice this means the **DXGWs must advertise the prefix with the same ASN** for TGW to ECMP across them. Different ASNs → no ECMP → TGW installs the **oldest route** (single path).
+- **This differs from DX-side ECMP.** Per AWS DX docs, ECMP *across VIFs for a Region* works "when prefixes have the same AS_PATH length and BGP attributes" and the ASNs in the AS_PATH **do not need to match** — that is a Region/DX-side behavior. The **same-ASN requirement here is specific to TGW ECMP across separate DXGW attachments** — do not conflate the two selection points.
+- **[Field knowledge]** The DXGW-one-path-per-prefix propagation to TGW, and the same-ASN requirement for TGW ECMP across DXGWs, are field-proven/operational behaviors. They are not clearly stated as such on the public AWS TGW route-evaluation page — validate in-account with `search-transit-gateway-routes` (per-prefix candidates and which attachment) and `list-virtual-interface-routes` (what each DXGW's VIF advertised).
 
 ## Direct Connect + TGW Considerations
 

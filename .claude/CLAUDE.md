@@ -302,6 +302,10 @@ python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict
 
 Fix every error, and the warnings for the skill you touched. Pull requests from forks may need a maintainer to approve the workflow run before these checks appear on the PR, so a PR with no checks has not passed them.
 
+### Connector pull requests
+
+To review a connector pull request, or to prepare one, follow [.kiro/steering/connector-review.md](../.kiro/steering/connector-review.md). It covers the connector contract, endpoint and authentication checks, the recommended skills, and how findings are classified.
+
 ## Adding a New Skill
 
 1. Create a new directory under `skills/` with the skill name.
