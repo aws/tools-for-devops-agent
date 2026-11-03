@@ -8,7 +8,8 @@ A connector is the definition of an MCP server that a partner hosts, for custome
 | `schema/v1/releases.schema.json` | JSON Schema for `releases.yaml` |
 | `schema/v1/published-files.json` | The files a connector directory may contain. Every one is published |
 | `releases.yaml` | Per connector, the version production serves. Changed by maintainers only |
+| `TERMS.md` | The AWS DevOps Agent Partner Connector Terms and Conditions, which a partner accepts in its connector's pull request |
 
 `maintainers` in `connector.yaml` lists the GitHub usernames, or teams as `org/team`, that maintain the connector, without a leading `@`.
 
-Connector submissions are not open yet. The contribution guide, covering how to write and submit a connector, will be added to [CONTRIBUTING.md](../CONTRIBUTING.md).
+A partner accepts the [AWS DevOps Agent Partner Connector Terms and Conditions](TERMS.md) in the pull request that adds or changes its connector; see "Partner Connectors" in [CONTRIBUTING.md](../CONTRIBUTING.md). Connector submissions are not open yet. The contribution guide, covering how to write and submit a connector, will be added to CONTRIBUTING.md.

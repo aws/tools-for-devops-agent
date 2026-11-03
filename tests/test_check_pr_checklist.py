@@ -19,6 +19,7 @@ TICKED = re.sub(r"^(\s*-\s*)\[\s*\]", r"\1[x]", TEMPLATE, flags=re.M)
 
 SKILL_PR = ["skills/demo/SKILL.md"]
 DOCS_PR = ["CONTRIBUTING.md"]
+CONNECTOR_PR = ["connectors/acme/connector.yaml", "connectors/acme/logo.svg"]
 
 
 def body(*sections: str) -> str:
@@ -29,6 +30,7 @@ REQUIRED_ALL_TICKED = "## Required before review\n- [x] **No internal-only or pr
 LICENSE_TICKED = "## License confirmation\n- [x] I confirm the terms of the Apache License 2.0."
 SECURITY_TICKED = "## Security and safety\n- [x] Read-only by default."
 SKILLS_TICKED = "## Skills — complete if this PR adds or changes a skill\n- [x] frontmatter is valid"
+CONNECTORS_TICKED = "## Connectors — complete if this PR adds or changes a connector\n- [x] I accept the terms."
 
 
 class TemplateTest(unittest.TestCase):
@@ -36,7 +38,7 @@ class TemplateTest(unittest.TestCase):
 
     def test_every_section_is_a_template_heading(self):
         headings = [m.group(1) for m in map(cpc.HEADING.match, TEMPLATE.splitlines()) if m]
-        names = [*cpc.ALWAYS_SECTIONS, cpc.TOOL_SECTION, *cpc.TOOL_DIRS.values()]
+        names = [*cpc.ALWAYS_SECTIONS, cpc.TOOL_SECTION, *cpc.TOOL_DIRS.values(), cpc.CONNECTOR_SECTION]
         for name in names:
             with self.subTest(name):
                 matches = [h for h in headings if h.lower().startswith(name.lower())]
@@ -63,8 +65,14 @@ class TemplateTest(unittest.TestCase):
         self.assertIn("Apache License", unmet[1])
 
     def test_fully_ticked_template_passes_on_every_tool_type(self):
-        paths = ["skills/a/SKILL.md", "mcp/b/README.md", "custom-agents/c/SYSTEM_PROMPT.md"]
+        paths = ["skills/a/SKILL.md", "mcp/b/README.md", "custom-agents/c/SYSTEM_PROMPT.md", *CONNECTOR_PR]
         self.assertEqual(cpc.evaluate(TICKED, paths)[0], [])
+
+    def test_untouched_template_on_a_connector_pr_holds_the_universal_items_and_the_terms(self):
+        unmet, _, is_tool = cpc.evaluate(TEMPLATE, CONNECTOR_PR)
+        self.assertFalse(is_tool)
+        self.assertEqual(len(unmet), 3)
+        self.assertTrue(unmet[2].startswith("Connectors → I accept the"))
 
 
 class EvaluateTest(unittest.TestCase):
@@ -108,9 +116,48 @@ class EvaluateTest(unittest.TestCase):
     def test_tool_items_do_not_apply_to_a_pr_touching_no_tool(self):
         text = body("## Required before review\n- [x] No internal-only or proprietary content\n- [ ] README is complete",
                     LICENSE_TICKED)
-        for paths in (DOCS_PR, ["connectors/acme/connector.yaml"]):
+        for paths in (DOCS_PR, ["connectors/releases.yaml"], ["connectors/schema/v1/connector.schema.json"],
+                      ["connectors/README.md", "connectors/TERMS.md"]):
             with self.subTest(paths):
                 self.assertEqual(cpc.evaluate(text, paths)[0], [])
+
+
+class ConnectorTest(unittest.TestCase):
+    def test_a_connector_pr_with_the_terms_accepted_passes(self):
+        text = body(REQUIRED_ALL_TICKED, CONNECTORS_TICKED, LICENSE_TICKED)
+        self.assertEqual(cpc.evaluate(text, CONNECTOR_PR)[0], [])
+
+    def test_a_connector_pr_without_the_terms_accepted_fails(self):
+        text = body(REQUIRED_ALL_TICKED, CONNECTORS_TICKED.replace("[x]", "[ ]"), LICENSE_TICKED)
+        unmet, _, _ = cpc.evaluate(text, CONNECTOR_PR)
+        self.assertEqual(len(unmet), 1)
+        self.assertTrue(unmet[0].startswith("Connectors → "))
+
+    def test_the_terms_cannot_be_marked_na(self):
+        text = body(
+            REQUIRED_ALL_TICKED,
+            "## Connectors — complete if this PR adds or changes a connector\n- [ ] I accept the terms. n/a: filed by an SA",
+            LICENSE_TICKED,
+        )
+        unmet, waived, _ = cpc.evaluate(text, CONNECTOR_PR)
+        self.assertEqual(waived, [])
+        self.assertEqual(len(unmet), 1)
+        self.assertIn("cannot be marked n/a", unmet[0])
+
+    def test_a_deleted_connectors_section_is_unmet(self):
+        unmet, _, _ = cpc.evaluate(body(REQUIRED_ALL_TICKED, LICENSE_TICKED), CONNECTOR_PR)
+        self.assertEqual(unmet, ["Connectors → section missing from the description; restore it from the template"])
+
+    def test_a_connector_with_its_skills_is_held_to_both_sections(self):
+        text = body(REQUIRED_ALL_TICKED, LICENSE_TICKED, SECURITY_TICKED, SKILLS_TICKED)
+        unmet, _, is_tool = cpc.evaluate(text, [*CONNECTOR_PR, "skills/acme-investigation/SKILL.md"])
+        self.assertTrue(is_tool)
+        self.assertEqual(len(unmet), 1)
+        self.assertTrue(unmet[0].startswith("Connectors → section missing"))
+
+    def test_the_summary_names_the_terms_only_for_a_connector_pr(self):
+        self.assertIn("partner terms", cpc.summary([], [], False, "complete", True))
+        self.assertNotIn("partner terms", cpc.summary([], [], False, "complete"))
 
 
 class DecideTest(unittest.TestCase):
