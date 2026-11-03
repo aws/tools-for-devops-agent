@@ -16,14 +16,14 @@ CloudFormation delta policy are needed.
 | `cloudtrail:GetTrail`, `cloudtrail:GetTrailStatus`, `cloudtrail:GetEventSelectors`, `cloudtrail:GetInsightSelectors` | explicit | Trail configuration, delivery health, selectors, Insights |
 | `cloudtrail:ListEventDataStores`, `cloudtrail:GetEventDataStore` | `cloudtrail:List*`, explicit | CloudTrail Lake stores as coverage sources |
 | `s3:ListAllMyBuckets`, `s3:GetBucketLocation` | explicit | Bucket inventory and Region |
-| `s3:GetBucketVersioning`, `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketPublicAccessBlock`, `s3:GetBucketPolicy` | explicit | E2 optional destination bucket context |
+| `s3:GetBucketVersioning`, `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketPublicAccessBlock` | explicit | E2 optional destination bucket context |
 | `lambda:ListFunctions` | `lambda:List*` | Function inventory |
 | `dynamodb:ListTables`, `dynamodb:DescribeTable` | `dynamodb:List*`, `dynamodb:Describe*` | Table inventory, stream note |
 | `organizations:DescribeOrganization`, `organizations:ListDelegatedAdministrators` | `organizations:Describe*`, `organizations:List*` | Account role resolution |
 | `ec2:DescribeRegions` | `ec2:Describe*` | Enabled Regions |
 | `kms:DescribeKey`, `logs:DescribeLogGroups`, `iam:GetRole` | explicit or `Describe*` | Optional context: key state, log group exists, `AWSServiceRoleForCloudTrail` present |
 | `sns:GetTopicAttributes`, `sns:ListTopics` | explicit, `sns:List*` | Only when the user's required list names an SNS topic |
-| `sqs:ListQueues`, `sqs:GetQueueAttributes` | to be confirmed in v12 before relying on it | Only when the user's required list names an SQS queue; if denied, the row is `Unknown` |
+| `sqs:ListQueues`, `sqs:GetQueueAttributes` | `sqs:List*`, explicit | Only when the user's required list names an SQS queue; if denied, the row is `Unknown` |
 | `sts:GetCallerIdentity` | no IAM permission required | Account id |
 
 ## Cautions

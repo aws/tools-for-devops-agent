@@ -34,8 +34,9 @@ user.
 | `iam:GetRole` (`AWSServiceRoleForCloudTrail`) | optional, member account | `Role.Arn` | none | Organization trail service linked role present [S8] |
 | `sns:GetTopicAttributes`, `sns:ListTopics`, `sqs:ListQueues`, `sqs:GetQueueAttributes` | only when the user's required list names a topic or queue | ARN | provider tokens | Request only types |
 
-Every action above is in `AIDevOpsAgentAccessPolicy` (see
-[permissions.md](permissions.md)). The skill never lists objects in any bucket.
+Every action above is in `AIDevOpsAgentAccessPolicy` v12, including
+`sqs:GetQueueAttributes` (explicit) and `sqs:ListQueues` (`sqs:List*`); see
+[permissions.md](permissions.md). The skill never lists objects in any bucket.
 
 ## 2. Hard denials (never called)
 

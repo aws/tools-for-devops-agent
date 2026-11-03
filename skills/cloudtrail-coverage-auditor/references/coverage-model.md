@@ -24,6 +24,11 @@ Rules that follow from the order:
   denied or cancelled call anywhere in the path makes the row `Unknown`.
 - A trail with `IsLogging` false covers nothing; its selectors are still read
   and reported so the operator can see what starting it would capture.
+- When more than one logging source matches a resource, the row names the
+  first and the selector note adds "also recorded by <trail or store>". That
+  is a fact about coverage, not a finding; whether the second copy is worth
+  paying for is `cloudtrail-cost-optimization`'s question, and this skill
+  never answers it.
 
 ## 2. Resource types
 
