@@ -1,21 +1,21 @@
 # Set up Coralogix
 
-Before you connect, find your Coralogix region and choose either OAuth sign-in or a personal API key. If you want Coralogix alerts to open investigations, also do step 3 after you connect.
+Before you connect, choose your Coralogix region and either OAuth sign-in or a personal API key. If you want Coralogix alerts to open investigations, also do step 3 after you connect.
 
 ## 1. Find your region
 
-Your Coralogix sign-in address shows your region. Select the matching label when you connect. A key works only in its own region.
+Select the label matching your Coralogix domain when you connect. A key works only in its own region.
 
-| You sign in at | Label | Hosted in |
+| Coralogix domain | Label | Hosted in |
 | --- | --- | --- |
-| `<team>.coralogix.com` | EU1 | AWS eu-west-1 (Ireland) |
-| `<team>.app.eu2.coralogix.com` | EU2 | AWS eu-north-1 (Stockholm) |
-| `<team>.app.coralogix.us` | US1 | AWS us-east-2 (Ohio) |
-| `<team>.app.us2.coralogix.com` | US2 | AWS us-west-2 (Oregon) |
-| `<team>.app.us3.coralogix.com` | US3 | Google Cloud us-central1 (Iowa) |
-| `<team>.app.ap1.coralogix.in` | AP1 | AWS ap-south-1 (Mumbai) |
-| `<team>.app.ap2.coralogix.com` | AP2 | AWS ap-southeast-1 (Singapore) |
-| `<team>.app.ap3.coralogix.com` | AP3 | AWS ap-southeast-3 (Jakarta) |
+| `eu1.coralogix.com` | EU1 | AWS eu-west-1 (Ireland) |
+| `eu2.coralogix.com` | EU2 | AWS eu-north-1 (Stockholm) |
+| `us1.coralogix.com` | US1 | AWS us-east-2 (Ohio) |
+| `us2.coralogix.com` | US2 | AWS us-west-2 (Oregon) |
+| `us3.coralogix.com` | US3 | Google Cloud us-central1 (Iowa) |
+| `ap1.coralogix.com` | AP1 | AWS ap-south-1 (Mumbai) |
+| `ap2.coralogix.com` | AP2 | AWS ap-southeast-1 (Singapore) |
+| `ap3.coralogix.com` | AP3 | AWS ap-southeast-3 (Jakarta) |
 
 ## 2. Choose how to authenticate
 
