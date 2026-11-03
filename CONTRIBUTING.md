@@ -565,10 +565,9 @@ A connector lists a partner's MCP server in AWS DevOps Agent. Before its
 connector merges, the partner accepts the
 [AWS DevOps Agent Partner Connector Terms and Conditions](connectors/TERMS.md) by
 ticking the box in the pull request template's Connectors section, and names a
-shared corporate address in `contact_email` in its `connector.yaml`, where AWS can
-reach it about the connector, including security notices. It is never a person's
-address, because the file is public. Every pull request that changes a
-`connectors/<name>/` directory carries both boxes, and the
+corporate work email address in `contact_email` in its `connector.yaml`, where AWS
+can reach it about the connector, including security notices. Every pull request
+that changes a `connectors/<name>/` directory carries both boxes, and the
 [checklist check](#the-pull-request-checklist) fails without them.
 
 The partner opens its own pull request, from the account of someone who can
