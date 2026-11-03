@@ -477,7 +477,7 @@ MCP server" names three types at once, so they cannot decide it.
 | Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
 | Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
 | Anything under `custom-agents/` | The same, with the Custom agents section |
-| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution, and both items in the Connectors section: the partner terms acceptance and the contact address. A connector is a definition, not a tool, so no other item applies unless the PR also changes a skill |
+| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution, and the partner terms acceptance in the Connectors section. The check also fails if a changed connector's `connector.yaml` sets no `contact_email`. A connector is a definition, not a tool, so no other item applies unless the PR also changes a skill |
 
 So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
 a CHANGELOG or an SME sign-off, because none of it means anything for that change.
@@ -511,9 +511,8 @@ Three items can never be waived this way:
 - **no internal-only or proprietary content**, because this repository is public
   and the claim is about every file in the PR
 - the **licence confirmation**, which is a statement only you can make
-- the **Connectors items** on a connector PR, the partner terms acceptance and
-  the contact address, which only the partner can give (see
-  [Partner Connectors](#partner-connectors))
+- the **partner terms acceptance** on a connector PR, which only the partner can
+  give (see [Partner Connectors](#partner-connectors))
 
 Use the escape rather than either of the alternatives. Ticking something untrue is
 caught at review and sends the PR back. Deleting the line is worse: the check
@@ -567,8 +566,9 @@ connector merges, the partner accepts the
 ticking the box in the pull request template's Connectors section, and names a
 corporate work email address in `contact_email` in its `connector.yaml`, where AWS
 can reach it about the connector, including security notices. Every pull request
-that changes a `connectors/<name>/` directory carries both boxes, and the
-[checklist check](#the-pull-request-checklist) fails without them.
+that changes a `connectors/<name>/` directory carries the box, and the
+[checklist check](#the-pull-request-checklist) fails if the box is unticked or
+`contact_email` is missing.
 
 The partner opens its own pull request, from the account of someone who can
 accept the terms for the company. If an AWS Solutions Architect opens one for a

@@ -71,9 +71,8 @@ class TemplateTest(unittest.TestCase):
     def test_untouched_template_on_a_connector_pr_holds_the_universal_items_and_the_terms(self):
         unmet, _, is_tool = cpc.evaluate(TEMPLATE, CONNECTOR_PR)
         self.assertFalse(is_tool)
-        self.assertEqual(len(unmet), 4)
+        self.assertEqual(len(unmet), 3)
         self.assertTrue(unmet[2].startswith("Connectors → I accept the"))
-        self.assertTrue(unmet[3].startswith("Connectors → `contact_email`"))
 
 
 class EvaluateTest(unittest.TestCase):
@@ -156,6 +155,29 @@ class ConnectorTest(unittest.TestCase):
         self.assertEqual(len(unmet), 1)
         self.assertTrue(unmet[0].startswith("Connectors → section missing"))
 
+    def test_a_changed_connector_must_set_contact_email(self):
+        files = {
+            "connectors/acme/connector.yaml": "name: acme\ncontact_email: devops@acme.example\n",
+            "connectors/beta/connector.yaml": "name: beta\nsupport_url: https://beta.example\n",
+            "connectors/gamma/connector.yaml": "name: gamma\ncontact_email:\n  # not set\n",
+            "connectors/delta/connector.yaml": "mcp:\n  contact_email: nested@delta.example\n",
+        }
+        paths = ["connectors/acme/logo.svg", "connectors/beta/connector.yaml", "connectors/gamma/README.md",
+                 "connectors/delta/connector.yaml", "connectors/omega/README.md", "connectors/README.md",
+                 "connectors/schema/v1/connector.schema.json"]
+        unmet = cpc.missing_contact(paths, files.get)
+        self.assertEqual([u.split(" sets ")[0] for u in unmet], [
+            "Connectors → connectors/beta/connector.yaml",
+            "Connectors → connectors/delta/connector.yaml",
+            "Connectors → connectors/gamma/connector.yaml",
+            "Connectors → connectors/omega/connector.yaml",
+        ])
+
+    def test_no_connector_change_reads_nothing(self):
+        def read(path):
+            raise AssertionError(path)
+        self.assertEqual(cpc.missing_contact([*DOCS_PR, "connectors/releases.yaml", "connectors/TERMS.md"], read), [])
+
     def test_the_summary_names_the_terms_only_for_a_connector_pr(self):
         self.assertIn("partner terms", cpc.summary([], [], False, "complete", True))
         self.assertNotIn("partner terms", cpc.summary([], [], False, "complete"))
@@ -208,6 +230,30 @@ class MainTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual((self.out / "outcome").read_text().strip(), "error")
         self.assertFalse((self.out / "reason").exists())
+
+    def connector_pr(self, connector_yaml):
+        repo = self.tmp / "repo"
+        repo.mkdir()
+        self.git("init", "-q", "-b", "main")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "base")
+        self.git("checkout", "-q", "-b", "pr")
+        (repo / "connectors" / "acme").mkdir(parents=True)
+        (repo / "connectors" / "acme" / "connector.yaml").write_text(connector_yaml, encoding="utf-8")
+        self.git("add", ".")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "connector")
+        cwd = os.getcwd()
+        os.chdir(repo)
+        self.addCleanup(os.chdir, cwd)
+        text = body(REQUIRED_ALL_TICKED, CONNECTORS_TICKED, LICENSE_TICKED)
+        return cpc.main(["--event", self.event(text), "--base-ref", "main", "--out", str(self.out)])
+
+    def test_a_connector_pr_with_contact_email_passes(self):
+        self.assertEqual(self.connector_pr("name: acme\ncontact_email: devops@acme.example\n"), 0)
+        self.assertEqual((self.out / "outcome").read_text().strip(), "pass")
+
+    def test_a_connector_pr_without_contact_email_fails(self):
+        self.assertEqual(self.connector_pr("name: acme\n"), 1)
+        self.assertEqual((self.out / "reason").read_text().strip(), "incomplete")
 
     def test_a_skill_pr_with_the_untouched_template_fails(self):
         repo = self.tmp / "repo"

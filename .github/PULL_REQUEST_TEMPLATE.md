@@ -97,7 +97,6 @@ before this check existed" in CONTRIBUTING.md.
 <!-- Applies to any change inside a connectors/<name>/ directory. The partner that owns the connector opens the PR; see "Partner Connectors" in CONTRIBUTING.md. This item cannot be marked n/a. -->
 
 - [ ] **I accept the [AWS DevOps Agent Partner Connector Terms and Conditions](https://github.com/aws/tools-for-devops-agent/blob/main/connectors/TERMS.md) on behalf of the company that owns this connector, and I have authority to do so.**
-- [ ] **`contact_email` in `connector.yaml` is a corporate work email address** where AWS can reach the company about this connector, including security notices.
 
 ## Security and safety
 
