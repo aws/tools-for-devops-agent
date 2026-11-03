@@ -11,6 +11,14 @@ This document captures key BGP routing mechanics, path selection behavior, VIF-s
 - [Direct Connect Routing Policies and BGP Communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html)
 - [Direct Connect Path Selection (routing policies for private/transit VIFs)](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html)
 - [Direct Connect Virtual Interfaces](https://docs.aws.amazon.com/directconnect/latest/UserGuide/WorkingWithVirtualInterfaces.html)
+- [Direct Connect gateways](https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-gateways-intro.html)
+
+## How the Direct Connect Gateway Fits In (Two-Lookup Model)
+
+- Every construct that owns a route table does its own lookup.
+- The DXGW is "a distributed set of BGP route reflectors" that "operates outside the data traffic path" ([Direct Connect gateways](https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-gateways-intro.html)).
+- For on-prem prefixes, a TGW or Cloud WAN CNE sees the DXGW as (usually) a single next hop. The DXGW selects the best VIF(s) for each prefix and reflects that result; traffic then goes straight to that VIF. Packets do not go through a second lookup at the DXGW.
+- So there are two decisions to reason about: the DXGW's VIF selection (DX rules below) and the TGW/CNE route-table lookup (its own rules; see tgw-routing-patterns.md and cloudwan-dx-routing-patterns.md).
 
 ## BGP & Routing
 
@@ -23,7 +31,7 @@ As of July 2026, DX supports **BGP route visibility** on virtual interfaces via 
 - Each route shows: prefix, address family, AS-path, community values, installation timestamp
 - Can filter by: prefix, AS-path, community, or address family
 - Available on: private, transit, and public VIFs
-- Available in: all AWS commercial regions
+- Available in: all AWS commercial Regions and the AWS China Regions (Beijing, Ningxia)
 
 **Use for troubleshooting:**
 - Verify route propagation between on-prem and AWS
@@ -36,7 +44,7 @@ As of July 2026, DX supports **BGP route visibility** on virtual interfaces via 
 
 ### CloudWatch BGP Metrics for DX Virtual Interfaces
 
-As of March 2026, DX publishes **3 BGP metrics** to CloudWatch for all VIF types (private, transit, public):
+DX publishes **3 BGP metrics** to CloudWatch for all VIF types (private, transit, public):
 
 | Metric | What It Reports |
 |---|---|
@@ -65,25 +73,32 @@ As of March 2026, DX publishes **3 BGP metrics** to CloudWatch for all VIF types
 
 ### General Routing Behavior
 
-- When designing active/active or active/passive DX (within or across DX locations), apply the documented **Private/Transit VIF outbound path-selection order**: longest prefix match → local preference → AS_PATH length → MED → ECMP (equal AS_PATH length and BGP attributes). See [Direct Connect routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html).
+- When designing active/active or active/passive DX (within or across DX locations), apply the documented **Private/Transit VIF outbound path selection**: **longest prefix match first** (a route lookup, not a BGP attribute), then the BGP attributes **local preference → AS_PATH length → MED**. BGP stops at the first attribute that differs. If all of them are equal, the **result** is ECMP across the VIFs; ECMP is an outcome, not a step. See [Direct Connect routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html).
 - Consider recommendations for **migrating from DX + VGW/Private VIF to DX + TGW/Transit VIF** when customers are modernizing their architecture
 
 ### MED Support
 
 - DX **supports Multi-Exit Discriminator (MED) on Private and Transit VIFs** — MED can influence the outbound (AWS → on-prem) routing path, but only as a **tiebreaker after prefix length, local preference, and AS_PATH are equal**. AWS explicitly **does not recommend relying on MED** given its lower priority in the evaluation order.
 - For **Public VIFs**, the documented outbound routing policy uses **AS_PATH and longest prefix match** — MED is not listed among the supported public VIF path-selection attributes.
-- **Outbound (AWS → on-prem) path selection order for Private/Transit VIF:** longest prefix match → local preference → AS_PATH length → MED → ECMP (equal AS_PATH length and BGP attributes).
+- **Outbound (AWS → on-prem) path selection for Private/Transit VIF:** longest prefix match first (route lookup), then local preference → AS_PATH length → MED, stopping at the first attribute that differs. If all are equal, the result is ECMP.
 
 **Reference:** [Direct Connect routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html)
 
-### BFD (Bidirectional Forwarding Detection)
+### Associated Region (DX connection → AWS Region)
 
-**⚠️ Always verify the Associated Region for each DX location** — some DX locations can associate to different AWS regions than expected based on their physical geography. For example:
-- Equinix LD5 (Slough, UK) → **eu-west-1** (Ireland)
-- Telehouse (London Docklands, UK) → **eu-west-2** (London)
-- Equinix MA3 (Manchester, UK) → **eu-west-2** (London)
+**⚠️ Always verify the Associated Region of each DX *connection*, not just the location.** The associated Region belongs to the Direct Connect **device**: a single DX location can host devices associated with different Regions, and a connection inherits the associated Region of the device it terminates on. Geography is not a reliable guide. Examples from the AWS docs table:
+- Equinix LD5 (Slough, UK) → **eu-west-1** (Ireland) **and** **eu-west-2** (London). Port speeds differ per Region; the docs list 100G only for the London devices.
+- Digital Realty LHR20 (London, UK) → **eu-west-1** **and** **eu-west-2**
+- Telehouse West (London, UK) → **eu-west-2** only
+- Equinix MA3 (Manchester, UK) → **eu-west-2** only
 
-The associated region determines which TGW/DXGW considers the DX "local" for LP preference and routing behavior. Verify a location's associated region with the `DescribeLocations` API/CLI (`aws directconnect describe-locations`) or the official AWS Direct Connect locations reference: https://aws.amazon.com/directconnect/locations/
+The associated Region determines which TGW/DXGW considers the DX "local" for LP preference. For private/transit VIFs, AWS sets the default local preference **per Region** to prefer DX locations with the same associated Region (the `7224:7200` medium value) and sets it lower for other locations. This default applies only when no LP community is tagged.
+
+For a location that lists several Regions, confirm the actual connection's Region with `aws directconnect describe-connections` (or the Region it appears in within the DX console). Don't infer it from the location name.
+
+**Note:** the Associated Region page says the Region governs management (console/API, CloudWatch metrics), not reachability: VIF and gateway type decide what you can reach. The default-LP behavior above comes from the routing-policies page.
+
+**References:** [Associated Region](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#associated-region), [Locations and their associated Regions](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#locations-and-associated-regions), [Routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html)
 
 ### BFD (Bidirectional Forwarding Detection)
 
@@ -124,11 +139,15 @@ The associated region determines which TGW/DXGW considers the DX "local" for LP 
 - When attaching VPCs with **AWS-assigned IPv6** to a TGW, these are discontinuous by default and **cannot be aggregated** for Direct Connect — leads to DX prefix quota limitations
   - **Workarounds:** Use Amazon-provided contiguous IPv6 CIDR blocks, or EC2 BYOIP
 
-### VPC-to-VPC Routing via DXGW (Regression)
+### VPC-to-VPC Traffic via a DXGW (Documented Behavior)
 
-- As of November 2021, **VPC-to-VPC routing** connected to the same DXGW via VGW/TGW which are also connected over Private/Transit VIF **is possible due to a regression**
-- This was previously blocked — be aware of this change
-- Workarounds exist to block this unintended traffic flow if isolation is required
+Source: [Direct Connect gateways](https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-gateways-intro.html).
+
+- **Default:** gateway associations on the same DXGW cannot send traffic to each other.
+- **Exception (implemented November 2021):** if on-prem advertises a **supernet that overlaps** the CIDRs of VPCs whose VGWs are associated to the same DXGW, and on the same VIF, those VPCs can communicate with each other via the Direct Connect endpoint.
+  - Documented mitigations: use **security groups**; advertise **more-specific, non-overlapping** routes instead of the supernet; or use a **separate DXGW per VPC**.
+- **Same gateway association:** a DXGW does not prevent traffic from being sent back to the same gateway association.
+- **TGW associations:** VPCs attached to TGWs that are associated to the same DXGW could communicate. To prevent this, use a TGW route table on the VPC attachments with the **blackhole** option for the destinations you want to block.
 
 ### DX VIFs and VGW — CloudHub Behavior
 
@@ -153,7 +172,7 @@ The associated region determines which TGW/DXGW considers the DX "local" for LP 
 | VPN CloudHub on a VGW | Multiple VPN connections on the same VGW exchange routes; remote sites reach each other. See [AWS VPN CloudHub](https://docs.aws.amazon.com/vpc/latest/userguide/vpn-connections.html). |
 | DX + VPN on the same VGW | A DX private VIF sharing a VGW with VPN connection(s) can talk to the VPN site(s) — DX ↔ VPN. |
 | TGW + Allowed Prefix List | The DXGW→TGW attachment advertises whatever is in the Allowed Prefix List (no VPC-CIDR-only restriction), so remote-site prefixes can be advertised intentionally. Enables DX ↔ VPN CloudHub via TGW. |
-| DX ↔ DX via two DXGWs into one TGW | Two DXGWs attached to the same TGW (CGW1–DXGW1–TGW–DXGW2–CGW2) allows DX site-to-site. |
+| DX ↔ DX via two DXGWs into one TGW | Two DXGWs attached to the same TGW (CGW1–DXGW1–TGW–DXGW2–CGW2) allows DX site-to-site. **[Field knowledge]** Capability statement only, not a recommended reason to add a DXGW (see "When to Use Multiple DXGWs" in tgw-routing-patterns.md). |
 | Customer-side hairpin | Always available: advertise a supernet/default from on-prem and let the customer router be the hub. AWS is not the transit point. |
 
 **Not supported — sites CANNOT reach each other through AWS:**
@@ -162,12 +181,12 @@ The associated region determines which TGW/DXGW considers the DX "local" for LP 
 |---|---|
 | Two DX VIFs on the same VGW | AWS advertises only VPC CIDRs to each VIF; no site-to-site. |
 | Two DX VIFs on the same single DXGW | Gateway associations on one DXGW cannot send traffic to each other. |
-| Inter-site over a single DXGW with transit VIFs | Routes may install but the flow loops; not supported. Use two DXGWs. |
+| Inter-site over a single DXGW with transit VIFs | Routes may install but the flow loops; not supported. DX-to-DX transit through AWS is only possible with the two-DXGW design above. |
 | Inter-site via two DXGWs with VGW associations | Only VPC CIDRs are advertised, so the sites never learn each other. |
 
 **Summary:**
 - **VGW / single DXGW** → advertises VPC CIDRs only → no VIF-to-VIF transit (except true VPN CloudHub, which is a VPN feature).
-- **TGW** → Allowed Prefix List with no route validation → VIF-to-VIF transit can be built intentionally, using two DXGWs for DX-to-DX.
+- **TGW** → Allowed Prefix List with no route validation → VIF-to-VIF transit can be built intentionally, using two DXGWs for DX-to-DX. This describes what is possible; it is not a reason to add a DXGW.
 
 ## DX vs Peering (Public VIF vs PNI)
 
@@ -199,19 +218,20 @@ The associated region determines which TGW/DXGW considers the DX "local" for LP 
 
 ### Active/Active (within or across DX locations)
 
-- Understand how AWS selects between multiple active paths using the Private/Transit VIF outbound path-selection order (longest prefix match → local preference → AS_PATH length → MED → ECMP). See [Direct Connect routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html).
-- ECMP is available at the TGW level across multiple DX-GW attachments (same or different DX-GWs)
-- LP communities (`7224:7300/7200/7100`) can influence preference but behavior varies between VGW/TGW/Cloud WAN — always test
-- **DXGW ECMPs across equal remote paths** — when a local DX fails and multiple remote DX locations have matching attributes (same LP, same AS-path), DXGW will ECMP across them. This provides load-balanced failover rather than single-path selection.
+- Understand how AWS selects between multiple active paths using the Private/Transit VIF outbound path selection: longest prefix match first (route lookup), then local preference → AS_PATH length → MED, stopping at the first difference; if all are equal, the result is ECMP. See [Direct Connect routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html).
+- **For ECMP with a TGW, use one DXGW with multiple transit VIFs.** The TGW docs state that a single Direct Connect gateway supports ECMP across multiple transit VIFs and recommend one DXGW rather than multiple to take advantage of ECMP ([TGW route evaluation](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)). ECMP across multiple DXGW attachments needs exactly matching prefix, prefix length and AS_PATH (see tgw-routing-patterns.md).
+- **Use one DXGW unless you need traffic isolation or multiple primary paths.** **[Field knowledge, SME-confirmed]** Those are the only reasons for multiple DXGWs; AWS states high availability is built into the DXGW design ([Direct Connect gateways](https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-gateways-intro.html)). See "When to Use Multiple DXGWs" in tgw-routing-patterns.md.
+- LP communities (`7224:7300/7200/7100`) can influence preference but behavior varies between VGW/TGW/Cloud WAN — always test. On private VIFs attached directly to a VGW they are honored and evaluated before AS_PATH (then MED) **[Field knowledge, SME-confirmed]** (see vpn-dx-redundancy-patterns.md)
+- **DXGW ECMPs across equal remote paths** — **[Field knowledge, SME-confirmed]** when a local DX fails and multiple remote DX locations have matching attributes (same LP, same AS-path), DXGW will ECMP across them. This provides load-balanced failover rather than single-path selection.
 
-**Path selection behavior by service (NOT at DXGW):**
+**Path selection behavior by service:**
 - **DXGW:** ECMPs across equal paths — load-balanced failover
-- **TGW:** Deterministic — selects oldest route for equal paths. Consistent but not customer-controllable.
-- **Cloud WAN CNE:** Deterministic — "deterministically random" at Step 2.4.4 for equal remote CNE paths. Consistent but not customer-controllable.
+- **TGW with multiple DXGW attachments:** **[Field knowledge, SME-confirmed]** the BGP attributes are set at the VIF level on the on-prem advertisements. Direct Connect compares those VIF advertisements across the DXGWs using all BGP attributes (longest prefix, then local preference, AS_PATH, MED); the attributes do not pass to the TGW and the TGW does not compare them. If they all match, every qualifying DXGW attachment is installed in the TGW as an ECMP next hop; if one wins on an attribute, only that attachment is installed. **[Field knowledge]** If no attribute separates them but they still do not qualify (for example, different ASNs), one attachment is picked deterministically using a hash of the prefix metadata; not customer-controllable. Documented: for routes with the same CIDR, attachment type and BGP attributes, AWS "can't guarantee a consistent route prioritization order" ([TGW route evaluation](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)).
+- **Cloud WAN CNE:** Deterministic — "deterministically random" at Step 2.5.4 for equal remote CNE paths, chosen per segment / network function group. Consistent but not customer-controllable.
 
 ### Active/Passive
 
 - Use LP communities or AS-path prepending to create primary/secondary paths
 - For Cloud WAN: communities override DXGW local-region preference (see cloudwan-dx-routing-patterns.md)
-- For TGW: LP communities are NOT honored across multiple DX-GW attachments (see tgw-routing-patterns.md)
+- For TGW with multiple DX-GW attachments: **[Field knowledge, SME-confirmed]** LP communities are honored. Tag them at the VIF level on the on-prem advertisements; Direct Connect compares the VIF advertisements across the DXGWs on longest prefix, then local preference (communities and the local-Region default), then AS_PATH, then MED, and the TGW installs the winner (or every attachment as ECMP if all match). LP communities are the preferred lever, alongside more-specific prefixes, prepending and MED (see tgw-routing-patterns.md). Validate in-account with `search-transit-gateway-routes`.
 - BFD should be enabled for fast failure detection on the active path

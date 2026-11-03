@@ -11,45 +11,49 @@ This document captures key routing mechanics and traffic engineering patterns fo
 - [Cloud WAN Route Evaluation](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-route-evaluation.html)
 - [Cloud WAN Routing Policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html)
 - [Direct Connect Routing Policies and BGP Communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html)
+- [Direct Connect gateways](https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-gateways-intro.html)
 
 ## Cloud WAN Route Evaluation Order (Per CNE)
 
-At each Core Network Edge, Cloud WAN evaluates routes in this order:
+At each Core Network Edge, Cloud WAN evaluates routes in this order ([Cloud WAN route evaluation](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-route-evaluation.html)):
 
-1. **Most specific route** (longest prefix match) — absolute, wins before everything
+1. **Most specific route** (longest prefix match) — absolute, wins before everything. This is a route lookup, not a BGP attribute.
 2. For same-destination routes with different targets:
    1. Static routes
-   2. VPC-propagated routes (same region)
-   3. **Unequal AS-path length and/or MED** — shortest wins
-   4. **Equal AS-path and MED** — preference order:
+   2. System routes (1:1 NAT)
+   3. VPC-propagated routes (same region)
+   4. **Unequal AS-path length and/or MED** — shortest AS-path wins, then lowest MED
+   5. **Equal AS-path and MED** — preference order:
       1. Direct Connect Gateway-propagated routes
       2. Cloud WAN Connect (same region)
       3. Site-to-Site VPN (same region)
       4. Other sources (TGW peering, CNEs in other regions) — if identical from 2+ sources: **deterministically random**
 
+The deterministically random choice is made **per segment / network function group**, so the same route can resolve to a different next hop in different segments.
+
 ## DX Gateway Path Selection Mechanics
 
 ### Key Behaviors
 
-1. **DXGW propagates only ONE path per prefix to each CNE route table** — it performs internal path selection and sends only the winner. CNEs do not see all available DX paths.
+1. **Two lookups: the DXGW reflects, the CNE forwards.** The DXGW is "a distributed set of BGP route reflectors" that "operates outside the data traffic path" ([Direct Connect gateways](https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-gateways-intro.html)). For each prefix, the DXGW does its own selection across its VIFs for each CNE, evaluating the BGP attributes on each VIF's advertisements (set per VIF by the on-prem router), and reflects the result, so the CNE sees the DXGW as (usually) a single next hop. The CNE then does its own lookup over that route and the routes from other sources. Traffic leaving the CNE goes straight to the VIF the DXGW selected; packets do not go through a second lookup at the DXGW. CNEs do not see every available DX path, only the DXGW's result.
 
-2. **DXGW uses Local Preference to prefer local-region DX over remote regions** — if a DX VIF exists in the same associated AWS region as the target CNE, DXGW prefers it regardless of AS-path length.
+2. **Local-region preference is applied as local preference** — **[Field knowledge, SME-confirmed]** for AWS → on-prem traffic, AWS applies a higher local preference to the path through a DX VIF in the same associated Region as the CNE. Local preference is compared before AS_PATH, and BGP stops at the first attribute that differs, so AS-path prepending cannot override it.
 
-   **⚠️ Always verify the Associated Region for each DX location** — some DX locations can associate to different regions than expected based on geography. For example, London-area locations associate to different regions:
-   - Equinix LD5 (Slough) → **eu-west-1** (Ireland)
-   - Digital Realty LHR20 (London) → **eu-west-1** (Ireland)
-   - Telehouse (London Docklands) → **eu-west-2** (London)
-   - Equinix MA3 (Manchester) → **eu-west-2** (London)
+   **⚠️ Always verify the Associated Region of each DX *connection*, not just the location.** The associated Region belongs to the Direct Connect **device**: one location can host devices associated with different Regions, and a connection inherits the Region of the device it terminates on. London-area examples from the AWS docs table:
+   - Equinix LD5 (Slough) → **eu-west-1** (Ireland) **and** **eu-west-2** (London)
+   - Digital Realty LHR20 (London) → **eu-west-1** **and** **eu-west-2**
+   - Telehouse West (London) → **eu-west-2** only
+   - Equinix MA3 (Manchester) → **eu-west-2** only
    
-   The associated region determines which CNE/TGW considers the DX "local" for LP preference. Verify a location's associated region with the `DescribeLocations` API/CLI (`aws directconnect describe-locations`) or the official AWS Direct Connect locations reference: https://aws.amazon.com/directconnect/locations/
+   The connection's associated Region determines which CNE/TGW considers the DX "local" for LP preference. AWS sets the default LP per Region to prefer same-associated-Region DX (`7224:7200` medium) and sets it lower for others, unless LP communities are tagged. For a multi-Region location, confirm the connection's Region with `aws directconnect describe-connections`. References: [Associated Region](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#associated-region), [Locations and their associated Regions](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#locations-and-associated-regions), [Routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html).
 
 3. **Explicit LP communities override DXGW's default local-region preference** — applying `7224:7300/7200/7100` on advertised prefixes forces DXGW to honor the explicit LP before applying its local-vs-remote default.
 
 4. **LP communities are evaluated before AS-path** — per DX documentation: "Local preference BGP community tags are evaluated before any AS_PATH attribute." This applies at the DXGW path selection stage.
 
-5. **LP communities from DX VIFs are NOT visible as community tags in Cloud WAN** — the community tags themselves don't propagate into Cloud WAN routing policies. However, the LP value they set at the DXGW level influences which path gets propagated to the CNE route table.
+5. **LP communities from DX VIFs are NOT visible as community tags in Cloud WAN** — the community tags themselves don't propagate into Cloud WAN routing policies. However, the LP value they set on the VIF advertisements, which the DXGW evaluates, influences which path the DXGW reflects to the CNE.
 
-6. **DXGW ECMPs across equal remote paths** — when the local-region DX fails and multiple remote DX locations have equal attributes (same LP, same AS-path), DXGW will **ECMP across them** rather than picking one non-deterministically. This provides load-balanced failover across all remaining DX locations.
+6. **DXGW ECMPs across equal remote paths** — **[Field knowledge, SME-confirmed]** when the local-region DX fails and multiple remote DX locations have equal attributes (same LP, same AS-path), DXGW will **ECMP across them** rather than picking one non-deterministically. This provides load-balanced failover across all remaining DX locations. Source of truth for which Region is local: the [Direct Connect locations page](https://aws.amazon.com/directconnect/locations/) and `aws directconnect describe-locations`.
 
 7. **Route filtering on the native Cloud WAN DXGW attachment (Routing Policies)** — Cloud WAN Routing Policies support **prefix-based route filtering (drop) and summarization, inbound and outbound, on Direct Connect attachments**. This is a **separate, supported feature** from the (unsupported) DXGW allowed-prefixes list. Use it to drop an overlapping inbound supernet or to suppress specific VPC prefixes advertised outbound to on-prem.
    - Match prefixes via `prefix-in-cidr` or `prefix-in-prefix-list`; actions are `allow`/`drop`; `routing-policy-direction` is `inbound` or `outbound`.
@@ -58,8 +62,8 @@ At each Core Network Edge, Cloud WAN evaluates routes in this order:
 
 **Important distinction — path selection behavior by service:**
 - **DXGW:** ECMPs across equal remote paths (load-balanced failover)
-- **TGW:** Deterministic — selects oldest route for equal paths. Consistent but not customer-controllable.
-- **Cloud WAN CNE:** Deterministic — "deterministically random" at Step 2.4.4 for equal remote CNE paths. Consistent but not customer-controllable.
+- **TGW with multiple DXGW attachments:** **[Field knowledge, SME-confirmed]** the BGP attributes are set at the VIF level on the on-prem advertisements. Direct Connect compares those VIF advertisements across the DXGWs using all BGP attributes (longest prefix, then local preference, AS_PATH, MED); the attributes do not pass to the TGW and the TGW does not compare them. If they all match, every qualifying DXGW attachment is installed in the TGW as an ECMP next hop; if one wins on an attribute, only that attachment is installed. **[Field knowledge]** If no attribute separates them but they still do not qualify (for example, different ASNs), one attachment is picked deterministically using a hash of the prefix metadata; not customer-controllable. Documented: for routes with the same CIDR, attachment type and BGP attributes, AWS "can't guarantee a consistent route prioritization order" ([TGW route evaluation](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)).
+- **Cloud WAN CNE:** Deterministic — "deterministically random" at Step 2.5.4 for equal remote CNE paths, chosen per segment / network function group. Consistent but not customer-controllable.
 
 ### Common Pitfall: AS-Path Prepending Does Not Override Local-Region LP at the DXGW
 
@@ -73,36 +77,38 @@ At each Core Network Edge, Cloud WAN evaluates routes in this order:
 
 ### Foundational Principle: Every Route Table Does Its Own Independent Lookup
 
-The single most important mental model for reasoning about AWS routing: **every construct that has its own route table performs its own independent route lookup**, and a packet is evaluated **hop-by-hop** — each route table it traverses makes a fresh, local forwarding decision using only the routes present in *that* table. There is no single end-to-end path calculation; the path is the concatenation of per-table decisions.
+The single most important mental model for reasoning about AWS routing: **every construct that has its own route table performs its own independent route lookup**. Each route table makes its decision using only the routes present in *that* table. There is no single end-to-end path calculation; the path is the concatenation of per-table decisions.
 
 Route-table-owning constructs each do this independently, including:
 - **VPC route tables** (subnet → destination: local, IGW, NAT, ENI, TGW/VGW/CWAN attachment, peering, endpoint)
-- **Transit Gateway route tables** (per-attachment association/propagation; oldest-route tiebreak on equal paths)
-- **DX Gateway** (its own BGP path selection; installs one winning path per prefix into each attached CNE/VGW)
+- **Transit Gateway route tables** (per-attachment association/propagation; ECMP or a hash-selected single attachment when multiple DXGW attachments carry the same prefix — see tgw-routing-patterns.md)
+- **DX Gateway** (a set of BGP route reflectors outside the data path: it does its own BGP selection across VIFs and reflects the result per prefix to each attached CNE/TGW/VGW)
 - **Cloud WAN Core Network Edge (CNE) route tables** (the CNE evaluation order over propagated routes)
 - **On-prem / customer routers** (their own BGP/IGP tables)
 
-The routing "outcome" is what you get when you chain these together. Each table's chosen next-hop simply hands the packet to the next construct, which then runs *its own* lookup. So to predict or debug a path, walk it table by table: at each hop, ask "what does *this* route table select for this destination, given only the routes it has?" The output (installed route) of one table's lookup becomes an input (a propagated/attached route) to the next.
+The routing "outcome" is what you get when you chain these together. To predict or debug a path, walk it table by table: at each table, ask "what does *this* route table select for this destination, given only the routes it has?" The output of one table's selection becomes an input (a propagated or reflected route) to the next.
 
-**Common analysis error:** treating an end-to-end path as one decision, or assuming an attribute (like a DX BGP community or a local preference) that decided at one table still applies at the next. It does not automatically — each table applies only its own selection rules over its own routes. (Example: DX LP communities decide at the DXGW's table but are not visible inside the Cloud WAN CNE table.)
+**DXGW special case:** the DXGW's selection is a control-plane decision. It decides which VIF a CNE's or TGW's route points to; the packet then goes from the CNE/TGW straight to that VIF, without a second packet lookup at the DXGW.
+
+**Common analysis error:** treating an end-to-end path as one decision, or assuming an attribute (like a DX BGP community or a local preference) that decided at one table still applies at the next. It does not automatically — each table applies only its own selection rules over its own routes. (Example: DX LP communities decide at the DXGW's selection but are not visible inside the Cloud WAN CNE table.)
 
 ### Applying the Principle: DXGW Lookup then CNE Lookup
 
-In a DX → Cloud WAN egress path, two of these independent lookups sit back-to-back, for the two directions. The DXGW's lookup output is the CNE's lookup input.
+For AWS → on-prem traffic in a DX + Cloud WAN design, two independent lookups decide the path. Both act on routes that on-prem advertised into AWS. The DXGW's result is the CNE's input.
 
-**Lookup 1 — DXGW path selection (on-prem → AWS; decides what is INSTALLED into each CNE).**
-The DXGW performs its own selection for a prefix and **installs one winning path into each CNE's route table**. Its selection order is:
-1. **Local-region Local Preference first** — if a DX VIF advertising the prefix is in the same associated region as the CNE, the DXGW prefers it **regardless of AS-path**. That local copy is installed into that region's CNE.
-2. **If no local advertisement exists for that CNE**, every candidate is remote, so they share the **same (remote) LP** — LP is equal. The DXGW then falls through to **AS-path length**, and the **shortest AS-path wins** and is installed into that CNE.
+**Lookup 1 — DXGW selection (control plane; decides which VIF each CNE's DXGW route points to).**
+The DXGW performs its own selection for a prefix and **reflects one result per prefix to each CNE**. Its selection order is:
+1. **Local-region Local Preference first** — if a DX VIF advertising the prefix is in the same associated region as the CNE, the DXGW prefers it **regardless of AS-path**. That local path is what the DXGW reflects to that region's CNE.
+2. **If no local advertisement exists for that CNE**, every candidate is remote, so they share the **same (remote) LP** — LP is equal. The DXGW then falls through to **AS-path length**, and the **shortest AS-path wins** (if all attributes are equal, the result is ECMP across those VIFs).
 
-**Lookup 2 — Cloud WAN CNE route lookup (AWS → on-prem return path).**
-For return traffic, each CNE runs its own lookup over the routes **propagated into its table** (what Lookup 1 installed, plus routes propagated from other CNEs). This is where the CNE evaluation order (longest-prefix → AS-path → source preference) applies, operating on the already-propagated entries.
+**Lookup 2 — Cloud WAN CNE route lookup.**
+Each CNE runs its own lookup over the routes **in its table** (the DXGW route from Lookup 1, plus routes propagated from other CNEs and other attachments). This is where the CNE evaluation order (longest prefix → static → system → VPC-propagated → AS-path/MED → source preference) applies. If the DXGW route wins, traffic goes straight to the VIF the DXGW selected.
 
 ### Worked Example (from the field diagram)
 
 Only **FR5/Frankfurt (eu-central-1)** and **LD5/London (eu-west-1)** advertise `11.0.0.0/8`. Applying **Lookup 1 (DXGW)** per region:
 
-| CNE region | Has local `/8` advertisement? | DXGW decision | Installed `/8` path |
+| CNE region | Has local `/8` advertisement? | DXGW decision | Path reflected to the CNE |
 |---|---|---|---|
 | eu-central-1 (FR5) | Yes (FR5 local) | Local-region LP wins — AS-path not consulted | **FR5 (local DX)** |
 | eu-west-1 (LD5) | Yes (LD5 local) | Local-region LP wins — AS-path not consulted | **LD5 (local DX)** |
@@ -110,7 +116,7 @@ Only **FR5/Frankfurt (eu-central-1)** and **LD5/London (eu-west-1)** advertise `
 | us-east-1 | No | both remote → LP equal → AS-path → **FR5 shortest** | **FR5** |
 | us-east-2 | No | both remote → LP equal → AS-path → **FR5 shortest** | **FR5** |
 
-**Why the non-LD5 regions use FR5's advertisement:** they have no local `/8`, so at the DXGW both FR5 and LD5 are **remote** and carry the **same (remote) LP** — LP is equal. The DXGW therefore falls to the next attribute, **AS-path length**, where **FR5 is shorter than the (heavily prepended) LD5 advertisement**, so FR5 wins and is installed. This is a straightforward DXGW LP-then-AS-path decision — **not** a CNE-to-CNE backbone comparison.
+**Why the non-LD5 regions use FR5's advertisement:** they have no local `/8`, so at the DXGW both FR5 and LD5 are **remote** and carry the **same (remote) LP** — LP is equal. The DXGW therefore falls to the next attribute, **AS-path length**, where **FR5 is shorter than the (heavily prepended) LD5 advertisement**, so FR5 wins. This is a straightforward DXGW LP-then-AS-path decision — **not** a CNE-to-CNE backbone comparison.
 
 **Role of the AS-path prepends:** the prepends matter at **Lookup 1 (DXGW)**, specifically as the **tiebreaker when LP is equal** (i.e., only for regions with no local advertisement). They set which remote advertisement (FR5 vs LD5) wins for those regions. They do **not** override the local-region LP for regions that *do* have a local advertisement — eu-central-1 and eu-west-1 pick their local DX on LP before AS-path is ever considered. So over-prepending LD5 does not stop eu-west-1 from choosing LD5 locally; it affects LD5's standing in the **AS-path tiebreak for the other regions**, where FR5's shorter path beats it.
 
@@ -118,7 +124,7 @@ Only **FR5/Frankfurt (eu-central-1)** and **LD5/London (eu-west-1)** advertise `
 
 ### Common Pitfall: Confusing Prepend Count with Total AS-Path Length (Origination vs. Transit)
 
-When comparing AS-path lengths at a CNE (Step 2.3), the number that matters is the **total AS-path AWS receives on the VIF**, not the prepend count configured on a site. These are only the same when the advertising site is the **originator** of the prefix.
+When comparing AS-path lengths (at the DXGW, or at a CNE in Step 2.4), the number that matters is the **total AS-path AWS receives on the VIF**, not the prepend count configured on a site. These are only the same when the advertising site is the **originator** of the prefix.
 
 **The distinction:**
 - **Originating site** — the site owns/aggregates the prefix (e.g., `aggregate-address 11.0.0.0/8`). The AS-path AWS sees is just that site's ASN, repeated by its prepend count. A `prepend 60208 2` on an originated route → AS-path `60208 60208 60208` (length 3).
@@ -126,13 +132,13 @@ When comparing AS-path lengths at a CNE (Step 2.3), the number that matters is t
 
 **Config signature to tell them apart:** A site that **matches-and-prepends** a prefix in a route-policy but has **no `aggregate-address`/origination** for it is almost certainly **transiting** a route learned from elsewhere. Do not assume it originates the prefix just because the prefix appears in its outbound policy.
 
-**Why this matters for path selection:** Step 2.3 compares total path length. If you model a transiting site's length as "prepend count + 1" (treating it as an originator) you will miscompute which copy wins — often flipping the predicted winner and the failover order. Example: three sites advertise a `/8` that **originates at only one** of them; the two that transit-and-prepend it are longer than a naive prepend-count model suggests, and can tie with the origin.
+**Why this matters for path selection:** AS-path selection compares total path length. If you model a transiting site's length as "prepend count + 1" (treating it as an originator) you will miscompute which copy wins — often flipping the predicted winner and the failover order. Example: three sites advertise a `/8` that **originates at only one** of them; the two that transit-and-prepend it are longer than a naive prepend-count model suggests, and can tie with the origin.
 
 **How to get the ground truth:** Never infer AS-path length from prepend config alone when a prefix may be transited. Read the literal path AWS receives per VIF:
 ```
 aws directconnect list-virtual-interface-routes --virtual-interface-id <vif-id>
 ```
-This shows the exact AS-path (and communities) AWS accepted, settling origination-vs-transit and the true length used at Step 2.3.
+This shows the exact AS-path (and communities) AWS accepted, settling origination-vs-transit and the true length used in AS-path comparison.
 
 ## DX Routing Selection — General Best Practice
 
@@ -168,13 +174,15 @@ This shows the exact AS-path (and communities) AWS accepted, settling originatio
 
 **Use case:** Different regions need different primary DX locations (e.g., one region group prefers DX-A, another region group prefers DX-B).
 
-**Problem:** Communities from a single DXGW are global — cannot provide per-region preferences.
+**Problem:** LP communities tagged on the VIFs of a single DXGW apply globally, so one DXGW gives one primary path for every region and cannot provide per-region preferences.
+
+This is one of the only two reasons to use multiple DXGWs (the other is traffic isolation); otherwise use a single DXGW. See "When to Use Multiple DXGWs" in tgw-routing-patterns.md.
 
 **Solution:** Create separate DXGWs per region group, each with their own VIFs:
 - DXGW-A: Region-A DX locations (primary `7224:7300`, secondary `7224:7200`)
 - DXGW-B: Region-B DX locations (`7224:7300`)
 
-Both DXGWs propagate their path to all CNEs. The CNE route table evaluates them at Step 2.3 (AS-path length). Control which DXGW wins per region by differentiating AS-path length on the VIFs between the two DXGWs.
+Both DXGWs reflect their selected path to all CNEs. The CNE route table evaluates them at Step 2.4 (AS-path length). Control which DXGW wins per region by differentiating AS-path length on the VIFs between the two DXGWs.
 
 Use communities within each DXGW for internal failover. No Cloud WAN Routing Policies needed — VIF-level BGP attributes provide per-region control at the CNE route table.
 
@@ -214,29 +222,29 @@ When routes are propagated from DX or VPN **via TGW** to Cloud WAN (TGW peering 
 
 - Region-A TGW advertises `0.0.0.0/0` to Cloud WAN via TGW peering (short AS-path)
 - Region-B TGW also advertises `0.0.0.0/0` but with prepending (longer AS-path)
-- All CNEs prefer Region-A as the internet exit (Step 2.3: shorter AS-path wins)
+- All CNEs prefer Region-A as the internet exit (Step 2.4: shorter AS-path wins)
 - If Region-A fails, Region-B's longer path takes over as backup
 
 ## Regional Firewall Inspection
 
 - Cloud WAN segment policy / service insertion routes traffic through the **same-region firewall** before it reaches the CNE
-- Traffic flow: VPC → local firewall (service insertion) → returns to local CNE → CNE route table → DXGW → DX
-- With a local DX advertisement present, the DXGW installs the local path into the local CNE (local-region LP, Lookup 1) — traffic stays at the local CNE for egress, preserving the local inspection chain
-- If the region has no local DX advertisement (or a community forces a remote DX to win), the installed path points out of region, and traffic leaves the local region for egress — potentially bypassing local firewall inspection
+- Traffic flow: VPC → local firewall (service insertion) → returns to local CNE → CNE route table → DX VIF selected by the DXGW
+- With a local DX advertisement present, the DXGW reflects the local path to the local CNE (local-region LP, Lookup 1) — traffic stays at the local CNE for egress, preserving the local inspection chain
+- If the region has no local DX advertisement (or a community forces a remote DX to win), the selected path points out of region, and traffic leaves the local region for egress — potentially bypassing local firewall inspection
 - **Requirement:** Firewall VPCs must exist in every region with workloads
 
 ## Directional Control (Mapped to the Two Lookups)
 
-The two route lookups map to the two directions. Keep these straight — they are governed by different services and different mechanisms.
+Keep the two traffic directions straight — they are governed by different devices and different mechanisms.
 
-| Direction | Governing lookup | Controlled by | Mechanism |
+| Traffic direction | Deciding lookup(s) | Controlled by | Mechanism |
 |---|---|---|---|
-| **On-prem → AWS** (which DX path is INSTALLED into each CNE) | **Lookup 1 — DXGW path selection** | On-prem BGP attributes the DXGW sees: DX LP communities (`7224:7300/7200/7100`), then AS-path as the LP-equal tiebreak | DXGW evaluates local-region LP first, then AS-path; installs one winning path per prefix into each CNE |
-| **AWS → On-prem** (return path from each CNE) | **Lookup 2 — Cloud WAN CNE route lookup** | The routes propagated into the CNE table (from Lookup 1 + other CNEs), evaluated by the CNE order | CNE evaluation: longest-prefix → AS-path → source preference, over already-propagated routes |
+| **AWS → On-prem** (egress from each CNE) | **Lookup 1 — DXGW selection**, then **Lookup 2 — CNE route lookup** | The BGP attributes on-prem advertises to AWS: DX LP communities (`7224:7300/7200/7100`) first, then AS-path as the LP-equal tiebreak; plus the competing routes in each CNE table | The DXGW selects the VIF per prefix per CNE (local-region LP first, then AS-path) and reflects it; each CNE then applies its own evaluation order |
+| **On-prem → AWS** (ingress) | On-prem router lookup | Customer router policies | Local-pref, weight, MED on on-prem routers — independent of Cloud WAN |
 
 Notes:
-- DX LP communities set the LP the **DXGW** uses in Lookup 1 — they are the recommended lever for steering which DX path is installed. They are **not visible inside Cloud WAN** and do not act at Lookup 2.
-- If on-prem AS-path prepending was being used to influence selection, prefer LP communities at the DXGW (Lookup 1); over-prepending a local VIF does not achieve cross-region steering (see the AS-Path Prepending pitfall above).
+- DX LP communities set the LP the **DXGW** uses in Lookup 1 — they are the recommended lever for steering which DX path each CNE uses. They are **not visible inside Cloud WAN** and do not act at Lookup 2.
+- Communities do NOT affect the on-prem → AWS direction. If on-prem AS-path prepending was being used to influence selection, prefer LP communities at the DXGW (Lookup 1); over-prepending a local VIF does not achieve cross-region steering (see the AS-Path Prepending pitfall above). If prepending was also used for on-prem path selection, replace that with router-side local-pref/weight before removing prepends.
 
 ## Cleanup Recommendations
 

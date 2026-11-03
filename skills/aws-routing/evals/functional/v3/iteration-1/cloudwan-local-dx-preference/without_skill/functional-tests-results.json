@@ -1,0 +1,69 @@
+{
+  "version": "v3",
+  "iteration": 1,
+  "eval_id": "cloudwan-local-dx-preference",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a specific two-stage lookup model: (1) the Direct Connect Gateway (DXGW) selects a VIF per prefix using local-region local preference (LP) first, then AS-path among remote paths, and reflects that choice to the Core Network Edge (CNE); (2) the CNE then runs its own route evaluation with longest prefix match first. It also expects the agent to state that AS-path prepending does NOT override local-region LP, and to recommend using the DX LP BGP communities (7224:7300/7200/7100) as the deterministic fix to prefer the local DX.\n\nThe agent's response instead describes Cloud WAN's internal route evaluation priority ladder (static > system > same-region VPC propagated > AS_PATH/MED > attachment-type tiebreak), treating AS_PATH as a factor that is evaluated and can be fixed by reducing prepending or using set-med. This directly contradicts the expected explanation, which states AS-path prepending does not override local-region LP (the DXGW-level LP mechanism governs VIF selection before CNE evaluation even sees it).\n\nCritically, the agent explicitly states the opposite of the recommended fix: it says 'Don't rely on Direct Connect's own local-preference BGP communities (7224:7100/7200/7300) for this \u2014 Cloud WAN's routing policy engine explicitly does not support BGP communities on Direct Connect... attachments, so that mechanism won't influence Cloud WAN's internal selection.' This is a direct contradiction of the expected output, which recommends exactly those LP communities as the deterministic fix.\n\nThe agent also never mentions the DXGW-level VIF selection step, the reflection mechanism to the CNE, or the 'connection's associated Region not matching CNE's Region' cause. Instead it proposes different fixes (set-med, AS-path shortening, more-specific prefixes) that are inconsistent with the expected guidance.\n\nGiven the core recommendation is inverted (actively telling the user NOT to use the mechanism that is the expected correct fix), this response fails to meet the expected output.</reasoning>\n<parameter name=\"evidence\">\"Don't rely on Direct Connect's own local-preference BGP communities (7224:7100/7200/7300) for this \u2014 Cloud WAN's routing policy engine explicitly does not support BGP communities on Direct Connect or TGW peering attachments, so that mechanism won't influence Cloud WAN's internal selection the way it would in a plain DX setup.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "references longest prefix match in Cloud WAN route evaluation",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Most specific route wins \u2014 longest prefix match, full stop, before anything else below is considered.' and later 'rule 1 (longest prefix) overrides everything else'",
+          "reasoning": "The output explicitly references longest prefix match as the first rule in Cloud WAN route evaluation.",
+          "confidence": "high"
+        },
+        {
+          "text": "explains that the DXGW applies local-region local preference before AS-path, so AS-path prepending does not override it",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output's priority ladder lists 'VPC-propagated routes in the same Region' at position 3, then AS_PATH/MED comparison at position 4, and only 'if AS_PATH and MED are equal does attachment type become the tiebreaker' with DX gateway listed first within that tiebreaker. There is no mention of 'local-region local preference' being applied before AS-path, nor any statement that AS-path prepending is overridden by a local preference mechanism.",
+          "reasoning": "The assertion claims the agent explained that DXGW applies local-region local preference before AS-path such that prepending doesn't matter. The agent's output states the opposite structure: AS_PATH/MED are evaluated before the attachment-type tiebreaker, and explicitly says 'your local DX path is losing on AS_PATH/MED before Cloud WAN ever gets to the step that would favor Direct Connect' and 'Fix AS_PATH length first \u2014 it's evaluated before MED and before the DX-priority tiebreak.' This directly contradicts the assertion rather than supporting it.",
+          "confidence": "high"
+        },
+        {
+          "text": "recommends tagging VIF advertisements with Direct Connect LP communities (7224:7xxx) as a deterministic remedy",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output explicitly states: \"Don't rely on Direct Connect's own local-preference BGP communities (7224:7100/7200/7300) for this \u2014 Cloud WAN's routing policy engine explicitly does not support BGP communities on Direct Connect or TGW peering attachments, so that mechanism won't influence Cloud WAN's internal selection the way it would in a plain DX setup.\"",
+          "reasoning": "The assertion claims the agent recommends tagging VIF advertisements with DX LP communities as a deterministic remedy. The agent does the opposite \u2014 it explicitly advises against relying on this mechanism, stating it won't work in Cloud WAN. This is a direct contradiction of the assertion, so it fails.",
+          "confidence": "high"
+        },
+        {
+          "text": "does not contain 'error'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No instance of the literal word 'error' appears anywhere in the output text.",
+          "reasoning": "Scanning the full response, there is no occurrence of the word 'error'.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "53s",
+    "cost": "$0.45",
+    "context_window": {
+      "utilization": "4.8%",
+      "compaction_count": 0
+    }
+  }
+}
