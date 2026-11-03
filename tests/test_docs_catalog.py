@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -85,6 +86,33 @@ class DimensionRenderingTests(unittest.TestCase):
                 for shown in rendered:
                     self.assertIn(shown, labels, f"{shown!r} is not a known label")
                     self.assertNotIn(shown, api_values, f"the raw API value {shown!r} reached the catalog")
+
+
+class AuthorLinkTests(unittest.TestCase):
+    """Each author in metadata.author gets its own link, and a team links to its organization."""
+
+    def setUp(self):
+        self.hook = _load_hook()
+
+    def links(self, author: str) -> list[tuple[str, str]]:
+        block = self.hook._build_skill_meta_block({"author": author, "dimensions": {}})
+        return re.findall(r'<a href="([^"]+)"[^>]*><strong>([^<]+)</strong></a>', block)
+
+    def test_a_user_links_to_their_profile(self):
+        self.assertEqual(self.links("octocat"), [("https://github.com/octocat", "octocat")])
+
+    def test_a_team_links_to_its_organization(self):
+        self.assertEqual(self.links("octo-org/octo-team"), [("https://github.com/octo-org", "octo-org/octo-team")])
+
+    def test_a_list_gets_one_link_per_author(self):
+        self.assertEqual(
+            self.links("octocat, hubot, octo-org/octo-team"),
+            [
+                ("https://github.com/octocat", "octocat"),
+                ("https://github.com/hubot", "hubot"),
+                ("https://github.com/octo-org", "octo-org/octo-team"),
+            ],
+        )
 
 
 if __name__ == "__main__":

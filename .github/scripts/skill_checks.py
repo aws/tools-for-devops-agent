@@ -60,6 +60,8 @@ TWO_PART_VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 # GitHub's own rule for usernames: alphanumerics and single hyphens, no leading
 # or trailing hyphen, at most 39 characters.
 GITHUB_LOGIN_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}")
+# org/team, with the organization under the username rule, as connector.yaml's maintainers allow.
+GITHUB_TEAM_PATTERN = re.compile(rf"(?:{GITHUB_LOGIN_PATTERN.pattern})/[A-Za-z0-9][A-Za-z0-9_-]{{0,99}}")
 
 DIMENSION_PREFIX = "aws-devops-agent-skills."
 DIMENSIONS = ("agent-types", "aws-services", "technical-domains")
@@ -760,10 +762,11 @@ def _check_author(metadata: dict, items: dict, lines: dict, metadata_line: int, 
         return
     if "author" not in metadata:
         return
-    if not all(GITHUB_LOGIN_PATTERN.fullmatch(part) for part in _split(metadata["author"])):
+    parts = _split(metadata["author"])
+    if not all(GITHUB_LOGIN_PATTERN.fullmatch(part) or GITHUB_TEAM_PATTERN.fullmatch(part) for part in parts):
         report.error(
-            '"metadata.author" must be one or more GitHub usernames separated by commas, '
-            'for example "octocat" or "octocat, hubot"',
+            '"metadata.author" must be one or more GitHub usernames or teams (org/team) separated by commas, '
+            'for example "octocat", "octocat, hubot" or "octo-org/octo-team"',
             line=lines["author"],
         )
 

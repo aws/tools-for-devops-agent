@@ -15,6 +15,7 @@ that don't have a docs page yet, so new entries appear on the site
 automatically.
 """
 
+import html
 import json
 import re
 from pathlib import Path
@@ -228,19 +229,24 @@ def _generate_skill_stub(doc_path: Path, skill: dict, config_dir: str):
     doc_path.write_text(content, encoding="utf-8")
 
 
+def _author_link(author: str) -> str:
+    """A user links to their profile; a team (org/team) to its organization, since team pages need sign-in."""
+    profile = author.split("/", 1)[0]
+    return (
+        f'<a href="https://github.com/{html.escape(profile)}" target="_blank" rel="noopener">'
+        f'<strong>{html.escape(author)}</strong></a>'
+    )
+
+
 def _build_skill_meta_block(skill: dict) -> str:
     """Build an HTML block showing author and dimension tags for a skill page."""
     parts = []
 
-    # Author line (linked to GitHub profile)
-    author = skill.get("author", "")
-    if author:
-        parts.append(
-            f'<div class="skill-meta">'
-            f'<span class="skill-author">by <a href="https://github.com/{author}" '
-            f'target="_blank" rel="noopener"><strong>{author}</strong></a></span>'
-            f'</div>'
-        )
+    # Author line, one GitHub link per comma-separated author
+    authors = [a.strip() for a in skill.get("author", "").split(",") if a.strip()]
+    if authors:
+        links = ", ".join(_author_link(a) for a in authors)
+        parts.append(f'<div class="skill-meta"><span class="skill-author">by {links}</span></div>')
 
     # Dimension tags
     dimensions = skill.get("dimensions", {})

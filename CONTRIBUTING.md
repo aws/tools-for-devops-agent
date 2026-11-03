@@ -17,6 +17,14 @@ Before contributing a new tool or to an existing tool (skill, custom agent, MCP 
 5. Follow tool-specific guidelines below. Note - in some cases, you may build multiple tools that fit together to serve a specific purpose. For example, a skill for an operations review with a custom agent to run it on schedule, or a skill for investigation of issues in a specific AWS service, with an MCP server that gives it access to additional data sources. In those cases, follow the tool-specific guidelines for each of the tools you intend to contribute
 6. Once you're happy with the result, create a PR (see [Contributing via Pull Requests](CONTRIBUTING.md#contributing-via-pull-requests)). A maintainer will review your content
 
+### Keep Your Tool Self-Contained
+
+This repository is for DevOps Agent tools: skills, custom agents, and lightweight MCP servers that support them. It isn't a home for broader solutions.
+
+- Your tool can rely on AWS services and APIs, DevOps Agent's built-in capabilities and integrations (including the third-party products covered by [connectors](connectors/README.md)), and the skills, custom agents and MCP servers in this repository
+- If your skill or custom agent depends on a solution you maintain elsewhere (for example, an application, framework, dashboard or data pipeline), please publish the tool in that solution's repository instead, so you can release and update them together. We can't test, version or support dependencies outside this repository, so pull requests with such dependencies will be closed
+- An MCP server is a good fit here when it's lightweight and exists to support a DevOps Agent skill or custom agent. General-purpose applications, or ports of them, aren't accepted
+
 
 ### Build the Tool
 
@@ -41,7 +49,7 @@ Follow these guidelines for each tool:
 
 #### Skill Metadata
 
-Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
+Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user, or your team as `org/team`) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
 
 #### Skill Publishing Rules
 
@@ -56,7 +64,7 @@ Skills on `main` are published automatically, so a pull request check ([`.github
 | `title` | Optional display name. Non-empty, one line, at most 100 characters. |
 | `license`, `compatibility`, `allowed-tools` | Optional. When present, non-empty text; `compatibility` is at most 500 characters. |
 | `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `deprecated: "true"`. A key that isn't listed below is a warning, with the nearest known key when there is one. |
-| `metadata.author` | Required. One or more GitHub usernames separated by commas. |
+| `metadata.author` | Required. One or more GitHub usernames or teams (`org/team`, such as `octo-org/octo-team`) separated by commas, without a leading `@`. |
 | `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix, suffix or leading zeros, at most 32 characters and at most 10 digits in each part. |
 | `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing or empty summary is a warning for now; it becomes required once every skill has one. |
 | `metadata.deprecated` | Optional. `"true"` or `"false"`. |
