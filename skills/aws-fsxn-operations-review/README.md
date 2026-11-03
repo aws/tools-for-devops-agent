@@ -66,14 +66,14 @@ An existing Agent Space with each account you want to review configured as a clo
 ### 2. IAM permissions
 
 The skill needs read-only access to `fsx`, `cloudwatch`, `backup`, and `ec2`. These permissions are
-delivered repo-wide through [`cloudformation/devops-agent-skill-policies.yaml`](../../cloudformation/devops-agent-skill-policies.yaml),
+delivered repo-wide through [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml),
 which attaches the inline policy `DevOpsAgentSkill-AwsFsxnOperationsReview` to your DevOps Agent role. The
 skill is enabled by default (`EnableAwsFsxnOperationsReview=true`). Deploy or update the stack against your
 agent role:
 
 ```bash
 aws cloudformation deploy \
-  --template-file cloudformation/devops-agent-skill-policies.yaml \
+  --template-file cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml \
   --stack-name devops-agent-skill-policies \
   --parameter-overrides ExistingRoleName=<YOUR-DEVOPS-AGENT-ROLE-NAME> \
   --capabilities CAPABILITY_NAMED_IAM
@@ -133,7 +133,7 @@ skills/aws-fsxn-operations-review/
 ```
 
 The least-privilege IAM for this skill is delivered repo-wide through the shared template
-[`cloudformation/devops-agent-skill-policies.yaml`](../../cloudformation/devops-agent-skill-policies.yaml),
+[`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml),
 which adds the `DevOpsAgentSkill-AwsFsxnOperationsReview` inline policy when
 `EnableAwsFsxnOperationsReview` is `true` (the default).
 
@@ -171,7 +171,7 @@ unzip -l ../../aws-fsxn-operations-review.zip
 (`README.md` and `evals/` are repo artifacts, excluded from the uploaded skill.)
 
 Upload the zip via the Agent Space Operator Web App Skills page. Target the **Chat tasks** agent type
-for on-demand and scheduled review runs.
+for on-demand review runs.
 
 ## Non-production disclaimer
 
