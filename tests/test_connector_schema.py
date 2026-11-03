@@ -94,6 +94,13 @@ class StringRuleTests(unittest.TestCase):
             ],
         )
 
+    def test_a_contact_email_is_one_address(self):
+        self.check(
+            CONNECTOR["properties"]["contact_email"],
+            good=["devops-agent@acme.example", "a@b.co", "partner.alerts+aws@acme.example"],
+            bad=["acme", "a@b", "a b@acme.example", "@acme.example", "a@@acme.example", "a@acme.example ", "x" * 250 + "@a.co"],
+        )
+
     def test_a_header_prefix_takes_no_placeholder(self):
         self.check(PREFIX, good=["Bearer ", "Token ", "", "{x}", "a{"], bad=["{{config.x}}", "Bearer {{config.x}}", "{{"])
 

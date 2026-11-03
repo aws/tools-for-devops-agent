@@ -12,4 +12,6 @@ A connector is the definition of an MCP server that a partner hosts, for custome
 
 `maintainers` in `connector.yaml` lists the GitHub usernames, or teams as `org/team`, that maintain the connector, without a leading `@`.
 
+`contact_email` is where AWS reaches the partner about the connector, including security notices. It is a shared corporate address, never a person's, because the file is public. Every new or changed connector sets it, which the pull request checklist enforces; the schema will require it once every connector on `main` has one.
+
 A partner accepts the [AWS DevOps Agent Partner Connector Terms and Conditions](TERMS.md) in the pull request that adds or changes its connector; see "Partner Connectors" in [CONTRIBUTING.md](../CONTRIBUTING.md). Connector submissions are not open yet. The contribution guide, covering how to write and submit a connector, will be added to CONTRIBUTING.md.

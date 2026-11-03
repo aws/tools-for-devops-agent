@@ -71,8 +71,9 @@ class TemplateTest(unittest.TestCase):
     def test_untouched_template_on_a_connector_pr_holds_the_universal_items_and_the_terms(self):
         unmet, _, is_tool = cpc.evaluate(TEMPLATE, CONNECTOR_PR)
         self.assertFalse(is_tool)
-        self.assertEqual(len(unmet), 3)
+        self.assertEqual(len(unmet), 4)
         self.assertTrue(unmet[2].startswith("Connectors → I accept the"))
+        self.assertTrue(unmet[3].startswith("Connectors → `contact_email`"))
 
 
 class EvaluateTest(unittest.TestCase):

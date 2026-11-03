@@ -20,7 +20,8 @@ reason on its own line, and the reviewer judges the reason; the universal items
 cannot be waived that way.
 
 A PR that changes a connector directory, ``connectors/<name>/``, is also held to
-the Connectors section, whose partner terms acceptance can never be marked ``n/a``.
+the Connectors section, whose items (the partner terms acceptance and the
+contact address) can never be marked ``n/a``.
 A connector is a definition, not a tool, so it adds no other tool items; the
 shared files directly in ``connectors/`` and ``connectors/schema/`` call for nothing.
 
@@ -51,7 +52,7 @@ ALWAYS_SECTIONS = ("Required before review", "License confirmation")
 TOOL_SECTION = "Security and safety"
 TOOL_DIRS = {"skills/": "Skills", "mcp/": "MCP servers", "custom-agents/": "Custom agents"}
 # Every item in this section is enforced and none can be marked n/a: accepting the
-# partner terms is a statement only the partner can make.
+# partner terms and naming a contact are statements only the partner can make.
 CONNECTOR_SECTION = "Connectors"
 CONNECTOR_DIR = re.compile(r"^connectors/(?!schema/)[^/]+/")
 
