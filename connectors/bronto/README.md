@@ -28,7 +28,7 @@ The agent acts as the user who signs in, with that user's Bronto permissions. Us
 
 ### API key
 
-Use a key when the agent must act as itself, not as a person.
+Use a key when the agent must act as itself, not as a person. Creating an API key requires the **Admin** role in Bronto; if you don't have it, ask a Bronto administrator to create the key.
 
 1. In Bronto, go to **Settings** > **API Keys** and select **Create a new API Key**.
 2. Name it after its purpose, such as `aws-devops-agent`.
