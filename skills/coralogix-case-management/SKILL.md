@@ -2,6 +2,7 @@
 name: coralogix-case-management
 description: Create and change Coralogix Cases — open a case, comment, re-prioritise, assign, acknowledge, retitle, resolve, close, mute, link and unlink. Load when the user asks to "open a case", "create a case for this", "raise a case for X", "comment on CASE-123", "make CASE-123 a P1", "change the priority", "assign this case to …", "acknowledge CASE-123", "resolve CASE-123", "close this case", "mute this case", "stop this case notifying", "link CASE-390 under CASE-383", "make this a child of", or to find a case they described in words rather than by ID. The `coralogix-alerts` skill must be loaded alongside this skill for terminology. This skill performs mutations; for read-only investigation of one case use `coralogix-single-case`, and for counts, trends and fleet questions use `coralogix-case-analytics`.
 metadata:
+  summary: "Create and manage Coralogix Cases, including assignment, acknowledgement, resolution, muting, and links."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"
@@ -33,7 +34,7 @@ A case is owned work for a team. Two things matter equally: doing what the user 
 
 **Reopen.** `RESOLVED` cannot be reopened, only closed. If the user wants the work reopened, say so — do not resolve-then-recreate to fake it. A recurrence of the same `dedup_key` on a resolved case does not reopen it either: `create` succeeds and the backend chains a new case onto the resolved one as the recurrence. The original stays resolved; call `create` normally and let the backend do the chaining.
 
-**Alert definitions.** When a finding keeps recurring and the right fix is an alert, offer a draft (query, threshold, labels) and hand off to the `alert-management` skill. Do not create alerts from this skill.
+**Alert definitions.** When a finding keeps recurring and the right fix is an alert, offer a draft (query, threshold, labels) for the user to create in Coralogix. Do not create alerts from this skill.
 
 **Labels after create.** There is no API to change a case's labels. If the labels are wrong, say so; do not resolve and recreate to work around it.
 

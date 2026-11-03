@@ -2,6 +2,7 @@
 name: coralogix-views
 description: Manage Coralogix saved views and saved-view folders. Load when the user asks to create, update, delete, inspect, organize, or list saved log views.
 metadata:
+  summary: "Create, inspect, update, organize, and delete Coralogix saved log views and folders."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

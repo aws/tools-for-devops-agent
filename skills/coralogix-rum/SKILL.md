@@ -2,6 +2,7 @@
 name: coralogix-rum
 description: Use when the user asks to "query RUM", "cx_rum", "real user monitoring", "frontend errors", "browser errors", "mobile app crashes", "Web Vitals", "slow page load", "LCP", "CLS", "browser network failures", "user clicks", "session replay", "RUM SDK", "install RUM", "source maps for RUM", or wants to query Coralogix RUM telemetry using query_dataprime with `source rum.events`, DataPrime, and flat `$d.*` fields (field catalog is in Key Fields below), or needs official RUM SDK docs (read_rum_sdk_docs).
 metadata:
+  summary: "Query and troubleshoot Coralogix RUM telemetry, frontend performance, errors, sessions, and SDK setup."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

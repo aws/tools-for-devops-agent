@@ -2,6 +2,7 @@
 name: coralogix-dataprime
 description: DataPrime query language for logs/spans/custom datasets (shared syntax, patterns, and rules). Load when you need to write a DataPrime query to explore logs or spans. Also load in case the user asks for help with a DataPrime query or its generation.
 metadata:
+  summary: "Write and troubleshoot DataPrime queries for Coralogix logs, spans, and custom datasets."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

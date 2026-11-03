@@ -2,6 +2,7 @@
 name: coralogix-service-catalog
 description: The fast, authoritative path for APM/RED data — error rate, latency percentiles (p50-p99), throughput, health status, resource saturation (CPU/memory/OOMKilled for k8s-pod, heap/thread/GC for jvm), and dependency latency — across services, databases, operations, k8s pods, and JVMs. Load this FIRST for any question about service errors, slowness, latency, health, or saturation, including broad ones like "is any service erroring or slow right now?", before reaching for raw spans or PromQL. Also covers inventory questions such as listing services or available entity types.
 metadata:
+  summary: "Analyze service health, RED metrics, saturation, dependencies, and inventory through Coralogix Service Catalog."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

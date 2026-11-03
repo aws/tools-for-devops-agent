@@ -2,6 +2,7 @@
 name: coralogix-datasets
 description: Dataset discovery and source-selection guidance for DataPrime system and user-defined datasets. Load when the user asks what datasets exist, how to use `list_datasets`, how to query `system/...` or `default/...` sources, or how to inspect a specific system dataset after discovery. The `coralogix-dataprime` skill should be loaded alongside this skill.
 metadata:
+  summary: "Discover Coralogix system and user-defined datasets and select sources for DataPrime queries."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

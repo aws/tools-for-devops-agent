@@ -2,6 +2,7 @@
 name: coralogix-olly
 description: '- Use when the user wants to investigate or analyze data in Coralogix, or explicitly asks to use Olly. Examples: "ask Olly", "why is my service slow", "what alerts fired", "investigate this incident", "analyze errors", "explain this spike".'
 metadata:
+  summary: "Use Olly to investigate Coralogix observability data, incidents, alerts, errors, and performance issues."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

@@ -2,6 +2,7 @@
 name: coralogix-ai-center
 description: Coralogix AI Center — observe, evaluate, and guard GenAI/LLM applications and agents. Use for questions or actions about the user's AI/GenAI applications or agents — their behavior, prompts/responses, chats, quality, hallucinations, guardrails, cost/tokens, evaluations/policies, model pricing or comparing or tracking agents over time. Combines GenAI span queries (via `query_dataprime`) with the `ai_center_*` / `manage_ai_*` configuration tools. Only load this skill when you have an indication that GenAI is related.
 metadata:
+  summary: "Investigate, evaluate, and manage Coralogix AI Center applications, models, and GenAI telemetry."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

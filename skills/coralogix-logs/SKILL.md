@@ -2,6 +2,7 @@
 name: coralogix-logs
 description: Log-specific concepts, fields, field discovery usage, and troubleshooting patterns. The `coralogix-dataprime` skill should be loaded alongside this skill. Load when you need to explore logs in your investigation or to answer a question about logs.
 metadata:
+  summary: "Investigate Coralogix logs with log-specific fields, discovery guidance, and troubleshooting patterns."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

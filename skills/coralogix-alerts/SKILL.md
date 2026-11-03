@@ -2,6 +2,7 @@
 name: coralogix-alerts
 description: Alert and case terminology, alert definitions, alert events, cases, IDs, alert types, and skill routing. Load whenever working with alerts or cases to understand shared terminology.
 metadata:
+  summary: "Shared Coralogix alert and case terminology, IDs, alert types, and routing guidance."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

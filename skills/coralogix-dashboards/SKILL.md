@@ -2,6 +2,7 @@
 name: coralogix-dashboards
 description: Dashboard analysis and editing workflow and rules for using dashboard JSON, filters, variables, and time ranges. Load when the user provides dashboard context (for example a dashboard link) or asks to create or change a dashboard.
 metadata:
+  summary: "Analyze, create, and edit Coralogix dashboards, including dashboard JSON, filters, variables, and time ranges."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"

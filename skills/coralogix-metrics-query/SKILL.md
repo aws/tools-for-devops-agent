@@ -2,6 +2,7 @@
 name: coralogix-metrics-query
 description: PromQL fundamentals and metric discovery/query workflow. Load when you need to explore metrics in your investigation or to answer a question about metrics. For service-level RED metrics (error rate, latency percentiles, throughput) or pod/JVM resource saturation, load the `coralogix-service-catalog` skill instead — it is a pre-aggregated path for that data; this skill is for custom, infrastructure, and hand-written PromQL work.
 metadata:
+  summary: "Discover Coralogix metrics and write PromQL queries for custom and infrastructure investigations."
   author: "coralogix"
   version: "1.0.0"
   tier: "partner-managed"
