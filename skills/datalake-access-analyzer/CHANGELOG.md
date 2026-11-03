@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased] - 2026-11-03 (continued)
+### Fixed
+- Removed the `### Output discipline` section added earlier this session - traced as
+  the likely cause of a regression where S2 (granted-but-unlinked) started fabricating
+  a false "no grant was ever issued" verdict with a wrong database name and an
+  invented "zero CloudTrail events" claim, after passing correctly on 2026-10-28 with
+  the same underlying diagnosis logic. Replaced with a direct instruction in
+  `Output format`: never report a zero/absent finding without citing the actual tool
+  response; a refused/gated call is `NOT_CHECKED`, never a negative result.
+- Extended the layer-states guard (Step 1, Step 2): a successful but EMPTY
+  `lakeformation:ListPermissions` result for a principal other than the investigating
+  identity is NOT conclusive evidence of no grant when the caller's Data Lake admin
+  status isn't confirmed - treat as `NOT_CHECKED`, not `DENYING`. Found via a false
+  "no grant exists, no sales table exists" diagnosis on S2 that ground-truth
+  verification (via the `Admin` role) proved wrong.
+### Testing
+- Re-validated R-on, R-off, S1 (PASS - correctly "Partial" under a Data Lake admin
+  visibility regression in the test account, confirmed via ground truth), and S2
+  (PASS after the two fixes above, following one intermediate failure each). See
+  `step3-testkit/TEST-EVIDENCE-2026-10-30.md` for full detail. S4, S5, NEG still
+  pending re-validation.
+
 ## [Unreleased] - 2026-10-30
 ### Changed
 - Aligned structure to the `aiml-access-diagnostics` v1.2.4 reference example found during
