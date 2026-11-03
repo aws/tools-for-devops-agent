@@ -1,0 +1,385 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "connector.yaml, schema_version 1",
+  "description": "The definition of a partner-hosted MCP server that customers add to AWS DevOps Agent. Unknown keys are rejected at every level. Rules that need more than one field, such as unique labels, are applied by the catalog check.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "version",
+    "title",
+    "vendor",
+    "description",
+    "categories",
+    "tier",
+    "type",
+    "mcp",
+    "docs_url",
+    "support_url",
+    "maintainers"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Selects connectors/schema/v<schema_version>/.",
+      "const": 1
+    },
+    "name": {
+      "description": "The connector's identity: equal to its directory name and never changed after merge. index is reserved, since <type>/index.json sits beside the capability directories.",
+      "$ref": "#/$defs/capabilityName",
+      "not": { "const": "index" }
+    },
+    "version": {
+      "description": "MAJOR.MINOR.PATCH, raised whenever a published file changes.",
+      "$ref": "#/$defs/version"
+    },
+    "title": {
+      "description": "Display name on the console tile.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "vendor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "description": {
+      "description": "One line for the console tile.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "categories": {
+      "description": "One or more of the console's domain categories, in no significant order. New values are added within schema_version 1.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["cloud", "telemetry", "pipeline", "communication"] }
+    },
+    "tier": {
+      "description": "Who maintains the connector, shown as a badge.",
+      "enum": ["aws-managed", "partner-managed"]
+    },
+    "type": {
+      "description": "The only connector type in v1. The block named after it holds the registration fields.",
+      "const": "mcp"
+    },
+    "deprecated": {
+      "description": "Hides the connector from the gallery and marks installed copies. Absent means false.",
+      "type": "boolean"
+    },
+    "replacement": {
+      "description": "With deprecated: true, the name of the connector that replaces this one.",
+      "$ref": "#/$defs/capabilityName"
+    },
+    "mcp": { "$ref": "#/$defs/mcp" },
+    "skills": {
+      "description": "Skills in skills/ that the console offers to install after the connector is associated. Names, never versions.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/capabilityName" }
+    },
+    "triggers": { "$ref": "#/$defs/triggers" },
+    "docs_url": {
+      "description": "The vendor's product documentation.",
+      "$ref": "#/$defs/httpsUrl"
+    },
+    "support_url": { "$ref": "#/$defs/httpsUrl" },
+    "maintainers": {
+      "description": "Who maintains this connector: GitHub usernames, or teams as org/team, without a leading @.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/githubHandle" }
+    }
+  },
+  "dependentSchemas": {
+    "replacement": {
+      "required": ["deprecated"],
+      "properties": { "deprecated": { "const": true } }
+    }
+  },
+  "$defs": {
+    "capabilityName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^(0|[1-9][0-9]{0,9})\\.(0|[1-9][0-9]{0,9})\\.(0|[1-9][0-9]{0,9})$"
+    },
+    "httpsUrl": {
+      "description": "An https URL. In mcp, it may contain {{config.<name>}} placeholders.",
+      "type": "string",
+      "pattern": "^https://[^\\s]+$"
+    },
+    "githubHandle": {
+      "anyOf": [{ "$ref": "#/$defs/githubUser" }, { "$ref": "#/$defs/githubTeam" }]
+    },
+    "githubUser": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 39,
+      "pattern": "^[A-Za-z0-9](-?[A-Za-z0-9])*$"
+    },
+    "githubTeam": {
+      "description": "org/team, with the organization under the username rule. Two patterns rather than one, so no lookahead is needed to bound the organization.",
+      "type": "string",
+      "maxLength": 140,
+      "allOf": [
+        { "pattern": "^[A-Za-z0-9](-?[A-Za-z0-9])*/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$" },
+        { "pattern": "^[^/]{1,39}/" }
+      ]
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32
+    },
+    "urlOrLabelMap": {
+      "description": "One URL, or, with mcp.endpoints, one URL per endpoint label.",
+      "oneOf": [
+        { "$ref": "#/$defs/httpsUrl" },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/label" },
+          "additionalProperties": { "$ref": "#/$defs/httpsUrl" }
+        }
+      ]
+    },
+    "mcp": {
+      "description": "Everything a registration is checked against.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["auth"],
+      "oneOf": [
+        { "required": ["endpoint"] },
+        { "required": ["endpoints"] }
+      ],
+      "properties": {
+        "endpoint": {
+          "description": "The MCP server URL. Declare this or endpoints, not both.",
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "endpoints": {
+          "description": "Regional variants, in the vendor's own terms; the customer picks one.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "endpoint"],
+            "properties": {
+              "label": { "$ref": "#/$defs/label" },
+              "endpoint": { "$ref": "#/$defs/httpsUrl" }
+            }
+          }
+        },
+        "auth": {
+          "description": "1 to 4 ways a customer can authenticate, offered in this order with the first as the default. Unique types are applied by the catalog check.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/authOption" }
+        },
+        "config": {
+          "description": "Non-secret values the customer supplies, rendered into the URLs and exchange_parameters values as {{config.<name>}}.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "label", "pattern"],
+            "properties": {
+              "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+              "label": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "pattern": {
+                "description": "An anchored pattern, ^...$, every customer value must match. The catalog check limits the syntax further.",
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\^.*\\$$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "authOption": {
+      "description": "One of BYO MCP's registration flows, with that type's fields and no others.",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["api_key", "oauth_client_credentials", "oauth_3lo", "dynamic_client_registration"]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "api_key" } } },
+          "then": { "$ref": "#/$defs/apiKeyAuth" }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "oauth_client_credentials" } } },
+          "then": { "$ref": "#/$defs/oauthClientCredentialsAuth" }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "oauth_3lo" } } },
+          "then": { "$ref": "#/$defs/oauth3loAuth" }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "dynamic_client_registration" } } },
+          "then": { "$ref": "#/$defs/dynamicClientRegistrationAuth" }
+        }
+      ]
+    },
+    "scopes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "apiKeyAuth": {
+      "description": "The customer enters one value per header.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "headers"],
+      "properties": {
+        "type": { "const": "api_key" },
+        "headers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["header", "label"],
+            "properties": {
+              "header": {
+                "description": "The HTTP header the partner's server reads.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "label": {
+                "description": "What the console asks the customer for.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "prefix": {
+                "description": "Fixed text sent before the customer's value, such as \"Bearer \". No placeholders.",
+                "type": "string",
+                "not": { "pattern": "\\{\\{" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "oauthClientCredentialsAuth": {
+      "description": "The customer enters a client ID and secret created in the vendor's product.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "exchange_url"],
+      "properties": {
+        "type": { "const": "oauth_client_credentials" },
+        "exchange_url": { "$ref": "#/$defs/urlOrLabelMap" },
+        "scopes": { "$ref": "#/$defs/scopes" },
+        "exchange_parameters": {
+          "description": "Non-secret parameters added to the token request. A value is fixed, or is {{config.<name>}}.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "value": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "oauth3loAuth": {
+      "description": "The customer signs in. Without client_id, they first enter their own client ID and secret.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "authorization_url", "exchange_url"],
+      "properties": {
+        "type": { "const": "oauth_3lo" },
+        "authorization_url": { "$ref": "#/$defs/urlOrLabelMap" },
+        "exchange_url": { "$ref": "#/$defs/urlOrLabelMap" },
+        "scopes": { "$ref": "#/$defs/scopes" },
+        "client_id": {
+          "description": "The one public client the vendor publishes for every customer. Requires pkce: true.",
+          "type": "string",
+          "minLength": 1
+        },
+        "pkce": {
+          "description": "The server supports a PKCE code challenge. Absent means false.",
+          "type": "boolean"
+        }
+      },
+      "dependentSchemas": {
+        "client_id": {
+          "required": ["pkce"],
+          "properties": { "pkce": { "const": true } }
+        }
+      }
+    },
+    "dynamicClientRegistrationAuth": {
+      "description": "The customer signs in. The client and the endpoints come from discovery.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "authorization_server"],
+      "properties": {
+        "type": { "const": "dynamic_client_registration" },
+        "authorization_server": {
+          "description": "The issuer identifier (RFC 8414) that discovery must resolve to.",
+          "$ref": "#/$defs/urlOrLabelMap"
+        }
+      }
+    },
+    "template": {
+      "description": "A value template in the vendor's own syntax that renders to the field's JSON value, quotes included.",
+      "type": "string",
+      "minLength": 1
+    },
+    "triggers": {
+      "description": "Present when the vendor's alerts can open investigations through the association's webhook. The webhook's headers are the platform's and are not declared here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["incident"],
+      "properties": {
+        "auth": {
+          "description": "How the vendor authenticates to the webhook: api_key, one Authorization: Bearer header, or hmac.",
+          "enum": ["api_key", "hmac"],
+          "default": "api_key"
+        },
+        "incident": {
+          "description": "One template per field of the platform's incident payload other than eventType.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["incidentId", "title", "priority"],
+          "properties": {
+            "incidentId": { "$ref": "#/$defs/template" },
+            "title": { "$ref": "#/$defs/template" },
+            "priority": { "$ref": "#/$defs/template" },
+            "action": { "$ref": "#/$defs/template" },
+            "timestamp": { "$ref": "#/$defs/template" },
+            "description": { "$ref": "#/$defs/template" },
+            "service": { "$ref": "#/$defs/template" },
+            "data": { "$ref": "#/$defs/template" }
+          }
+        }
+      }
+    }
+  }
+}

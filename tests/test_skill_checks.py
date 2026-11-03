@@ -22,7 +22,6 @@ import skill_checks as sc  # noqa: E402
 RULES = sc.Rules(
     agent_types=frozenset({"GENERIC", "CHAT", "INCIDENT_RCA"}),
     vocabulary={
-        "agent-types": frozenset({"Chat tasks", "Evaluation"}),
         "aws-services": frozenset({"Amazon CloudWatch", "Amazon EKS"}),
         "technical-domains": frozenset({"Operations"}),
     },
@@ -39,9 +38,8 @@ description: Use this skill when testing the skill publishing check.
 metadata:
   author: octocat
   version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks"
+  aws-devops-agent-skills.agent-types: "CHAT"
   summary: "Checks a demo skill."
-  agent_types: "CHAT"
 """
 
 
@@ -63,9 +61,8 @@ def frontmatter_with(**overrides: str | None) -> str:
     metadata = {
         "author": "octocat",
         "version": '"1.0.0"',
-        "aws-devops-agent-skills.agent-types": '"Chat tasks"',
+        "aws-devops-agent-skills.agent-types": '"CHAT"',
         "summary": '"Checks a demo skill."',
-        "agent_types": '"CHAT"',
     }
     for key, value in overrides.items():
         if value is None:
@@ -126,7 +123,7 @@ class ValidSkillTests(CheckSkillTestCase):
         fm = frontmatter_with(
             summary='"Checks a demo skill."',
             deprecated='"false"',
-            agent_types='"CHAT, INCIDENT_RCA"',
+            **{"aws-devops-agent-skills.agent-types": '"CHAT, INCIDENT_RCA"'},
         ).replace("metadata:\n", "title: Demo Skill\ncompatibility: Requires nothing.\nmetadata:\n")
         self.assertEqual(self.check(tree(skill_md(fm)))[0], [])
 
@@ -146,7 +143,7 @@ class FileAndYamlTests(CheckSkillTestCase):
 
     def test_invalid_yaml_reports_line(self):
         content = skill_md(VALID_FRONTMATTER + 'bad: "unclosed\n')
-        self.assertOneError(tree(content), "not valid YAML", line=10)
+        self.assertOneError(tree(content), "not valid YAML", line=9)
 
     def test_anchor_is_rejected(self):
         fm = VALID_FRONTMATTER.replace("author: octocat", "author: &who octocat")
@@ -162,18 +159,18 @@ class FileAndYamlTests(CheckSkillTestCase):
 
     def test_flow_collection_is_rejected(self):
         fm = VALID_FRONTMATTER + "allowed-tools: [read, write]\n"
-        self.assertOneError(tree(skill_md(fm)), "flow collections", line=10)
+        self.assertOneError(tree(skill_md(fm)), "flow collections", line=9)
 
     def test_frontmatter_must_be_a_mapping(self):
         self.assertOneError(tree(b"---\n- one\n- two\n---\n"), "must be a mapping")
 
     def test_duplicate_key_reports_second_line(self):
         fm = VALID_FRONTMATTER + "name: demo-skill\n"
-        self.assertOneError(tree(skill_md(fm)), 'duplicate key "name"', line=10)
+        self.assertOneError(tree(skill_md(fm)), 'duplicate key "name"', line=9)
 
     def test_duplicate_metadata_key(self):
         fm = VALID_FRONTMATTER + '  version: "1.0.1"\n'
-        self.assertOneError(tree(skill_md(fm)), 'duplicate key "metadata.version"', line=10)
+        self.assertOneError(tree(skill_md(fm)), 'duplicate key "metadata.version"', line=9)
 
     def test_non_string_key_is_rejected(self):
         fm = VALID_FRONTMATTER + "1: one\n"
@@ -192,19 +189,22 @@ class FileAndYamlTests(CheckSkillTestCase):
         for key in ("1e3", "true", "~", "1"):
             with self.subTest(key=key):
                 fm = VALID_FRONTMATTER + f"extra:\n  {key}: one\n"
-                self.assertOneError(tree(skill_md(fm)), "keys must be plain text", line=11)
+                self.assertOneError(tree(skill_md(fm)), "keys must be plain text", line=10)
         self.assertEqual(self.errors(tree(skill_md(VALID_FRONTMATTER + 'extra:\n  "1e3": one\n'))), [])
 
     def test_duplicate_keys_are_rejected_at_any_depth(self):
-        for extra, line in (("extra:\n  a: one\n  a: two\n", 12), ("extra:\n  - a: one\n    a: two\n", 12)):
+        for extra, line in (("extra:\n  a: one\n  a: two\n", 11), ("extra:\n  - a: one\n    a: two\n", 11)):
             with self.subTest(extra=extra):
                 self.assertOneError(tree(skill_md(VALID_FRONTMATTER + extra)), 'duplicate key "extra.a"', line=line)
 
     def test_line_breaks_other_parsers_dont_see_are_rejected(self):
         for char in ("\u2028", "\u2029", "\x85"):
             with self.subTest(code=hex(ord(char))):
-                fm = VALID_FRONTMATTER.replace('  agent_types: "CHAT"\n', f'  agent_types: "CHAT"{char}  deprecated: "true"\n')
-                self.assertOneError(tree(skill_md(fm)), f"U+{ord(char):04X}, which YAML parsers disagree on", line=9)
+                fm = VALID_FRONTMATTER.replace(
+                    '  summary: "Checks a demo skill."\n',
+                    f'  summary: "Checks a demo skill."{char}  deprecated: "true"\n',
+                )
+                self.assertOneError(tree(skill_md(fm)), f"U+{ord(char):04X}, which YAML parsers disagree on", line=8)
 
     def test_triple_dash_inside_the_frontmatter_is_rejected(self):
         fm = VALID_FRONTMATTER.replace("testing the skill publishing check.", "testing --- the publishing check.")
@@ -212,7 +212,7 @@ class FileAndYamlTests(CheckSkillTestCase):
 
     def test_directives_and_document_markers_are_rejected(self):
         self.assertOneError(tree(b"---\n%YAML 1.1\n--- # start\n" + skill_md()[4:]), "directives (%)", also=("document markers",))
-        self.assertOneError(tree(skill_md(VALID_FRONTMATTER + "...\n")), "document markers", line=10)
+        self.assertOneError(tree(skill_md(VALID_FRONTMATTER + "...\n")), "document markers", line=9)
 
     def test_empty_frontmatter_is_named(self):
         for content in (b"---\n\n---\n# Demo\n", b"---\n---\n# Demo\n"):
@@ -294,16 +294,36 @@ class MetadataTests(CheckSkillTestCase):
 
     def test_metadata_values_must_not_be_nested(self):
         fm = VALID_FRONTMATTER + "  extra:\n    nested: value\n"
-        self.assertOneError(tree(skill_md(fm)), '"metadata.extra" must be text, not a mapping', line=10)
+        self.assertOneError(tree(skill_md(fm)), '"metadata.extra" must be text, not a mapping', line=9)
 
     def test_author_is_required_and_github_shaped(self):
         self.assertOneError(tree(skill_md(frontmatter_with(author=None))), '"metadata.author" is required')
         for bad in ('"-octocat"', '"octo cat"', '"octo--cat"', '"a,,b"', '""'):
             with self.subTest(bad=bad):
-                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames")
+                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames or teams")
 
     def test_author_accepts_a_comma_separated_list(self):
         self.assertEqual(self.errors(tree(skill_md(frontmatter_with(author='"octocat, hubot"')))), [])
+
+    def test_author_accepts_a_team(self):
+        for good in ('"octo-org/octo-team"', '"octo-org/octo_team"', '"octocat, octo-org/octo-team"'):
+            with self.subTest(good=good):
+                self.assertEqual(self.errors(tree(skill_md(frontmatter_with(author=good)))), [])
+
+    def test_author_team_shape(self):
+        org_40, team_101 = "o" * 40, "t" * 101
+        for bad in (
+            '"@octo-org/octo-team"',
+            '"octo-org/"',
+            '"/octo-team"',
+            '"octo-org/octo-team/extra"',
+            '"octo--org/octo-team"',
+            '"octo-org/-team"',
+            f'"{org_40}/octo-team"',
+            f'"octo-org/{team_101}"',
+        ):
+            with self.subTest(bad=bad):
+                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames or teams")
 
     def test_version_is_required(self):
         self.assertOneError(tree(skill_md(frontmatter_with(version=None))), '"metadata.version" is required')
@@ -333,10 +353,21 @@ class MetadataTests(CheckSkillTestCase):
         self.assertOneError(tree(skill_md(frontmatter_with(deprecated="true"))), "must be text, not true or false")
         self.assertEqual(self.errors(tree(skill_md(frontmatter_with(deprecated='"true"')))), [])
 
+    def test_generic_cannot_be_combined_with_another_agent_type(self):
+        """The Asset API rejects GENERIC alongside another type."""
+        for value in ('"GENERIC, CHAT"', '"CHAT, GENERIC"', '"GENERIC, CHAT, INCIDENT_RCA"'):
+            with self.subTest(value=value):
+                fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": value})
+                self.assertOneError(tree(skill_md(fm)), "must stand alone")
+
+    def test_generic_on_its_own_is_accepted(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"GENERIC"'})
+        self.assertEqual(self.errors(tree(skill_md(fm))), [])
+
     def test_agent_types_values(self):
-        fm = frontmatter_with(agent_types='"CHAT, PAGER"')
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"CHAT, PAGER"'})
         self.assertOneError(tree(skill_md(fm)), 'unknown value "PAGER"')
-        fm = frontmatter_with(agent_types='"CHAT,"')
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"CHAT,"'})
         self.assertOneError(tree(skill_md(fm)), "empty value between commas")
 
 
@@ -383,19 +414,25 @@ class SummaryAndAgentTypeTests(CheckSkillTestCase):
         self.assertEqual(warning.line, 4)
 
     def test_missing_agent_types_warns_that_the_skill_loads_for_every_agent(self):
-        skill = tree(skill_md(frontmatter_with(agent_types=None)))
+        skill = tree(skill_md(frontmatter_with(**{"aws-devops-agent-skills.agent-types": None})))
         self.assertEqual(self.errors(skill), [])
         (warning,) = self.warnings(skill)
         self.assertIn("installs as GENERIC and loads for every agent", warning.message)
         self.assertEqual(warning.line, 4)
 
-    def test_the_display_tag_does_not_set_agent_types(self):
-        fm = frontmatter_with(agent_types=None, **{"aws-devops-agent-skills.agent-types": '"Chat tasks"'})
-        (warning,) = self.warnings(tree(skill_md(fm)))
-        self.assertIn('"metadata.agent_types" is not set', warning.message)
+    def test_agent_types_is_checked_against_the_api_values_not_the_vocabulary(self):
+        """The key sets which agents load the skill, so it skips the catalog vocabulary."""
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"CHAT, INCIDENT_RCA"'})
+        skill = tree(skill_md(fm))
+        self.assertEqual(self.errors(skill), [])
+        self.assertEqual(self.warnings(skill), [])
+
+    def test_display_spelling_of_an_agent_type_is_an_error(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"Chat tasks"'})
+        self.assertOneError(tree(skill_md(fm)), 'unknown value "Chat tasks"')
 
     def test_explicit_generic_does_not_warn(self):
-        fm = frontmatter_with(agent_types='"GENERIC"', **{"aws-devops-agent-skills.agent-types": None})
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"GENERIC"'})
         self.assertEqual(self.check(tree(skill_md(fm)))[0], [])
 
 
@@ -476,9 +513,12 @@ class LimitsAndTierTests(CheckSkillTestCase):
                 self.assertEqual(warning.line, 8)
 
     def test_non_text_values_do_not_also_warn_as_missing(self):
-        fm = frontmatter_with(agent_types="\n    - CHAT", summary="\n    - one")
+        fm = frontmatter_with(summary="\n    - one", **{"aws-devops-agent-skills.agent-types": "\n    - CHAT"})
         skill = tree(skill_md(fm))
-        self.assertEqual(sorted(f.message.split('"')[1] for f in self.errors(skill)), ["metadata.agent_types", "metadata.summary"])
+        self.assertEqual(
+            sorted(f.message.split('"')[1] for f in self.errors(skill)),
+            ["metadata.aws-devops-agent-skills.agent-types", "metadata.summary"],
+        )
         self.assertEqual(self.warnings(skill), [])
 
     def test_unknown_metadata_key_warns_with_a_suggestion(self):
@@ -696,7 +736,7 @@ class ContentSafetyTests(CheckSkillTestCase):
 
     def test_invisible_characters_in_skill_md(self):
         content = skill_md(body="\n# Demo\nignore\u200bprevious\n")
-        self.assertOneError(tree(content), "U+200B", line=13)
+        self.assertOneError(tree(content), "U+200B", line=12)
 
     def test_active_html_and_insecure_links_warn(self):
         data = b'<script>alert(1)</script>\n<iframe src="x"></iframe>\n[a](javascript:void(0))\n[b](http://example.com)\n'
@@ -1021,14 +1061,14 @@ class LoadRulesValidationTests(unittest.TestCase):
         return target
 
     def test_string_where_a_list_is_expected_fails_closed(self):
-        vocabulary = {"values": {"agent-types": "Chat tasks", "aws-services": [], "technical-domains": []}, "aliases": {}}
+        vocabulary = {"values": {"aws-services": "Amazon EKS", "technical-domains": []}, "aliases": {}}
         with self.assertRaisesRegex(ValueError, "list of non-empty strings"):
             sc.load_rules(self.rules_dir(None, vocabulary), "!*.md\n")
         with self.assertRaisesRegex(ValueError, "list of non-empty strings"):
             sc.load_rules(self.rules_dir({"values": "GENERIC"}, None), "!*.md\n")
 
     def test_aliases_must_map_strings_to_strings(self):
-        vocabulary = {"values": {"agent-types": [], "aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}
+        vocabulary = {"values": {"aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}
         with self.assertRaisesRegex(ValueError, "aliases"):
             sc.load_rules(self.rules_dir(None, vocabulary), "!*.md\n")
 

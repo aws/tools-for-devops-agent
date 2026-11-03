@@ -42,7 +42,7 @@ The most accurate CI-driver attribution runs an Athena query over the Config S3 
 - **`s3:GetObject` on the Config delivery bucket** so the query engine can read the Config objects. `AIDevOpsAgentAccessPolicy` grants `s3:ListBucket` only on `AWSLogs/` prefixes and does **not** grant `s3:GetObject` on bucket contents — so without this grant the query fails with **AccessDenied**.
 - **`athena:StartQueryExecution`, `athena:GetQueryExecution`, `athena:GetQueryResults`** — these are not in the managed policy. (The Glue Data Catalog reads `glue:GetDatabase`/`GetTable`/`GetPartitions` and `athena:GetWorkGroup` that the query also uses *are* already in `AIDevOpsAgentAccessPolicy`, so the add-on only needs to add the four actions above.)
 
-Enable these by setting `EnableConfigAthenaCiAnalysis=true` (and scoping `ConfigDataBucketArn` to the Config delivery bucket) in [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml). When the add-on is not enabled, the skill automatically falls back to `GetDiscoveredResourceCounts` and labels CI-driver estimates as approximate — it does not attempt Athena.
+Enable these by setting `EnableConfigAthenaCiAnalysis=true` (and scoping `ConfigDataBucketArn` to the Config delivery bucket) in [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml). When the add-on is not enabled, the skill automatically falls back to `GetDiscoveredResourceCounts` and labels CI-driver estimates as approximate — it does not attempt Athena.
 
 The skill operates entirely in **read-only** mode — it never calls `PutConfigurationRecorder`, `StopConfigurationRecorder`, `PutConfigRule`, `DeleteConfigRule`, or any conformance-pack/delivery-channel mutation.
 
@@ -55,10 +55,9 @@ The skill operates entirely in **read-only** mode — it never calls `PutConfigu
 
 ## Agent Types
 
-- **On-demand (Chat tasks)** — "why is my Config bill so high", "should I use daily or continuous recording".
-- **Evaluation** — proactive cost-optimization recommendations.
+- **Chat tasks** — "why is my Config bill so high", "should I use daily or continuous recording".
 
-Select **Generic** (All agents) if you want the skill available to all agent types — required if you use it with the `unified-security-cost-optimizer` custom agent.
+Select **All agents** if you want the skill available to all agent types — required if you use it with the `unified-security-cost-optimizer` custom agent.
 
 ## Uploading to AWS DevOps Agent
 
@@ -72,7 +71,7 @@ zip -r ../config-cost-optimization.zip . \
   -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' '.skilleval.yml' 'evals/*'
 ```
 
-Then in the Operator Web App: **Skills → Add skill → Upload skill**, drag in the zip, select agent types (**On-demand** and **Evaluation**, or **Generic** for the custom agent), review validation, and **Upload**.
+Then in the Operator Web App: **Skills → Add skill → Upload skill**, drag in the zip, select agent types (**Chat tasks**, or **All agents** for the custom agent), review validation, and **Upload**.
 
 ## How to Use This Skill
 

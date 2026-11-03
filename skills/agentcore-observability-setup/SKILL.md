@@ -12,8 +12,8 @@ description: Validates and bootstraps Amazon Bedrock AgentCore observability so 
   cannot directly read such as code-level OTEL instrumentation.
 metadata:
   author: vggargav
-  version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
+  version: "1.0.2"
+  aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock AgentCore, Amazon CloudWatch, AWS X-Ray"
   aws-devops-agent-skills.technical-domains: "AI/ML, Observability"
 ---

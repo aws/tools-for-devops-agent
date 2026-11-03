@@ -37,7 +37,7 @@ def skill_md(name: str, version: str = "1.0.0", extra: str = "") -> str:
     return (
         f"---\nname: {name}\ndescription: Use this skill when testing {name}.\n"
         f'metadata:\n  author: octocat\n  version: "{version}"\n'
-        f'  summary: "Tests {name}."\n  aws-devops-agent-skills.agent-types: "Chat tasks"\n  agent_types: "CHAT"\n'
+        f'  summary: "Tests {name}."\n  aws-devops-agent-skills.agent-types: "CHAT"\n'
         f"{extra}---\n\n# {name}\n"
     )
 

@@ -12,8 +12,8 @@ description: >
   for a workload".
 metadata:
   author: shyamkulkarni
-  version: "2.5.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Evaluation"
+  version: "2.5.3"
+  aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon ECS"
 ---
 

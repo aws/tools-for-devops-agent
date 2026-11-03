@@ -1,12 +1,12 @@
 # CRM Production Investigation Guidelines Skill (Sample)
 
-This is a **sample skill** demonstrating how to write production investigation guidelines for the AWS DevOps Agent **Incident Triage** agent type. It shows how to encode application-specific troubleshooting knowledge — architecture details, incident isolation rules, and investigation procedures — into a skill that guides the agent during production incidents.
+This is a **sample skill** demonstrating how to write production investigation guidelines for the AWS DevOps Agent **Incident triage** agent type. It shows how to encode application-specific troubleshooting knowledge — architecture details, incident isolation rules, and investigation procedures — into a skill that guides the agent during production incidents.
 
 > **Note:** This skill is specific to a fictional CRM application and cannot be reused as-is. Use it as a template for writing similar investigation guideline skills for your own applications.
 
 ## Purpose
 
-When a production incident occurs, investigation agents might need application-specific context that goes beyond generic AWS troubleshooting: what services make up the application, what the common failure modes are, how to isolate unrelated incidents, and what observability tools to use. This sample skill demonstrates how to encode that knowledge so the Incident Triage agent can conduct thorough, structured investigations without repeated human guidance.
+When a production incident occurs, investigation agents might need application-specific context that goes beyond generic AWS troubleshooting: what services make up the application, what the common failure modes are, how to isolate unrelated incidents, and what observability tools to use. This sample skill demonstrates how to encode that knowledge so the Incident triage agent can conduct thorough, structured investigations without repeated human guidance.
 
 ## Key Capabilities (Demonstrated)
 
@@ -32,7 +32,7 @@ When a production incident occurs, investigation agents might need application-s
 
 This skill is designed for:
 
-- **Incident Triage** — initial incident assessment and investigation
+- **Incident triage** — initial incident assessment and investigation
 
 ## Uploading to AWS DevOps Agent
 
@@ -56,7 +56,7 @@ If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsa
 2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
 3. Click **Add skill** → **Upload skill**.
 4. Drag and drop the zip file (max 6 MB).
-5. Select the agent type: **Incident Triage**.
+5. Select the agent type: **Incident triage**.
 6. Click **Upload**.
 
 **Option C: Upload via the Asset API**
@@ -75,7 +75,7 @@ For more details, see [Uploading a skill](https://docs.aws.amazon.com/devopsagen
 4. Update the investigation approach with your organization's runbook procedures
 5. Add common root cause patterns specific to your application
 
-### Sample Incident Triage Prompts (for this demo application)
+### Sample Chat Prompts (to test the `Incident triage` agent for this demo application)
 
 - "Investigate the SQS Message Backlog Spike alert"
 - "We received an alert for High Lambda Error Rate, all invocations failing"

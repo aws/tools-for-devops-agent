@@ -7,8 +7,8 @@ description: Use this skill during any incident investigation, capacity planning
   a recommendation involves provisioning new AWS resources.
 metadata:
   author: yuriypr
-  version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Incident RCA"
+  version: "1.0.1"
+  aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "AWS Service Quotas, Amazon CloudWatch"
   aws-devops-agent-skills.technical-domains: "Operations, Capacity Planning"
 ---

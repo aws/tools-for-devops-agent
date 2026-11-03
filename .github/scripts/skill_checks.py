@@ -60,17 +60,27 @@ TWO_PART_VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 # GitHub's own rule for usernames: alphanumerics and single hyphens, no leading
 # or trailing hyphen, at most 39 characters.
 GITHUB_LOGIN_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}")
+# org/team, with the organization under the username rule, as connector.yaml's maintainers allow.
+GITHUB_TEAM_PATTERN = re.compile(rf"(?:{GITHUB_LOGIN_PATTERN.pattern})/[A-Za-z0-9][A-Za-z0-9_-]{{0,99}}")
 
 DIMENSION_PREFIX = "aws-devops-agent-skills."
 DIMENSIONS = ("agent-types", "aws-services", "technical-domains")
 DIMENSION_KEYS = tuple(DIMENSION_PREFIX + d for d in DIMENSIONS)
+
+# agent-types decides which agents load the skill, so its values are the API
+# values in agent-types.json, not the catalog vocabulary the other two use.
+AGENT_TYPES_DIMENSION = "agent-types"
+AGENT_TYPES_KEY = DIMENSION_PREFIX + AGENT_TYPES_DIMENSION
+VOCABULARY_DIMENSIONS = tuple(d for d in DIMENSIONS if d != AGENT_TYPES_DIMENSION)
+# Loads the skill for every agent, so it can't be combined with another type.
+GENERIC_AGENT_TYPE = "GENERIC"
 
 # The Agent Skills specification's frontmatter fields, plus the optional
 # display `title`. Anything else is reported as a warning.
 TOP_LEVEL_KEYS = ("name", "description", "license", "compatibility", "metadata", "allowed-tools", "title")
 # metadata keys this check knows, besides the aws-devops-agent-skills.* dimensions.
 # Any other key is a warning, so a typo such as "deprecate" isn't silently ignored.
-METADATA_KEYS = ("author", "version", "summary", "deprecated", "tier", "agent_types")
+METADATA_KEYS = ("author", "version", "summary", "deprecated", "tier")
 # A misspelling of DIMENSION_PREFIX, such as "aws-devops-agent-skill." or
 # "AWS-DevOps-Agent-Skills.", which would silently drop a skill from a filter.
 # A key this close to one of DIMENSION_KEYS counts too.
@@ -272,13 +282,15 @@ def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
         values = _string_list(agent_types["values"], f"{AGENT_TYPES_FILE} values")
         dimensions = vocabulary["values"]
         aliases = vocabulary["aliases"]
-        if not isinstance(dimensions, dict) or set(dimensions) != set(DIMENSIONS):
-            raise TypeError(f"{VOCABULARY_FILE}: values must have exactly the keys {', '.join(DIMENSIONS)}")
+        if not isinstance(dimensions, dict) or set(dimensions) != set(VOCABULARY_DIMENSIONS):
+            raise TypeError(f"{VOCABULARY_FILE}: values must have exactly the keys {', '.join(VOCABULARY_DIMENSIONS)}")
         if not isinstance(aliases, dict) or not all(
             isinstance(k, str) and isinstance(v, str) and k and v for k, v in aliases.items()
         ):
             raise TypeError(f"{VOCABULARY_FILE}: aliases must map non-empty strings to non-empty strings")
-        vocabulary_sets = {dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in DIMENSIONS}
+        vocabulary_sets = {
+            dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in VOCABULARY_DIMENSIONS
+        }
         return Rules(
             agent_types=frozenset(values),
             vocabulary=vocabulary_sets,
@@ -750,10 +762,11 @@ def _check_author(metadata: dict, items: dict, lines: dict, metadata_line: int, 
         return
     if "author" not in metadata:
         return
-    if not all(GITHUB_LOGIN_PATTERN.fullmatch(part) for part in _split(metadata["author"])):
+    parts = _split(metadata["author"])
+    if not all(GITHUB_LOGIN_PATTERN.fullmatch(part) or GITHUB_TEAM_PATTERN.fullmatch(part) for part in parts):
         report.error(
-            '"metadata.author" must be one or more GitHub usernames separated by commas, '
-            'for example "octocat" or "octocat, hubot"',
+            '"metadata.author" must be one or more GitHub usernames or teams (org/team) separated by commas, '
+            'for example "octocat", "octocat, hubot" or "octo-org/octo-team"',
             line=lines["author"],
         )
 
@@ -825,26 +838,41 @@ def _check_tier(metadata: dict, lines: dict, report: _Report) -> None:
 def _check_agent_types(
     metadata: dict, items: dict, lines: dict, metadata_line: int, rules: Rules, report: _Report
 ) -> None:
-    if "agent_types" in items and "agent_types" not in metadata:
+    if AGENT_TYPES_KEY in items and AGENT_TYPES_KEY not in metadata:
         return  # _text already reported that it isn't text.
-    value = metadata.get("agent_types")
+    value = metadata.get(AGENT_TYPES_KEY)
     if value is None:
         report.warning(
-            '"metadata.agent_types" is not set, so the skill installs as GENERIC and loads for every agent. '
-            'Set it to the agent types the skill is for, for example agent_types: "INCIDENT_RCA"; '
+            f'"metadata.{AGENT_TYPES_KEY}" is not set, so the skill installs as GENERIC '
+            "and loads for every agent. Set it to the agent types the skill is for, for example "
+            f'{AGENT_TYPES_KEY}: "INCIDENT_RCA"; '
             f"the values are listed in {RULES_DIR_DISPLAY}/{AGENT_TYPES_FILE}",
             line=metadata_line,
         )
         return
-    for part in _split(value):
+    parts = _split(value)
+    for part in parts:
         if not part:
-            report.error('"metadata.agent_types" has an empty value between commas', line=lines["agent_types"])
+            report.error(
+                f'"metadata.{AGENT_TYPES_KEY}" has an empty value between commas',
+                line=lines[AGENT_TYPES_KEY],
+            )
         elif part not in rules.agent_types:
             report.error(
-                f'"metadata.agent_types" has unknown value "{part}"; '
+                f'"metadata.{AGENT_TYPES_KEY}" has unknown value "{part}"; '
                 f"allowed values are listed in {RULES_DIR_DISPLAY}/{AGENT_TYPES_FILE}",
-                line=lines["agent_types"],
+                line=lines[AGENT_TYPES_KEY],
             )
+    # The Asset API rejects GENERIC alongside another agent type, because GENERIC
+    # already loads the skill for every agent.
+    if GENERIC_AGENT_TYPE in parts and len(set(parts)) > 1:
+        others = ", ".join(sorted(set(parts) - {GENERIC_AGENT_TYPE}))
+        report.error(
+            f'"metadata.{AGENT_TYPES_KEY}" combines {GENERIC_AGENT_TYPE} with {others}; '
+            f"{GENERIC_AGENT_TYPE} already loads the skill for every agent, so it must stand alone. "
+            f"List the specific agent types instead, or only {GENERIC_AGENT_TYPE}",
+            line=lines[AGENT_TYPES_KEY],
+        )
 
 
 def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report) -> None:
@@ -862,6 +890,8 @@ def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report
             continue
         if key not in metadata:
             continue
+        if dimension == AGENT_TYPES_DIMENSION:
+            continue  # _check_agent_types validates it against agent-types.json.
         approved = rules.vocabulary.get(dimension, frozenset())
         for part in _split(metadata[key]):
             if not part:

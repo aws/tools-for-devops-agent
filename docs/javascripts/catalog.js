@@ -14,6 +14,22 @@
     return span;
   }
 
+  // One GitHub link per comma-separated author. A team (org/team) links to its
+  // organization, since team pages need sign-in.
+  function appendAuthorLinks(parent, authors) {
+    String(authors || "").split(",").map(function (a) { return a.trim(); })
+      .filter(Boolean)
+      .forEach(function (entry, i) {
+        if (i > 0) parent.appendChild(document.createTextNode(", "));
+        var link = document.createElement("a");
+        link.href = "https://github.com/" + encodeURIComponent(entry.split("/")[0]);
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = entry;
+        parent.appendChild(link);
+      });
+  }
+
   function sanitizeHTML(html) {
     return DOMPurify.sanitize(html, { ALLOWED_TAGS: ["a", "strong"], ALLOWED_ATTR: ["href", "target", "rel"] });
   }
@@ -84,13 +100,8 @@
     meta.className = "skill-meta";
     var author = document.createElement("span");
     author.className = "skill-author";
-    var authorLink = document.createElement("a");
-    authorLink.href = "https://github.com/" + encodeURIComponent(skill.author);
-    authorLink.target = "_blank";
-    authorLink.rel = "noopener";
-    authorLink.textContent = skill.author;
     author.textContent = "by ";
-    author.appendChild(authorLink);
+    appendAuthorLinks(author, skill.author);
     meta.appendChild(author);
     card.appendChild(meta);
 
