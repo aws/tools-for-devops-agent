@@ -71,7 +71,7 @@ this repo and re-paste to update.
 ### Option C — CloudFormation (for IaC-managed Agent Spaces)
 
 Provision the agent, memory store, and trigger declaratively with
-[`assets-template.yaml`](assets-template.yaml) (`AWS::DevOpsAgent::Asset` +
+[`assets-template.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/custom-agents/dx-resilience-auditor/assets-template.yaml) (`AWS::DevOpsAgent::Asset` +
 `AWS::DevOpsAgent::Trigger`): it creates the custom agent, the
 `dx-resilience-intent` memory store, and the weekly trigger in one stack.
 
