@@ -8,4 +8,4 @@
 - Explicit origin handoff to aws-mediapackage-investigate and ADS-owner handoff; evidence carries coordinates in Step F.
 - Read-only diagnostics throughout; write operations are surfaced as customer recommendations only.
 - Shaped to the DevOps Agent skill-eval best practices: a step checklist the agent copies and ticks, a self-check before findings are presented, and the metric, status and field tables relocated to references/lookup-tables.md so they load only with the step that uses them.
-- The SSAI and Channel Assembly report outlines moved to references/report-outlines.md, loaded at Step F.
+- The SSAI and Channel Assembly report outlines moved to references/report-outlines.md, loaded at Step F. Review round: the two logging write commands (configure-logs-for-channel, configure-logs-for-playback-configuration) carry an explicit never-run guard; mediatailor:ListPrefetchSchedules and ListLiveSources added to the IAM policy for the commands the skill runs.

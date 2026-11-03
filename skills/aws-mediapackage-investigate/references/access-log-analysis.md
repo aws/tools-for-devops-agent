@@ -23,8 +23,11 @@ service-linked role):
 
 ### v2 access logs (Vended Logs)
 
-v2 uses CloudWatch Vended Logs — the customer configures delivery via
-`put-delivery-source`, `put-delivery-destination`, and `create-delivery`.
+v2 uses CloudWatch Vended Logs. The customer configures delivery via
+`put-delivery-source`, `put-delivery-destination`, and `create-delivery`; those
+are write operations this skill never runs. It only reads the delivery
+configuration back with `describe-delivery-sources`, `describe-delivery-destinations`
+and `describe-deliveries`.
 Destinations can be CloudWatch Logs, S3, or Firehose (up to 3 deliveries
 per log type per channel group).
 

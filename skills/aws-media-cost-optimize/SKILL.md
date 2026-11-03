@@ -235,8 +235,11 @@ for every hop in the topology. The four highest-value checks:
    the declared tier.
 2. `ChannelClass=STANDARD` where downstream consumes only one pipeline
    (one MediaPackage ingest endpoint receiving bytes).
-3. H.264 outputs on `FramerateControl=INITIALIZE_FROM_SOURCE`, which
-   provisions and bills the 30-60fps tier for 30fps content.
+3. H.264 outputs on `H264Settings.FramerateControl=INITIALIZE_FROM_SOURCE`,
+   which provisions and bills the 30-60fps tier for 30fps content. The fix
+   is `SPECIFIED` with the actual frame rate. The trap is H.264 only: HEVC,
+   AV1 and MPEG-2 outputs already require an explicit numerator and
+   denominator.
 4. CloudFront distributions without separate cache behaviors for manifests
    and segments, or with session tokens in the segment cache key.
 
@@ -299,7 +302,7 @@ cost the customer money or resilience.
 | STANDARD to SINGLE_PIPELINE downgrade | Customer explicitly confirms redundancy is not required for this channel; never recommend on modeling alone |
 | Output ladder trim, advanced audio removal, price class restriction | Customer confirms the rendition, audio format, or geography is not consumed; delivery-side evidence (manifest requests, player population) supports it |
 | Input specification downgrade | Observed source bitrate, codec, and resolution over the full lookback window sit at or below the proposed tier, with headroom the customer accepts; a source that peaks above the tier will be rejected at ingest |
-| Flows to Router migration | Multiple flows kept ACTIVE primarily to preserve routing paths, with material idle time; model both architectures side by side before recommending |
+| Flows to Router migration | Feasibility first: Router inputs and outputs support RTP, RIST and SRT (caller and listener) only, so a flow on Zixi, UDP, CDI, JPEG XS, NDI or Fujitsu has no direct Router equivalent and the protocol gap is reported instead of a model. Then: multiple flows kept ACTIVE primarily to preserve routing paths, with material idle time; model both architectures side by side before recommending |
 | Origin Shield | Behavior cache hit ratio > 50% (below that it is a surcharge) |
 | CloudFront commitment (Savings Bundle / flat-rate plan) | 12-month spend is stable and predictable from the lookback window |
 

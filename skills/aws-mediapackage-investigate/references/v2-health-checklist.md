@@ -24,7 +24,7 @@ and its origin endpoints.
 | Quality metrics | None | MQCS (CMAF only) |
 | Active input metric | `ActiveInput` (IngestEndpoint+OriginEndpoint dims) | None — use MQCS or per-endpoint IngressBytes |
 | Root dimension | `Channel` | `ChannelGroup` + `Channel` |
-| State reset | Not supported | `reset-channel-state` / `reset-origin-endpoint-state` |
+| State reset | Not supported | `reset-channel-state` / `reset-origin-endpoint-state` (write operations; this skill recommends them and never runs them) |
 
 ## Checklist
 
@@ -330,8 +330,10 @@ aws mediapackagev2 get-origin-endpoint \
 | No recent ResetAt (or before impact window) | ✅ | ResetAt within impact window | Medium — may explain discontinuity |
 
 If endpoint appears stuck (healthy ingest but no egress, no ForceEndpointError):
-- Recommend `reset-channel-state` or `reset-origin-endpoint-state`
-- **WARNING:** This is a WRITE operation that discards in-flight content
+- This is a write operation outside this skill's read-only scope. Never run it. Recommend it to the customer, with the consequence stated next to the command.
+- Recommend `reset-channel-state` or `reset-origin-endpoint-state`, with the
+  consequence: a reset discards in-flight content and creates a discontinuity
+  in the stream, so it belongs in a maintenance window.
 
 ### 12. Vended Logs (access log availability)
 

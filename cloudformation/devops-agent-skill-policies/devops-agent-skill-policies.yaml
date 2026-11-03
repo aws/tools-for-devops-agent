@@ -162,31 +162,31 @@ Parameters:
 
   EnableMediaConnectInvestigate:
     Type: String
-    Description: MediaConnect investigation skill (adds read-only mediaconnect flow, Router, bridge and events:ListRules reads).
+    Description: MediaConnect investigation skill (adds read-only mediaconnect flow, Router, bridge, entitlement and Link input device reads plus events:ListRules).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
   EnableMediaLiveInvestigate:
     Type: String
-    Description: MediaLive investigation skill (adds read-only medialive channel, input, device, schedule and alert reads).
+    Description: MediaLive investigation skill (adds read-only medialive channel, input, device, schedule, alert, cluster alert and multiplex alert reads plus events:ListRules).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
   EnableMediaPackageInvestigate:
     Type: String
-    Description: MediaPackage investigation skill, v1 and v2 (adds read-only mediapackage and mediapackagev2 channel, endpoint, policy and harvest job reads plus logs:DescribeDeliverySources).
+    Description: MediaPackage investigation skill, v1 and v2 (adds read-only mediapackage and mediapackagev2 channel, endpoint, policy and harvest job reads).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
   EnableMediaTailorInvestigate:
     Type: String
-    Description: MediaTailor investigation skill, SSAI and Channel Assembly (adds read-only mediatailor playback configuration, channel, schedule, program, source and alert reads; not covered by the managed policy).
+    Description: MediaTailor investigation skill, SSAI and Channel Assembly (adds read-only mediatailor playback configuration, prefetch schedule, channel, schedule, program, source location, VOD and live source, policy and alert reads; not covered by the managed policy).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
   EnableMediaCloudFrontInvestigate:
     Type: String
-    Description: CloudFront investigation skill for media origins (adds read-only cloudfront distribution, cache policy and origin request policy reads plus standard logging v2 delivery discovery).
+    Description: CloudFront investigation skill for media origins (adds read-only cloudfront distribution, cache policy and origin request policy reads).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -682,7 +682,7 @@ Resources:
               - savingsplans:DescribeSavingsPlans
             Resource: '*'
 
-  # aws-mediaconnect-investigate: read-only MediaConnect flow, Router and bridge reads plus events:ListRules
+  # aws-mediaconnect-investigate: read-only MediaConnect flow, Router, bridge and entitlement reads, MediaLive Link input device reads, events:ListRules
   PolicyMediaConnectInvestigate:
     Type: AWS::IAM::Policy
     Condition: SkillMediaConnectInvestigate
@@ -708,9 +708,11 @@ Resources:
               - mediaconnect:GetRouterInputSourceMetadata
               - mediaconnect:GetRouterInputThumbnail
               - events:ListRules
+              - medialive:ListInputDevices
+              - medialive:DescribeInputDevice
             Resource: '*'
 
-  # aws-medialive-investigate: read-only MediaLive channel, input, input device, schedule and alert reads
+  # aws-medialive-investigate: read-only MediaLive channel, input, input device, schedule and alert reads (channel, cluster, multiplex), events:ListRules
   PolicyMediaLiveInvestigate:
     Type: AWS::IAM::Policy
     Condition: SkillMediaLiveInvestigate
@@ -730,6 +732,9 @@ Resources:
               - medialive:DescribeSchedule
               - medialive:ListChannels
               - medialive:ListAlerts
+              - medialive:ListClusterAlerts
+              - medialive:ListMultiplexAlerts
+              - events:ListRules
             Resource: '*'
 
   # aws-mediapackage-investigate: read-only MediaPackage v1 and v2 channel, endpoint, policy and harvest job reads
@@ -748,6 +753,8 @@ Resources:
             Action:
               - mediapackage:DescribeChannel
               - mediapackage:ListChannels
+              - mediapackage:ListOriginEndpoints
+              - mediapackage:DescribeOriginEndpoint
               - mediapackage:ListHarvestJobs
               - mediapackage:DescribeHarvestJob
               - mediapackagev2:GetChannel
@@ -759,10 +766,9 @@ Resources:
               - mediapackagev2:GetOriginEndpointPolicy
               - mediapackagev2:ListHarvestJobs
               - mediapackagev2:GetHarvestJob
-              - logs:DescribeDeliverySources
             Resource: '*'
 
-  # aws-mediatailor-investigate: read-only MediaTailor playback configuration, channel, schedule, program, source and alert reads
+  # aws-mediatailor-investigate: read-only MediaTailor playback configuration, prefetch schedule, channel, schedule, program, source and alert reads
   PolicyMediaTailorInvestigate:
     Type: AWS::IAM::Policy
     Condition: SkillMediaTailorInvestigate
@@ -788,9 +794,11 @@ Resources:
               - mediatailor:DescribeVodSource
               - mediatailor:GetChannelPolicy
               - mediatailor:ListAlerts
+              - mediatailor:ListPrefetchSchedules
+              - mediatailor:ListLiveSources
             Resource: '*'
 
-  # aws-media-cloudfront-investigate: read-only CloudFront distribution and policy reads plus standard logging v2 delivery discovery
+  # aws-media-cloudfront-investigate: read-only CloudFront distribution, cache policy and origin request policy reads
   PolicyMediaCloudFrontInvestigate:
     Type: AWS::IAM::Policy
     Condition: SkillMediaCloudFrontInvestigate
@@ -811,9 +819,6 @@ Resources:
               - cloudfront:ListCachePolicies
               - cloudfront:GetOriginRequestPolicy
               - cloudfront:ListOriginRequestPolicies
-              - logs:DescribeDeliverySources
-              - logs:DescribeDeliveries
-              - logs:DescribeDeliveryDestinations
             Resource: '*'
 
   # aws-media-cost-optimize: Price List Query API reads plus inventory, reservation and offering reads; no ce:*, no purchase, update, stop or delete
@@ -872,8 +877,8 @@ Resources:
               - cloudfront:GetMonitoringSubscription
             Resource: '*'
 
-  # Shared by the six media investigation and cost skills above: CloudWatch metrics and
-  # Logs Insights reads. Log-group scope is account-wide because customers name their own
+  # Shared by the six media investigation and cost skills above: CloudWatch metrics, Logs
+  # Insights reads and vended-log delivery discovery. Log-group scope is account-wide because customers name their own
   # media log groups; narrow Resource to known log-group ARNs if your posture requires it.
   PolicyMediaSharedObservability:
     Type: AWS::IAM::Policy
@@ -896,6 +901,9 @@ Resources:
               - logs:StartQuery
               - logs:GetQueryResults
               - logs:StopQuery
+              - logs:DescribeDeliverySources
+              - logs:DescribeDeliveries
+              - logs:DescribeDeliveryDestinations
             Resource: '*'
 
   # aws-media-speke-drm-reference optional diagnostics: SPEKE key provider API Gateway and ACM
@@ -954,13 +962,13 @@ Outputs:
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
-        - aws-mediaconnect-investigate: ${EnableMediaConnectInvestigate} (mediaconnect:Describe*/List* for flows, Router, bridges and entitlements, events:ListRules)
-        - aws-medialive-investigate: ${EnableMediaLiveInvestigate} (medialive:DescribeChannel/DescribeInput/DescribeInputDevice/DescribeSchedule/ListChannels/ListAlerts)
-        - aws-mediapackage-investigate: ${EnableMediaPackageInvestigate} (mediapackage and mediapackagev2 channel, endpoint, policy and harvest job reads, logs:DescribeDeliverySources)
-        - aws-mediatailor-investigate: ${EnableMediaTailorInvestigate} (mediatailor:Get*/List*/Describe* for playback configurations, channels, schedules, programs, source locations, VOD sources and alerts)
-        - aws-media-cloudfront-investigate: ${EnableMediaCloudFrontInvestigate} (cloudfront:Get/ListDistribution*, Get/ListCachePolic*, Get/ListOriginRequestPolic*, logs:DescribeDeliverySources/Deliveries/DeliveryDestinations)
-        - aws-media-cost-optimize: ${EnableMediaCostOptimize} (pricing:DescribeServices/GetProducts, media services List/Describe/Get reads incl. reservations and offerings, cloudfront:GetMonitoringSubscription; no ce:*)
-        - media investigation and cost skills, shared: cloudwatch:ListMetrics/GetMetricData/GetMetricStatistics, logs:DescribeLogGroups/FilterLogEvents/StartQuery/GetQueryResults/StopQuery (applied when any of the six above is enabled)
+        - aws-mediaconnect-investigate: ${EnableMediaConnectInvestigate} (mediaconnect:DescribeFlow/ListFlows/ListEntitlements/ListBridges/DescribeBridge/ListRouterInputs/ListRouterOutputs/GetRouterInput/GetRouterOutput/GetRouterInputSourceMetadata/GetRouterInputThumbnail, events:ListRules, medialive:ListInputDevices/DescribeInputDevice)
+        - aws-medialive-investigate: ${EnableMediaLiveInvestigate} (medialive:DescribeChannel/DescribeInput/DescribeInputDevice/DescribeSchedule/ListChannels/ListAlerts/ListClusterAlerts/ListMultiplexAlerts, events:ListRules)
+        - aws-mediapackage-investigate: ${EnableMediaPackageInvestigate} (mediapackage:DescribeChannel/ListChannels/ListOriginEndpoints/DescribeOriginEndpoint/ListHarvestJobs/DescribeHarvestJob, mediapackagev2:GetChannel/ListChannelGroups/ListChannels/ListOriginEndpoints/GetChannelPolicy/GetOriginEndpoint/GetOriginEndpointPolicy/ListHarvestJobs/GetHarvestJob)
+        - aws-mediatailor-investigate: ${EnableMediaTailorInvestigate} (mediatailor:GetPlaybackConfiguration/ListPlaybackConfigurations/ListChannels/DescribeChannel/GetChannelSchedule/DescribeProgram/ListSourceLocations/DescribeSourceLocation/ListVodSources/DescribeVodSource/GetChannelPolicy/ListAlerts/ListPrefetchSchedules/ListLiveSources)
+        - aws-media-cloudfront-investigate: ${EnableMediaCloudFrontInvestigate} (cloudfront:GetDistribution/GetDistributionConfig/ListDistributions/GetCachePolicy/ListCachePolicies/GetOriginRequestPolicy/ListOriginRequestPolicies)
+        - aws-media-cost-optimize: ${EnableMediaCostOptimize} (pricing:DescribeServices/GetProducts plus the List, Describe and Get reads the inventory step needs on MediaConnect, MediaLive, MediaPackage v1 and v2, MediaTailor and CloudFront, including reservations and offerings; every action is listed in the README; nothing under ce:*)
+        - media investigation and cost skills, shared: cloudwatch:ListMetrics/GetMetricData/GetMetricStatistics, logs:DescribeLogGroups/FilterLogEvents/StartQuery/GetQueryResults/StopQuery/DescribeDeliverySources/DescribeDeliveries/DescribeDeliveryDestinations (applied when any of the six above is enabled)
         - aws-media-speke-drm-reference diagnostics add-on: ${EnableMediaSpekeDrmDiagnostics} (apigateway:GET on REST APIs, acm:DescribeCertificate/ListCertificates)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines

@@ -64,6 +64,8 @@ If MediaLive shows Output4xxErrors with 401/403 pattern:
 - `rotate-ingest-endpoint-credentials` generates new credentials
 - If called without updating ML's destination settings → immediate ingest failure
 
+This is a write operation outside this skill's read-only scope. Never run it. Recommend it to the customer, with the consequence stated next to the command. For this command the consequence is: update the MediaLive channel's MediaPackage destination with the new credentials in the same change window, or ingest stops.
+
 ```
 aws mediapackage rotate-ingest-endpoint-credentials \
   --id $CHANNEL_ID \
@@ -71,9 +73,10 @@ aws mediapackage rotate-ingest-endpoint-credentials \
   --no-cli-pager --output json
 ```
 
-**WARNING:** This is a WRITE operation. In read-only mode, recommend the
-customer perform rotation manually and update ML destination settings
-in the same maintenance window.
+**WARNING:** Write operation; never run it from this skill. Recommend that the
+customer perform the rotation and update the MediaLive destination settings in
+the same maintenance window, or ingest stops the moment the old credentials
+are revoked.
 
 ### 4. Egress health
 

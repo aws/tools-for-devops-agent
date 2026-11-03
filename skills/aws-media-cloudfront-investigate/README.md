@@ -32,10 +32,7 @@ CloudFront IAM actions are global. The CloudWatch metric reads target us-east-1,
         "cloudfront:GetCachePolicy",
         "cloudfront:ListCachePolicies",
         "cloudfront:GetOriginRequestPolicy",
-        "cloudfront:ListOriginRequestPolicies",
-        "logs:DescribeDeliverySources",
-        "logs:DescribeDeliveries",
-        "logs:DescribeDeliveryDestinations"
+        "cloudfront:ListOriginRequestPolicies"
       ],
       "Resource": "*"
     },
@@ -50,7 +47,10 @@ CloudFront IAM actions are global. The CloudWatch metric reads target us-east-1,
         "logs:FilterLogEvents",
         "logs:StartQuery",
         "logs:GetQueryResults",
-        "logs:StopQuery"
+        "logs:StopQuery",
+        "logs:DescribeDeliverySources",
+        "logs:DescribeDeliveries",
+        "logs:DescribeDeliveryDestinations"
       ],
       "Resource": "*"
     }

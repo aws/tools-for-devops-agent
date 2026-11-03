@@ -26,6 +26,8 @@ The skill is read-only by design and never performs write operations. The DevOps
       "Action": [
         "mediapackage:DescribeChannel",
         "mediapackage:ListChannels",
+        "mediapackage:ListOriginEndpoints",
+        "mediapackage:DescribeOriginEndpoint",
         "mediapackage:ListHarvestJobs",
         "mediapackage:DescribeHarvestJob",
         "mediapackagev2:GetChannel",
@@ -36,8 +38,7 @@ The skill is read-only by design and never performs write operations. The DevOps
         "mediapackagev2:GetOriginEndpoint",
         "mediapackagev2:GetOriginEndpointPolicy",
         "mediapackagev2:ListHarvestJobs",
-        "mediapackagev2:GetHarvestJob",
-        "logs:DescribeDeliverySources"
+        "mediapackagev2:GetHarvestJob"
       ],
       "Resource": "*"
     },
@@ -52,7 +53,10 @@ The skill is read-only by design and never performs write operations. The DevOps
         "logs:FilterLogEvents",
         "logs:StartQuery",
         "logs:GetQueryResults",
-        "logs:StopQuery"
+        "logs:StopQuery",
+        "logs:DescribeDeliverySources",
+        "logs:DescribeDeliveries",
+        "logs:DescribeDeliveryDestinations"
       ],
       "Resource": "*"
     }

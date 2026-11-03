@@ -125,8 +125,11 @@ dual-pipeline output). Each endpoint has a unique URL and WebDAV credentials
 If MediaLive is pushing to MediaPackage v1 and receiving 401/403 errors:
 - Credentials may have been rotated without updating MediaLive
 - Check `Output4xxErrors` on the MediaLive side
-- Credential rotation: `rotate-ingest-endpoint-credentials` generates new
-  creds — if called without updating ML, ingest breaks immediately
+- Credential rotation (`rotate-ingest-endpoint-credentials`) is a write
+  operation outside this skill's read-only scope. Never run it. Recommend it
+  to the customer with the consequence: update the MediaLive channel's
+  MediaPackage destination with the new credentials in the same change
+  window, or ingest stops.
 
 ### Ingest metrics
 

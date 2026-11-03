@@ -125,6 +125,6 @@ If `LogConfiguration.LogTypes` from C1 contains `AS_RUN`, query
 `MediaTailor/Channel/AsRunLog` for as-played programs and ad breaks (note: As-Run
 currently covers only the default program, not alternateMedia from program
 rules). If As-Run is off, emit the DATA GAP and name
-`configure-logs-for-channel --log-types AS_RUN` as the operator fix.
+`configure-logs-for-channel --log-types AS_RUN` as the operator fix. This is a write operation outside this skill's read-only scope. Never run it. Recommend it to the customer, with the consequence stated next to the command.
 
 ---

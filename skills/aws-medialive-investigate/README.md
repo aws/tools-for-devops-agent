@@ -29,7 +29,10 @@ The skill is read-only by design and never performs write operations. The DevOps
         "medialive:DescribeInputDevice",
         "medialive:DescribeSchedule",
         "medialive:ListChannels",
-        "medialive:ListAlerts"
+        "medialive:ListAlerts",
+        "medialive:ListClusterAlerts",
+        "medialive:ListMultiplexAlerts",
+        "events:ListRules"
       ],
       "Resource": "*"
     },
@@ -44,7 +47,10 @@ The skill is read-only by design and never performs write operations. The DevOps
         "logs:FilterLogEvents",
         "logs:StartQuery",
         "logs:GetQueryResults",
-        "logs:StopQuery"
+        "logs:StopQuery",
+        "logs:DescribeDeliverySources",
+        "logs:DescribeDeliveries",
+        "logs:DescribeDeliveryDestinations"
       ],
       "Resource": "*"
     }

@@ -37,7 +37,9 @@ MediaTailor reads are not part of `AIDevOpsAgentAccessPolicy`, so this statement
         "mediatailor:ListVodSources",
         "mediatailor:DescribeVodSource",
         "mediatailor:GetChannelPolicy",
-        "mediatailor:ListAlerts"
+        "mediatailor:ListAlerts",
+        "mediatailor:ListPrefetchSchedules",
+        "mediatailor:ListLiveSources"
       ],
       "Resource": "*"
     },
@@ -52,7 +54,10 @@ MediaTailor reads are not part of `AIDevOpsAgentAccessPolicy`, so this statement
         "logs:FilterLogEvents",
         "logs:StartQuery",
         "logs:GetQueryResults",
-        "logs:StopQuery"
+        "logs:StopQuery",
+        "logs:DescribeDeliverySources",
+        "logs:DescribeDeliveries",
+        "logs:DescribeDeliveryDestinations"
       ],
       "Resource": "*"
     }

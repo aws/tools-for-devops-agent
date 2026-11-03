@@ -64,8 +64,8 @@ If empty:
 ```
 DATA GAP: As-Run logging is off for this channel. As-played program and
 ad-break history is not observable.
-To enable: aws mediatailor configure-logs-for-channel --channel-name <name>
---log-types AS_RUN (operator action).
+To enable (operator action; a write operation this skill never runs):
+aws mediatailor configure-logs-for-channel --channel-name <name> --log-types AS_RUN
 Metrics (4xx/5xx/RequestCount/TotalTime) and ListAlerts remain available.
 ```
 

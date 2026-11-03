@@ -11,7 +11,7 @@ Source: Live capture from DirecTV FIFA 2026 workflow (sa-east-1), 2026-05-02
 - cmsd-static: st=l (live), ot=m (manifest), com.amazonaws-mqcs-seq="100"
 - x-amzn-mediapackage-endpoint-id, channel-id, channel-uniqueid, endpoint-uniqueid
 - x-amzn-mediapackage-manifest-last-sequence: 296280595
-- x-amzn-mediapackage-active-input: 1
+- x-amzn-mediapackage-active-input: 1 (which ingest input, 1 or 2, is currently active and produced this response; on a channel with two ingest endpoints it shows input switching and failover state from the egress side, without CloudWatch)
 
 ## Segment Response Headers
 - content-type: video/MP2T

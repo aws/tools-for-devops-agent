@@ -95,6 +95,13 @@ If `Status` ≠ ACTIVE:
 - ERROR → Flow has a fatal configuration issue; quote Messages.Errors[]
 - UPDATING/DELETING → Transient state; wait and re-check
 
+**Topology check.** Compare the source address and the receivers against the
+flow's Region. When both are far from it (source in one continent, flow in
+another, receiver back near the source), the stream crosses the public internet
+twice. Recommend placing the ingest flow in the Region closest to the source and
+reaching distant receivers through an entitlement or a MediaConnect Router
+cross-Region route rather than a long SRT pull.
+
 ## Step 2: Source connectivity analysis
 
 ### Protocol-specific metric availability
@@ -160,6 +167,16 @@ accompanied by:
 - SourceTotalPackets declining or zero
 - NotRecoveredPackets Sum > 0
 - SourceRoundTripTime or SourceJitter rising
+
+**Link device sources.** When the flow source is fed by an AWS Elemental Link
+device (check `aws medialive list-input-devices` for a device whose MediaConnect
+settings name this flow), short bursts of `SourceBitRate` drop together with PCR
+and continuity errors, while `SourceConnected` stays 1 and `SourceDisconnections`
+stays 0, are consistent with the device encoder pausing rather than network
+loss. Check `describe-input-device` for the device's configured bitrate and
+latency, ask the customer whether the device's video input or uplink changed at
+those times, and compare `SourceNotRecoveredPackets`: network loss raises it, an
+encoder pause does not.
 
 ## Step 3: Packet loss analysis (protocol-layered)
 
@@ -232,6 +249,17 @@ is sending a malformed transport stream.
 
 Table: [Step 4: Transport stream health (TR 101 290): Priority 2 indicators (P2)](references/lookup-tables.md#step-4-transport-stream-health-tr-101-290-priority-2-indicators-p2). Load it when you run this step.
 
+### Reading PCR errors
+
+- `SourcePCRError` counts PCR intervals over 100 ms, the ISO 13818-1 limit.
+  Third-party analyzers usually alarm at 40 ms, the DVB limit, so a stream can
+  fail the analyzer and still show 0 in CloudWatch.
+- PCR errors rising together with `SourceNotRecoveredPackets` or
+  `SourceContinuityCounter` point at packet loss. PCR errors with clean packet
+  counters point at the source's PCR cadence.
+- Errors on the flow source pass unchanged to every output. When a receiver
+  reports errors, check the flow source before blaming the output protocol.
+
 ### TR 101 290 investigation flow
 
 ```
@@ -266,6 +294,11 @@ Table: [Step 5: Per-output health](references/lookup-tables.md#step-5-per-output
 
 Valid dimensions for output metrics: `OutputARN`, `FlowARN`,
 `AvailabilityZone`, and the aggregate `All flows` dimension.
+
+**SRT latency.** For SRT outputs and sources, compare the configured
+`MinLatency` against the measured round-trip time and recommend at least 3 to 4
+times the RTT. Flag intercontinental receivers configured at 1000 ms or lower,
+and cellular receivers at any setting.
 
 **NDI output metrics** (if protocol is `ndi-speed-hq`):
 

@@ -204,8 +204,9 @@ Table: [Step S1: Configuration and logging precheck](references/lookup-tables.md
 
 **Logging precheck.** If `PercentEnabled = 0`, record now that Step S3 will be a
 DATA GAP and name the fix (`configure-logs-for-playback-configuration
---percent-enabled <N> --playback-configuration-name <n>`; operator action,
-report it, do not attempt it). If the strategy is `VENDED_LOGS`, verify the
+--percent-enabled <N> --playback-configuration-name <n>`). That is a write
+operation outside this skill's read-only scope: never run it, report it as the
+operator action. If the strategy is `VENDED_LOGS`, verify the
 chain read-only before blaming sampling:
 
 ```
@@ -270,8 +271,10 @@ split has three branches, not two:
   events `EMPTY_VAST_RESPONSE` / `WARNING_NO_ADVERTISEMENTS`. This is an
   ADS-owner finding.
 - ADS fill healthy BUT avail fill low AND `SkippedReason.*` non-zero -> ads
-  are returned but not inserted. Pursue the dominant `SkippedReason.*` using
-  the skipped-reason catalog in the metric reference.
+  are returned but not inserted. Pursue the dominant `SkippedReason.*`
+  (TranscodeInProgress, NewCreative, NoVariantMatch, ProfileNotFound,
+  PersonalizationThresholdExceeded, DurationExceeded, ImportError; meanings
+  in the metric reference's skipped-reason catalog).
 - ADS fill healthy, avail fill low, `SkippedReason.*` near zero -> the break
   was never personalized: avail suppression, or personalization abandoned by
   the threshold, or the session joined mid-break. Read `AvailSuppression`,
