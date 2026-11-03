@@ -1,7 +1,7 @@
 ---
 name: grafana-cloud-investigation
 title: Grafana Cloud investigations
-description: Use the Grafana Cloud connector to investigate incidents with the customer's Grafana Cloud telemetry. Covers choosing tools, handing open-ended questions to Grafana Assistant, read and write access, keeping results small, and querying Prometheus, Loki and Tempo data. Use when an investigation needs metrics, logs, traces or profiles from Grafana Cloud, when checking Grafana dashboards, alert rules, incidents or on-call schedules, or when the customer asks a question about their Grafana Cloud stack.
+description: Use the Grafana Cloud connector to investigate incidents with the customer's Grafana Cloud telemetry. Covers choosing tools, when to use Grafana Assistant, the Read, Query and Write access levels, confirming every write with the operator, keeping results small, and querying Prometheus, Loki and Tempo data. Use when an investigation needs metrics, logs, traces or profiles from Grafana Cloud, when checking Grafana dashboards, alert rules, incidents or on-call schedules, or when the customer asks a question about their Grafana Cloud stack.
 metadata:
   author: "sd2k"
   version: "1.0.0"
@@ -21,8 +21,9 @@ The server's tools change as Grafana adds capabilities, so this skill doesn't li
 
 - Read the server's instructions and each tool's description. They're kept current with the server and say what each tool does and when to use it.
 - Pick tools by what you need. There are tools for dashboards, data sources, Prometheus, Loki, Tempo and Pyroscope queries, SQL data sources, alerting, incidents, on-call, annotations, Grafana Assistant investigations, deep links and panel rendering.
-- When no dedicated tool covers a task, the server describes fallbacks (a Grafana CLI tool and a raw Grafana API tool). Use those before concluding the data isn't available.
-- If a tool you expect isn't available, the connection may be read-only, or the feature may not be enabled on the stack. Say so in your findings rather than guessing.
+- When no dedicated tool covers a task, the server describes fallbacks: a Grafana CLI tool and a raw Grafana API tool. Use them only to read: GET requests with the API tool, and only commands that read with the CLI tool. Never use them to create, change or delete anything.
+- The SQL query tools run a query exactly as written. Only run `SELECT` queries; treat any other statement as a write.
+- If a tool you expect isn't available, the connection may not have been granted that access level, or the feature may not be enabled on the stack. Say so in your findings rather than guessing.
 
 ## A typical investigation
 
@@ -34,9 +35,10 @@ The server's tools change as Grafana adds capabilities, so this skill doesn't li
 
 ## Grafana Assistant
 
-- For open-ended questions about the stack ("Why is checkout latency spiking?", "What changed before this alert fired?"), hand the question to Grafana Assistant. It plans its own investigation across metrics, logs and traces and returns a grounded answer. For longer root-cause work, start an Assistant investigation and read its report.
-- Asking Grafana Assistant needs a connection with write access. On a read-only connection, use the query tools directly and note that Assistant wasn't available.
-- For targeted lookups (a known query, dashboard, alert or incident), call the specific tool directly. Going through Assistant there only adds latency.
+- Investigate with the read tools first. Grafana Assistant can plan its own investigation across metrics, logs and traces, but asking it a question or starting an Assistant investigation is a write: it needs a connection with Write access and counts toward the stack's Grafana Assistant usage.
+- Use Grafana Assistant only when an operator asks for it, or when you recommend it and the operator approves. Follow the rules for writes below, showing the exact question you'll send.
+- On a connection without Write access, the Assistant tools aren't available. Use the read tools and say in your findings that Assistant wasn't used.
+- Reading existing Assistant investigations, their reports and their evidence is a read, and is fine at any time.
 
 ## Keeping results small
 
@@ -46,7 +48,11 @@ The server's tools change as Grafana adds capabilities, so this skill doesn't li
 - In Loki, use label matchers to select streams before filtering on line content.
 - Aggregate before returning series: a `sum by (...)` or `topk` is usually more useful than hundreds of raw series.
 
-## Safety
+## Rules for writes
 
-- Don't change anything in Grafana (dashboards, alert rules, silences, incidents) unless an operator asked for it.
-- Prefer read-only steps during triage and root-cause analysis. Propose changes, such as a silence or an incident update, as recommended actions for the operator to approve.
+A write is any call that creates, changes or deletes something in Grafana (dashboards, alert rules, silences, incidents, annotations, data sources), asks Grafana Assistant a question, starts an Assistant investigation, or runs SQL other than `SELECT`.
+
+1. Only make a write when an operator explicitly asked for it. During triage and root-cause analysis, propose changes as recommended actions instead.
+2. Before each write, show the operator exactly what you'll do: the tool, the target, and the full change, query or question.
+3. Ask for confirmation immediately before the call, and make the call only after the operator confirms.
+4. If the operator declines, or DevOps Agent's approval is denied, don't retry the write and don't try another tool or route to the same effect. Report that it wasn't made.
