@@ -101,6 +101,10 @@ class StringRuleTests(unittest.TestCase):
             bad=["acme", "a@b", "a b@acme.example", "@acme.example", "a@@acme.example", "a@acme.example ", "x" * 250 + "@a.co"],
         )
 
+    def test_categories_include_devops(self):
+        categories = CONNECTOR["properties"]["categories"]["items"]["enum"]
+        self.assertEqual(categories, ["cloud", "telemetry", "pipeline", "communication", "devops"])
+
     def test_a_header_prefix_takes_no_placeholder(self):
         self.check(PREFIX, good=["Bearer ", "Token ", "", "{x}", "a{"], bad=["{{config.x}}", "Bearer {{config.x}}", "{{"])
 
