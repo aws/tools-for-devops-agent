@@ -2,6 +2,12 @@
 
 All notable changes to this skill are documented here. New entries go at the top.
 
+## [1.0.0] - 2026-11-03 (live test round 1)
+
+- Organization trail from a member account: the CloudTrail API permits `GetEventSelectors` and `GetTrailStatus` with the full trail ARN, but the agent's AWS tool blocks cross account ARNs before the request reaches AWS. SKILL.md, README, api-reference, coverage-model, check-matrix, permissions and report-template now say so; the refusal is `ToolingFailure` (not `AccessDenied`), the state is `CoveredByOrgTrail-Unverified`, the one ARN attempt stays, and Next Steps carries the full ARN and the `aws cloudtrail get-event-selectors --trail-name <ARN>` command for the operator. Live evals L1, L2, L4 and L5 expect that state instead of a live selector read.
+- Output contract and Critical Rule 10: the report ends at Next Steps; no closing offer to modify configuration, open a support case, draft `UpdateTrail` or `PutEventSelectors` calls, re-run elsewhere or extend the report; a parent relaying a subagent report adds nothing after it. The universal eval assertion covers these offers.
+- Inventory uses list calls only: `ListBuckets` plus `GetBucketLocation`, `ListFunctions`, `ListTables`. `dynamodb:DescribeTable` (cancelled by the agent guardrail as mutative) and `lambda:GetFunction` (denied, unnecessary) removed from the flow and the permissions list; DynamoDB stream presence is no longer read.
+
 ## [1.0.0] - 2026-11-03
 
 - Boundary with `cloudtrail-cost-optimization` made explicit after the SME's overlap review. README and SKILL.md name the cost skill and `unified-security-cost-optimizer` with a one sentence boundary each and a hand off rule for cost, duplicate trail waste and data event charge questions; the description's negative trigger names them.

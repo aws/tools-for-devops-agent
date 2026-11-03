@@ -26,9 +26,8 @@ user.
 | `s3:ListAllMyBuckets` (`ListBuckets`) | once | `Buckets[].Name` | `ContinuationToken` where supported | Bucket inventory |
 | `s3:GetBucketLocation` | per bucket | `LocationConstraint` (empty or null means `us-east-1`; `EU` means `eu-west-1`) | none | Bucket Region for single Region trail matching |
 | `s3:GetBucketVersioning`, `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketPublicAccessBlock` | per trail destination bucket the account owns | `Status`, `ObjectLockEnabled`, `PublicAccessBlockConfiguration` | none | E2 optional context |
-| `lambda:ListFunctions` | per Region | `FunctionArn`, `FunctionName` | `Marker` / `NextMarker` | Function inventory |
-| `dynamodb:ListTables` | per Region | `TableNames[]` | `LastEvaluatedTableName` | Table inventory |
-| `dynamodb:DescribeTable` | per table | `TableArn`, `LatestStreamArn` | none | Table ARN for matching; stream note |
+| `lambda:ListFunctions` | per Region | `FunctionArn`, `FunctionName` | `Marker` / `NextMarker` | Function inventory and ARN; never `GetFunction` (denied under the Agent Space role, and unnecessary) |
+| `dynamodb:ListTables` | per Region | `TableNames[]`; build the ARN as `arn:aws:dynamodb:<region>:<account>:table/<name>` | `LastEvaluatedTableName` | Table inventory and ARN; never `DescribeTable` (the agent guardrail cancels it as a mutative operation, so stream presence is not read) |
 | `kms:DescribeKey` | per `KmsKeyId`, optional | `KeyState` | none | E1 context: key enabled |
 | `logs:DescribeLogGroups` | optional, by prefix of `CloudWatchLogsLogGroupArn` | `logGroupName` | `nextToken` | E2 context: log group exists |
 | `iam:GetRole` (`AWSServiceRoleForCloudTrail`) | optional, member account | `Role.Arn` | none | Organization trail service linked role present [S8] |
@@ -60,19 +59,37 @@ account:
   **must be called with the full `TrailARN`**
   (`arn:aws:cloudtrail:<home-region>:<management-account>:trail/<name>`). The
   documentation states this for `GetTrailStatus` [S7] and that members can run
-  it on organization trails [S8].
+  it on organization trails [S8]. From the CLI the ARN call succeeds from any
+  Region; the trail's `HomeRegion` is in the ARN.
 - Calling them with the bare trail name returns `TrailNotFoundException`,
   because the name resolves only in the owning account. That error after a name
-  call is **not** evidence of a permission boundary. Retry with the ARN.
-- Only after the **ARN** call fails (`AccessDeniedException`, a guardrail
-  cancellation, or `TrailNotFoundException` with the ARN) may the trail's
-  selectors be treated as unreadable, which produces
+  call is **not** evidence of a permission boundary. Never stop there.
+- **Inside DevOps Agent the ARN call is blocked by the agent's AWS tool**, not
+  by AWS: the tool validates the ARN's account against the Agent Space's target
+  accounts and refuses with "ARN account <id> not in target accounts" (seen as
+  "Resource validation failed" or "cross-account ARN blocked by tool resource
+  validation"). The request never reaches CloudTrail, so the Agent Space role's
+  IAM permissions are not the cause. Classify the refusal as `ToolingFailure`,
+  not `AccessDenied`.
+- Make the ARN call **once** for `GetTrailStatus` and once for
+  `GetEventSelectors` so a future tool change is picked up; do not retry by
+  name, by Region, or with an account parameter. Skip `GetTrail` and
+  `GetInsightSelectors` on the organization trail when the first ARN call is
+  blocked; `DescribeTrails` already supplied `HasInsightSelectors`,
+  `IsMultiRegionTrail` and `LogFileValidationEnabled`.
+- Only after the **ARN** call fails or is blocked (`AccessDeniedException`, the
+  tool refusal, a guardrail cancellation, or `TrailNotFoundException` with the
+  ARN) may the trail's selectors be treated as unreadable, which produces
   `CoveredByOrgTrail-Unverified` rows and check O1.
-- The ARN call works from any Region; the trail's `HomeRegion` is in the ARN.
+- Next Steps must then give the operator the exact command to run from the CLI
+  (member account credentials work) or from the management account:
+  `aws cloudtrail get-event-selectors --trail-name <full TrailARN>` and
+  `aws cloudtrail get-trail-status --name <full TrailARN>`.
 
-Whether the Agent Space role (as opposed to an administrator role) can read the
-selectors this way is an open question for SME review (README); the skill
-always tries and classifies the result.
+From a member account inside the agent this block is the normal result today
+(observed on every live run, 2026-11-03). The skill's value is that it records
+the ARN and the command and models the state explicitly instead of saying
+"I can't inspect it".
 
 ## 4. Error classification
 
@@ -80,7 +97,8 @@ always tries and classifies the result.
 |---|---|---|
 | Success | evidence | Use the fields |
 | `AccessDeniedException`, `UnauthorizedOperation`, `AccessDenied` (S3) | `AccessDenied` | Row or source becomes `Unknown`; Not Assessed lists the call; rating caps at `Attention`. Never "no trails", "no buckets" or "not covered" |
-| Guardrail message such as "Cancelled mutative operation" or any tool cancellation | `ToolingFailure` | Same as `AccessDenied`; note that the call is a read and was cancelled by the agent's tool policy |
+| Guardrail message such as "Cancelled mutative operation" or any tool cancellation (seen on `dynamodb:DescribeTable`, which the skill therefore never calls) | `ToolingFailure` | Same as `AccessDenied`; note that the call is a read and was cancelled by the agent's tool policy |
+| Tool refusal "ARN account <id> not in target accounts" / "Resource validation failed" on an organization trail's full ARN | `ToolingFailure` | `CoveredByOrgTrail-Unverified` for the resources the trail could cover; O1; Not Assessed names the call and the ARN; Next Steps gives the CLI command. Never `AccessDenied`: the request did not reach AWS |
 | `ThrottlingException`, `TooManyRequestsException`, 5xx | retry up to 3 times with backoff; then `ToolingFailure` | Same as above |
 | `TrailNotFoundException` after a **name** call on an organization trail | not evidence | Retry with the full ARN (section 3) |
 | `TrailNotFoundException` after an **ARN** call | `Unreadable` | `CoveredByOrgTrail-Unverified` for the resources it could cover; O1 |
@@ -122,13 +140,14 @@ say "no functions or tables supplied" rather than asserting coverage for them.
 | `IncludeGlobalServiceEvents` delivers global service events only from a multi Region trail or a single Region trail in us-east-1 [S11] | T2 passes only when such a trail is logging |
 | Multi Region and organization trails are shadow trails in every Region [S9] | De duplicate by `TrailARN`; do not report the same trail per Region |
 | Advanced and basic selectors are mutually exclusive; applying one clears the other [S3] | Read whichever array is non empty; never merge them |
-| Organization trail APIs need the full ARN from a member [S7] | Section 3; a name call failure is a mistake, not a boundary |
+| Organization trail APIs need the full ARN from a member [S7]; inside the agent the AWS tool blocks cross account ARNs before AWS sees them | Section 3; a name call failure is a mistake, not a boundary; the tool refusal is `ToolingFailure`, state `CoveredByOrgTrail-Unverified`, Next Steps carries the ARN and the CLI command |
 | A member cannot modify an organization trail and by default cannot read its bucket [S8] | O1 and O2 direct the operator to the management account; E2 is `NotApplicable` for that bucket |
+| `dynamodb:DescribeTable` is classified mutative by the agent guardrail and cancelled; `lambda:GetFunction` is denied under the Agent Space role | Inventory is `ListTables` and `ListFunctions` only; table ARNs are built from Region, account and name; stream presence is not read |
 | S3 multipart uploads emit `CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload`, not `PutObject`; bulk deletes emit `DeleteObjects` [S6] | An `eventName` allowlist without them misses writes and deletes (D4) |
 | `GetBucketLocation` returns null for us-east-1 and `EU` for eu-west-1 | Normalise before Region matching |
 | Delivery is about every 5 minutes but not guaranteed [S14] | L3 uses 1 h INFO and 24 h HIGH thresholds; quiet Regions can be older |
 | `InsightNotEnabledException` from `GetInsightSelectors` | Normal for a trail without Insights; not an error |
-| Selecting `AWS::DynamoDB::Table` also logs stream events by default [S3] | No separate stream row; one line note |
+| Selecting `AWS::DynamoDB::Table` also logs stream events by default [S3] | No separate stream row; one line note that stream events follow the table's data events |
 | A `ReadWriteType` of `ReadOnly` or `WriteOnly` on a basic selector applies to both management and data events in that selector [S4] | Narrow both the management checks (M1) and the data rows (D4) |
 
 ## Sources

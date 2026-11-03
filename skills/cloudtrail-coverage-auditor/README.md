@@ -14,10 +14,10 @@ Region, logging state, delivery health and, in an organization, a trail owned by
 another account. Without a fixed procedure the answer varies from run to run and
 stops at "no data events configured" instead of naming the resources that have
 no record. This skill runs the same 20 check matrix every time, resolves every
-in scope resource to one of five coverage states, reads the organization trail's
-selectors with its full ARN before calling anything unverified, always states
-the Event history limit and how automated activity is attributed, and returns a
-rating an auditor can quote.
+in scope resource to one of five coverage states, models an organization trail
+the agent cannot read as an explicit unverified state with the ARN and command
+the operator needs, always states the Event history limit and how automated
+activity is attributed, and returns a rating an auditor can quote.
 
 By default the skill checks against a built in baseline: multi Region
 management logging with global service events, data events for the baseline
@@ -44,28 +44,31 @@ Agent without a skill:
 4. 0 of 6 runs mentioned the 90 day Event history limit or how service and
    service linked role activity is attributed, both named in the request that
    motivated the skill.
-5. The organization trail was called "opaque from this account" in every run.
-   The agent queried it by trail name, which fails from a member account with
-   `TrailNotFoundException`, and never retried with the full trail ARN, so a
-   readable trail was reported as unverifiable and the user was told to check
-   from the management account. Verified afterwards: `GetEventSelectors`,
-   `GetTrail` and `GetTrailStatus` with the full ARN succeed from the member
-   account in any Region.
+5. The organization trail was called "opaque from this account" in every run,
+   with no ARN and no command the operator could use to confirm it. Inside
+   DevOps Agent neither the base agent nor the skill can read the organization
+   trail's selectors from a member account: the agent's AWS tool blocks cross
+   account ARNs before the request reaches AWS, even though the CloudTrail API
+   permits the call with the full trail ARN (verified from the CLI). The
+   skill's value is that it records the exact ARN and the `GetEventSelectors`
+   command for the operator and models the result as an explicit
+   `CoveredByOrgTrail-Unverified` state instead of saying "I can't inspect it".
 6. "Covered by the organization trail, not verified" was never a distinct state
    from "covered nowhere".
 
 The skill fixes this with a 20 row check matrix that runs identically every
-time, a per resource coverage state, the full ARN rule for organization trails,
-mandatory Event history and attribution notes, and a rating an auditor can
-quote.
+time, a per resource coverage state, an explicit unverified state for the
+organization trail with the operator's ARN and command, mandatory Event history
+and attribution notes, and a rating an auditor can quote.
 
 ## Key Capabilities
 
 - Trail inventory across every enabled Region with shadow trails de duplicated
   by ARN, plus CloudTrail Lake event data stores as coverage sources
-- Organization trail status, configuration and selectors read with the full
-  trail ARN from a member account; `CoveredByOrgTrail-Unverified` only after
-  that call fails
+- Organization trail attempted with the full trail ARN (never the name); when
+  the agent's AWS tool blocks the cross account read, the affected resources
+  are `CoveredByOrgTrail-Unverified` and Next Steps carries the ARN and the
+  `GetEventSelectors` command for the operator
 - Per resource coverage state for every S3 bucket, Lambda function and DynamoDB
   table in scope: `Covered`, `CoveredByOrgTrail-Unverified`, `Uncovered`,
   `Unknown`, `NotApplicable`, with the covering trail and selector note
@@ -100,7 +103,9 @@ one is granted by the AWS managed
   `cloudtrail:GetEventDataStore`
 - `s3:ListAllMyBuckets`, `s3:GetBucketLocation`, `s3:GetBucketVersioning`,
   `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketPublicAccessBlock`
-- `lambda:ListFunctions`, `dynamodb:ListTables`, `dynamodb:DescribeTable`
+- `lambda:ListFunctions`, `dynamodb:ListTables` (list calls only; the agent
+  guardrail cancels `dynamodb:DescribeTable` as mutative and `lambda:GetFunction`
+  is denied, neither is needed)
 - `organizations:DescribeOrganization`,
   `organizations:ListDelegatedAdministrators`, `ec2:DescribeRegions`
 - Optional context: `kms:DescribeKey`, `logs:DescribeLogGroups`, `iam:GetRole`
@@ -222,16 +227,21 @@ what was not assessed, and next steps.
   others) are not inventoried unless the user's required list names one; the
   report lists them as not assessed.
 - DynamoDB streams are not separate rows: selecting a table logs its stream
-  events by default, so the table row answers the stream question and a one
-  line note is added when a table has a stream.
+  events by default, so the table row answers the stream question. Stream
+  presence is not read (`DescribeTable` is cancelled by the agent guardrail); a
+  one line note states that stream events follow the table's data events.
 - Single account view. From a management or delegated administrator account the
   review covers that account's resources; organization trail data resources
   naming other accounts are reported as covering resources outside this account.
   An organization wide sweep is not part of this version.
-- `CoveredByOrgTrail-Unverified` depends on the organization trail's selectors
-  being unreadable with the full ARN. With the managed policy that has not been
-  reproduced live, so the state and the `Unknown` state are exercised by the
-  inline data evals rather than by a live fixture.
+- From a member account inside DevOps Agent, the organization trail's status
+  and selectors cannot be read: the agent's AWS tool rejects cross account ARNs
+  before the call reaches AWS, so `CoveredByOrgTrail-Unverified` is the normal
+  result for every resource the organization trail could cover, and the rating
+  caps at `Attention`. The CloudTrail API itself permits the read with the full
+  ARN; the operator runs `aws cloudtrail get-event-selectors --trail-name <full
+  ARN>` from the CLI or the management account to resolve the rows. The skill
+  still makes the one ARN call so a future tool change is picked up.
 - Cross account S3 buckets touched by this account's principals are logged by
   an `arn:aws:s3` selector but are not in this account's inventory and are not
   listed.
@@ -246,10 +256,12 @@ what was not assessed, and next steps.
 ## Open questions for SME review
 
 1. Organization trail readability: `GetEventSelectors` with the full trail ARN
-   works from a member account under an administrator role. Does it work under
-   the Agent Space role (`AIDevOpsAgentAccessPolicy` v12 grants it on `*`), and
-   is the agent guardrail silent on it? If yes, `CoveredByOrgTrail-Unverified`
-   becomes rare and this README should say so.
+   works from a member account from the CLI, but inside DevOps Agent the AWS
+   tool rejects the cross account ARN before the call reaches AWS (observed on
+   every live run, "ARN account ... not in target accounts"). Is that
+   restriction expected to stay? If it can be lifted for CloudTrail
+   organization trail ARNs, `CoveredByOrgTrail-Unverified` becomes rare; until
+   then the operator resolves it from the CLI or the management account.
 2. Does an organization trail selector `arn:aws:s3` (all buckets) cover member
    account buckets, or only the management account's? The documentation says
    member resource ARNs can be added and the console lists only management
