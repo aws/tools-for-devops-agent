@@ -8,8 +8,8 @@ A Bronto organization can hold hundreds of datasets, grouped into collections, e
 
 ## Key Capabilities
 
-- Find a service's datasets by `service` and `environment` tag, by dataset or collection name, or by which datasets logged errors in the incident window
-- Rank candidates by environment, and set aside metrics and trace collections and datasets that have been dormant for days
+- Find a service's datasets by `service`, `environment` and `region` tag, by dataset or collection name, or by which datasets logged errors in the incident window
+- Rank candidates by environment and AWS region, and set aside metrics and trace collections and datasets that have been dormant for days
 - Confirm the exact key and value that identify the service in each dataset
 - Show whether the service logged before, during and after the incident, and report a logging gap as evidence
 - Report plainly when the service's logs are not in Bronto, instead of searching everything
@@ -17,7 +17,7 @@ A Bronto organization can hold hundreds of datasets, grouped into collections, e
 ## Prerequisites
 
 - The Bronto connector associated with your Agent Space in AWS DevOps Agent, using sign-in or an API key with the **API Agent ReadOnly Role**, as described in the connector's README
-- Datasets tagged with `service` and `environment` give the best results; name matching works without tags
+- Datasets tagged with `service`, `environment` and `region` give the best results; name matching works without tags
 
 ## Limitations
 

@@ -33,7 +33,7 @@ Datasets are grouped into collections and carry tags such as `service`, `environ
 
 Try these in order and stop once you have candidates:
 
-1. **By tag:** `get_datasets` with `from_expr` set to `"service" = '<service>'`. Add `AND "environment" = '<environment>'` when you know the environment.
+1. **By tag:** `get_datasets` with `from_expr` set to `"service" = '<service>'`. Add `AND "environment" = '<environment>'` when you know the environment, and `AND "region" = '<region>'` when you know the region. Tags are optional, so if a narrowed selector returns nothing, drop the region and then the environment before moving on.
 2. **By name:** `get_datasets` with `from_expr` set to `"dataset" LIKE '%<name>%' OR "collection" LIKE '%<name>%'`. Repeat with each name variant.
 3. **By errors in the window:** `get_error_summary` with `from_ts` and `to_ts` set to the window. Its `by_dataset` list names only the datasets that logged errors or warnings, and it does not use search quota.
 
@@ -44,6 +44,7 @@ Set `minimal_output` to true. Pass `minimal_output: false` with `from` set to th
 ## 3. Rank the candidates
 
 - Prefer datasets whose `environment` tag or collection name matches the incident's environment.
+- Prefer datasets whose `region` tag or name matches the incident's region, such as `eu-west-1`. A dataset for another region holds traffic the incident did not affect. When one dataset holds every region, keep it and filter on the event's region key instead, found in step 4.
 - Use `last_heartbeat_at` only to set aside datasets that have been dormant for a long time. It is recorded about once a day, so a dataset that is ingesting normally can show a heartbeat up to 48 hours old. Set a dataset aside only when its `last_heartbeat_at` is more than 2 days before the window start. `active` is false when the heartbeat is more than 14 days old or missing. A missing heartbeat means unknown, not dormant, so keep such a dataset if it is the best match.
 - Never conclude that a service stopped logging from `last_heartbeat_at` or `active`. Use the event counts in step 5.
 - Collections whose names start with a dot, such as `.metrics` and `.traces`, hold metrics and traces rather than log events. Include them only when the question is about metrics or traces.
@@ -55,7 +56,7 @@ Keep the full ranked list for the report. Only the next step is limited, because
 
 For each of the top candidates:
 
-1. Call `get_keys` with its `log_id`. Look for keys that identify the service or host, such as `service`, `$service`, `service.name`, `host`, `hostname` or Kubernetes and container keys.
+1. Call `get_keys` with its `log_id`. Look for keys that identify the service or host, such as `service`, `$service`, `service.name`, `host`, `hostname` or Kubernetes and container keys. When the dataset holds more than one region, also look for a region key such as `region` or `cloud.region`.
 2. Call `get_key_values` for the most likely key to confirm the service appears as a value. The values come from the most frequent keys only, so a missing value is not proof of absence.
 
 Copy key names exactly as `get_keys` returns them. Do not list every value of a key that holds IDs, timestamps or other high-cardinality data.
@@ -72,7 +73,7 @@ Before any log search, report one line per dataset you will use:
 
 - Dataset name, collection and `log_id`.
 - Why it matched: tag, name, key value or error summary.
-- The filter key and value to use, in `search_filter` syntax, such as `"service.name"='checkout-api'`.
+- The filter key and value to use, in `search_filter` syntax, such as `"service.name"='checkout-api'`. Include the region filter when the dataset holds more than one region, such as `"service.name"='checkout-api' AND "cloud.region"='eu-west-1'`.
 - Whether it has data in the window, and when it last ingested.
 - Your confidence: high, medium or low.
 - The `webapp_url` from the `timeseries` response, so a person can open the same search in Bronto.
