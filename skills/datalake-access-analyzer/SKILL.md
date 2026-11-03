@@ -102,6 +102,21 @@ Lake Formation returns the same denial for "no permission" and "does not exist" 
 non-admins. Rank "no LF read visibility" above "resource does not exist," and say the LF
 layer is unverified.
 
+The same blind spot applies when the call SUCCEEDS but comes back empty.
+`lakeformation:ListPermissions` filtered to a principal OTHER than the investigating
+identity can return zero results for a non-Data-Lake-admin caller even when a real grant
+exists - a non-admin does not reliably see another principal's grants, and the API
+returns an empty list rather than an error in that case. Do not treat an empty
+`ListPermissions` result as proof that "no grant exists" unless the calling identity's
+Data Lake admin status is independently confirmed (for example, `GetDataLakeSettings`
+lists the caller as a `DataLakeAdmins` entry), or the absence is corroborated by another
+signal (a `GrantPermissions`/`CreateDatabase` CloudTrail history, or an explicit
+entity-not-found on the resource itself, which IS conclusive). An unconfirmed empty
+result is NOT_CHECKED, not DENYING - this applies equally to Step 1 (Lake Formation
+grants) and Step 2 (resource links), and to a catalog-wide/unfiltered `ListPermissions`
+dump, which is scoped by what the caller itself can see and is not a comprehensive view
+of all principals' grants unless the caller is a Data Lake admin.
+
 ### Inputs to collect
 1. Principal ARN (role/user) that is denied.
 2. Target resource: catalog id, database, table (and column set if relevant), or the
@@ -123,14 +138,20 @@ on the findings of the ones before it.
   table / column) against the level the operation needs. Detector - catalog-vs-table
   scope mismatch: a grant exists at database level but the operation needs table-level
   (or a table grant exists but the flow needs `DESCRIBE` on the database). Report the
-  exact scope gap.
+  exact scope gap. An empty result here is NOT_CHECKED unless the caller's Data Lake
+  admin status is confirmed or the absence is independently corroborated (see the
+  layer-states guard above) - never report DENYING on an unconfirmed empty result.
 - [ ] **Step 2 - Resource links and granted-but-unlinked.** `glue:GetDatabase` /
   `glue:GetTable` / `glue:GetTables`. For shared or linked resources, confirm BOTH
   exist and are consistent: a resource link object in the consuming context, AND Lake
   Formation permissions on BOTH the resource link and its target. Detector -
   granted-but-unlinked: Lake Formation permission is granted on the target but no
   resource link was created (or the link exists without permission on the target).
-  Report which half is missing.
+  Report which half is missing. An `EntityNotFoundException` on the link itself is
+  conclusive (the link genuinely does not exist); an empty `ListPermissions` result on
+  the target is NOT conclusive evidence the target grant is also missing unless the
+  caller's Data Lake admin status is confirmed - check the target grant with the same
+  care as the link before concluding neither half exists.
 - [ ] **Step 3 - Cross-account share (AWS RAM).** For cross-account access:
   `ram:GetResourceShares` / `ram:GetResourceShareAssociations` and
   `glue:GetResourcePolicy` (Data Catalog resource policy). Verify the producer granted
