@@ -51,22 +51,6 @@ Do activate whenever the target is Lake Formation-governed, a Glue Data Catalog
 resource, or an LF-registered S3 location - including when the querying engine is an
 AI/ML service reading a governed table.
 
-### Output discipline
-The report in Output format is the deliverable. Conversation around it is not.
-- Do not narrate each API call as you make it - no per-call summaries, no interim
-  findings, no raw response extracts. Work the checklist silently and deliver the
-  finished report.
-- Do not narrate your plan or reasoning ("Let me check...", "I'll now look at...").
-  Execute the step and move on.
-- Do not echo raw policy documents or CloudTrail events; cite the finding, not the
-  payload.
-- Speak between steps only at real milestones: starting, asking the user for a
-  missing input, or delivering the report.
-- Do not summarize or self-assess after delivering the report. The report already
-  contains the verdict; do not append a paragraph judging whether the diagnosis
-  worked or was correct. Nothing follows the report except, at most, one line
-  offering a next action.
-
 ### Layer states
 Every layer in the chain (Steps 0-6) reports exactly one token from this closed set.
 Never invent a token and never write a verdict as free prose in place of one.
@@ -215,8 +199,10 @@ WOULD_ALSO_DENY / NOT_APPLICABLE / NOT_CHECKED / INSUFFICIENT_DATA) with the API
 called and the finding for each layer, (4) corrective patch, (5) confidence, and
 (6) any layer that needs separate handling (SCP attribution or a KMS grant owned by
 another account). If any on-path layer is NOT_CHECKED, label the verdict "partial."
-This report is the deliverable - do not follow it with a restated summary (see
-Output discipline).
+Cite the actual API finding behind every layer state - never state a count, an
+absence, or a "zero results" finding you cannot trace to a specific tool call's
+actual response; if a call was refused, gated, or errored, say so and mark that
+layer NOT_CHECKED rather than treating the refusal as a negative result.
 
 ### Safety
 Read-only diagnosis. All actions are describe / list / get / simulate. Recommend

@@ -1,18 +1,18 @@
 {
-  "version": "v12",
-  "iteration": 2,
-  "timestamp": "2026-11-03T08:17:52Z",
+  "version": "v13",
+  "iteration": 3,
+  "timestamp": "2026-11-03T10:44:34Z",
   "test_type": "best-practices",
   "passing_score": 100,
-  "score": 100,
-  "result": "passed",
+  "score": 93,
+  "result": "error",
   "summary": {
     "total": 17,
-    "passed": 14,
+    "passed": 13,
     "failed": 0,
     "skipped": 3,
     "warning": 0,
-    "errored": 0,
+    "errored": 1,
     "low_confidence": 0,
     "avg_confidence": "high"
   },
@@ -20,10 +20,8 @@
     {
       "id": "BP-01",
       "name": "Effective description",
-      "result": "passed",
-      "confidence": "high",
-      "reasoning": "The description uses imperative framing ('Use when...'), describes the triggering symptoms/user intent (access denied errors on specific AWS data lake services) rather than internal mechanics, explicitly lists trigger contexts and exclusions ('Do NOT use for...'), and is concise (a short paragraph).",
-      "evidence": "\"Use when a principal cannot access a Glue Data Catalog database or table or a Lake Formation-governed resource, or when Athena, EMR, Redshift Spectrum, or QuickSight fails with access denied or a Lake Formation permission error.\"",
+      "result": "error",
+      "message": "Verdict not allowed for this test: 'warning' (allowed: passed, failed)",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/optimizing-descriptions"
     },
     {
@@ -31,8 +29,8 @@
       "name": "Verbosity and conciseness",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The body is dense but nearly all content is domain/project-specific \u2014 Lake Formation layer semantics, API call names, non-obvious blind spots (empty ListPermissions, AccessDenied ambiguity), and specific gotchas. There is no explanation of generic concepts like 'what is IAM' or 'what is S3'.",
-      "evidence": "When a Lake Formation or Glue read (`lakeformation:ListPermissions`, `glue:GetTable` / `glue:GetDatabase`) returns AccessDenied and the caller is not a Lake Formation Data Lake admin, treat that layer as NOT_CHECKED",
+      "reasoning": "The body jumps directly into Lake Formation-specific mechanics (ListPermissions, resource links, RAM shares, layer state tokens) without explaining general AWS concepts the agent already knows. It stays tightly focused on domain-specific, non-obvious procedures.",
+      "evidence": "Walk these steps in order and stop at the first layer that denies. Each step depends on the findings of the ones before it.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#add-what-the-agent-lacks-omit-what-it-knows"
     },
     {
@@ -40,7 +38,7 @@
       "name": "Detailed reference materials must not be in body",
       "result": "passed",
       "confidence": "medium",
-      "reasoning": "The checklist steps reference specific API calls but keep detail to what's needed to execute the step; deeper per-layer API/condition detail is explicitly deferred to references/permission-chain.md rather than embedded inline.",
+      "reasoning": "The checklist steps give concise API call names and detectors rather than dumping full API docs, error tables, or condition-key lists inline; that detail is explicitly deferred to references/permission-chain.md.",
       "evidence": "Load [permission-chain.md](references/permission-chain.md) when you need the exact API call, condition keys, or per-layer gotchas for any step in the checklist",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#structure-large-skills-with-progressive-disclosure"
     },
@@ -49,7 +47,7 @@
       "name": "Reference files must be linked",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The single file in references/ (permission-chain.md) is linked with a proper markdown link in the body.",
+      "reasoning": "The single file in references/ (permission-chain.md) is linked with a proper markdown link in the References section.",
       "evidence": "Load [permission-chain.md](references/permission-chain.md) when you need the exact API call, condition keys, or per-layer gotchas for any step in the checklist"
     },
     {
@@ -57,7 +55,7 @@
       "name": "Reference links must specify when to load",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The reference link specifies the exact condition for loading it \u2014 when the agent needs exact API call, condition keys, or per-layer gotchas for a checklist step.",
+      "reasoning": "The link specifies concrete trigger conditions (needing exact API calls, condition keys, or per-layer gotchas for checklist steps) rather than a vague 'see for details' phrasing.",
       "evidence": "Load [permission-chain.md](references/permission-chain.md) when you need the exact API call, condition keys, or per-layer gotchas for any step in the checklist (for example, when checking Step 4 IAM simulation inputs or the Step 5 S3 condition keys).",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#structure-large-skills-with-progressive-disclosure"
     },
@@ -66,7 +64,7 @@
       "name": "Reference path format",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The reference path uses a relative path format from the skill root.",
+      "reasoning": "The reference path is a relative path from the skill root with no traversal or absolute path.",
       "evidence": "[permission-chain.md](references/permission-chain.md)",
       "agent_skills_spec_reference": "https://agentskills.io/specification#file-references"
     },
@@ -75,8 +73,8 @@
       "name": "Prescription vs description",
       "result": "passed",
       "confidence": "medium",
-      "reasoning": "Fragile operations (layer state tokens, chain order, AccessDenied ambiguity handling) are given exact, prescriptive rules, while flexible parts (narration style, patch scoping) explain purpose and rationale rather than micromanaging every word choice.",
-      "evidence": "A layer that would deny must never be rendered as OK just because an earlier layer already explains the failure.",
+      "reasoning": "Fragile, order-dependent diagnostic steps (the layer chain, layer-state definitions, SCP caveats) are given exact, prescriptive instructions, while the synthesis/patch step appropriately allows judgment (e.g., offering to patch WOULD_ALSO_DENY layers only if the user wants).",
+      "evidence": "Patch only the DENYING layer by default - offer to also patch the WOULD_ALSO_DENY layers if the user wants the whole chain hardened in one pass",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#match-specificity-to-fragility"
     },
     {
@@ -84,7 +82,7 @@
       "name": "Defaults, not menus",
       "result": "passed",
       "confidence": "medium",
-      "reasoning": "Where multiple tools could apply (IAM evaluation), a clear default is designated (direct policy reads) with the alternative explicitly marked as optional/fallback.",
+      "reasoning": "Where IAM evaluation offers multiple methods, the skill clearly designates direct policy reads as primary and the simulator as optional corroboration, i.e., a default with an escape hatch.",
       "evidence": "Direct policy reads are the PRIMARY IAM evaluation. `iam:SimulatePrincipalPolicy` is OPTIONAL corroboration only and is frequently `RuntimeUnavailable`... never block on it",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#provide-defaults-not-menus"
     },
@@ -93,8 +91,8 @@
       "name": "Favor procedures over declarations",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The skill teaches a generalizable diagnostic procedure (walk the authorization chain layer by layer, applicable to any principal/resource combination) rather than a one-off instance; specific details (API names, gotchas) support the generalizable approach.",
-      "evidence": "Walk these steps in order and stop at the first layer that denies. Each step depends on the findings of the ones before it.",
+      "reasoning": "The skill teaches a generalizable diagnostic procedure (walk the authorization chain, layer states, detectors) applicable to any access-denied scenario, not a one-off instance-specific task.",
+      "evidence": "Diagnose a data-lake access-denied failure by walking the authorization chain in order and stopping at the first layer that denies.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#favor-procedures-over-declarations"
     },
     {
@@ -102,7 +100,7 @@
       "name": "Gotchas section",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The skill has an explicit 'Known denial gotchas' section with concrete, specific, non-obvious corrections (cross-region credential vending, S3-vs-query-engine discrepancy, full-table access settings).",
+      "reasoning": "There is an explicit 'Known denial gotchas' section documenting concrete, non-obvious environment facts (e.g., cross-Region credential vending failure, S3-vs-query-engine asymmetry).",
       "evidence": "Cross-Region registered location: Lake Formation does NOT vend credentials for an S3 data location registered in a different Region than the API call.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#gotchas-sections"
     },
@@ -111,8 +109,8 @@
       "name": "Templates and outputs missing",
       "result": "passed",
       "confidence": "medium",
-      "reasoning": "The skill specifies a structured output format for its report deliverable (verdict, breaking layer, per-layer state lines, patch, confidence) directly in the body at a reasonable length, satisfying the need for structured output.",
-      "evidence": "Return: (1) verdict, (2) breaking layer, (3) a per-layer state line (OK / DENYING / WOULD_ALSO_DENY / NOT_APPLICABLE / NOT_CHECKED / INSUFFICIENT_DATA)... (4) corrective patch, (5) confidence, and (6) any layer that needs separate handling",
+      "reasoning": "The skill specifies a structured output format directly in the body (verdict, breaking layer, per-layer state lines, patch, confidence) which is concise enough to not need a separate template asset.",
+      "evidence": "Return: (1) verdict, (2) breaking layer, (3) a per-layer state line (OK / DENYING / WOULD_ALSO_DENY / NOT_APPLICABLE / NOT_CHECKED / INSUFFICIENT_DATA) with the API called and the finding for each layer, (4) corrective patch, (5) confidence, and (6) any layer that needs separate handling",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#templates-for-output-format"
     },
     {
@@ -120,8 +118,8 @@
       "name": "Templates and outputs must not be in body",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The output format section is short (under 20 lines) and does not embed a large inline template; it describes required elements rather than a full structured skeleton.",
-      "evidence": "Return: (1) verdict, (2) breaking layer, (3) a per-layer state line... (4) corrective patch, (5) confidence, and (6) any layer that needs separate handling",
+      "reasoning": "The inline output format description is short (under 20 lines) and is a list of elements to include rather than a large template skeleton.",
+      "evidence": "Return: (1) verdict, (2) breaking layer, (3) a per-layer state line ... (6) any layer that needs separate handling (SCP attribution or a KMS grant owned by another account).",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#templates-for-output-format"
     },
     {
@@ -147,7 +145,7 @@
       "name": "Step-by-step guidance",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The procedural diagnosis checklist uses the required checkbox format with Step N numbering, and all detailed step descriptions appear inline within each checkbox item rather than in separate disconnected sections, consistent with the required format.",
+      "reasoning": "The procedural diagnosis checklist uses the required checkbox format with Step N numbering, and the order dependency is explicitly called out.",
       "evidence": "- [ ] **Step 0 - Establish governance mode.** ... - [ ] **Step 1 - Lake Formation grants.** ... - [ ] **Step 7 - Synthesize and patch.**",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#checklists-for-multi-step-workflows"
     },
@@ -156,7 +154,7 @@
       "name": "Validation loops",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The skill includes an explicit 'Validate before presenting' section instructing the agent to self-check its findings and verdict before returning output.",
+      "reasoning": "There is an explicit self-validation section instructing the agent to check its own output (breaking layer backed by cited evidence, patch matches scope gap, NOT_CHECKED labeling) before presenting.",
       "evidence": "Before returning the output, self-check: confirm the named breaking layer's state is backed by the specific API finding you cited, and confirm the corrective patch matches the exact scope gap you identified",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#validation-loops"
     }
