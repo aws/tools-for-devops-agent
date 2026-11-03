@@ -1,0 +1,67 @@
+{
+  "version": "v6",
+  "iteration": 2,
+  "eval_id": "instance-eni-vs-natgw-eni",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": {
+    "outcome": "timed_out",
+    "found": false,
+    "waited_seconds": 3629.5,
+    "polls": 120,
+    "summary": "Skill 'understanding-agent-space' was not generated within 60m 0s \u2014 proceeded without it"
+  },
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to explain that instance-ENI flow logs capture ALL traffic including traffic that never traverses the NAT Gateway (e.g., Gateway Endpoint-routed traffic to S3/DynamoDB), making instance-ENI logs unreliable for isolating NAT-driven costs, and to recommend capturing flow logs on the NAT Gateway's own ENI instead of proceeding with instance-ENI data.\n\nThe agent's response instead affirms that instance-ENI flow logs are 'a solid way to find what's driving NAT Gateway data processing charges' and presents NAT Gateway ENI flow logs merely as an alternative/complementary option with additional fields (pkt-srcaddr/pkt-dstaddr) for multi-subnet scenarios, not as the necessary and more reliable source. It never mentions that instance-ENI traffic could include non-NAT routed traffic (like Gateway Endpoint traffic to S3) that would conflate costs. The agent even offers to proceed with analysis using instance ENI data ('I can pull your actual flow logs and break down bytes by source instance and destination'), which is the opposite of what's expected (recommending against using instance-ENI data and recommending the NAT Gateway ENI source instead).\n\nThis is a significant miss of the core technical caveat the expected output is testing for \u2014 the risk of conflating Gateway Endpoint or other non-NAT-routed traffic with actual NAT-processed traffic when analyzing from the instance ENI level.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Explains that instance-ENI flow logs include traffic that does not cross NAT, such as endpoint-routed traffic",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output discusses instance-ENI flow logs capturing 'the real external destination IP' and aggregating 'bytes by destination to find your top talkers' but never mentions that instance-ENI flow logs may include traffic that doesn't cross the NAT Gateway at all, such as traffic to VPC endpoints, S3 gateway endpoints, PrivateLink, or other VPC-local destinations.",
+          "reasoning": "The assertion requires an explicit caveat about non-NAT traffic (e.g., endpoint-routed traffic) being captured in instance-ENI flow logs, which would inflate or confound NAT cost attribution. No such caveat appears anywhere in the response; the listed caveats are about byte-to-dollar conversion, missing interface-id, and field format versions only.",
+          "confidence": "high"
+        },
+        {
+          "text": "States that NAT Gateway ENI flow logs are needed for a reliable analysis",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent frames instance-ENI flow logs as 'a solid way to find what's driving NAT Gateway data processing charges' and only mentions NAT Gateway ENI flow logs as an alternative/useful addition ('If you instead capture flow logs on the NAT Gateway's own network interface... That view ties traffic directly to the NAT gateway's ENI, which is useful if you have multiple subnets/instances funneling through one NAT') rather than stating it is necessary/required for reliable analysis.",
+          "reasoning": "The assertion requires a statement that NAT Gateway ENI flow logs are needed for reliable analysis. The agent instead validates instance-ENI logs as sufficient ('a solid way') and presents NAT ENI logs as merely an additional useful view, not a requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "Does not produce a categorized traffic breakdown from instance-ENI data alone",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent states instance-ENI flow logs let you 'aggregate bytes by destination to find your top \"talkers\" and top external endpoints' and offers to 'pull your actual flow logs and break down bytes by source instance and destination to show where your NAT spend is concentrated' \u2014 explicitly proposing to produce a categorized breakdown using instance-ENI data (implied, since NAT ENI data is presented as an alternative/addition, not a replacement).",
+          "reasoning": "The assertion requires that the agent NOT produce a categorized traffic breakdown from instance-ENI data alone. However the agent explicitly describes building a bytes-by-destination/source breakdown from instance ENI flow logs as sufficient and valid, and offers to perform exactly this breakdown, violating the assertion.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 0,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "8s",
+    "cost": "$0.07",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}
