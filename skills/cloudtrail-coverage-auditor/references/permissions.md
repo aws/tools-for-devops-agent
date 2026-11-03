@@ -17,8 +17,8 @@ CloudFormation delta policy are needed.
 | `cloudtrail:ListEventDataStores`, `cloudtrail:GetEventDataStore` | `cloudtrail:List*`, explicit | CloudTrail Lake stores as coverage sources |
 | `s3:ListAllMyBuckets`, `s3:GetBucketLocation` | explicit | Bucket inventory and Region |
 | `s3:GetBucketVersioning`, `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketPublicAccessBlock` | explicit | E2 optional destination bucket context |
-| `lambda:ListFunctions` | `lambda:List*` | Function inventory |
-| `dynamodb:ListTables`, `dynamodb:DescribeTable` | `dynamodb:List*`, `dynamodb:Describe*` | Table inventory, stream note |
+| `lambda:ListFunctions` | `lambda:List*` | Function inventory and ARNs (`GetFunction` is not used) |
+| `dynamodb:ListTables` | `dynamodb:List*` | Table inventory; ARNs are built from Region, account and name (`DescribeTable` is not used) |
 | `organizations:DescribeOrganization`, `organizations:ListDelegatedAdministrators` | `organizations:Describe*`, `organizations:List*` | Account role resolution |
 | `ec2:DescribeRegions` | `ec2:Describe*` | Enabled Regions |
 | `kms:DescribeKey`, `logs:DescribeLogGroups`, `iam:GetRole` | explicit or `Describe*` | Optional context: key state, log group exists, `AWSServiceRoleForCloudTrail` present |
@@ -30,10 +30,19 @@ CloudFormation delta policy are needed.
 
 - `s3:ListBucket` in the managed policy is limited to `AWSLogs/*` prefixes.
   This does not affect the skill, which never lists objects.
-- The agent's tool policy has cancelled some read calls as "mutative" in other
-  skills. A cancelled call is classified `ToolingFailure` and is never evidence.
-  The skill does not ask for approval of any call; nothing it calls changes
-  state.
+- The agent's guardrail classifies `dynamodb:DescribeTable` as a mutative
+  operation requiring approval and cancels it, and `lambda:GetFunction` was
+  denied under the Agent Space role. Neither is needed: `ListTables` and
+  `ListFunctions` give existence and ARN. A cancelled call is classified
+  `ToolingFailure` and is never evidence. The skill does not ask for approval
+  of any call; nothing it calls changes state.
+- The agent's AWS tool refuses any ARN whose account is not an Agent Space
+  target account ("ARN account <id> not in target accounts"). From a member
+  account this blocks `GetTrailStatus` and `GetEventSelectors` on the
+  organization trail's full ARN before the request reaches AWS, so the managed
+  policy is not the cause and the result is `ToolingFailure`, not
+  `AccessDenied`. The operator runs the same call from the CLI or the
+  management account.
 - `cloudtrail:LookupEvents` is in the policy but the skill never calls it;
   reading Event history content is log analysis, which is out of scope.
 
@@ -49,9 +58,12 @@ Lambda, DynamoDB, SNS, SQS or Organizations write.
 
 1. Record the call, the trail or type, and the error under Not Assessed.
 2. Set the affected rows to `Unknown` (or `CoveredByOrgTrail-Unverified` when
-   the denied call was `GetEventSelectors` with an organization trail's ARN).
+   the denied or blocked call was `GetEventSelectors` with an organization
+   trail's ARN).
 3. Cap the rating at `Attention`. Never fill the gap with "no resources" or
    "not covered".
 4. In Next Steps, name the action and the policy that normally grants it, so
    the operator can check the Agent Space role for an explicit deny or a
-   permission boundary.
+   permission boundary. For the organization trail tool block, give the full
+   ARN and `aws cloudtrail get-event-selectors --trail-name <full ARN>` to run
+   from the CLI or the management account instead; no IAM change fixes it.

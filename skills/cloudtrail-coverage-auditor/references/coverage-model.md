@@ -12,8 +12,8 @@ are numbered [S#] and listed at the end; every behaviour claim carries one.
 |---|---|---|---|
 | 1 | `NotApplicable` | The resource is outside the user's requested scope (Region or type), or its type is not auditable by this skill. | Never counted |
 | 2 | `Unknown` | The inventory call for the type, or the selector read for a trail that could cover it, returned `AccessDenied`, was cancelled by the agent guardrail, or failed. Also used for a required list name that does not resolve in inventory (note "not found in account"). | Caps rating at `Attention` |
-| 3 | `Covered` | At least one logging trail (`IsLogging` true) or `ENABLED` event data store whose selectors match the resource (section 3) and whose Region scope includes the resource (section 4). The row names the covering trail or store. An organization trail read with the full ARN gives `Covered` with the trail marked `(organization trail)`; a Lake store is marked `(event data store)`. Narrowing conditions are recorded on the row: `Covered (write only)`, `Covered (read only)`, `Covered (prefix <p> only)`, `Covered (eventName <list>)`. | None by itself; narrowing raises D4 |
-| 4 | `CoveredByOrgTrail-Unverified` | An organization trail is visible (`IsOrganizationTrail` true) with `HasCustomEventSelectors` true and `GetEventSelectors` with the **full trail ARN** failed, so its selectors cannot be read. The resource may be covered. | Caps rating at `Attention`; O1 fires; Next Steps names the management account |
+| 3 | `Covered` | At least one logging trail (`IsLogging` true) or `ENABLED` event data store whose selectors match the resource (section 3) and whose Region scope includes the resource (section 4). The row names the covering trail or store. An organization trail whose selectors were read (possible from the management account, or from the CLI; inside the agent a member's read is blocked by the AWS tool) gives `Covered` with the trail marked `(organization trail)`; a Lake store is marked `(event data store)`. Narrowing conditions are recorded on the row: `Covered (write only)`, `Covered (read only)`, `Covered (prefix <p> only)`, `Covered (eventName <list>)`. | None by itself; narrowing raises D4 |
+| 4 | `CoveredByOrgTrail-Unverified` | An organization trail is visible (`IsOrganizationTrail` true) with `HasCustomEventSelectors` true and `GetEventSelectors` with the **full trail ARN** failed or was blocked by the agent's AWS tool (the normal result from a member account inside the agent; `ToolingFailure`), so its selectors cannot be read. The resource may be covered. | Caps rating at `Attention`; O1 fires; Next Steps gives the full ARN and the `get-event-selectors` command to run from the CLI or the management account |
 | 5 | `Uncovered` | Every readable trail and event data store was evaluated and none matches. | D1 to D3 finding (HIGH baseline, CRITICAL in required list mode) |
 
 Rules that follow from the order:
@@ -36,8 +36,8 @@ Rules that follow from the order:
 |---|---|---|---|
 | `AWS::S3::Object` (general purpose buckets) | Yes | `s3:ListAllMyBuckets`, then `s3:GetBucketLocation` per bucket for the Region | Basic and advanced selectors both support it [S4] |
 | `AWS::Lambda::Function` | Yes | `lambda:ListFunctions` per Region | Basic and advanced [S4] |
-| `AWS::DynamoDB::Table` | Yes | `dynamodb:ListTables` per Region, `dynamodb:DescribeTable` for the stream note | Basic and advanced [S4] |
-| `AWS::DynamoDB::Stream` | No, note only | `DescribeTable.LatestStreamArn` | Selecting `AWS::DynamoDB::Table` logs stream events too by default [S3], so the table row answers the stream question. Add a one line note when any table has a stream. |
+| `AWS::DynamoDB::Table` | Yes | `dynamodb:ListTables` per Region; ARN built as `arn:aws:dynamodb:<region>:<account>:table/<name>`. Never `DescribeTable` (the agent guardrail cancels it as mutative) | Basic and advanced [S4] |
+| `AWS::DynamoDB::Stream` | No, note only | none (stream presence is not read) | Selecting `AWS::DynamoDB::Table` logs stream events too by default [S3], so the table row answers the stream question. Add the one line note "DynamoDB stream events are logged with the table's data events" when any table is in scope. |
 | `AWS::S3Outposts::Object`, `AWS::S3Express::Object`, `AWS::S3::AccessPoint` | No | none | Advanced selectors only [S3]; rare in audit scopes; need extra inventory APIs. Listed in the report as not assessed. |
 | `AWS::SNS::Topic`, `AWS::SQS::Queue`, `AWS::Cognito::IdentityPool`, `AWS::EKS::Cluster`, other advanced only types in [S3] | By request only | The type's List call, only when the user's required list names one | Advanced selectors only. Evaluate the selector match the same way; never enumerate them unasked. |
 
@@ -152,13 +152,19 @@ question for SME review (README).
    `Uncovered`; D4 MEDIUM for the missing `CreateMultipartUpload`,
    `UploadPart`, `CompleteMultipartUpload`, `DeleteObjects` and all reads.
 4. Organization trail visible with `HasCustomEventSelectors` true, and
-   `GetEventSelectors` with the full ARN returns `AccessDenied`: every bucket,
-   function and table the trail's Region scope could cover is
-   `CoveredByOrgTrail-Unverified`, O1 fires, rating caps at `Attention`.
-5. Organization trail read with the full ARN, `IncludeManagementEvents` false
-   and a single Lambda data resource in another account: it contributes no
-   coverage to this account; rows stay `Uncovered` unless another source
-   matches; O2 fires only if no own trail passes T1.
+   `GetEventSelectors` with the full ARN is refused by the agent's AWS tool
+   ("ARN account ... not in target accounts", the normal result from a member
+   account inside the agent) or returns `AccessDenied`: every bucket, function
+   and table the trail's Region scope could cover is
+   `CoveredByOrgTrail-Unverified`, O1 fires, rating caps at `Attention`, Not
+   Assessed lists the call as `ToolingFailure` with the ARN, and Next Steps
+   gives `aws cloudtrail get-event-selectors --trail-name <full ARN>` for the
+   operator to run from the CLI or the management account.
+5. Organization trail read with the full ARN (from the management account, or
+   supplied by the user from a CLI run), `IncludeManagementEvents` false and a
+   single Lambda data resource in another account: it contributes no coverage
+   to this account; rows stay `Uncovered` unless another source matches; O2
+   fires only if no own trail passes T1.
 
 ## Sources
 
