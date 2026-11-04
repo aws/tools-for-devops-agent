@@ -485,7 +485,7 @@ MCP server" names three types at once, so they cannot decide it.
 | Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
 | Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
 | Anything under `custom-agents/` | The same, with the Custom agents section |
-| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution, and the partner terms acceptance in the Connectors section. The check also fails if a changed connector's `connector.yaml` sets no `contact_email`. A connector is a definition, not a tool, so no other item applies unless the PR also changes a skill |
+| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
 
 So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
 a CHANGELOG or an SME sign-off, because none of it means anything for that change.
@@ -584,6 +584,20 @@ partner, as an exception, they link the partner's written authorization in the
 pull request description, and a maintainer approves the exception before review.
 A partner whose connector merged before the terms existed accepts them, and adds
 `contact_email`, in a new pull request.
+
+The box names the version of the terms, the date at the end of `TERMS.md`, so
+each pull request records the version its partner accepted. One acceptance covers
+every later contribution from that partner, connector and skills alike, and a
+pull request that removes a connector needs no `contact_email`. A connector is a
+definition, not a tool, so no other checklist item applies unless the pull request
+also changes a skill.
+
+**Revising the terms (maintainers).** AWS Legal approves the new text and updates
+its record of the terms. One pull request then updates `TERMS.md`, its
+`Date last updated`, and the version named in the pull request template's terms
+box; a test fails if the two dates differ. Partners already listed don't accept
+again: under Section 6(b) of the terms, continuing to list a connector after a
+revision is posted accepts it.
 
 ## Reporting Bugs/Feature Requests
 

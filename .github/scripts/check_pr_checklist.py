@@ -57,8 +57,9 @@ CONNECTOR_SECTION = "Connectors"
 CONNECTOR_DIR = re.compile(r"^connectors/(?!schema/)([^/]+)/")
 # contact_email is optional in schema v1 only because connectors merged before it
 # have none; every connector a PR changes must set it. Its format is the schema's
-# job, so this looks only for the top-level key with a value.
-CONTACT_EMAIL = re.compile(r"^contact_email:[ \t]*[^\s#]", re.M)
+# job, so this looks only for the top-level key with a plain or quoted value, not a
+# block scalar (> or |), whose trailing newline the schema's pattern would refuse.
+CONTACT_EMAIL = re.compile(r"""^contact_email:[ \t]*(?![>|]|""|'')[^\s#]""", re.M)
 
 # Items every PR is held to, tool or not, and that can never be marked n/a: the
 # repository is public, and the licence is a statement only the author can make.
@@ -100,13 +101,17 @@ def changes_connector(paths: list[str]) -> bool:
 
 def missing_contact(paths: list[str], read) -> list[str]:
     """Unmet entries for each changed connector whose connector.yaml sets no
-    contact_email. ``read`` returns a file's text at the PR head, or None."""
+    contact_email. ``read`` returns a file's text at the PR head, or None when the
+    file is not there. A connector directory without connector.yaml, which every
+    connector must have, is a connector the PR removes, so it needs no contact."""
     names = sorted({m.group(1) for m in map(CONNECTOR_DIR.match, paths) if m})
     unmet = []
     for name in names:
         path = f"connectors/{name}/connector.yaml"
         text = read(path)
-        if text is None or not CONTACT_EMAIL.search(text):
+        if text is None:
+            continue
+        if not CONTACT_EMAIL.search(text):
             unmet.append(f"{CONNECTOR_SECTION} → {path} sets no contact_email, the corporate work email "
                          "address where AWS can reach the company about this connector")
     return unmet
@@ -173,7 +178,7 @@ def decide(pr: dict, unmet: list[str]) -> tuple[str, str]:
     return "fail", "incomplete"
 
 
-def summary(unmet: list[str], waived: list[str], is_tool: bool, reason: str, is_connector: bool = False) -> str:
+def summary(unmet: list[str], waived: list[str], is_tool: bool, reason: str, is_connector: bool) -> str:
     lines = ["## PR checklist", ""]
     lines.append(
         "This PR touches a tool directory, so every required item applies."
@@ -199,9 +204,17 @@ def summary(unmet: list[str], waived: list[str], is_tool: bool, reason: str, is_
 
 
 def read_at(head_ref: str):
+    """Reads a file at ``head_ref``: its text, or None when the path is not in that
+    tree. A ref git cannot read raises, so main() reports an error rather than
+    blaming the PR for a missing file."""
     def read(path: str) -> str | None:
-        out = subprocess.run(["git", "show", f"{head_ref}:{path}"], capture_output=True)
-        return out.stdout.decode("utf-8", "replace") if out.returncode == 0 else None
+        listed = subprocess.run(["git", "ls-tree", head_ref, "--", path], capture_output=True, text=True)
+        if listed.returncode != 0:
+            raise RuntimeError(f"git ls-tree {head_ref} failed: {listed.stderr.strip()}")
+        if not listed.stdout.strip():
+            return None
+        shown = subprocess.run(["git", "show", f"{head_ref}:{path}"], check=True, capture_output=True)
+        return shown.stdout.decode("utf-8", "replace")
     return read
 
 

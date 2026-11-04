@@ -50,6 +50,16 @@ class TemplateTest(unittest.TestCase):
             with self.subTest(pattern.pattern):
                 self.assertEqual(sum(bool(pattern.search(b)) for b in boxes), 1)
 
+    def test_the_terms_box_names_the_version_in_terms_md(self):
+        # A terms revision changes TERMS.md's date and the box together, so each
+        # connector PR records the version its partner accepted.
+        terms = (ROOT / "connectors" / "TERMS.md").read_text(encoding="utf-8")
+        dated = re.search(r"^Date last updated: (\d{4}-\d{2}-\d{2})$", terms, re.M)
+        self.assertIsNotNone(dated, "TERMS.md must end with 'Date last updated: YYYY-MM-DD'")
+        boxes = [line for line in TEMPLATE.splitlines() if "Partner Connector Terms and Conditions" in line]
+        self.assertEqual(len(boxes), 1)
+        self.assertIn(f"version {dated.group(1)},", boxes[0])
+
     def test_untouched_template_waives_nothing(self):
         # Prose in the template that happens to read as `n/a: <reason>` would let
         # every author skip that item without writing anything.
@@ -170,8 +180,20 @@ class ConnectorTest(unittest.TestCase):
             "Connectors → connectors/beta/connector.yaml",
             "Connectors → connectors/delta/connector.yaml",
             "Connectors → connectors/gamma/connector.yaml",
-            "Connectors → connectors/omega/connector.yaml",
         ])
+
+    def test_a_removed_connector_needs_no_contact(self):
+        # connector.yaml is required, so a connector directory without one at the
+        # head is a connector the PR deletes.
+        paths = ["connectors/acme/connector.yaml", "connectors/acme/logo.svg", "connectors/acme/README.md"]
+        self.assertEqual(cpc.missing_contact(paths, lambda path: None), [])
+
+    def test_a_block_scalar_or_empty_contact_email_is_not_set(self):
+        for value in (">\n  devops@acme.example", "|\n  devops@acme.example", '""', "''", "", "# none"):
+            with self.subTest(value):
+                text = f"name: acme\ncontact_email: {value}\n"
+                self.assertEqual(len(cpc.missing_contact(["connectors/acme/connector.yaml"], {
+                    "connectors/acme/connector.yaml": text}.get)), 1)
 
     def test_no_connector_change_reads_nothing(self):
         def read(path):
@@ -180,7 +202,7 @@ class ConnectorTest(unittest.TestCase):
 
     def test_the_summary_names_the_terms_only_for_a_connector_pr(self):
         self.assertIn("partner terms", cpc.summary([], [], False, "complete", True))
-        self.assertNotIn("partner terms", cpc.summary([], [], False, "complete"))
+        self.assertNotIn("partner terms", cpc.summary([], [], False, "complete", False))
 
 
 class DecideTest(unittest.TestCase):
@@ -254,6 +276,15 @@ class MainTest(unittest.TestCase):
     def test_a_connector_pr_without_contact_email_fails(self):
         self.assertEqual(self.connector_pr("name: acme\n"), 1)
         self.assertEqual((self.out / "reason").read_text().strip(), "incomplete")
+
+    def test_a_head_ref_git_cannot_read_is_an_error_not_a_finding(self):
+        self.connector_pr("name: acme\ncontact_email: devops@acme.example\n")
+        code = cpc.main(["--event", self.event(body(REQUIRED_ALL_TICKED, CONNECTORS_TICKED, LICENSE_TICKED)),
+                         "--base-ref", "main", "--head-ref", "pr", "--out", str(self.out)])
+        self.assertEqual(code, 0)
+        read = cpc.read_at("no-such-ref")
+        with self.assertRaises(RuntimeError):
+            read("connectors/acme/connector.yaml")
 
     def test_a_skill_pr_with_the_untouched_template_fails(self):
         repo = self.tmp / "repo"
