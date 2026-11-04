@@ -32,6 +32,7 @@ Metadata:
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
+          - EnableAimlAccessDiagnostics
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -157,6 +158,17 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableAimlAccessDiagnostics:
+    Type: String
+    Description: >
+      AI/ML Access Diagnostics skill. Adds read-only lex Describe/List, textract Get/List,
+      and transcribe Get/List for the Lex, Textract, and Transcribe service-specific status
+      reads. The other seven services ride reads already granted by AIDevOpsAgentAccessPolicy.
+      The managed-policy gap for these three is being handled with the service team separately;
+      this ships the reads in CloudFormation for now.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -196,6 +208,7 @@ Conditions:
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
+  SkillAimlAccessDiagnostics: !Equals [!Ref EnableAimlAccessDiagnostics, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -640,6 +653,45 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # aiml-access-diagnostics: service-specific READ actions for the three services absent from
+  # AIDevOpsAgentAccessPolicy (Lex, Textract, Transcribe). All Get/List/Describe, strictly
+  # read-only. The other seven services (Bedrock, SageMaker, Comprehend, Q Business,
+  # Personalize, Forecast, Rekognition) ride reads already granted by the managed policy plus
+  # the shared s3:GetBucketPolicy / kms:GetKeyPolicy / iam:GetRole* / sns:GetTopicAttributes
+  # reads. The managed-policy gap for these three is being handled with the service team
+  # separately; this ships the reads in CloudFormation for now.
+  PolicyAimlAccessDiagnostics:
+    Type: AWS::IAM::Policy
+    Condition: SkillAimlAccessDiagnostics
+    Properties:
+      PolicyName: DevOpsAgentSkill-AimlAccessDiagnostics
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LexV2DiagnosticReads
+            Effect: Allow
+            Action:
+              - lex:ListBots
+              - lex:ListBotAliases
+              - lex:DescribeBotAlias
+              - lex:DescribeBotVersion
+              - lex:DescribeResourcePolicy
+            Resource: '*'
+          - Sid: TextractDiagnosticReads
+            Effect: Allow
+            Action:
+              - textract:Get*
+              - textract:List*
+            Resource: '*'
+          - Sid: TranscribeDiagnosticReads
+            Effect: Allow
+            Action:
+              - transcribe:Get*
+              - transcribe:List*
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -669,6 +721,7 @@ Outputs:
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
+        - aiml-access-diagnostics: ${EnableAimlAccessDiagnostics} (lex Describe/List, textract:Get*/List*, transcribe:Get*/List* for Lex/Textract/Transcribe reads)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
