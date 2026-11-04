@@ -1,0 +1,63 @@
+{
+  "version": "v2",
+  "iteration": 5,
+  "eval_id": "textract-sns-managed-policy-scope",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aiml-access-diagnostics' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identifies this as a Denial, specifically at the service-role SNS publish hop (Hop 4), and explicitly labels it an 'implicit deny on sns:Publish'. It explains that the AmazonTextractServiceRole managed policy scopes sns:Publish to arn:aws:sns:*:*:AmazonTextract* and that 'doc-complete' doesn't match this pattern, causing the role to be unable to publish. It frames this as a real IAM permissions issue (a resource-pattern mismatch in the IAM policy) rather than a Textract API naming rule, and even clarifies that StartDocumentAnalysis succeeds because that part never touches SNS \u2014 the failure is a genuine IAM denial that occurs later. This matches all key elements of the expected output: IMPLICIT deny classification, correct root cause (policy's resource ARN pattern not matching the topic name), and correctly framing it as an IAM denial rather than a naming rule enforced by the Textract API itself.",
+      "evidence": "\"**Root cause:** `AmazonTextractServiceRole` grants `sns:Publish` only on topics matching `arn:aws:sns:*:*:AmazonTextract*`... Your topic is `doc-complete`, which doesn't match that pattern... the publish call hits an implicit deny.\" and \"Role permissions \u2014 `sns:Publish` on `doc-complete` | **Denied** \u2014 managed policy's resource pattern (`AmazonTextract*`) doesn't cover this topic name\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Classifies it as a real IAM denial (implicit deny / DENIED_BY) caused by the managed policy scoping sns:Publish to AmazonTextract* topics, and explicitly states it is NOT a Textract API naming requirement",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Classification: Denial \u2014 Hop 4 (role permissions), implicit deny on sns:Publish' and 'AmazonTextractServiceRole grants sns:Publish only on topics matching arn:aws:sns:*:*:AmazonTextract* -- that's the AWS-documented naming convention required by this managed policy. Your topic is doc-complete, which doesn't match that pattern.'",
+          "reasoning": "The agent explicitly classifies it as a 'Denial' with an 'implicit deny on sns:Publish' and attributes it to the managed policy's resource scoping (AmazonTextract* pattern) not matching the topic name. It does not frame this as a Textract API naming requirement - it correctly frames it as an IAM policy resource pattern issue, calling it 'the managed policy's resource pattern' and the role 'grants sns:Publish only on topics matching arn:aws:sns:*:*:AmazonTextract*'. It does describe this as 'the AWS-documented naming convention required by this managed policy' which is consistent with being an IAM policy scoping issue rather than an API-level naming requirement. The table also explicitly labels hop 4 as 'Denied'."
+        },
+        {
+          "text": "Attributes the deny to the AmazonTextractServiceRole managed policy's resource scope not matching the topic name",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Root cause: AmazonTextractServiceRole grants sns:Publish only on topics matching arn:aws:sns:*:*:AmazonTextract* ... Your topic is doc-complete, which doesn't match that pattern.' Also in the table: 'Role permissions \u2014 sns:Publish on doc-complete | Denied \u2014 managed policy's resource pattern (AmazonTextract*) doesn't cover this topic name'",
+          "reasoning": "The agent directly attributes the deny to the managed policy's resource scope (AmazonTextract* pattern) not matching the topic name 'doc-complete'."
+        },
+        {
+          "text": "Offers both fixes: rename the topic to start with AmazonTextract, or grant sns:Publish on the exact topic ARN",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'1. Rename the topic to start with AmazonTextract (e.g. AmazonTextractDocComplete) so it falls under the managed policy's wildcard, or 2. Attach a custom inline policy to the role granting sns:Publish on [redacted ARN] directly \u2014 works regardless of naming.'",
+          "reasoning": "The agent explicitly offers both fixes under a 'Fix \u2014 pick one' section: renaming the topic to start with AmazonTextract, and attaching a custom inline policy granting sns:Publish on the exact topic ARN."
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m1s",
+    "cost": "$1.01",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

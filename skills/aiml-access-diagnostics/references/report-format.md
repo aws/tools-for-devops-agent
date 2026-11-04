@@ -56,7 +56,7 @@ Four elements in order.
 **1. Metadata block**
 
 ```
-- **Service:** <Amazon Bedrock | Amazon SageMaker>
+- **Service:** <Amazon Bedrock | Amazon SageMaker | Amazon Comprehend | Amazon Lex V2 | Amazon Textract | Amazon Q Business>
 - **Failed action:** <IAM action>
 - **Principal:** <principal ARN>
 - **Resource:** <resource ARN or "not specified in the error">
@@ -80,6 +80,16 @@ Or, when undetermined:
 ```
 **Root cause:** ❓ Undetermined — <what was ruled out, and what could not be evaluated>
 ```
+
+Or, when the established cause is not an authorization decision at all:
+
+```
+**Root cause:** 🚫 Not an access denial — <one-line statement>
+```
+
+The root-cause line therefore has three forms and is not bound by the closed verdict
+vocabulary, which governs chain-table cells and finding headings. See
+`finding-logic.md` "Root cause selection" cases 1–3b.
 
 **3. Deny kind**, when a root cause was identified
 
@@ -196,6 +206,11 @@ Add conditionally:
   existence was not verified, because `s3:ListBucket` is not available to the agent, and
   that the finding holds either way since the execution role's missing S3 permission
   produces this error regardless.
+- When a Lex code hook is configured and no hop denied: that a code hook timeout produces
+  the same user-visible symptom as a permission failure, which of the two timeout budgets
+  is smaller, and that the Lex budget was assumed at its 30s default because the client
+  supplies it per request. State plainly that whether a timeout occurred was not
+  established, since Lex runtime calls do not appear in CloudTrail.
 
 ## References
 
@@ -242,7 +257,9 @@ Run all 17 checks before delivering. Do not output the validation results.
    asserts a hop definitively permits the call.
 7. **Root cause consistency.** If any hop is `DENIED_BY`, the root cause is the earliest
    such hop, and every later denying hop is `WOULD_ALSO_DENY`. If none is, the root cause
-   is a service-specific cause or undetermined.
+   is a service-specific denial, a non-denial cause in the `🚫` form, or undetermined. A
+   non-denial root cause must not coexist with any `DENIED_BY` hop — if a hop denied, that
+   is the cause.
 8. **Deny kind stated** whenever a root cause was identified, and the remediation
    matches it — no policy proposal for an explicit deny.
 9. **Every `CANNOT_DETERMINE` names its missing evidence.** A bare "cannot determine"
@@ -288,5 +305,5 @@ When the runtime supports persisted artifacts:
 aiml-access-diagnosis-<service>-<YYYY-MM-DD>.md
 ```
 
-Where `<service>` is `bedrock` or `sagemaker`. See the Final Delivery Contract in
+Where `<service>` is `bedrock`, `sagemaker`, `comprehend`, `lex`, `textract`, or `qbusiness`. See the Final Delivery Contract in
 `SKILL.md` for delivery requirements.

@@ -1,0 +1,60 @@
+{
+  "version": "v2",
+  "iteration": 3,
+  "eval_id": "bedrock-inference-profile-dual-resource",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The response renders a clearly structured hop-by-hop chain (Hop 1 through Hop 7), each with a heading, not just undifferentiated prose. It explicitly identifies Hop 2 as the top suspect: the missing grant on underlying foundation-model ARNs in each destination region, correctly explaining that the 'us.' prefix denotes a cross-region inference profile requiring permissions on BOTH the profile ARN and the foundation-model ARNs in every destination region (us-east-1, us-east-2, us-west-2). It also addresses SCP/Organizations guardrails (Hop 4), noting that a Region-restriction SCP denying bedrock:InvokeModel on foundation-model/* outside an allow-list can block CRIS fan-out even when IAM is correct \u2014 matching the expectation that an SCP blocking any single destination region fails the whole request. All required elements (structured hop-by-hop format, foundation-model ARN gap diagnosis, SCP blocking note) are present and substantively correct.",
+      "evidence": "\"Hop 2 \u2014 Inference profile \u2192 Underlying foundation-model ARNs (the actual break point, ~80% of cases)... IAM evaluates permissions against those ARNs too, not just the profile ARN... Hop 4 \u2014 SCP / Organizations guardrails... A common pattern denies bedrock:InvokeModel on foundation-model/* outside an allow-list of Regions \u2014 which blocks CRIS fan-out even when IAM and model access are fine.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Presents the diagnosis as a hop-by-hop authorization chain with an explicit verdict per hop, not only prose advice",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Headers 'Hop 1 \u2014 Caller identity...', 'Hop 2 \u2014 Inference profile \u2192 Underlying foundation-model ARNs (the actual break point, ~80% of cases)', etc., plus the closing 'Most likely root cause' section explicitly ranking Hop 2 as top suspect and Hop 3/4 as next checks.",
+          "reasoning": "The output is structured as a numbered list of 7 hops, each labeled 'Hop N' with a clear statement of what is checked and a verdict/likelihood assessment for each (e.g., Hop 1 'Take this at face value', Hop 2 'the actual break point, ~80% of cases', Hop 3 'Separate from IAM...', etc.), followed by a 'Most likely root cause' section ranking hops by likelihood. This is clearly a structured hop-by-hop diagnosis, not just generic prose advice."
+        },
+        {
+          "text": "Identifies the missing underlying foundation-model ARN grant (across every destination region the profile routes to) as the cause, not the profile grant",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Text states: 'Hop 2 \u2014 Inference profile \u2192 Underlying foundation-model ARNs (the actual break point, ~80% of cases)... If your policy only lists the inference-profile resource and not: [redacted ARN] ... the call is denied' and in 'Most likely root cause': 'Hop 2 is the top suspect \u2014 missing InvokeModel grant on the regional foundation-model ARNs that the us. profile fans out to.'",
+          "reasoning": "The agent explicitly identifies Hop 2 (missing IAM grant on the underlying regional foundation-model ARNs that the cross-region profile fans out to, across us-east-1, us-east-2, us-west-2) as the most likely root cause, explicitly distinguishing it from the profile ARN grant which the user said was correct."
+        },
+        {
+          "text": "Notes that an SCP denying any single destination region fails the entire Converse request",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output says: 'A common pattern denies bedrock:InvokeModel on foundation-model/* outside an allow-list of Regions \u2014 which blocks CRIS fan-out even when IAM and model access are fine.' This describes SCPs blocking fan-out generally but does not explicitly state that denial of just one of the multiple destination regions (while others are allowed) is sufficient to fail the entire request.",
+          "reasoning": "The SCP discussion (Hop 4) addresses Region-restriction SCPs blocking regions outside an allow-list, but it does not explicitly state that an SCP denying a single destination region (one of the multiple fan-out regions) would cause the entire Converse request to fail. It describes the general SCP guardrail pattern and fix, but doesn't make the specific point about partial/any-single-region denial failing the whole multi-region fan-out call.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "18s",
+    "cost": "$0.16",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

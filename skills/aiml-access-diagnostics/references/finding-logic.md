@@ -299,7 +299,20 @@ The report names one root cause. Select it as follows:
    only a later hop will not resolve the call, and fixing only the root cause will not
    either.
 3. If no hop is `DENIED_BY` but a service-specific non-IAM cause was found, that is the
-   root cause.
+   root cause. Such a cause still produced a denial — Bedrock model access and the
+   Marketplace subscription path both surface as `AccessDeniedException` — so it carries
+   `DENIED_BY` (service-specific) and the root cause line takes the hop form.
+3b. If no hop is `DENIED_BY` and the established cause produced **no denial at all**, the
+   root cause takes the non-denial form:
+
+       **Root cause:** 🚫 Not an access denial — <one-line statement>
+
+   Use this only when the call failed for a reason that is not an authorization decision
+   anywhere in the chain, and only from evidence actually read for this diagnosis. Every
+   hop keeps its own evidence-based verdict; do not restate the cause as a hop denial. The
+   finding renders under `### Service-specific: <cause name>`. Where the establishing read
+   was unavailable, this is `CANNOT_DETERMINE` naming the operation, not a non-denial root
+   cause. See `svc-lex.md` for the first two instances.
 4. If no hop is `DENIED_BY` and no non-IAM cause was found, but CloudTrail shows a
    denial, the root cause is **undetermined** — state that plainly and list what could
    not be evaluated. Do not manufacture a cause from the strongest-looking hop.

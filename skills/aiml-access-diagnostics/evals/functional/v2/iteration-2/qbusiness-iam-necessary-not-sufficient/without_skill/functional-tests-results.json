@@ -1,0 +1,62 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "qbusiness-iam-necessary-not-sufficient",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to specifically identify two non-IAM gates that can still deny access even after IAM passes: (1) Identity Center application assignment (the user must be assigned to the specific Q Business application, not just resolvable) and (2) active subscription/license status. It should frame these as service-specific DENIED_BY conditions and clearly warn that SimulatePrincipalPolicy 'allowed' does not guarantee success due to these service-side checks.\n\nThe agent's response does cover IAM-layer gaps extensively (SCPs, RCPs, session policies, permission boundaries, condition keys) and does mention 'Layer 2' Q Business-specific authorization. It mentions IAM Identity Center user identity context/mapping (close to assignment) but frames it ambiguously as 'valid/assigned IDC user mapping' - partially matching gate 1. However, it explicitly states regarding licensing: 'this is distinct from LicenseNotFoundException (that's the subscription/license-inactive case), so it won't show up as a license error' - this explicitly EXCLUDES the subscription/license gate as a cause, which contradicts the expected output that says subscription status IS one of the two gates that can cause this 403. The agent is actively telling the user that license/subscription issues would NOT present as AccessDeniedException, whereas the expected answer indicates that an inactive subscription is indeed one of the two service-specific gates that produces a DENIED_BY-type 403 denial.\n\nAdditionally, the response does not use the specific framing of 'DENIED_BY' service-specific denial codes it should reference, nor does it clearly state the two-gate structure (assignment THEN subscription) in sequence. It also doesn't explicitly warn that SimulatePrincipalPolicy 'allowed' does not mean the call will succeed in as direct terms as expected (though it does imply this through the overall narrative).\n\nGiven that the response explicitly misattributes/excludes the subscription gate as a possible cause (contradicting the expected answer), and does not clearly use the DENIED_BY framing for Identity Center assignment and subscription gates, this fails to meet the core expected criteria, despite covering extensive IAM-layer nuances correctly.",
+      "evidence": "\"A caller with a perfectly valid IAM policy but no valid/assigned IDC user mapping for that application gets denied at the service layer \u2014 this is distinct from LicenseNotFoundException (that's the subscription/license-inactive case), so it won't show up as a license error, it shows up as plain AccessDeniedException.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "States that passing IAM (and SimulatePrincipalPolicy) is necessary but not sufficient for Q Business, and that a passing simulation does not mean the call will succeed",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Agent states: 'this exception can come from two different authorization layers, and SimulatePrincipalPolicy only ever covers one of them cleanly' and 'A caller with a perfectly valid IAM policy but no valid/assigned IDC user mapping for that application gets denied at the service layer.' This directly conveys that passing IAM/simulation is necessary but not sufficient.",
+          "reasoning": "The agent explicitly frames the exception as spanning two layers and shows that a valid IAM policy (and by extension a passing simulation) does not guarantee success, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Names the two additional non-IAM gates: IAM Identity Center application assignment and an active subscription, evaluated after IAM",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Item 6 mentions 'IAM Identity Center / user identity context... expects a resolvable identity-federated user context... not just an allowed IAM action.' However, the agent explicitly says this is 'distinct from LicenseNotFoundException (that's the subscription/license-inactive case), so it won't show up as a license error' \u2014 meaning it explicitly excludes the subscription/license gate rather than naming it as one of the two gates. No mention of an 'active subscription' as a required gate for ChatSync itself.",
+          "reasoning": "The assertion requires both IAM Identity Center application assignment AND an active subscription to be named as the two additional gates. The agent names IDC user mapping but explicitly disclaims the subscription/license angle as a separate, different error type, not as a second gate causing AccessDeniedException. Thus only one of the two required gates is substantively named.",
+          "confidence": "high"
+        },
+        {
+          "text": "Reports those gates as genuine (service-specific) denials rather than prose, and recommends checking them outside IAM",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent discusses IDC user mapping as a genuine service-specific denial ('gets denied at the service layer... this is distinct from LicenseNotFoundException') but does not discuss an active subscription gate at all, and explicitly separates license/subscription issues out as a different exception type rather than recommending to check subscription status outside IAM.",
+          "reasoning": "Since the subscription gate is not named or recommended for checking, and is explicitly carved out as unrelated, assertion 2 (which depends on both gates being reported as genuine denials to check) is not satisfied for the subscription half. The IDC half is covered, but the assertion requires both gates to be treated this way.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "54s",
+    "cost": "$0.45",
+    "context_window": {
+      "utilization": "4.9%",
+      "compaction_count": 0
+    }
+  }
+}

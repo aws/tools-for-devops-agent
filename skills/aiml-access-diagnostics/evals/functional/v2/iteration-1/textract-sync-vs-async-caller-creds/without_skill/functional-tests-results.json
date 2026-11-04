@@ -1,0 +1,61 @@
+{
+  "version": "v2",
+  "iteration": 1,
+  "eval_id": "textract-sync-vs-async-caller-creds",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly concludes that synchronous AnalyzeDocument has no role chain - it reads S3 using the caller's own IAM credentials, not the Textract service role the user created. It explicitly states the service role is unused/irrelevant for the sync path, and identifies the missing grant as s3:GetObject on the caller's own IAM principal (plus kms:Decrypt if SSE-KMS). This matches the expected output's core determination: hops 2-4 (service role chain) are not applicable, and the fix is granting the caller's own identity s3:GetObject.</reasoning>\n<parameter name=\"evidence\">\"There is no role chain for synchronous AnalyzeDocument... the caller's own IAM identity... is the one that needs s3:GetObject on the object... The service role you created with s3:GetObject is permission Textract would use if you were calling the async start APIs... but since AnalyzeDocument never references that role, it's sitting unused.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "States that the synchronous call uses the caller's own credentials and marks the role hops NOT_APPLICABLE for this path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"There is no role chain for synchronous AnalyzeDocument.\" ... \"the caller's own IAM identity ... is the one that needs s3:GetObject\" and \"No Textract service role is consulted.\"",
+          "reasoning": "The agent explicitly states the sync call uses the caller's own IAM identity/credentials and marks the role chain as not applicable to this path.",
+          "confidence": "high"
+        },
+        {
+          "text": "Identifies the missing grant as the CALLER's s3:GetObject, and states the service role is irrelevant to the synchronous path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The fix is to attach s3:GetObject (and kms:Decrypt/kms:DescribeKey if the object is SSE-KMS encrypted) to whatever identity is actually calling AnalyzeDocument \u2014 not to a separate Textract service role.\" and \"The service role you created with s3:GetObject is permission Textract would use if you were calling the async start APIs ... but since AnalyzeDocument never references that role, it's sitting unused.\"",
+          "reasoning": "The agent identifies the missing grant as s3:GetObject on the caller's identity and explicitly states the service role created is irrelevant/unused for the sync path.",
+          "confidence": "high"
+        },
+        {
+          "text": "Distinguishes the synchronous permission model from the asynchronous service-role model",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The RoleArn/DataAccessRoleArn and service-role pattern you set up only applies to the asynchronous APIs (StartDocumentAnalysis/StartDocumentTextDetection), where Textract assumes that role to read the input S3 object... For the synchronous AnalyzeDocument / DetectDocumentText calls, there's no RoleArn parameter at all.\"",
+          "reasoning": "The agent clearly distinguishes the synchronous permission model (caller's own credentials) from the asynchronous model (Textract assumes a service role via RoleArn/DataAccessRoleArn).",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "11s",
+    "cost": "$0.10",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

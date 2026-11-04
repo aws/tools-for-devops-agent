@@ -1,28 +1,26 @@
 ---
 name: aiml-access-diagnostics
 description: >
-  Use this skill when diagnosing IAM and access failures for Bedrock and
-  SageMaker. It traces the authorization chain — caller identity, iam:PassRole,
-  trust policy, role permissions, resource policies, SCPs — to name the denying
-  hop and propose a scoped policy. Read-only.
+  Diagnose IAM and access failures for AI/ML services: Amazon Bedrock, SageMaker,
+  Comprehend, Lex V2, Textract, Q Business, Personalize, Forecast, Rekognition, and
+  Transcribe. Traces the authorization chain (caller identity, iam:PassRole, trust policy,
+  role permissions, resource policies, SCPs) to name the denying hop and propose a scoped
+  policy, and identifies service-specific causes that are not IAM denials. Read-only.
 
-  Use when a Bedrock or SageMaker call fails on permissions: InvokeModel or
-  Converse AccessDeniedException, CreateTrainingJob or CreateEndpoint
-  AccessDenied, "is not authorized to perform", "not authorized to perform:
-  iam:PassRole", or an execution role that cannot reach S3, ECR, or KMS. Also
-  covers Marketplace and model-subscription denials that are not IAM gaps, and
-  failures under non-access codes: ValidationException "Could not assume role"
-  (trust-policy gap) or "No S3 objects found under S3 URL" (execution role
-  cannot list the prefix).
+  Use when one of these services fails on permissions or an access-shaped error:
+  AccessDeniedException, "is not authorized to perform", iam:PassRole denials, a role that
+  cannot reach S3/KMS/SNS, an async job that fails after submitting, a Lex RecognizeText
+  denial or failing code hook, a Q Business ChatSync 403, or non-access codes
+  (ValidationException, ResourceNotFoundException, DependencyFailedException,
+  InvalidS3ObjectException).
 
-  Do NOT use for IAM questions outside AI/ML, policy authoring or least-privilege
-  review without a failure, throttling or quota errors (ThrottlingException),
-  model quality issues, or non-AI/ML services.
+  Do NOT use for IAM outside AI/ML, policy authoring without a failure, throttling or quota
+  errors, model quality issues, or non-AI/ML services.
 metadata:
   author: tamrish
-  version: "1.2.4"
+  version: "2.0.0"
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
-  aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker, AWS IAM"
+  aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker, Amazon Comprehend, Amazon Lex, Amazon Textract, Amazon Q Business, Amazon Personalize, Amazon Forecast, Amazon Rekognition, Amazon Transcribe, AWS IAM"
   aws-devops-agent-skills.technical-domains: "Security"
 ---
 
@@ -36,7 +34,7 @@ review. Read-only throughout.
 
 Work through these steps in order. Each is detailed in its own section below.
 
-- [ ] **Step 1 — Classify the request:** confirm the service is Bedrock or SageMaker, and that there is an observed failure (not a speculative audit). Stop otherwise.
+- [ ] **Step 1 — Classify the request:** confirm the service is one of the ten supported (Bedrock, SageMaker, Comprehend, Lex V2, Textract, Q Business, Personalize, Forecast, Rekognition, Transcribe), and that there is an observed failure (not a speculative audit). Stop otherwise.
 - [ ] **Step 2 — Establish identity and scope:** record the agent's own identity, extract the principal/action/resource ARNs, and flag cross-account.
 - [ ] **Step 3 — Collect evidence, policy reads first:** read the chain's policy documents by hand; use CloudTrail and simulation only as corroboration.
 - [ ] **Step 4 — Walk the chain:** traverse the six hops in precedence order; do not stop at hop 1 just because it passed.
@@ -74,7 +72,23 @@ The report is the deliverable. Conversation around it is not.
 |---|---|
 | Amazon Bedrock | Full — including non-IAM denial causes |
 | Amazon SageMaker | Full — including PassRole and execution-role chains |
+| Amazon Comprehend | Full — sync vs async, data-access-role two-sided grant, VPC non-denial causes |
+| Amazon Lex V2 | Full — runtime bot-alias ARN, Lambda code-hook (Mode 3), non-denial causes |
+| Amazon Textract | Full — sync vs async, service role SNS/S3, non-denial causes |
+| Amazon Q Business | Full — IAM plus the Identity Center assignment / subscription gates |
+| Amazon Personalize | Full — two-sided grant (service role + required bucket policy), VPC non-denial cause |
+| Amazon Forecast | Full — role-based access, cross-account and VPC non-denial causes (existing customers only) |
+| Amazon Rekognition | Full — sync vs async vs stream processor, SNS-scope implicit deny |
+| Amazon Transcribe | Full — caller-creds vs DataAccessRole path, KMS-without-bucket non-denial cause |
 | Other AI/ML services | Not supported in this version. State this plainly and stop. |
+
+Several of the services above (Comprehend, Lex, Textract, Q Business, Personalize, Forecast, Transcribe) carry **non-denial
+causes** — failures that look like access errors but are not an authorization decision in
+the chain (a VPC with no S3 route, a disabled Lex code hook, an unbuilt bot locale, a
+region mismatch). These use the `🚫 Not an access denial` root-cause form defined in
+`references/finding-logic.md` (case 3b) and `references/report-format.md`. Bedrock and
+SageMaker have no such causes — their service-specific causes all still produce a real
+`AccessDeniedException` and keep `DENIED_BY`.
 
 If the request concerns an unsupported service, say so and do not attempt a partial
 diagnosis from the generic chain alone. The value of this skill is in the
@@ -95,7 +109,15 @@ service-specific knowledge; without it the output would be a guess.
   `references/report-format.md`
 - **Service specifics:** loaded only for the service in question —
   `references/svc-bedrock.md`,
-  `references/svc-sagemaker.md`
+  `references/svc-sagemaker.md`,
+  `references/svc-comprehend.md`,
+  `references/svc-lex.md`,
+  `references/svc-textract.md`,
+  `references/svc-qbusiness.md`,
+  `references/svc-personalize.md`,
+  `references/svc-forecast.md`,
+  `references/svc-rekognition.md`,
+  `references/svc-transcribe.md`
 
 ## Step 1: Classify the request
 
@@ -103,8 +125,10 @@ service-specific knowledge; without it the output would be a guess.
 
 ### 1a. Which service?
 
-Determine the AI/ML service from the error text, API name, or resource ARN. If it is
-not Bedrock or SageMaker, stop and report it as unsupported.
+Determine the AI/ML service from the error text, API name, or resource ARN. Supported
+services: Bedrock, SageMaker, Comprehend, Lex V2, Textract, Q Business, Personalize, Forecast, Rekognition, Transcribe. If it is none of
+these, stop and report it as unsupported — do not attempt a generic diagnosis from the
+chain alone.
 
 ### 1b. Is there an observed failure?
 
@@ -175,10 +199,19 @@ role's permissions are not.** Do not conclude at hop 1 simply because it passed.
 
 ## Step 5: Apply service-specific knowledge
 
-Load the matching `references/svc-*.md` and evaluate the non-IAM denial causes it
-lists. For Bedrock these include model subscription state, AWS Marketplace
-permissions, and propagation timing — none of which are IAM policy gaps, and all of
-which produce `AccessDeniedException`.
+Load the matching `references/svc-*.md` and evaluate the non-IAM causes it lists. For
+Bedrock these include model subscription state, AWS Marketplace permissions, and
+propagation timing — all of which produce `AccessDeniedException` and so carry `DENIED_BY`.
+
+For Comprehend, Lex, Textract, Q Business, Personalize, Forecast, and Transcribe, the service file also lists **non-denial
+causes** — failures where no hop denied at all (a VPC with no S3 route, an unbuilt Lex bot
+locale, a disabled code hook, a region mismatch). These take the `🚫 Not an access denial`
+root-cause form (`references/finding-logic.md` case 3b); every hop still keeps its own
+evidence-based verdict, and the cause is emitted only from evidence actually read. Do NOT
+assign `DENIED_BY` to a cause that produced no authorization denial. Conversely, a
+service-specific cause that DID produce a real denial (Bedrock model access, the Textract
+service role's SNS/S3 scope, the Q Business Identity Center assignment/subscription gates)
+keeps `DENIED_BY (service-specific)`.
 
 A diagnosis that checks only IAM and reports "your permissions are correct" while one
 of these is the true cause is the primary failure mode of this skill. Rule them out
@@ -237,7 +270,7 @@ mark the affected hop, and continue with what remains.
 | No CloudTrail event found | Delivery lag of up to ~15 minutes, or wrong region or time window | Proceed using the user-supplied error text. State that the event was not corroborated. Do not conclude the call never happened. |
 | Neither error text nor CloudTrail event | Nothing to diagnose | Stop. Ask for the error message, or the principal ARN plus the failed API call. |
 | Target role cannot be identified | `RoleArn` absent from the event and no Describe available | Mark hops 2 through 4 `CANNOT_DETERMINE`. Do not diagnose hop 1 alone and imply the chain is clear. |
-| Service is not Bedrock or SageMaker | Out of scope for this version | Stop and report it as unsupported. Do not attempt a generic diagnosis. |
+| Service is not one of the ten supported (Bedrock, SageMaker, Comprehend, Lex V2, Textract, Q Business, Personalize, Forecast, Rekognition, Transcribe) | Out of scope for this version | Stop and report it as unsupported. Do not attempt a generic diagnosis. |
 | Account is not in an Organization | No SCP applies | Mark hop 6 `NOT_APPLICABLE`. This is not a failure. |
 | Simulation contradicts a policy read | Simulation is a model and has known blind spots — trust policies, and `iam:PassRole` conditions | Follow the policy read. State the divergence and which one the verdict followed. Do not mark the hop `CANNOT_DETERMINE` on this basis alone. |
 | CloudTrail shows a denial the policies read as allowing | The cause lies outside the readable policies — a session policy, a conditional SCP, or a service-side gate | Mark the hop `CANNOT_DETERMINE` and surface the divergence — it is itself the finding. |
@@ -311,3 +344,11 @@ mark the affected hop, and continue with what remains.
 - `references/report-format.md` — report structure and pre-render validation
 - `references/svc-bedrock.md` — Bedrock roles, actions, and non-IAM denial causes
 - `references/svc-sagemaker.md` — SageMaker PassRole, trust policy, and execution-role minimums
+- `references/svc-comprehend.md` — Comprehend sync/async, data-access-role two-sided grant, VPC non-denial causes
+- `references/svc-lex.md` — Lex V2 runtime bot-alias ARN, Lambda code-hook (Mode 3), non-denial causes
+- `references/svc-textract.md` — Textract sync/async, service-role SNS/S3 scope, non-denial causes
+- `references/svc-qbusiness.md` — Q Business IAM plus Identity Center assignment/subscription gates
+- `references/svc-personalize.md` — Personalize two-sided grant (service role + required bucket policy), VPC non-denial cause
+- `references/svc-forecast.md` — Forecast role-based access, cross-account InvalidInputException and VPC non-denial causes
+- `references/svc-rekognition.md` — Rekognition sync/async/stream-processor split, SNS-scope implicit deny
+- `references/svc-transcribe.md` — Transcribe caller-creds vs DataAccessRole path, KMS-without-bucket non-denial cause
