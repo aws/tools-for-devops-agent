@@ -12,7 +12,7 @@ metadata:
 # Bluebox observability
 
 Bluebox is an observability agent by Dynatrace. It reads the customer's live telemetry (traces, logs,
-metrics, events and Davis problems) from the observability backend its workspace is connected to, maps
+metrics, events and findings) from the observability backend its workspace is connected to, maps
 it to services and their dependencies, and answers questions in plain language with the evidence behind
 each answer. It also runs its own investigations and keeps their reports. You reach it through the
 Bluebox MCP tools of the Bluebox connector.
@@ -25,13 +25,16 @@ The server's instructions and each tool's description are kept current with the 
 from this skill, follow them.
 
 ## What Bluebox sees
-- Services and applications that send OpenTelemetry traces (and optionally logs and metrics) to the
-  workspace, with their health, open problem count, request rate, error rate and latency percentiles.
-- Davis problems: anomalies the backend's AI engine detected, grouped with a severity and a root-cause entity.
-- Logs, traces and span attributes such as endpoint, status code, exception, service version and environment.
-- Service topology: who calls whom, from the entity model and from recent spans.
-- Repositories connected to the workspace, and the services whose telemetry names them.
-- Bluebox investigations of earlier problems: summary, impact, root cause, recommendation and evidence.
+The workspace's observability backend and connected GitHub repositories:
+- Services (any instrumentation) and frontend applications. `list_services` gives `health` and
+  `problem_count` only, for services with spans in the last hour. Get rates and latency from `ask`.
+- Findings: issues Bluebox detected, with status, affected entities and root-cause entity when known.
+- Traces, logs, metrics, events and span attributes.
+- Hosts, processes, Kubernetes and databases, with utilization.
+- Topology from the entity model and recent spans.
+- Dashboards and SLOs, where they exist.
+- Repositories and the services whose spans name them.
+- Bluebox investigations: summary, impact, root cause, recommendation, evidence, severity, status.
 
 A service that sends no telemetry to the workspace is missing from `list_services` or listed with health
 `unknown`. For such a service, rely on your AWS tools and say that Bluebox has no data for it.
@@ -92,7 +95,7 @@ setting or what an IAM policy allows, your AWS tools answer directly.
   the window and the `conversation_id` in your findings, so the operator can open the conversation in Bluebox.
 - A `Cannot complete` section means data or context was missing. Narrow the question or add the
   `entity_id` and ask once more, or report the gap. Do not treat it as evidence.
-- `health: healthy` in `list_services` only means that no problem is open. Davis problems can stay open
+- `health: healthy` in `list_services` only means that no problem is open. Findings can stay open
   after a recovery and can be absent during a fault that just started, while the error rate already
   moves. Base conclusions on the error rate and latency in the `ask` answer.
 - Telemetry arrives with a short delay. After a change, wait at least 5 minutes before you judge the

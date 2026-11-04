@@ -4,7 +4,7 @@ This skill helps AWS DevOps Agent decide when to ask Bluebox (by Dynatrace) abou
 
 ## Purpose
 
-Bluebox is an observability agent that reads a workspace's live traces, logs, metrics and Davis problems and answers questions with evidence. The skill describes what Bluebox sees and which Bluebox MCP tool answers which question, so AWS DevOps Agent can bring Bluebox in whenever an answer depends on how a service behaves in production: during triage and root cause analysis, before and after a directed action or mitigation, in a release readiness review, or for an operational question in chat. It covers scoping a question to a service, waiting for long answers, reading verdicts, usage cost and treating answers as data.
+Bluebox is an observability agent that reads a workspace's live traces, logs, metrics and findings and answers questions with evidence. The skill describes what Bluebox sees and which Bluebox MCP tool answers which question, so AWS DevOps Agent can bring Bluebox in whenever an answer depends on how a service behaves in production: during triage and root cause analysis, before and after a directed action or mitigation, in a release readiness review, or for an operational question in chat. It covers scoping a question to a service, waiting for long answers, reading verdicts, usage cost and treating answers as data.
 
 ## Key Capabilities
 
