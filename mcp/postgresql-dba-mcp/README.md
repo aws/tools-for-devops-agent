@@ -1,6 +1,6 @@
 # PostgreSQL DBA MCP Server for AWS DevOps Agent
 
-A Model Context Protocol (MCP) server for read-only diagnostics of Amazon RDS for PostgreSQL and Aurora PostgreSQL. It exposes exactly 10 MCP tools, including 55 predefined SQL diagnostics across 11 categories, and complete Markdown health/pre-upgrade reports presented on screen (`report_format="markdown"`, plus an explicit five-query `quick` health mode). Reports are returned as the tool result and shown in the AWS DevOps Agent Output panel; the server produces no downloadable file, no HTML document, and never writes to S3 or mints a presigned URL. Its higher-risk free-form EXPLAIN surface remains registered but is disabled by default in the non-production demo configuration.
+A Model Context Protocol (MCP) server for read-only diagnostics of Amazon RDS for PostgreSQL and Aurora PostgreSQL. It exposes exactly 9 MCP tools, including 55 predefined SQL diagnostics across 11 categories, and complete Markdown health/pre-upgrade reports presented on screen (`report_format="markdown"`, plus an explicit five-query `quick` health mode). Reports are returned as the tool result and shown in the AWS DevOps Agent Output panel; the server produces no downloadable file, no HTML document, and never writes to S3 or mints a presigned URL.
 
 This MCP server is sample code for technical review. Validate it in a non-production account and database before broader use.
 
@@ -21,20 +21,6 @@ The stack does **not** create the database login, secret, subnets, Lambda/databa
 
 The MCP endpoint is the `MCPEndpointUrl` stack output and ends in `/mcp`.
 
-### Default-off non-production demo surface
-
-The non-production demo configuration keeps one higher-risk surface inert by
-default:
-
-- `EXPLAIN_QUERY_ENABLED=false` keeps `explain_query` registered and documented,
-  but the tool returns a disabled error before parsing SQL or opening a database
-  connection.
-
-This is a deployment-controlled flag, not an MCP tool argument. Enabling it
-requires an explicit deployment change and a separate security review of the
-resulting input and output surface. The SAM parameter `ExplainQueryEnabled`
-defaults to `false`.
-
 ### Report delivery: on screen only, no server publication
 
 Reports are delivered on screen only. `run_full_health_check` and
@@ -50,24 +36,17 @@ perspective.
 ## Safety model
 
 1. `execute_health_query` accepts only one of 55 predefined SQL queries.
-2. `explain_query` is registered but returns a disabled error by default under `EXPLAIN_QUERY_ENABLED=false`, before parsing or connecting. If a separately reviewed deployment enables it, the retained validator requires exactly one PostgreSQL `SelectStmt`, rejects every function call plus data-changing CTEs, `SELECT INTO`, and row-locking clauses, and runs plan-only `EXPLAIN` with `search_path` restricted to `pg_catalog`.
-3. Each database connection explicitly opens `BEGIN READ ONLY`, verifies `transaction_read_only=on`, restricts `search_path` to `pg_catalog, pg_temp`, and applies local timeouts before diagnostic SQL. Predefined queries therefore resolve operators and functions only through `pg_catalog`, so another database user cannot substitute a same-named object (the CVE-2018-1058 pattern). `pg_stat_statements` views are referenced through the schema recorded in `pg_extension`, and those queries fail closed when the extension is not installed.
-4. Database names, RDS instance identifiers, and database endpoint hostnames require explicit allowlists. The runtime fails closed when a required value is missing or its entire value is `*`; deployment instructions prohibit wildcards.
-5. Data-plane tools can use only the one `SECRET_ARN` configured on the Lambda function.
-6. The secret must contain exactly non-empty string `username` and `password` fields.
-7. PostgreSQL TLS verifies the certificate and endpoint hostname against the SHA-256-pinned Amazon RDS global CA bundle packaged by the layer build.
-8. The Lambda Function URL uses `AWS_IAM`; do not change it to `NONE`.
-9. Use a dedicated PostgreSQL login with `CONNECT` and `pg_monitor`, not an application owner or `rds_superuser`. On PostgreSQL 14 and earlier (and databases upgraded from them), also run `REVOKE CREATE ON SCHEMA public FROM PUBLIC` as defense in depth.
-10. In AWS DevOps Agent, register only the 10 documented tools. All tools are read-only: diagnostics return evidence, and reports are returned as on-screen Markdown tool results with no S3 write, URL, or downloadable file. Do not enable free-form EXPLAIN (`EXPLAIN_QUERY_ENABLED=true`) without a separate security review and explicit deployment change.
-11. Every `shared_buffers` analysis uses explicit fail-closed evidence gates. Call `list_rds_instances()` first; for Aurora, analyze the sole current allowlisted writer, collect `get_instance_config`, 60 minutes of `get_instance_metrics`, DB instance parameter-group evidence, and live query 2.1, then finish with `list_rds_instances(expected_writer_id="<writer-id>")`. The analysis may continue only when that call emits `SHARED_BUFFERS_FINAL_GATE: PASS`; on failure, discard mixed evidence and restart once. The PASS response emits the exact reader opt-in question. Reader analysis, when approved, uses individual allowlisted reader instance endpoints rather than the load-balanced reader endpoint. Query 2.1 reports effective PostgreSQL settings, not AWS parameter provenance. `get_parameter_group` reads only the DB instance parameter group; with `filter_modified=True` it returns only `AWS Source=user` values, because `Source=system` formulas are not user overrides. Aurora cluster provenance and exact engine defaults remain `UNKNOWN` unless separately proven. `get_instance_config` and `get_instance_metrics` emit `MEMORY_SIZING_GATE: INSUFFICIENT_EVIDENCE`; metrics emit `CACHE_FIT_GATE: OBSERVATION_ONLY`. Therefore, no percentage, page count, formula, byte/GiB target, reset, or reboot action may be inferred from advertised RAM, cache-hit ratio, or FreeableMemory, or back-solved from `effective_cache_size`, another live setting, or a sibling formula. A perfect cache-hit observation does not prove the working set fits, and FreeableMemory is availability/reclaimability evidence—not wasted or unused memory. For Aurora, the baseline policy is `USE_VERIFIED_AURORA_ENGINE_DEFAULT`: once exact cluster provenance and the exact engine default are independently verified, recommend that verified default unless an approved workload-specific reason supports a custom value. A perfect cache-hit ratio does not change this policy, and the default must not be described as a fixed percentage without exact version-specific evidence. RDS PostgreSQL uses query 6.3 for its connected-database cache observation and does not use the Aurora final-writer or reader-question flow.
+2. Each database connection explicitly opens `BEGIN READ ONLY`, verifies `transaction_read_only=on`, restricts `search_path` to `pg_catalog, pg_temp`, and applies local timeouts before diagnostic SQL. Predefined queries therefore resolve operators and functions only through `pg_catalog`, so another database user cannot substitute a same-named object (the CVE-2018-1058 pattern). `pg_stat_statements` views are referenced through the schema recorded in `pg_extension`, and those queries fail closed when the extension is not installed.
+3. Database names, RDS instance identifiers, and database endpoint hostnames require explicit allowlists. The runtime fails closed when a required value is missing or its entire value is `*`; deployment instructions prohibit wildcards. Database names are matched case-sensitively.
+4. Data-plane tools can use only the one `SECRET_ARN` configured on the Lambda function.
+5. The secret must contain exactly non-empty string `username` and `password` fields.
+6. PostgreSQL TLS verifies the certificate and endpoint hostname against the SHA-256-pinned Amazon RDS global CA bundle packaged by the layer build.
+7. The Lambda Function URL uses `AWS_IAM`; do not change it to `NONE`.
+8. Use a dedicated PostgreSQL login with `CONNECT` and `pg_monitor`, not an application owner or `rds_superuser`. On PostgreSQL 14 and earlier (and databases upgraded from them), also run `REVOKE CREATE ON SCHEMA public FROM PUBLIC` as defense in depth.
+9. In AWS DevOps Agent, register only the 9 documented tools. All tools are read-only: diagnostics return evidence, and reports are returned as on-screen Markdown tool results with no S3 write, URL, or downloadable file.
+10. Every `shared_buffers` analysis uses explicit fail-closed evidence gates. Call `list_rds_instances()` first; for Aurora, analyze the sole current allowlisted writer, collect `get_instance_config`, 60 minutes of `get_instance_metrics`, DB instance parameter-group evidence, and live query 2.1, then finish with `list_rds_instances(expected_writer_id="<writer-id>")`. The analysis may continue only when that call emits `SHARED_BUFFERS_FINAL_GATE: PASS`; on failure, discard mixed evidence and restart once. The PASS response emits the exact reader opt-in question. Reader analysis, when approved, uses individual allowlisted reader instance endpoints rather than the load-balanced reader endpoint. Query 2.1 reports effective PostgreSQL settings, not AWS parameter provenance. `get_parameter_group` reads only the DB instance parameter group; with `filter_modified=True` it returns only `AWS Source=user` values, because `Source=system` formulas are not user overrides. Aurora cluster provenance and exact engine defaults remain `UNKNOWN` unless separately proven. `get_instance_config` and `get_instance_metrics` emit `MEMORY_SIZING_GATE: INSUFFICIENT_EVIDENCE`; metrics emit `CACHE_FIT_GATE: OBSERVATION_ONLY`. Therefore, no percentage, page count, formula, byte/GiB target, reset, or reboot action may be inferred from advertised RAM, cache-hit ratio, or FreeableMemory, or back-solved from `effective_cache_size`, another live setting, or a sibling formula. A perfect cache-hit observation does not prove the working set fits, and FreeableMemory is availability/reclaimability evidence—not wasted or unused memory. For Aurora, the baseline policy is `USE_VERIFIED_AURORA_ENGINE_DEFAULT`: once exact cluster provenance and the exact engine default are independently verified, recommend that verified default unless an approved workload-specific reason supports a custom value. A perfect cache-hit ratio does not change this policy, and the default must not be described as a fixed percentage without exact version-specific evidence. RDS PostgreSQL uses query 6.3 for its connected-database cache observation and does not use the Aurora final-writer or reader-question flow.
 
 These application controls supplement—not replace—IAM, VPC, security-group, database privilege, and change-management controls.
-
-### Security review focus: planning-time function evaluation
-
-`explain_query` is the server's only free-form SQL surface. PostgreSQL can evaluate `IMMUTABLE` or `STABLE` expressions while planning an `EXPLAIN`, even when `ANALYZE` is absent and the execution plan itself is not run. The server therefore rejects every parsed `FuncCall`, including built-in, extension, user-defined, and schema-qualified function calls.
-
-The parser and fail-closed AST walk require one `SelectStmt` containing no function call, data-changing CTE, `SELECT INTO`, or row-locking clause. The independently verified read-only transaction and `SET LOCAL search_path = pg_catalog` provide additional runtime boundaries. Keep the dedicated least-privilege diagnostic login and restricted network path as defense in depth, and validate first in a non-production environment.
 
 ### IAM wildcard rationale
 
@@ -85,7 +64,6 @@ The interface endpoint policies also use `Principal: "*"` and `Resource: "*"` fo
 | `list_rds_instances` | List only allowlisted instances and resolve current Aurora writer/reader topology |
 | `get_instance_config` | Read instance, engine, storage, parameter-group, and Aurora-role metadata |
 | `get_instance_metrics` | Read CloudWatch CPU, memory, I/O, latency, connection, and Aurora `BufferCacheHitRatio` metrics for 1 to 50,400 minutes with a datapoint-safe dynamic period |
-| `explain_query` | Run plan-only `EXPLAIN` for one conservatively validated `SELECT` |
 | `get_parameter_group` | Read an RDS DB parameter group |
 | `get_log_files` | List RDS PostgreSQL log-file metadata; it does not read log contents |
 | `check_upgrade_readiness` | Run on-screen Markdown control-plane pre-upgrade heuristics (`markdown`); deeper data-plane checks are available via category-10 `execute_health_query` |
@@ -93,18 +71,13 @@ The interface endpoint policies also use `Principal: "*"` and `Resource: "*"` fo
 ### BYO MCP tool classification
 
 Classify tools from their **enabled deployment behavior**, not from the name of
-the server or its normal diagnostic use:
-
-| Deployment configuration | Tool classification |
-| --- | --- |
-| Default: `ExplainQueryEnabled=false` | Classify all 10 registered tools as **Read only**. Diagnostics return evidence, and reports are returned as on-screen Markdown tool results with no S3 write, URL, or downloadable file. The disabled `explain_query` tool returns before parsing or connecting. |
-| Separately reviewed deployment with `ExplainQueryEnabled=true` | Classify `explain_query` as **Mutative** and keep it unavailable in autonomous mode because PostgreSQL planning can evaluate database-defined behavior. The current public sample does not approve enabling this surface. |
-
-The remaining tools stay **Read only**. This MCP exposes no **Destructive**
-tool and performs no S3 write or bearer-URL creation. Tool classification is
-defense in depth: it does not replace the `ExplainQueryEnabled` flag, target
-allowlists, least-privilege PostgreSQL role, or the separate security review
-required before the EXPLAIN surface is enabled.
+the server or its normal diagnostic use. All 9 registered tools are **Read
+only**: diagnostics return evidence, and reports are returned as on-screen
+Markdown tool results with no S3 write, URL, or downloadable file. This MCP
+exposes no **Mutative** or **Destructive** tool and performs no S3 write or
+bearer-URL creation. Tool classification is defense in depth: it does not
+replace the target allowlists, least-privilege PostgreSQL role, or the other
+runtime controls.
 
 `check_upgrade_readiness` is not upgrade approval. Combine it with category 10 diagnostics, extension compatibility checks, AWS pre-upgrade checks, and testing on a restored snapshot or clone.
 
@@ -205,7 +178,6 @@ The server supplies its configured Secrets Manager credential automatically. Do 
 | Vacuum and transaction IDs | “Check vacuum history and transaction ID wraparound risk on `<allowlisted-endpoint>`, database `<allowlisted-database>`.” |
 | Index review | “Show unused indexes, potentially duplicate indexes, and table scan ratios on `<allowlisted-endpoint>`, database `<allowlisted-database>`. Do not make index changes.” |
 | Query performance | “Show the queries with the highest total and mean execution time on `<allowlisted-endpoint>`, database `<allowlisted-database>`.” |
-| Plan inspection | “Run plan-only `EXPLAIN` for this query on `<allowlisted-endpoint>`, database `<allowlisted-database>`: `SELECT ...`. Do not use `ANALYZE`; report the planning-time function-evaluation caveat.” |
 | Parameter group | “Show only modified parameter-group settings for `<allowlisted-instance-id>`.” |
 | Log metadata | “List the 20 most recent PostgreSQL log files and their sizes for `<allowlisted-instance-id>`. Do not read log contents.” |
 | Upgrade readiness | “Run the control-plane readiness checks for upgrading `<allowlisted-instance-id>` to PostgreSQL 17, then run category 10 database checks against `<allowlisted-endpoint>`, database `<allowlisted-database>`. Report blockers and warnings; do not perform an upgrade.” |
@@ -348,7 +320,7 @@ GRANT CONNECT ON DATABASE <database_name> TO devops_agent_dba;
 GRANT pg_monitor TO devops_agent_dba;
 ```
 
-`pg_monitor` supports monitoring views. `explain_query` for application tables additionally requires narrowly scoped privileges on the referenced objects; do not grant broad application access solely to make plan analysis work.
+`pg_monitor` supports the monitoring views used by the predefined diagnostics.
 
 ### 2. Create the secret
 
@@ -412,7 +384,6 @@ sam deploy \
     "EndpointSubnetId=$ENDPOINT_SUBNET_ID" \
     "SecretArn=$SECRET_ARN" \
     "SubnetIds=$SUBNET_IDS" \
-    "ExplainQueryEnabled=false" \
     "SecurityGroupId=$LAMBDA_SG" \
     "AllowedInstances=$ALLOWED_INSTANCE_IDS" \
     "AllowedDatabases=$ALLOWED_DATABASE_NAMES" \
@@ -477,10 +448,10 @@ AWS reference: [Control access to Lambda function URLs](https://docs.aws.amazon.
 2. In **Services**, open MCP server registration and register `MCP_ENDPOINT`.
 3. Use a descriptive name such as `PostgreSQL DBA Diagnostics`.
 4. Complete the approved authentication setup with the authorized caller.
-5. Confirm discovery returns exactly the 10 tools documented above.
-6. Select only those tools and keep `ExplainQueryEnabled=false`; all active paths in this demo registration are **Read only**, and reports are on-screen Markdown tool results.
+5. Confirm discovery returns exactly the 9 tools documented above.
+6. Select those tools; all active paths in this demo registration are **Read only**, and reports are on-screen Markdown tool results.
 7. Associate the registered server with the intended non-production Agent Space.
-8. Confirm that the intended agents can see all 10 tools.
+8. Confirm that the intended agents can see all 9 tools.
 
 Stop if discovery returns a different count or unexpected tool name.
 
@@ -495,20 +466,17 @@ Run negative checks before positive diagnostics:
 3. A non-allowlisted database is rejected.
 4. A non-allowlisted RDS instance identifier is rejected.
 5. A different secret ARN is rejected.
-6. With the default `ExplainQueryEnabled=false`, `explain_query` returns its disabled error before parsing or connecting.
-7. The `html` and `html_download` report formats are rejected as invalid (health accepts only `markdown`/`quick`; pre-upgrade accepts only `markdown`); the server performs no S3 write or URL creation on any code path.
-8. In a separately reviewed deployment that enables EXPLAIN, verify it still rejects multiple statements, data-changing CTEs, `SELECT INTO`, row-locking clauses, every function call, and any statement whose parsed tree cannot be fully inspected.
+6. The `html` and `html_download` report formats are rejected as invalid (health accepts only `markdown`/`quick`; pre-upgrade accepts only `markdown`); the server performs no S3 write or URL creation on any code path.
 
 Then verify:
 
-1. `tools/list` returns exactly 10 tools.
+1. `tools/list` returns exactly 9 tools.
 2. `list_health_queries` returns exactly 55 query IDs across 11 categories.
 3. `list_rds_instances` returns only configured instance identifiers and identifies the current Aurora writer/reader roles without exposing non-allowlisted members.
 4. `get_instance_config`, `get_instance_metrics`, `get_parameter_group`, `get_log_files`, and the non-publication modes of `check_upgrade_readiness` return read-only metadata for approved resources. Confirm Aurora metrics include `BufferCacheHitRatio`; confirm RDS PostgreSQL guidance directs cache-ratio analysis to query 6.3.
 5. `execute_health_query` query 1.1 succeeds against an approved endpoint/database.
 6. `run_full_health_check` returns a complete 26/26 Markdown tool result shown on screen in the Output panel; explicit `quick` returns the five-query check; the `html` format is rejected.
-7. `explain_query` returns `ERROR: explain_query is disabled in this deployment.` without parsing or connecting.
-8. `check_upgrade_readiness` returns on-screen Markdown control-plane pre-upgrade checks; the `html` format is rejected; the server performs no S3 write or URL creation.
+7. `check_upgrade_readiness` returns on-screen Markdown control-plane pre-upgrade checks; the `html` format is rejected; the server performs no S3 write or URL creation.
 
 Direct Python data-plane tests can be run only against an approved non-production target using the environment documented at the top of `tests/e2e_test.py`.
 
@@ -525,7 +493,7 @@ Direct Python data-plane tests can be run only against an approved non-productio
 | Query permission error | Grant only the monitoring/object privileges required for that diagnostic |
 | Queries 6.1 or 6.2 fail | Confirm `pg_stat_statements` is enabled and installed; queries 6.3 and 6.4 do not require that extension |
 | Tool count mismatch | Confirm deployed code revision, refresh discovery, and stop registration until resolved |
-| `search_user_tools` reports no tools | Confirm the MCP Capability Provider is enabled and associated with the Agent Space/Chat agent, keep `ExplainQueryEnabled=false`, save the 10-tool read-only selection, reconnect the provider, and start a new chat. |
+| `search_user_tools` reports no tools | Confirm the MCP Capability Provider is enabled and associated with the Agent Space/Chat agent, save the 9-tool read-only selection, reconnect the provider, and start a new chat. |
 | Complete Markdown not visible in primary chat | Expand the `run_full_health_check` tool's **Output** panel. AWS DevOps Agent may render the validated 26-section result there and add a managed summary in the primary chat; custom skills cannot reliably override that final-response format. |
 | Same-chat rerun is deduplicated | Start a new chat for an independent snapshot. The managed chat layer may treat a repeated request as already answered instead of invoking the tool again. |
 

@@ -26,7 +26,6 @@ os.environ["ALLOWED_ENDPOINTS"] = (
     "test-cluster.cluster-example.us-west-2.rds.amazonaws.com,"
     "test-cluster.cluster-ro-example.us-west-2.rds.amazonaws.com"
 )
-os.environ["EXPLAIN_QUERY_ENABLED"] = "true"
 
 CANONICAL_HEALTH_SECTIONS = (
     "Date", "Instance Details", "Infrastructure Metrics (CloudWatch)", "Extensions Installed",
@@ -58,7 +57,7 @@ CANONICAL_UPGRADE_CHECKS = (
 )
 
 class TestToolAndQuerySurface:
-    def test_exact_ten_decorated_tools(self):
+    def test_exact_nine_decorated_tools(self):
         tree = ast.parse((REPOSITORY_ROOT / "src" / "server.py").read_text(encoding="utf-8"))
         tools = [
             node.name
@@ -78,7 +77,6 @@ class TestToolAndQuerySurface:
             "list_rds_instances",
             "get_instance_config",
             "get_instance_metrics",
-            "explain_query",
             "get_parameter_group",
             "get_log_files",
             "check_upgrade_readiness",
@@ -134,8 +132,8 @@ class TestToolAndQuerySurface:
         assert "otta" in bloat_sql
         assert "estimated_table_wasted_bytes" in bloat_sql
         assert "n_dead_tup" not in bloat_sql
-        from pglast import parse_sql
-        assert parse_sql(bloat_sql)
+        import sqlglot
+        assert sqlglot.parse_one(bloat_sql, read="postgres") is not None
         assert "lower(c.relname) IN ('checkpoint','subscription','publication')" in server.QUERY_ALLOWLIST["10"]["10.11"]["sql"]
         for query_id in ("6.1", "6.2", "6.6", "6.7", "6.8"):
             definition = server.QUERY_ALLOWLIST["6"][query_id]
@@ -212,9 +210,72 @@ class TestToolAndQuerySurface:
             assert prohibited not in str(long_running)
             assert prohibited not in str(lock_waits)
             assert prohibited not in serialized
-        assert "SELECT \\* FROM orders WHERE token=? AND id=?" in serialized
-        assert "UPDATE accounts SET balance=? WHERE id=?" in str(lock_waits)
-        assert "DELETE FROM audit_log WHERE payload=?" in str(lock_waits)
+        assert "SELECT \\* FROM orders WHERE token = ? AND id = ?" in serialized
+        assert "UPDATE accounts SET balance = ? WHERE id = ?" in str(lock_waits)
+        assert "DELETE FROM audit_log WHERE payload = ?" in str(lock_waits)
+
+    def test_query_preview_masks_every_literal_form_and_fails_closed(self):
+        from report_service import QUERY_PREVIEW_WITHHELD, normalized_query_preview
+
+        # Every secret-bearing literal form sqlglot can represent must be masked
+        # to ? and must not survive in the rendered preview.
+        masking_cases = {
+            "dollar_quoted": (
+                "SELECT * FROM t WHERE c = $$DOLLAR_SECRET$$", "DOLLAR_SECRET"
+            ),
+            "dollar_tagged": (
+                "SELECT * FROM t WHERE c = $tag$TAGGED_SECRET$tag$", "TAGGED_SECRET"
+            ),
+            "escape_string": (
+                "SELECT * FROM t WHERE c = E'ESC_\\'SECRET'", "ESC_"
+            ),
+            "national_string": (
+                "SELECT * FROM t WHERE c = N'NAT_SECRET'", "NAT_SECRET"
+            ),
+            "hex_string": ("SELECT * FROM t WHERE c = x'DEADBEEF'", "DEADBEEF"),
+            "bit_string": ("SELECT * FROM t WHERE c = b'10101010'", "10101010"),
+            "float_and_negative": (
+                "SELECT * FROM t WHERE amt = -3.14159 AND big = 9999999", "3.14159"
+            ),
+            "integer_in_list": (
+                "SELECT * FROM t WHERE id IN (70001, 70002, 70003)", "70001"
+            ),
+            "block_comment": ("SELECT /* BLOCK_SECRET */ col FROM t", "BLOCK_SECRET"),
+            "line_comment": ("SELECT col FROM t -- LINE_SECRET", "LINE_SECRET"),
+        }
+        for name, (query, secret) in masking_cases.items():
+            preview = normalized_query_preview(query)
+            assert secret not in preview, name
+            # Literal forms are replaced with the ? mask; comment-only cases are
+            # stripped and therefore need not contain a mask.
+            if name not in ("block_comment", "line_comment"):
+                assert "?" in preview, name
+
+        assert (
+            normalized_query_preview("SELECT * FROM t WHERE c = $$DOLLAR_SECRET$$")
+            == "SELECT * FROM t WHERE c = ?"
+        )
+        assert (
+            normalized_query_preview(
+                "SELECT * FROM t WHERE amt = -3.14159 AND big = 9999999"
+            )
+            == "SELECT * FROM t WHERE amt = -? AND big = ?"
+        )
+        assert (
+            normalized_query_preview("SELECT /* BLOCK_SECRET */ col FROM t")
+            == "SELECT col FROM t"
+        )
+
+        # Non-DML, multi-statement, and unparseable input fail closed without
+        # leaking any raw text.
+        for withheld in (
+            "CREATE TABLE secret_t (id int)",
+            "DROP TABLE secret_t",
+            "SELECT 1; DROP TABLE secret_t",
+            "VACUUM secret_t",
+            "this is not sql SECRET",
+        ):
+            assert normalized_query_preview(withheld) == QUERY_PREVIEW_WITHHELD
 
     def test_orderability_api_is_allowed_by_endpoint_and_runtime_role(self):
         template = (REPOSITORY_ROOT / "template.yaml").read_text(encoding="utf-8")
@@ -226,18 +287,13 @@ class TestToolAndQuerySurface:
         assert endpoint_policy.count(action) == 1
         assert runtime_role.count(action) == 1
 
-    def test_sensitive_surfaces_are_default_off_in_sam_template(self):
+    def test_removed_surfaces_are_absent_from_sam_template(self):
         template = (REPOSITORY_ROOT / "template.yaml").read_text(encoding="utf-8")
 
-        for parameter, environment_name in (
-            ("ExplainQueryEnabled", "EXPLAIN_QUERY_ENABLED"),
-        ):
-            parameter_block = template.split(f"  {parameter}:", 1)[1].split(
-                "\n\n  ", 1
-            )[0]
-            assert "Default: 'false'" in parameter_block
-            assert "AllowedValues: ['true', 'false']" in parameter_block
-            assert f"{environment_name}: !Ref {parameter}" in template
+        # The free-form plan-inspection surface and its deployment gate were
+        # removed to drop the GPL-3.0 SQL parser dependency; no trace may remain.
+        assert "ExplainQueryEnabled" not in template
+        assert "EXPLAIN_QUERY_ENABLED" not in template
 
         # The report S3 bucket, S3 IAM, S3 endpoint, and report publication flag
         # were removed; report delivery is client-side via the Artifacts panel.

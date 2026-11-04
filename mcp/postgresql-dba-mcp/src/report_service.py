@@ -42,19 +42,7 @@ QUERY_PREVIEW_MAX_CHARS = 240
 QUERY_PREVIEW_WITHHELD = "[preview withheld]"
 QUERY_PREVIEW_UNAVAILABLE = "[preview unavailable]"
 _QUERY_PREVIEW_MAX_SOURCE_CHARS = 100_000
-_QUERY_LITERAL_TOKENS = {
-    "BCONST",
-    "FCONST",
-    "ICONST",
-    "SCONST",
-    "USCONST",
-    "XCONST",
-    "FALSE_P",
-    "NULL_P",
-    "PARAM",
-    "TRUE_P",
-}
-_QUERY_COMMENT_TOKENS = {"C_COMMENT", "SQL_COMMENT"}
+_QUERY_PREVIEW_MASK = "?"
 
 
 def normalize_instance_metadata(
@@ -205,7 +193,16 @@ def resolve_report_name(
 
 
 def normalized_query_preview(query_text: Any) -> str:
-    """Return a bounded DML preview with comments, literals, and binds removed."""
+    """Return a bounded DML preview with comments, literals, and binds removed.
+
+    The statement is parsed with sqlglot (PostgreSQL dialect) and every literal,
+    bind parameter, boolean, NULL, and string-bearing node (including ``E''``
+    escape strings, ``$$`` dollar-quoted strings, and national, hex, and bit
+    strings) is replaced with ``?`` before the AST is rendered back to text with
+    comments stripped. Anything that is not a single DML-shaped statement, that
+    cannot be fully parsed, or that leaves an unmodeled raw passthrough node
+    fails closed to a withheld placeholder, so no raw literal reaches a report.
+    """
     if query_text is None:
         return QUERY_PREVIEW_UNAVAILABLE
     if not isinstance(query_text, str):
@@ -220,34 +217,44 @@ def normalized_query_preview(query_text: Any) -> str:
         return QUERY_PREVIEW_WITHHELD
 
     try:
-        from pglast import parse_sql, parser
-        from pglast.ast import DeleteStmt, InsertStmt, MergeStmt, SelectStmt, UpdateStmt
+        import sqlglot
+        from sqlglot import exp
 
-        statements = parse_sql(source)
-        if len(statements) != 1 or not isinstance(
-            statements[0].stmt,
-            (SelectStmt, InsertStmt, UpdateStmt, DeleteStmt, MergeStmt),
+        mask_types = (
+            exp.Literal,
+            exp.RawString,
+            exp.National,
+            exp.HexString,
+            exp.ByteString,
+            exp.BitString,
+            exp.Boolean,
+            exp.Null,
+            exp.Placeholder,
+            exp.Parameter,
+        )
+
+        def _mask(node):
+            if isinstance(node, mask_types):
+                return exp.Literal(this=_QUERY_PREVIEW_MASK, is_string=False)
+            return node
+
+        statements = sqlglot.parse(source, read="postgres")
+        if len(statements) != 1 or statements[0] is None:
+            return QUERY_PREVIEW_WITHHELD
+        root = statements[0]
+        if not isinstance(
+            root, (exp.Query, exp.Insert, exp.Update, exp.Delete, exp.Merge)
         ):
             return QUERY_PREVIEW_WITHHELD
 
-        pieces: list[str] = []
-        cursor = 0
-        for token in parser.scan(source):
-            if token.start < cursor or token.end < token.start:
-                return QUERY_PREVIEW_WITHHELD
-            pieces.append(source[cursor:token.start])
-            if token.name in _QUERY_COMMENT_TOKENS:
-                pieces.append(" ")
-            elif token.name in _QUERY_LITERAL_TOKENS:
-                pieces.append("?")
-            else:
-                pieces.append(source[token.start:token.end + 1])
-            cursor = token.end + 1
-        pieces.append(source[cursor:])
+        masked = root.transform(_mask)
+        if any(isinstance(node, exp.Command) for node in masked.walk()):
+            return QUERY_PREVIEW_WITHHELD
+        rendered = masked.sql(dialect="postgres", comments=False)
     except Exception:
         return QUERY_PREVIEW_WITHHELD
 
-    preview = " ".join("".join(pieces).split())
+    preview = " ".join(rendered.split())
     if not preview:
         return QUERY_PREVIEW_WITHHELD
     if len(preview) > QUERY_PREVIEW_MAX_CHARS:
