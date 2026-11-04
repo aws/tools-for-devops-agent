@@ -10,6 +10,7 @@ This document captures key routing mechanics and traffic engineering patterns fo
 
 - [Cloud WAN Route Evaluation](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-route-evaluation.html)
 - [Cloud WAN Routing Policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html)
+- [Cloud WAN core network policy version parameters (routing-policies actions)](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-policies-json.html)
 - [Cloud WAN Routing Policy, Part 1: fine-grained controls](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-fine-grained-controls-for-your-global-network-part-1/)
 - [Cloud WAN Routing Policy, Part 2: real-world scenarios](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-real-world-global-network-scenarios-part-2/)
 - [Direct Connect locations](https://aws.amazon.com/directconnect/locations/)
@@ -26,8 +27,11 @@ At each Core Network Edge, Cloud WAN evaluates routes in this order ([Cloud WAN 
    1. Static routes
    2. System routes (1:1 NAT)
    3. VPC-propagated routes (same region)
-   4. **Unequal AS-path length and/or MED** — shortest AS-path wins, then lowest MED
-   5. **Equal AS-path and MED** — preference order:
+   4. **Dynamic routes, compared in order** — selection stops at the first attribute that differs:
+      1. **Local preference** set by a Cloud WAN routing policy (`set-local-preference`) — higher wins; the default is 0. **[Field knowledge, SME-confirmed]** for its position before AS_PATH: the route evaluation page lists only AS-path length then MED for dynamic routes. The routing policies documentation and the Part 1 blog state that a higher local preference is preferred and the default is 0 ([Cloud WAN routing policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html), [Part 1](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-fine-grained-controls-for-your-global-network-part-1/)). This is the CNE's own value; DX LP communities on the VIFs act inside the DXGW (Lookup 1) and do not set it.
+      2. **AS-path length** — shortest wins
+      3. **MED** — lowest wins
+   5. **Equal local preference, AS-path and MED** — source preference order:
       1. Direct Connect Gateway-propagated routes
       2. Cloud WAN Connect (same region)
       3. Site-to-Site VPN (same region)
@@ -58,7 +62,7 @@ The deterministically random choice is made **per segment / network function gro
 6. **DXGW ECMPs across equal remote paths** — **[Field knowledge, SME-confirmed]** when the local-region DX fails and multiple remote DX locations have equal attributes (same LP, same AS-path), DXGW will **ECMP across them** rather than picking one non-deterministically. This provides load-balanced failover across all remaining DX locations. Source of truth for which Region is local: the [Direct Connect locations page](https://aws.amazon.com/directconnect/locations/) and `aws directconnect describe-locations`.
 
 7. **Routing policies on the native Cloud WAN DXGW attachment (filtering, summarization, path preferences)** — Cloud WAN Routing Policies (core network policy version **2025.11 or later**) support, on Direct Connect attachments: **prefix-based route filtering** (allow/drop, inbound and outbound), **summarization** (outbound only), and **path preferences** — setting **local preference, AS_PATH or MED** on inbound and outbound route propagations. This is a **separate, supported feature** from the (unsupported) DXGW allowed-prefixes list. Use filtering to drop an overlapping inbound supernet or to suppress specific VPC prefixes advertised outbound to on-prem; use inbound path preferences to steer between multiple DXGW attachments (see "Multiple DXGWs on Cloud WAN" below).
-   - Match prefixes via `prefix-in-cidr` or `prefix-in-prefix-list`; actions include `allow`/`drop` (terminal), `set-local-preference` and `set-med` (non-terminal), and `summarize`; `routing-policy-direction` is `inbound` or `outbound`. A higher local preference is preferred; the default is 0.
+   - Match prefixes via `prefix-in-cidr` or `prefix-in-prefix-list`; actions include `allow`/`drop` (terminal), `set-local-preference` and `set-med` (non-terminal), the AS_PATH actions `prepend-asn-list`, `remove-asn-list` and `replace-asn-list`, and `summarize`; `routing-policy-direction` is `inbound` or `outbound`. A higher local preference is preferred; the default is 0. `replace-asn-list` is not supported cross-Region (CNE-to-CNE). Action names: [core network policy version parameters](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-policies-json.html) (`routing-policies` section) and [Create a route policy and rule](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-route-policy.html).
    - **DX caveat:** BGP communities **cannot** be matched or set on Direct Connect attachments in Cloud WAN — prefix/CIDR matching only (consistent with point 5). Community-based routing policies work on other attachment types but not DX.
    - **Visibility:** the **Route information base** tab (and `list-core-network-routing-information`) shows routes **before** routing policies are applied; the **Routes** tab shows the route Cloud WAN installed after policy evaluation.
    - Sources: [Cloud WAN Routing Policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html), [Cloud WAN Routing Policy Part 1](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-fine-grained-controls-for-your-global-network-part-1/) (policy version 2025.11, Route information base vs Routes tab); the DXGW-attachment "no allowed-prefixes list" limitation ([DX gateway attachments in Cloud WAN](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-dxattach-about.html)) refers to the legacy allowed-prefixes construct, not routing-policy filtering.
@@ -68,7 +72,7 @@ The deterministically random choice is made **per segment / network function gro
 Cloud WAN does **not** use the TGW model for multiple DXGWs. On a TGW, the Direct Connect side compares the VIF attributes across the DXGWs and the TGW installs the result (ECMP or one attachment; see tgw-routing-patterns.md). On Cloud WAN:
 - **Inside each DXGW**, the DXGW still selects its own VIF per prefix (VIF LP communities `7224:7300/7200/7100`, local-region default, AS_PATH, MED) and reflects that result.
 - **Between DXGWs**, the **CNE itself** learns the route from each DXGW attachment and runs its own Cloud WAN route evaluation over them.
-- **To steer between DXGWs, use Cloud WAN routing policies** (policy version 2025.11 or later): an **inbound** policy on each DXGW attachment sets local preference, AS_PATH or MED for matching prefixes, giving a deterministic primary/secondary/tertiary order.
+- **To steer between DXGWs, use Cloud WAN routing policies** (policy version 2025.11 or later): an **inbound** policy on each DXGW attachment sets local preference (`set-local-preference`), AS_PATH (`prepend-asn-list`, `remove-asn-list`, `replace-asn-list`) or MED (`set-med`) for matching prefixes, giving a deterministic primary/secondary/tertiary order.
 - **Without a routing policy**, identical routes from multiple DXGWs give **non-deterministic path selection**; prefixes that match no rule fall into the same case, so keep the prefix lists current.
 - BGP communities cannot be matched or set on Direct Connect attachments in Cloud WAN, so the routing policy matches on prefixes or prefix lists.
 - Verify with the **Route information base** tab (routes before policies) against the **Routes** tab (installed route).
@@ -118,7 +122,7 @@ The DXGW performs its own selection for a prefix and **reflects one result per p
 2. **If no local advertisement exists for that CNE**, every candidate is remote, so they share the **same (remote) LP** — LP is equal. The DXGW then falls through to **AS-path length**, and the **shortest AS-path wins** (if all attributes are equal, the result is ECMP across those VIFs).
 
 **Lookup 2 — Cloud WAN CNE route lookup.**
-Each CNE runs its own lookup over the routes **in its table** (the DXGW route from Lookup 1, plus routes propagated from other CNEs and other attachments). This is where the CNE evaluation order (longest prefix → static → system → VPC-propagated → AS-path/MED → source preference) applies. If the DXGW route wins, traffic goes straight to the VIF the DXGW selected.
+Each CNE runs its own lookup over the routes **in its table** (the DXGW route from Lookup 1, plus routes propagated from other CNEs and other attachments). This is where the CNE evaluation order (longest prefix → static → system → VPC-propagated → routing-policy local preference → AS-path → MED → source preference) applies. If the DXGW route wins, traffic goes straight to the VIF the DXGW selected.
 
 ### Worked Example (from the field diagram)
 
@@ -140,7 +144,7 @@ Only **FR5/Frankfurt (eu-central-1)** and **LD5/Slough** advertise `11.0.0.0/8`.
 
 ### Common Pitfall: Confusing Prepend Count with Total AS-Path Length (Origination vs. Transit)
 
-When comparing AS-path lengths (at the DXGW, or at a CNE in Step 2.4), the number that matters is the **total AS-path AWS receives on the VIF**, not the prepend count configured on a site. These are only the same when the advertising site is the **originator** of the prefix.
+When comparing AS-path lengths (at the DXGW, or at a CNE in Step 2.4.2), the number that matters is the **total AS-path AWS receives on the VIF**, not the prepend count configured on a site. These are only the same when the advertising site is the **originator** of the prefix.
 
 **The distinction:**
 - **Originating site** — the site owns/aggregates the prefix (e.g., `aggregate-address 11.0.0.0/8`). The AS-path AWS sees is just that site's ASN, repeated by its prepend count. A `prepend 60208 2` on an originated route → AS-path `60208 60208 60208` (length 3).
@@ -202,7 +206,7 @@ Both DXGWs reflect their selected path to all CNEs, and each CNE learns the rout
 
 **Primary lever — Cloud WAN routing policies** (policy version 2025.11 or later): apply an **inbound** routing policy to each DXGW attachment that sets **local preference** (or AS_PATH / MED) for the matching prefixes or prefix lists, so each CNE or region group prefers the intended DXGW with a deterministic failover order. Apply them per attachment, or per segment / CNE-to-CNE where the preference must differ by region. Without a policy, identical routes from the two DXGWs give non-deterministic path selection. See [Cloud WAN routing policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html) and [Part 2, Scenario 2](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-real-world-global-network-scenarios-part-2/).
 
-**Alternative — AS_PATH differentiation on the VIFs:** make the AS_PATH length on the VIF advertisements differ between the two DXGWs so the CNE prefers the shorter one at Step 2.4 (AS-path length). This works without routing policies but is coarser and harder to vary per region.
+**Alternative — AS_PATH differentiation on the VIFs:** make the AS_PATH length on the VIF advertisements differ between the two DXGWs so the CNE prefers the shorter one at Step 2.4.2 (AS-path length). This works without routing policies but is coarser and harder to vary per region. A routing-policy local preference on either attachment is compared first (Step 2.4.1) and overrides an AS_PATH difference.
 
 Use VIF LP communities within each DXGW for internal VIF failover (communities cannot be matched or set by Cloud WAN routing policies on Direct Connect attachments). Confirm the result on the **Routes** tab; the **Route information base** tab shows routes before policies are applied.
 
@@ -242,7 +246,7 @@ When routes are propagated from DX or VPN **via TGW** to Cloud WAN (TGW peering 
 
 - Region-A TGW advertises `0.0.0.0/0` to Cloud WAN via TGW peering (short AS-path)
 - Region-B TGW also advertises `0.0.0.0/0` but with prepending (longer AS-path)
-- All CNEs prefer Region-A as the internet exit (Step 2.4: shorter AS-path wins)
+- All CNEs prefer Region-A as the internet exit (Step 2.4.2: shorter AS-path wins, with no routing-policy local preference set)
 - If Region-A fails, Region-B's longer path takes over as backup
 
 ## Regional Firewall Inspection
