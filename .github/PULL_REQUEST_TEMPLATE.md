@@ -92,6 +92,12 @@ before this check existed" in CONTRIBUTING.md.
 - [ ] Any mutative tool the agent can call is identified, with its approval behavior described.
 - [ ] Run mode (on-demand vs scheduled) and the artifact it produces are documented.
 
+## Connectors — complete if this PR adds or changes a connector
+
+<!-- Applies to any change inside a connectors/<name>/ directory. The partner that owns the connector opens the PR; see "Partner Connectors" in CONTRIBUTING.md. This item cannot be marked n/a. -->
+
+- [ ] **I accept the [AWS DevOps Agent Partner Connector Terms and Conditions](https://github.com/aws/tools-for-devops-agent/blob/main/connectors/TERMS.md), version 2026-11-03, on behalf of the company that owns this connector, and I have authority to do so.**
+
 ## Security and safety
 
 - [ ] Read-only by default; any action that changes customer state is explicit, documented, and approval-gated.
