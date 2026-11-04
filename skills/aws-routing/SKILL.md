@@ -89,19 +89,25 @@ the result is ECMP.
 Longest prefix match first; then static → system routes (1:1 NAT) → VPC-propagated (same region) →
 unequal AS-path/MED (shortest AS-path, then lowest MED) → equal AS-path & MED source preference:
 DXGW-propagated → Cloud WAN Connect → S2S VPN → other (TGW peering, remote CNEs; identical from 2+
-sources = deterministically random, chosen per segment / network function group).
+sources = deterministically random, chosen per segment / network function group). With multiple
+DXGWs, Cloud WAN works differently from TGW: the CNE evaluates the route from each DXGW attachment
+itself. Steer between DXGWs with inbound Cloud WAN routing policies (local preference, AS_PATH or
+MED; policy version 2025.11+). Without a policy, identical routes give non-deterministic selection.
 
 ### Direct Connect (private/transit VIF, outbound AWS→on-prem)
 Longest prefix match first; then local preference → AS_PATH length → MED, stopping at the first
 difference. If all are equal, the result is ECMP across the VIFs. LP communities `7224:7300/7200/7100`
 (High/Medium/Low) set local preference and are evaluated before AS-path. These BGP attributes are
 set at the VIF level on the on-prem router's advertisements and evaluated by the DXGW. DXGW prefers
-the local associated-region DX by default.
+the local associated-region DX by default. Some DX locations serve more than one Region by port
+speed, so check the associated Region of the specific connection, not just the location.
 
 ### Transit Gateway with Direct Connect
 Use one DXGW with multiple transit VIFs for ECMP. BGP attributes stay on the VIFs and do not pass to
-the TGW. Use multiple DXGWs only for traffic isolation or multiple primary paths. For ECMP across
-DXGW attachments, LP communities and failover timing, load
+the TGW. Use multiple DXGWs only for traffic isolation or multiple primary paths. Across DXGWs on a
+TGW with no LP community and equal AS_PATH/MED, a local associated-Region DX wins on local
+preference over a remote one (no ECMP), and ECMP also needs matching DXGW Amazon-side ASNs. For
+ECMP across DXGW attachments, LP communities and failover timing, load
 [Transit Gateway routing patterns](references/tgw-routing-patterns.md).
 
 ### Direction & tooling guidance

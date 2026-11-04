@@ -10,6 +10,10 @@ This document captures key routing mechanics and traffic engineering patterns fo
 
 - [Cloud WAN Route Evaluation](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-route-evaluation.html)
 - [Cloud WAN Routing Policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html)
+- [Cloud WAN Routing Policy, Part 1: fine-grained controls](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-fine-grained-controls-for-your-global-network-part-1/)
+- [Cloud WAN Routing Policy, Part 2: real-world scenarios](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-real-world-global-network-scenarios-part-2/)
+- [Direct Connect locations](https://aws.amazon.com/directconnect/locations/)
+- [Direct Connect Associated Region](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#associated-region)
 - [Direct Connect Routing Policies and BGP Communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html)
 - [Direct Connect gateways](https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-gateways-intro.html)
 
@@ -39,13 +43,11 @@ The deterministically random choice is made **per segment / network function gro
 
 2. **Local-region preference is applied as local preference** — **[Field knowledge, SME-confirmed]** for AWS → on-prem traffic, AWS applies a higher local preference to the path through a DX VIF in the same associated Region as the CNE. Local preference is compared before AS_PATH, and BGP stops at the first attribute that differs, so AS-path prepending cannot override it.
 
-   **⚠️ Always verify the Associated Region of each DX *connection*, not just the location.** The associated Region belongs to the Direct Connect **device**: one location can host devices associated with different Regions, and a connection inherits the Region of the device it terminates on. London-area examples from the AWS docs table:
-   - Equinix LD5 (Slough) → **eu-west-1** (Ireland) **and** **eu-west-2** (London)
-   - Digital Realty LHR20 (London) → **eu-west-1** **and** **eu-west-2**
-   - Telehouse West (London) → **eu-west-2** only
-   - Equinix MA3 (Manchester) → **eu-west-2** only
+   **⚠️ Always check the associated Region of the specific DX *connection*; do not assume one Region per location.** Source the location name and associated Region(s) from the [Direct Connect locations page](https://aws.amazon.com/directconnect/locations/) and the [Associated Region](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#associated-region) table. Some locations serve **more than one Region, depending on port speed**, and a connection takes the Region of the device it terminates on.
+   - Dual-Region example: **Equinix LD5 (Slough, GBR)** is listed as Europe (Ireland) for 1G and 10G, and Europe (London) for 1G, 10G and 100G, so a 1G or 10G connection at LD5 can be associated with either Region. Digital Realty LHR20 (London), Digital Realty STO1 (Stockholm) and Telehouse Voltaire (Paris) are also listed with two Regions.
+   - Single-Region examples from the same table: Equinix MA3 (Manchester) and Telehouse West (London) → Europe (London); Equinix FR5 (Frankfurt) → Europe (Frankfurt). Re-check the table, as it changes over time.
    
-   The connection's associated Region determines which CNE/TGW considers the DX "local" for LP preference. AWS sets the default LP per Region to prefer same-associated-Region DX (`7224:7200` medium) and sets it lower for others, unless LP communities are tagged. For a multi-Region location, confirm the connection's Region with `aws directconnect describe-connections`. References: [Associated Region](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#associated-region), [Locations and their associated Regions](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#locations-and-associated-regions), [Routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html).
+   The connection's associated Region determines which CNE/TGW considers the DX "local" for LP preference. AWS sets the default LP per Region to prefer same-associated-Region DX (`7224:7200` medium) and sets it lower for others, unless LP communities are tagged. Confirm the actual connection's Region with `aws directconnect describe-connections` (`describe-locations` lists the locations available in a Region). References: [Associated Region](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#associated-region), [Locations and their associated Regions](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#locations-and-associated-regions), [Routing policies and BGP communities](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html).
 
 3. **Explicit LP communities override DXGW's default local-region preference** — applying `7224:7300/7200/7100` on advertised prefixes forces DXGW to honor the explicit LP before applying its local-vs-remote default.
 
@@ -55,15 +57,29 @@ The deterministically random choice is made **per segment / network function gro
 
 6. **DXGW ECMPs across equal remote paths** — **[Field knowledge, SME-confirmed]** when the local-region DX fails and multiple remote DX locations have equal attributes (same LP, same AS-path), DXGW will **ECMP across them** rather than picking one non-deterministically. This provides load-balanced failover across all remaining DX locations. Source of truth for which Region is local: the [Direct Connect locations page](https://aws.amazon.com/directconnect/locations/) and `aws directconnect describe-locations`.
 
-7. **Route filtering on the native Cloud WAN DXGW attachment (Routing Policies)** — Cloud WAN Routing Policies support **prefix-based route filtering (drop) and summarization, inbound and outbound, on Direct Connect attachments**. This is a **separate, supported feature** from the (unsupported) DXGW allowed-prefixes list. Use it to drop an overlapping inbound supernet or to suppress specific VPC prefixes advertised outbound to on-prem.
-   - Match prefixes via `prefix-in-cidr` or `prefix-in-prefix-list`; actions are `allow`/`drop`; `routing-policy-direction` is `inbound` or `outbound`.
+7. **Routing policies on the native Cloud WAN DXGW attachment (filtering, summarization, path preferences)** — Cloud WAN Routing Policies (core network policy version **2025.11 or later**) support, on Direct Connect attachments: **prefix-based route filtering** (allow/drop, inbound and outbound), **summarization** (outbound only), and **path preferences** — setting **local preference, AS_PATH or MED** on inbound and outbound route propagations. This is a **separate, supported feature** from the (unsupported) DXGW allowed-prefixes list. Use filtering to drop an overlapping inbound supernet or to suppress specific VPC prefixes advertised outbound to on-prem; use inbound path preferences to steer between multiple DXGW attachments (see "Multiple DXGWs on Cloud WAN" below).
+   - Match prefixes via `prefix-in-cidr` or `prefix-in-prefix-list`; actions include `allow`/`drop` (terminal), `set-local-preference` and `set-med` (non-terminal), and `summarize`; `routing-policy-direction` is `inbound` or `outbound`. A higher local preference is preferred; the default is 0.
    - **DX caveat:** BGP communities **cannot** be matched or set on Direct Connect attachments in Cloud WAN — prefix/CIDR matching only (consistent with point 5). Community-based routing policies work on other attachment types but not DX.
-   - Source: [Cloud WAN Routing Policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html); the DXGW-attachment "no allowed-prefixes list" limitation ([DX gateway attachments in Cloud WAN](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-dxattach-about.html)) refers to the legacy allowed-prefixes construct, not routing-policy filtering.
+   - **Visibility:** the **Route information base** tab (and `list-core-network-routing-information`) shows routes **before** routing policies are applied; the **Routes** tab shows the route Cloud WAN installed after policy evaluation.
+   - Sources: [Cloud WAN Routing Policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html), [Cloud WAN Routing Policy Part 1](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-fine-grained-controls-for-your-global-network-part-1/) (policy version 2025.11, Route information base vs Routes tab); the DXGW-attachment "no allowed-prefixes list" limitation ([DX gateway attachments in Cloud WAN](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-dxattach-about.html)) refers to the legacy allowed-prefixes construct, not routing-policy filtering.
+
+### Multiple DXGWs on Cloud WAN (Differs From TGW)
+
+Cloud WAN does **not** use the TGW model for multiple DXGWs. On a TGW, the Direct Connect side compares the VIF attributes across the DXGWs and the TGW installs the result (ECMP or one attachment; see tgw-routing-patterns.md). On Cloud WAN:
+- **Inside each DXGW**, the DXGW still selects its own VIF per prefix (VIF LP communities `7224:7300/7200/7100`, local-region default, AS_PATH, MED) and reflects that result.
+- **Between DXGWs**, the **CNE itself** learns the route from each DXGW attachment and runs its own Cloud WAN route evaluation over them.
+- **To steer between DXGWs, use Cloud WAN routing policies** (policy version 2025.11 or later): an **inbound** policy on each DXGW attachment sets local preference, AS_PATH or MED for matching prefixes, giving a deterministic primary/secondary/tertiary order.
+- **Without a routing policy**, identical routes from multiple DXGWs give **non-deterministic path selection**; prefixes that match no rule fall into the same case, so keep the prefix lists current.
+- BGP communities cannot be matched or set on Direct Connect attachments in Cloud WAN, so the routing policy matches on prefixes or prefix lists.
+- Verify with the **Route information base** tab (routes before policies) against the **Routes** tab (installed route).
+
+**Published example** ([Part 2, Scenario 2](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-real-world-global-network-scenarios-part-2/)): three data centers each connect through their own DXGW (ASNs 65010, 65011, 65012) and all advertise all three DC prefixes. Inbound routing policies on each DXGW attachment set local preference 300/200/100 per prefix list, so each prefix prefers the DXGW of the DC that owns it, with deterministic failover. Inside each DXGW, VIF communities `7224:7300` (primary) and `7224:7100` (secondary) choose the VIF, or `7224:7200` on both VIFs gives active-active ECMP.
 
 **Important distinction — path selection behavior by service:**
 - **DXGW:** ECMPs across equal remote paths (load-balanced failover)
-- **TGW with multiple DXGW attachments:** **[Field knowledge, SME-confirmed]** the BGP attributes are set at the VIF level on the on-prem advertisements. Direct Connect compares those VIF advertisements across the DXGWs using all BGP attributes (longest prefix, then local preference, AS_PATH, MED); the attributes do not pass to the TGW and the TGW does not compare them. If they all match, every qualifying DXGW attachment is installed in the TGW as an ECMP next hop; if one wins on an attribute, only that attachment is installed. **[Field knowledge]** If no attribute separates them but they still do not qualify (for example, different ASNs), one attachment is picked deterministically using a hash of the prefix metadata; not customer-controllable. Documented: for routes with the same CIDR, attachment type and BGP attributes, AWS "can't guarantee a consistent route prioritization order" ([TGW route evaluation](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)).
-- **Cloud WAN CNE:** Deterministic — "deterministically random" at Step 2.5.4 for equal remote CNE paths, chosen per segment / network function group. Consistent but not customer-controllable.
+- **TGW with multiple DXGW attachments (TGW-specific):** **[Field knowledge, SME-confirmed]** the BGP attributes are set at the VIF level on the on-prem advertisements. Direct Connect compares those VIF advertisements across the DXGWs using all BGP attributes (longest prefix, then local preference, AS_PATH, MED); the attributes do not pass to the TGW and the TGW does not compare them. If they all match, every qualifying DXGW attachment is installed in the TGW as an ECMP next hop; if one wins on an attribute, only that attachment is installed. **[Field knowledge]** If no attribute separates them but they still do not qualify (for example, different ASNs), one attachment is picked deterministically using a hash of the prefix metadata; not customer-controllable. Documented: for routes with the same CIDR, attachment type and BGP attributes, AWS "can't guarantee a consistent route prioritization order" ([TGW route evaluation](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)). TGW ECMP across DXGWs also needs matching DXGW Amazon-side ASNs **[Field knowledge, SME-confirmed]**.
+- **Cloud WAN CNE with multiple DXGW attachments:** the CNE learns the route from each DXGW attachment and runs its own route evaluation; steer with inbound routing policies (local preference, AS_PATH, MED) on the DXGW attachments. Without a policy, identical routes from multiple DXGWs give non-deterministic path selection (see "Multiple DXGWs on Cloud WAN" above).
+- **Cloud WAN CNE (equal routes from other sources):** Deterministic — "deterministically random" at Step 2.5.4 for equal remote CNE paths, chosen per segment / network function group. Consistent but not customer-controllable.
 
 ### Common Pitfall: AS-Path Prepending Does Not Override Local-Region LP at the DXGW
 
@@ -106,7 +122,7 @@ Each CNE runs its own lookup over the routes **in its table** (the DXGW route fr
 
 ### Worked Example (from the field diagram)
 
-Only **FR5/Frankfurt (eu-central-1)** and **LD5/London (eu-west-1)** advertise `11.0.0.0/8`. Applying **Lookup 1 (DXGW)** per region:
+Only **FR5/Frankfurt (eu-central-1)** and **LD5/Slough** advertise `11.0.0.0/8`. In this example the LD5 connection is on a device associated with **eu-west-1 (Ireland)**; LD5 also has eu-west-2 (London) devices, so check the actual connection. Applying **Lookup 1 (DXGW)** per region:
 
 | CNE region | Has local `/8` advertisement? | DXGW decision | Path reflected to the CNE |
 |---|---|---|---|
@@ -182,9 +198,13 @@ This is one of the only two reasons to use multiple DXGWs (the other is traffic 
 - DXGW-A: Region-A DX locations (primary `7224:7300`, secondary `7224:7200`)
 - DXGW-B: Region-B DX locations (`7224:7300`)
 
-Both DXGWs reflect their selected path to all CNEs. The CNE route table evaluates them at Step 2.4 (AS-path length). Control which DXGW wins per region by differentiating AS-path length on the VIFs between the two DXGWs.
+Both DXGWs reflect their selected path to all CNEs, and each CNE learns the route from both DXGW attachments and runs its own Cloud WAN route evaluation. The Direct Connect-side cross-DXGW comparison used with a TGW does not apply here (see "Multiple DXGWs on Cloud WAN" above).
 
-Use communities within each DXGW for internal failover. No Cloud WAN Routing Policies needed — VIF-level BGP attributes provide per-region control at the CNE route table.
+**Primary lever — Cloud WAN routing policies** (policy version 2025.11 or later): apply an **inbound** routing policy to each DXGW attachment that sets **local preference** (or AS_PATH / MED) for the matching prefixes or prefix lists, so each CNE or region group prefers the intended DXGW with a deterministic failover order. Apply them per attachment, or per segment / CNE-to-CNE where the preference must differ by region. Without a policy, identical routes from the two DXGWs give non-deterministic path selection. See [Cloud WAN routing policies](https://docs.aws.amazon.com/network-manager/latest/cloudwan/cloudwan-routing-policies.html) and [Part 2, Scenario 2](https://aws.amazon.com/blogs/networking-and-content-delivery/aws-cloud-wan-routing-policy-real-world-global-network-scenarios-part-2/).
+
+**Alternative — AS_PATH differentiation on the VIFs:** make the AS_PATH length on the VIF advertisements differ between the two DXGWs so the CNE prefers the shorter one at Step 2.4 (AS-path length). This works without routing policies but is coarser and harder to vary per region.
+
+Use VIF LP communities within each DXGW for internal VIF failover (communities cannot be matched or set by Cloud WAN routing policies on Direct Connect attachments). Confirm the result on the **Routes** tab; the **Route information base** tab shows routes before policies are applied.
 
 ### Pattern 3: Per-Region Control via More Specific Routes
 
@@ -243,7 +263,8 @@ Keep the two traffic directions straight — they are governed by different devi
 | **On-prem → AWS** (ingress) | On-prem router lookup | Customer router policies | Local-pref, weight, MED on on-prem routers — independent of Cloud WAN |
 
 Notes:
-- DX LP communities set the LP the **DXGW** uses in Lookup 1 — they are the recommended lever for steering which DX path each CNE uses. They are **not visible inside Cloud WAN** and do not act at Lookup 2.
+- DX LP communities set the LP the **DXGW** uses in Lookup 1 — they are the recommended lever for steering which VIF each DXGW selects. They are **not visible inside Cloud WAN** and do not act at Lookup 2.
+- With **multiple DXGWs**, the choice between them is made at Lookup 2 by the CNE. Steer it with Cloud WAN inbound routing policies on the DXGW attachments (local preference, AS_PATH or MED), not with VIF communities.
 - Communities do NOT affect the on-prem → AWS direction. If on-prem AS-path prepending was being used to influence selection, prefer LP communities at the DXGW (Lookup 1); over-prepending a local VIF does not achieve cross-region steering (see the AS-Path Prepending pitfall above). If prepending was also used for on-prem path selection, replace that with router-side local-pref/weight before removing prepends.
 
 ## Cleanup Recommendations

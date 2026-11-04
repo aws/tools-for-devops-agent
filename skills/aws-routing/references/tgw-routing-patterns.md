@@ -58,6 +58,8 @@ Consequences:
 
 - **Documented condition:** the prefix, prefix length and AS_PATH must be **exactly the same**. BGP Multipath AS-Path Relax is not supported, so there is no ECMP across different ASNs ([route evaluation order](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)).
 - **[Field knowledge, lab-validated]** The routes also need **equal MED** and AS_PATHs that contain **exactly the same ASNs** (equal length alone is not enough).
+- **[Field knowledge, SME-confirmed]** The DXGWs' **Amazon-side ASNs must match** (see "DXGW Amazon-Side ASNs Must Match for ECMP" below).
+- **TGW-specific:** this Direct Connect-side cross-DXGW decision applies to a TGW. Cloud WAN works differently: the CNE learns the route from each DXGW attachment and runs its own route evaluation, steered by Cloud WAN routing policies (see "Multiple DXGWs on Cloud WAN" in cloudwan-dx-routing-patterns.md).
 - **[Field knowledge, SME-confirmed] Where the decision is made:** the ECMP decision is made on the **Direct Connect side**, not by the TGW comparing attributes. The BGP attributes are VIF-level (set on the on-prem router's advertisements over each VIF) and do not pass to the TGW. Direct Connect compares the VIF BGP advertisements across the DXGWs using **all** the BGP attributes, in this order:
   1. Longest prefix match (a route lookup, not a BGP attribute)
   2. Local preference — LP communities (`7224:7300/7200/7100`) and the local-Region default
@@ -80,11 +82,12 @@ Consequences:
 - **[Field knowledge]** If no attribute separates them but they still do not qualify for ECMP (for example, equal AS_PATH length but different ASNs), one attachment is picked deterministically using a hash of the prefix metadata, and only that attachment is installed in the TGW route table. The choice is consistent but not customer-controllable.
 - Documented: for routes with the same CIDR, attachment type and BGP attributes, AWS "can't guarantee a consistent route prioritization order" ([route evaluation order](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)). Do not design around which attachment wins an exact tie.
 
-### Open Question: DXGW Amazon-Side ASN in the AS_PATH Comparison
+### DXGW Amazon-Side ASNs Must Match for ECMP
 
-This is the **only open item** in this section. It is not confirmed either way whether each DXGW's Amazon-side ASN appears in the AS_PATH that is compared across DXGWs when deciding ECMP, so do not assume that DXGWs with different (or the same) Amazon-side ASNs will or will not qualify for ECMP. Verify in-account with the same route-table check:
+**[Field knowledge, SME-confirmed]** For TGW ECMP across multiple DXGW attachments, the DXGWs' **Amazon-side ASNs must match**. The AS_PATH compared across DXGWs must be exactly the same, and AS-Path Relax is not supported, so DXGWs with different Amazon-side ASNs do not qualify for ECMP; a single attachment is installed instead. Verify in-account with the route-table check:
 - `aws ec2 search-transit-gateway-routes` — two DXGW attachments listed as next hops for the prefix = ECMP; one attachment = single path
 - `aws directconnect list-virtual-interface-routes` — the AS_PATH and communities each VIF received
+- `aws directconnect describe-direct-connect-gateways` — the `amazonSideAsn` of each DXGW
 
 ### Recommendation
 
@@ -106,7 +109,7 @@ This is the **only open item** in this section. It is not confirmed either way w
 
 ECMP and redundancy are not reasons for multiple DXGWs. The DX site-to-site transit design (CGW1–DXGW1–TGW–DXGW2–CGW2) in dx-routing-patterns.md is a capability statement, not a recommended reason to add a DXGW.
 
-If two DXGWs carry the same prefix, **make the outcome deterministic** instead of relying on an exact tie. All of these work because the BGP attributes are set on the VIF advertisements, Direct Connect compares those VIF advertisements across the DXGWs, and the TGW installs the winning DXGW attachment:
+If two DXGWs on a TGW carry the same prefix, **make the outcome deterministic** instead of relying on an exact tie. (On Cloud WAN, use routing policies on the DXGW attachments instead; see cloudwan-dx-routing-patterns.md.) All of these work on a TGW because the BGP attributes are set on the VIF advertisements, Direct Connect compares those VIF advertisements across the DXGWs, and the TGW installs the winning DXGW attachment:
 - **LP communities (preferred)** — tag `7224:7300/7200/7100` on the advertisements sent over the preferred DXGW's VIFs so that path has the higher local preference. **[Field knowledge, SME-confirmed]**
 - **Longest prefix match** — advertise a more-specific prefix over the preferred DXGW
 - **AS_PATH prepending** — the shorter AS_PATH wins when local preference is equal
@@ -117,6 +120,7 @@ If two DXGWs carry the same prefix, **make the outcome deterministic** instead o
 ### LP Communities Across Multiple DXGW Attachments
 
 - **[Field knowledge, SME-confirmed]** LP communities **are honored** across multiple DXGW attachments on a TGW. The communities are tagged at the VIF level, on the on-prem router's advertisements. Direct Connect's cross-DXGW comparison of those VIF advertisements uses all the BGP attributes, and local preference (LP communities and the local-Region default) is compared before AS_PATH and MED. The TGW does not compare the attributes; it installs the result.
+- **Local-Region default across DXGWs [Field knowledge, SME-confirmed]:** with **no** LP community tagged and equal AS_PATH and MED, if one DXGW's VIF is at a DX location whose associated Region matches the TGW's Region and the other DXGW's VIF is at a location associated with a remote Region, the **local one wins on local preference** (AWS prefers local over remote Regions); they do not ECMP. Check each connection's associated Region on the [Direct Connect locations page](https://aws.amazon.com/directconnect/locations/) and the [Associated Region](https://docs.aws.amazon.com/directconnect/latest/UserGuide/remote_regions.html#associated-region) table; some locations serve more than one Region depending on port speed, so confirm the connection itself with `aws directconnect describe-connections`.
 - Inside each DXGW, the same communities set local preference for the DXGW's own VIF selection, as documented ([DX routing policies](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html)).
 - LP communities are the preferred lever for steering between DXGWs, alongside more-specific prefixes, AS_PATH prepending and MED.
 - Verify in-account: `search-transit-gateway-routes` (which DXGW attachment(s) the TGW installed per prefix) and `list-virtual-interface-routes` (communities each VIF received).
