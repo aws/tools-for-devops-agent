@@ -47,6 +47,15 @@ tools-for-devops-agent/
         └── ...               # Server implementation and deployment assets
 ```
 
+## Scope: Self-Contained Tools
+
+This repository holds DevOps Agent tools only: skills, custom agents, and lightweight MCP servers that support them. It isn't a home for broader solutions.
+
+- A tool may rely on AWS services and APIs, DevOps Agent's built-in capabilities and integrations (including the third-party products that `connectors/` covers), and the skills, custom agents and MCP servers in this repository, including pinned upstream MCP server packages deployed from an `mcp/` directory.
+- A skill or custom agent that depends on a solution maintained outside this repository (an application, framework, dashboard or data pipeline its author builds and publishes elsewhere) is not accepted. This repository can't test, version or support that dependency, and because the solution serves a wider purpose than DevOps Agent, the tool belongs in the solution's own repository, where both are released together.
+- Don't suggest moving the external solution into this repository instead. An MCP server is accepted only when it's a lightweight server whose purpose is to support a DevOps Agent skill or custom agent, not a general-purpose application or a port of one.
+- When reviewing such a pull request, comment with the reason and close it: thank the author, name the external dependency, and explain that tools here must be self-contained and that this one fits best next to the solution in the author's own repository.
+
 ## Writing Skills
 
 Skills live under `skills/` and should follow both the [Agent Skills spec](https://agentskills.io/home) best practices and [AWS DevOps Agent best practices](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html). Skills are the most common contribution type; the guidance below is the most detailed for that reason.
@@ -202,7 +211,7 @@ Server implementations vary (SAM applications, Lambda deployments, source packag
 - `README.md` — documents what the server does, its tools, prerequisites and IAM scoping, and step-by-step deployment and registration instructions.
 - `CHANGELOG.md` — version history (recommended, same format as skills).
 
-Prefer running standard, pinned upstream server packages over forked code where possible, and enforce least-privilege IAM and read-only access by default. There is no MCP-specific evaluation tool yet — test the server manually and document how you validated it.
+Keep each server lightweight and scoped to the skills or custom agents it supports (see Scope: Self-Contained Tools). Prefer running standard, pinned upstream server packages over forked code where possible, and enforce least-privilege IAM and read-only access by default. There is no MCP-specific evaluation tool yet — test the server manually and document how you validated it.
 
 ## Allowed File Extensions
 
@@ -292,6 +301,10 @@ python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict
 ```
 
 Fix every error, and the warnings for the skill you touched. Pull requests from forks may need a maintainer to approve the workflow run before these checks appear on the PR, so a PR with no checks has not passed them.
+
+### Connector pull requests
+
+To review a connector pull request, or to prepare one, follow [.kiro/steering/connector-review.md](connector-review.md). It covers the connector contract, endpoint and authentication checks, the recommended skills, and how findings are classified.
 
 ## Adding a New Skill
 
