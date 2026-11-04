@@ -9,7 +9,8 @@ Discovers AWS resources approaching or past End of Standard Support and calculat
 - Discovers resources with deprecated versions across 5 AWS services (multi-account supported)
 - Validates EOS dates per exact engine + version against AWS documentation (no guessing, no date bleed between engine families)
 - Retrieves live Extended Support pricing from the AWS Pricing API with Year 1/2 vs Year 3 tiering
-- Handles RDS Multi-AZ cost doubling and instance class to vCPU mapping
+- Counts every billed RDS instance (Multi-AZ standbys, read replicas), prices Aurora members one by one, and prices Aurora Serverless v2 per ACU-hour
+- Prices OpenSearch from the published normalization factors, and at the instance's own rate during an extension period
 - Flags deprecated Lambda runtimes as a security risk (no ES charge but patching stops)
 - Produces a structured report plus a per-resource CSV artifact, splitting current (reactive) from projected (proactive) cost
 
@@ -26,7 +27,9 @@ Discovers AWS resources approaching or past End of Standard Support and calculat
 
 - Covers five services only — EKS, RDS/Aurora, Lambda, ElastiCache, and OpenSearch. Other services that may have Extended Support are out of scope.
 - Cost figures are estimates based on on-demand AWS Pricing API rates; they do not account for Savings Plans, Reserved Instances, private pricing, or credits. Verify against your bill before acting.
-- EOS dates depend on AWS documentation lookups at runtime. If a version's date cannot be confirmed, it is reported as `UNVERIFIED` rather than guessed.
+- EOS dates depend on AWS documentation lookups at runtime. If a version's date cannot be confirmed, it is reported as `UNVERIFIED` rather than guessed, and kept out of the totals.
+- Aurora Serverless v2 cost depends on ACU usage. Without CloudWatch `ServerlessDatabaseCapacity` data it is reported as `USAGE_DEPENDENT`, with the rate and capacity range.
+- The OpenSearch normalization factors and the extension-period version list in `references/billing-rules.md` are dated copies of AWS documentation and must be kept current.
 - Scans of large organizations (hundreds or thousands of accounts) may return partial results if time or API limits are reached; the report notes which accounts completed.
 - Read-only — the skill never modifies, upgrades, or deletes resources.
 

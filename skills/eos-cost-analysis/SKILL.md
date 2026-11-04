@@ -42,10 +42,12 @@ Support charges, and generate an actionable cost-impact report.
 | Service | Billing Unit | Discovery API |
 |---------|-------------|---------------|
 | Amazon EKS | Per cluster/hour | `eks:ListClusters`, `eks:DescribeCluster` |
-| Amazon RDS/Aurora | Per vCPU/hour | `rds:DescribeDBInstances`, `rds:DescribeDBClusters` |
+| Amazon RDS/Aurora | Per vCPU/hour per billed instance; per ACU-hour for Aurora Serverless v2 | `rds:DescribeDBInstances`, `rds:DescribeDBClusters` |
 | AWS Lambda | No direct ES charge (security risk only) | `lambda:ListFunctions` |
-| Amazon ElastiCache | Per node/hour | `elasticache:DescribeCacheClusters`, `elasticache:DescribeReplicationGroups`, `elasticache:DescribeServerlessCaches` |
-| Amazon OpenSearch | Per instance/hour | `opensearch:ListDomainNames`, `opensearch:DescribeDomain` |
+| Amazon ElastiCache | Per node/hour (Redis OSS v4–v6 only) | `elasticache:DescribeCacheClusters`, `elasticache:DescribeReplicationGroups`, `elasticache:DescribeServerlessCaches` |
+| Amazon OpenSearch | Per Normalized Instance Hour, or equal to instance cost during an extension period | `opensearch:ListDomainNames`, `opensearch:DescribeDomain` |
+
+Which resources are billed, in what unit and how many units are defined in [references/billing-rules.md](references/billing-rules.md). Follow it for every classification and cost.
 
 > **IAM prefix note:** the `use_aws` calls above use `opensearch` because that is the correct API client name, but the corresponding IAM actions live under the `es:` prefix (`es:ListDomainNames`, `es:DescribeDomain`, `es:DescribeDomains`). The `AIDevOpsAgentAccessPolicy` managed policy already grants the discovery actions for all five services.
 
@@ -59,15 +61,16 @@ Pricing is ALWAYS retrieved live from the AWS Pricing API (`pricing:GetProducts`
 |---------|---------------|-------------|--------------|---------------|
 | EKS | $0.50/cluster/hour | $0.50/cluster/hour | per cluster/hour | Flat — no Year 3 escalation. This is the ES premium on top of the $0.10 standard cluster cost. |
 | RDS | $0.10/vCPU/hour | $0.20/vCPU/hour | per vCPU/hour | Year 3 = 2× Year 1-2 |
+| Aurora Serverless v2 | $0.085/ACU-hour for Aurora PostgreSQL 13 | — | per ACU-hour | Read the Yr3 usagetype when it applies |
 | ElastiCache | $0.165/node/hour for `cache.r6g.large` (rate depends on node type, e.g. $0.054 for `cache.t3.medium`) | $0.330/node/hour for `cache.r6g.large` | per node/hour | Year 3 = 2× Year 1-2 |
-| OpenSearch | $0.0065/NIH | $0.0065/NIH | per Normalized Instance Hour | Single tier — no escalation |
+| OpenSearch | $0.0065/NIH (`m7g.medium.search` = 2 NIH per hour); during an extension period, the instance's own hourly price (`m7g.medium.search` $0.068) | — | per NIH or per instance-hour | No Year 3 escalation |
 | Lambda | — | — | — | No Extended Support charge (deprecated runtimes are a security risk only) |
 
 After Year 3, AWS may force-upgrade the resource. **Cost framing:** these rates represent the AVOIDABLE Extended Support premium (what the customer eliminates by upgrading). For EKS, the $0.50/hour is the ES surcharge on top of the $0.10 standard cluster cost the customer pays regardless — report the premium as the cost exposure/savings opportunity, not the standard cost.
 
 ## Prerequisites
 
-- Discovery APIs (listed per service above) are covered by the `AIDevOpsAgentAccessPolicy` managed policy
+- Discovery APIs (listed per service above) and the CloudWatch metric reads for Aurora Serverless v2 usage are covered by the `AIDevOpsAgentAccessPolicy` managed policy
 - The Pricing API actions `pricing:GetProducts`, `pricing:GetAttributeValues` and `pricing:DescribeServices` for live Extended Support pricing, granted by the `EnableEosCostAnalysis` parameter of the skill-policies CloudFormation template
 - For organization-wide analysis: resources across all associated accounts (via Agent Space cloud source associations)
 - For EOS date validation and upgrade guidance: `verify_aws_claim` or AWS documentation search
@@ -78,7 +81,7 @@ After Year 3, AWS may force-upgrade the resource. **Cost framing:** these rates 
 - NEVER reuse one version's EOS date for another version, even within the same service — verify each version independently
 - NEVER fabricate pricing rates — retrieve live rates from the AWS Pricing API (Step 3.2)
 - When calling the Pricing API, ALWAYS extract only `pricePerUnit` — never dump the full PriceList (responses are very large)
-- If a version's EOS date is not found, mark it as "UNVERIFIED — check AWS docs"
+- If a version's EOS date is not found, mark it `UNVERIFIED` and set the dependent fields as in references/billing-rules.md, section 6
 - All output is AI-generated and must be independently verified before taking action
 - Read-only operations only — do not modify any resources
 
@@ -144,7 +147,8 @@ RDS Extended Support applies to both standalone RDS instances AND Aurora cluster
 use_aws: rds:DescribeDBInstances (region: <region>)   # standalone RDS + Aurora member instances
 → For each instance:
   → Extract: DBInstanceIdentifier, Engine, EngineVersion, DBInstanceClass,
-             MultiAZ, DBInstanceArn, DBClusterIdentifier
+             MultiAZ, DBInstanceArn, DBClusterIdentifier,
+             ReadReplicaSourceDBInstanceIdentifier
 
 use_aws: rds:DescribeDBClusters (region: <region>)    # Aurora clusters (authoritative engine version)
 → For each cluster:
@@ -152,9 +156,9 @@ use_aws: rds:DescribeDBClusters (region: <region>)    # Aurora clusters (authori
              DBClusterMembers (instance identifiers)
 ```
 
-**Filter:** RDS Extended Support is offered for `mysql`, `postgres`, `aurora-mysql` and `aurora-postgresql`; discover those. Other engines (`mariadb`, `oracle-*`, `sqlserver-*`) have no Extended Support charge or Pricing API usagetype, so list them in the discovery summary as out of scope and do not price them.
-**Aurora handling:** For Aurora, use the cluster's `EngineVersion` as the authoritative version (instance-level version may lag). Extended Support is billed per Aurora instance (vCPU-based), so map each cluster member instance's class to vCPUs.
-**Record:** account_id, region, resource_id, engine, engine_version, instance_class, multi_az, arn, is_aurora, cluster_id
+**Filter:** In scope are the engines and major versions on the RDS and Aurora Extended Support pages (references/billing-rules.md, section 2): today `mysql`, `postgres`, `aurora-mysql` and `aurora-postgresql`. Other engines (`mariadb`, `oracle-*`, `sqlserver-*`) have no Extended Support charge or Pricing API usagetype, so list them in the discovery summary as out of scope and do not price them.
+**Billed instances:** Count every instance on an affected version (primary, standbys, readable standbys, read replicas) by deployment shape, per references/billing-rules.md, section 3. A Multi-AZ DB instance adds one unlisted standby; cluster members, Aurora included, are listed individually and are never doubled. For Aurora, use the cluster's `EngineVersion` as the authoritative version (instance-level version may lag). A `db.serverless` instance is priced in ACU-hours (section 5), not vCPUs.
+**Record:** account_id, region, resource_id, engine, engine_version, instance_class, multi_az, cluster_id, read_replica_source, billed_instances, arn
 
 **Instance class to vCPU mapping** (required for cost calculation):
 - Look up the vCPU count for each instance class using documentation search (`verify_aws_claim`) or the AWS Pricing API product attributes
@@ -188,8 +192,8 @@ use_aws: elasticache:DescribeServerlessCaches (region: <region>)    # ElastiCach
   → Extract: ServerlessCacheName, Engine, MajorEngineVersion, FullEngineVersion, ARN
 ```
 
-**Serverless caches are a distinct resource type** — they are NOT returned by `DescribeCacheClusters`. You MUST call `DescribeServerlessCaches` separately or serverless caches on an EOS engine version will be silently missed. Serverless uses `MajorEngineVersion` / `FullEngineVersion` (there is no node type / node count); its ES cost model is usage-based rather than per-node, so price it from the Pricing API for the serverless usagetype rather than the node-based formula.
-**Filter:** Include ALL engines that offer Extended Support — `redis`, `valkey`, and `memcached`. Do NOT limit to Redis only. Verify each engine+version's EOS status in Phase 3 rather than pre-filtering on "deprecated" here (discover everything, classify later).
+**Serverless caches are a distinct resource type** — they are NOT returned by `DescribeCacheClusters`. You MUST call `DescribeServerlessCaches` separately so every cache is accounted for. Serverless uses `MajorEngineVersion` / `FullEngineVersion` (there is no node type / node count), and the Pricing API has no Extended Support usagetype for serverless caches, so never price one as nodes (references/billing-rules.md, section 2).
+**Filter:** Discover all engines, but only Redis OSS v4, v5 and v6 have Extended Support (references/billing-rules.md, section 2). Valkey and Memcached are out of scope: list them in the discovery summary as supported, with no charge.
 **Record (node-based):** account_id, region, cluster_id, engine, engine_version, node_type, num_nodes, arn
 **Record (serverless):** account_id, region, serverless_cache_name, engine, engine_version, is_serverless=true, arn
 
@@ -199,12 +203,12 @@ use_aws: elasticache:DescribeServerlessCaches (region: <region>)    # ElastiCach
 use_aws: opensearch:ListDomainNames (region: <region>)
 → For each domain name:
   use_aws: opensearch:DescribeDomain (DomainName: <name>, region: <region>)
-  → Extract: DomainName, EngineVersion, ClusterConfig.InstanceType,
-             ClusterConfig.InstanceCount, ARN
+  → Extract: DomainName, EngineVersion, ARN, and every node group in ClusterConfig:
+             InstanceType/InstanceCount, DedicatedMasterType/Count, WarmType/Count
 ```
 
 **Engine family split (date-bleed risk):** `EngineVersion` comes back prefixed as either `OpenSearch_2.x` or `Elasticsearch_7.x`. These are TWO different engine families with COMPLETELY different EOS calendars — an OpenSearch version's EOS date must never be applied to an Elasticsearch version, or vice versa. Parse the prefix, treat `Elasticsearch_*` and `OpenSearch_*` as separate engines during EOS validation (Phase 3), and verify each independently. The Pricing API usagetype may also differ between the two families — resolve it per family, don't assume one covers both.
-**Record:** account_id, region, domain_name, engine_family (OpenSearch|Elasticsearch), engine_version, instance_type, instance_count, arn
+**Record:** account_id, region, domain_name, engine_family (OpenSearch|Elasticsearch), engine_version, node groups (type and count each), arn
 
 ### Discovery Summary
 
@@ -241,7 +245,7 @@ For each unique version discovered, verify its End of Standard Support date inde
 - Is a version that is clearly several generations behind the current release being reported as "supported with a future EOS date"? If so, re-verify — it may already be past EOS.
 
 If documentation search returns no result for a specific version:
-- Mark as `UNVERIFIED`
+- Mark as `UNVERIFIED` and set the dependent fields per references/billing-rules.md, section 6
 - Note in the report: "EOS date could not be confirmed from AWS documentation — verify manually"
 - Do NOT substitute a similar version's date as a proxy
 
@@ -261,9 +265,9 @@ If documentation search returns no result for a specific version:
 | Service | ServiceCode | Usage Type Pattern | Region Prefix | Billing Unit | Year 3 |
 |---------|-------------|-------------------|---------------|--------------|--------|
 | EKS | `AmazonEKS` | `{PREFIX}-AmazonEKS-Hours:extendedSupport` | Yes, in every region (`USE1-` in us-east-1) | per cluster/hour | Flat (no escalation) |
-| RDS | `AmazonRDS` | `{PREFIX}-ExtendedSupport:Yr1-Yr2:{EngineVersion}` / `{PREFIX}-ExtendedSupport:Yr3:{EngineVersion}` | **None in us-east-1**, prefixed elsewhere (`USW2-`, `EU-`, `APS3-`...) | per vCPU/hour | 2× Yr1-2 |
+| RDS | `AmazonRDS` | `{PREFIX}-ExtendedSupport:Yr1-Yr2:{EngineVersion}` / `{PREFIX}-ExtendedSupport:Yr3:{EngineVersion}`; Aurora Serverless v2 adds `ASv2` (references/billing-rules.md, section 5) | **None in us-east-1**, prefixed elsewhere (`USW2-`, `EU-`, `APS3-`...) | per vCPU/hour; per ACU-hour for `ASv2` | 2× Yr1-2 |
 | ElastiCache | `AmazonElastiCache` | `{PREFIX}-ExtendedSupportYr1_Yr2-NodeUsage:{nodeType}` / `{PREFIX}-ExtendedSupportYr3-NodeUsage:{nodeType}` | Yes, in every region (`USE1-` in us-east-1) | per node/hour | 2× Yr1-2 |
-| OpenSearch | `AmazonES` | `{PREFIX}-OpenSearchExtendedSupport` | **None in us-east-1**, prefixed elsewhere (`EU-`, `APS3-`...) | per NIH/hour | Single tier (no escalation) |
+| OpenSearch | `AmazonES` | `{PREFIX}-OpenSearchExtendedSupport` (NIH mode); `{PREFIX}-ESInstance:{type}` (extension-period mode, references/billing-rules.md, section 4) | **None in us-east-1**, prefixed elsewhere (`EU-`, `APS3-`...) | per NIH/hour or per instance-hour | Single tier (no escalation) |
 | Lambda | — | No Extended Support charge | — | — | — |
 
 **Whether us-east-1 carries a prefix depends on the service, so never assume.** Checked against the live Pricing API:
@@ -298,7 +302,7 @@ Regions you MUST resolve via the API (prefixes vary / are not reliably guessable
    )
    ```
    **Apply a `jmespath_filter` at the API call to return ONLY the price**, so the large PriceList JSON never enters context. Pricing API returns each product as a JSON-encoded string in `PriceList`; filter/parse down to the `pricePerUnit.USD` value inside the on-demand price dimensions rather than pulling the whole payload. Filtering at the call level is more reliable than asking the model to extract it afterward.
-3. Extract ONLY `pricePerUnit.USD` from the response — ignore everything else
+3. Extract ONLY `pricePerUnit.USD` and the price dimension's `unit` (for example `vCPU-hour`, `ACU-hour`, `Hrs`) — ignore everything else. The unit decides what you count in Phase 4 (references/billing-rules.md, section 1)
 4. If the exact usagetype returns empty, call `pricing:GetAttributeValues` for the `usagetype` attribute to discover the correct format, then retry. If it is still empty, use `pricing:DescribeServices` to confirm the `ServiceCode` and the exact attribute names for that service before constructing another `GetAttributeValues`/`GetProducts` call — a wrong ServiceCode or attribute name also returns empty.
 
 **Validate the returned rate against the reference table** in the [Extended Support Pricing](#extended-support-pricing) section (us-east-1 validation reference). The API result is authoritative — the table is only a sanity check. If the API rate is wildly different from the reference (orders of magnitude), re-check the usagetype before trusting it; never replace the API result with the reference number.
@@ -312,7 +316,8 @@ Compare each resource's version against the validated EOS dates:
 | `IN_EXTENDED_SUPPORT` | EOS date is past, ES end date is future | YES — currently incurring charges |
 | `APPROACHING_EOS` | EOS date is within 6 months from today | YES — will soon incur charges |
 | `PAST_EXTENDED_SUPPORT` | Both EOS and ES end dates are past | YES — critical, may be force-upgraded |
-| `SUPPORTED` | EOS date is more than 6 months away | NO — exclude from cost report |
+| `SUPPORTED` | EOS date is more than 6 months away, or the engine is out of scope | NO — exclude from cost report (list in the discovery summary) |
+| `UNVERIFIED` | No EOS date confirmed for the exact engine and version | YES — listed separately, kept out of the totals |
 
 ### Step 3.4 — Search Upgrade Recommendations
 
@@ -346,34 +351,21 @@ Tier behavior by service (rates themselves come from the Pricing API; see the [v
 
 ### Step 4.2 — Calculate per-resource monthly cost
 
-Every `es_rate` below is the per-tier rate returned by the Pricing API for that resource (Step 3.2) — never a hardcoded value:
+Every cost uses one formula (references/billing-rules.md, section 1): `monthly_cost = billed_units_per_hour × es_rate × 730`. `es_rate` is the per-tier rate the Pricing API returned for the resource (Step 3.2), never a hardcoded value, and `billed_units_per_hour` is counted in that rate's `unit`:
 
-| Service | Formula |
-|---------|---------|
-| EKS | `monthly_cost = es_rate × 730` (flat) |
-| RDS | `monthly_cost = vCPUs × es_rate × 730 × (2 if MultiAZ else 1)` (per vCPU) |
-| ElastiCache | `monthly_cost = num_nodes × node_es_rate × 730` (node_es_rate from Pricing API for the node type + tier) |
-| OpenSearch | `monthly_cost = total_NIH_per_hour × es_rate_per_NIH × 730` (NIH-based; es_rate from Pricing API) |
-| Lambda | `monthly_cost = $0` (flag as security risk only) |
+| Service | `billed_units_per_hour` |
+|---------|-------------------------|
+| EKS | 1 per cluster |
+| RDS / Aurora provisioned | vCPUs of the instance class × billed instances (section 3): one standby added for a Multi-AZ DB instance, read replicas counted, cluster members (Aurora included) each counted once and never doubled |
+| Aurora Serverless v2 | Average ACUs consumed (CloudWatch `ServerlessDatabaseCapacity`, section 5), else `USAGE_DEPENDENT` |
+| ElastiCache | Nodes on Redis OSS v4–v6 |
+| OpenSearch | NIH mode: Σ node groups of `instance_count × normalization factor` from the section 4 table (medium = 2, large = 4, xlarge = 8, …). Extension-period mode: instances, at the instance type's own hourly rate |
+| Lambda | 0 (flag as security risk only) |
 
 **Notes:**
 - The EKS ES rate is the Extended Support premium (the avoidable cost). The standard cluster cost applies regardless and is NOT part of the exposure.
-- For RDS, map instance class to vCPU count (e.g., db.r6g.xlarge = 4 vCPUs). Multi-AZ doubles the cost.
-- For ElastiCache and OpenSearch, query the Pricing API per node type / instance type since rates vary.
-
-**Deriving OpenSearch NIH (Normalized Instance Hours):** The formula needs `total_NIH_per_hour`, which is NOT the raw instance count. Compute it as:
-
-```
-total_NIH_per_hour = instance_count × NIH_factor(instance_type)
-```
-
-`NIH_factor` is the normalization multiplier for the instance size (AWS normalizes to a base unit). Do NOT hardcode these — the size-to-factor scale can change and varies by family. Resolve the factor at runtime:
-1. Preferred: derive from the size within the family. AWS uses a doubling scale per size step (…medium=1, large=2, xlarge=4, 2xlarge=8, 4xlarge=16, 8xlarge=32, …). Confirm the family's base with documentation search (`verify_aws_claim`: "OpenSearch normalized instance hours factor [instance_type]").
-   - **Sizes SMALLER than medium (small, micro) do NOT reliably follow the doubling scale — DO NOT extrapolate them as 0.5 / 0.25.** The fractional factor for small/micro search instances (and whether they are even eligible for Extended Support billing) must be looked up from AWS documentation for that specific size, not inferred. Extrapolating "medium=1 so small=0.5" is a guess and violates the never-guess rule. If the doc value for a small/micro size cannot be confirmed, mark the NIH factor `UNVERIFIED` and flag the resulting cost as an estimate rather than silently assuming a fraction.
-2. If a domain has mixed instance types (data + dedicated master + warm nodes), sum NIH across each node group separately.
-3. Multiply the summed `total_NIH_per_hour` by the per-NIH ES rate returned by the Pricing API (Step 3.2), then × 730 for monthly.
-
-Never estimate NIH from instance count alone — that under- or over-counts cost by the normalization factor.
+- For RDS, map instance class to vCPU count (e.g., db.r6g.xlarge = 4 vCPUs).
+- For OpenSearch, take the charge mode for the version and date from section 4, and never derive a normalization factor from instance count or by extrapolation.
 
 ### Step 4.2b — Reactive (current) vs Proactive (projected) cost
 
@@ -386,6 +378,7 @@ Every affected resource has TWO cost figures. Compute both so the report shows w
 - **Projected monthly ES cost (proactive)** — what the resource WILL cost once it enters Extended Support, if not upgraded first.
   - `APPROACHING_EOS`: compute the full Year 1-2 ES cost using the SAME per-resource formula (Step 4.2), as if it were already in ES. This is the cost that starts on its EOS date (within the next 6 months).
   - `IN_EXTENDED_SUPPORT` / `PAST_EXTENDED_SUPPORT`: projected = current (already incurring). If the resource will cross into Year 3 (`>= 24` months) within the projection window, project the Year 3 (elevated) rate and note the escalation.
+  - `UNVERIFIED`, `PRICING_UNAVAILABLE` and `USAGE_DEPENDENT` resources: set the fields per references/billing-rules.md, section 6; keep them out of the totals and count them separately.
 
 This split is the whole point of the skill: **reactive** = stop the bleeding on resources already in ES; **proactive** = show the cost cliff approaching in the next 6 months so the customer can upgrade before it hits. Report both, never collapse them into one number.
 
@@ -396,6 +389,7 @@ This split is the whole point of the skill: **reactive** = stop the bleeding on 
 | `CRITICAL` | `IN_EXTENDED_SUPPORT` or `PAST_EXTENDED_SUPPORT` (already incurring charges) |
 | `HIGH` | `APPROACHING_EOS` within 3 months |
 | `MEDIUM` | `APPROACHING_EOS` within 3–6 months |
+| `UNVERIFIED` | `UNVERIFIED` status (no confirmed EOS date): verify manually |
 
 ### Step 4.4 — Aggregate totals
 
@@ -407,6 +401,7 @@ Calculate:
 - **Top 10 most impacted accounts** (by projected monthly cost)
 - **Cost by service** breakdown (current and projected)
 - **Cost by urgency** breakdown
+- **Not in totals:** counts of `UNVERIFIED`, `PRICING_UNAVAILABLE` and `USAGE_DEPENDENT` resources, each listed
 
 ---
 
@@ -456,15 +451,15 @@ Produce a CSV artifact with these columns:
 - `service` — AWS service (EKS, RDS, Lambda, ElastiCache, OpenSearch)
 - `version` — Current version/engine version/runtime
 - `instance_class` — Instance type (for RDS, ElastiCache, OpenSearch) or N/A
-- `multi_az` — true/false (RDS only)
-- `eos_date` — End of Standard Support date
-- `eos_status` — IN_EXTENDED_SUPPORT / APPROACHING_EOS / PAST_EXTENDED_SUPPORT
+- `billed_units` — Billed units per hour and their unit (e.g. `12 vCPU-hour` for 6 billed instances × 2 vCPUs, `8 NIH`, `4 ACU-hour`)
+- `eos_date` — End of Standard Support date, or `UNVERIFIED`
+- `eos_status` — IN_EXTENDED_SUPPORT / APPROACHING_EOS / PAST_EXTENDED_SUPPORT / UNVERIFIED
 - `es_year` — Which pricing year the resource is in: `1-2` or `3`. For resources not yet in Extended Support (`APPROACHING_EOS`), use the sentinel `N/A` (they are not incurring ES charges yet, so no pricing year applies).
 - `current_monthly_es_cost` — Monthly ES cost being incurred RIGHT NOW ($0 for APPROACHING_EOS; the Year 1-2/Year 3 rate for resources already in/past ES)
 - `projected_monthly_es_cost` — Monthly ES cost once the resource enters Extended Support (full ES rate for APPROACHING_EOS; equals current for resources already in ES, or the Year 3 rate if it escalates within the window)
 - `es_start_date` — Date the projected cost begins (the EOS date for APPROACHING_EOS; blank/`N/A` if already incurring)
 - `annual_es_cost` — Annual ES cost based on `projected_monthly_es_cost` × 12 (the forward-looking run-rate)
-- `urgency` — CRITICAL / HIGH / MEDIUM
+- `urgency` — CRITICAL / HIGH / MEDIUM / UNVERIFIED
 - `recommended_target` — Recommended upgrade version
 - `upgrade_guide_url` — Link to AWS migration documentation
 
@@ -503,8 +498,9 @@ a security and compliance risk.
 |-------|----------|
 | Role assumption fails for a linked account | Skip that account, note in report: "Account [ID] skipped — role assumption failed" |
 | Service API returns AccessDenied | Skip that service/region, note: "Insufficient permissions for [service] in [region]" |
-| Documentation search returns no EOS date | Mark version as "UNVERIFIED", include in report with note |
+| Documentation search returns no EOS date | Mark version as `UNVERIFIED` (status, urgency and cost fields per references/billing-rules.md, section 6), include in report with note |
 | Pricing API returns no product after the `GetAttributeValues` usagetype retry | Set current_monthly_es_cost and projected_monthly_es_cost to "PRICING_UNAVAILABLE", do not estimate |
+| No usage data for a usage-priced resource (Aurora Serverless v2) | Set the cost fields to `USAGE_DEPENDENT` with the rate and capacity range |
 | No resources found for a service | Report: "No [service] resources found in scope" |
 | Rate limiting (throttling) | Retry with exponential backoff (1s, 2s, 4s), max 3 retries |
 | Timeout on large organization (1000+ accounts) | Report partial results, note which accounts were completed |
@@ -514,7 +510,7 @@ a security and compliance risk.
 ## Tips
 
 - **Start with a single service** for faster results — EKS is the simplest (flat per-cluster rate)
-- **RDS has the most complex pricing** due to vCPU mapping and Multi-AZ doubling
+- **RDS has the most complex pricing** due to vCPU mapping and counting every billed instance (standbys and read replicas)
 - **Lambda has no cost impact** but deprecated runtimes are a security risk worth flagging
 - **Year 3 doubles the rate for RDS and ElastiCache** (EKS and OpenSearch stay flat), so a resource 24+ months past EOS costs twice what it did in Year 1-2
 - **Verify EOS dates from AWS documentation at runtime** — deprecation schedules shift, so confirm each engine + version rather than trusting cached knowledge
