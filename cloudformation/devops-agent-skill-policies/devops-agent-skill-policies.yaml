@@ -33,6 +33,7 @@ Metadata:
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
           - EnableAwsFsxnOperationsReview
+          - EnableAwsPerformanceEfficiencyReview
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -168,6 +169,15 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableAwsPerformanceEfficiencyReview:
+    Type: String
+    Description: >
+      AWS Performance Efficiency Review skill (adds compute-optimizer:GetEnrollmentStatus,
+      compute-optimizer:Get*Recommendations for EC2, Auto Scaling groups, EBS, Lambda,
+      ECS and RDS, and lambda:GetFunctionConcurrency).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -208,6 +218,7 @@ Conditions:
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
+  SkillAwsPerformanceEfficiencyReview: !Equals [!Ref EnableAwsPerformanceEfficiencyReview, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -691,6 +702,50 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # aws-performance-efficiency-review: only the read actions NOT already granted by
+  # AIDevOpsAgentAccessPolicy (checked against default version v12): the seven
+  # Compute Optimizer reads and lambda:GetFunctionConcurrency. Every other API the
+  # skill calls (CloudWatch, Logs Insights, X-Ray, Application Signals, Performance
+  # Insights, ELB, EC2, Auto Scaling, ECS, EKS, Lambda, RDS, DynamoDB, ElastiCache,
+  # SQS, Service Quotas, CloudTrail describes and reads) is covered by the managed
+  # policy. Strictly read-only; no Put*, Create*, Update*, or Delete* is granted.
+  # Without this policy the skill names the missing permission for the Compute
+  # Optimizer and reserved-concurrency reads, uses a fallback, and the rest of the
+  # review runs normally. compute-optimizer:GetECSServiceRecommendations is also in
+  # PolicyEcsOperationReview; it is repeated here so this skill does not depend on
+  # EnableEcsOperationReview.
+  PolicyAwsPerformanceEfficiencyReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillAwsPerformanceEfficiencyReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-AwsPerformanceEfficiencyReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Compute Optimizer defines no resource types, so these actions do not
+          # support resource-level permissions and need Resource '*'.
+          - Sid: PerformanceEfficiencyComputeOptimizerRead
+            Effect: Allow
+            Action:
+              - compute-optimizer:GetEnrollmentStatus
+              - compute-optimizer:GetEC2InstanceRecommendations
+              - compute-optimizer:GetAutoScalingGroupRecommendations
+              - compute-optimizer:GetEBSVolumeRecommendations
+              - compute-optimizer:GetLambdaFunctionRecommendations
+              - compute-optimizer:GetECSServiceRecommendations
+              - compute-optimizer:GetRDSDatabaseRecommendations
+            Resource: '*'
+          # GetFunctionConcurrency supports the Lambda function resource type, so it
+          # is scoped to functions in this account. Region is '*' because the role
+          # is global and the agent reviews every Region of the account.
+          - Sid: PerformanceEfficiencyLambdaConcurrencyRead
+            Effect: Allow
+            Action:
+              - lambda:GetFunctionConcurrency
+            Resource: !Sub 'arn:${AWS::Partition}:lambda:*:${AWS::AccountId}:function:*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -722,6 +777,7 @@ Outputs:
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
+        - aws-performance-efficiency-review: ${EnableAwsPerformanceEfficiencyReview} (compute-optimizer:GetEnrollmentStatus, compute-optimizer:Get*Recommendations for EC2/ASG/EBS/Lambda/ECS/RDS, lambda:GetFunctionConcurrency)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)

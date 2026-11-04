@@ -1,0 +1,122 @@
+{
+  "version": "v8",
+  "iteration": 1,
+  "eval_id": "perf02-credits-rca",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-performance-efficiency-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's root cause matches the expected root cause closely: perf-demo-worker-a (t3.micro, standard credit mode) exhausts its CPU credit balance during the ~12:00-22:00 UTC day-rate window because the sustained load (~37% CPU) exceeds its 10% baseline, causing it to be throttled to baseline CPU and its throughput to drop. This is contrasted with worker-b (unlimited mode), which handles the same load without throttling - ruling out the job code, SQS, or producer as the cause. The investigation correctly identifies the burstable credit model (standard vs unlimited) as the root cause, matches the CPUCreditBalance depletion timeline (~83 credits to ~0 by 14:00), the CPU being pinned at ~10% baseline, and the overnight recovery of credits when load drops below baseline. All key identifying details align with the expected root cause.",
+      "evidence": "\"perf-demo-worker-a (i-1234567890abcdef0_1, standard mode): CPU is ~37% from 12:00 UTC while CPUCreditBalance falls from ~83 to ~0.025 by 14:00... CPU is then pinned at exactly ~10.0% (the t3.micro baseline) until the peak ends, and credits rebuild overnight... worker-b (i-1234567890abcdef0_2, unlimited mode)... is never throttled.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause names CPU credit exhaustion on perf-demo-worker-a (CPUCreditBalance reaching zero and the CPU throttled to baseline in standard mode) and separates this cause from its symptoms (rising per-job duration and the growing backlog and age of oldest message), rather than blaming the job code or an inherently too-heavy workload",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'CPU is ~37% from 12:00 UTC while CPUCreditBalance falls from ~83 to ~0.025 by 14:00... CPU is then pinned at exactly ~10.0% (the t3.micro baseline)' and the root cause section explicitly separates this from symptoms: 'Consumer throughput levels off at ~3,830 msgs/h' is listed as a supporting observation/finding, while the backlog and oldest message age are listed under 'Symptoms'.",
+          "reasoning": "The output clearly names CPU credit exhaustion as cause and keeps the backlog/age-of-oldest-message as symptoms, not blaming job code or workload size inherently (in fact it notes the workload is fine for worker-b in unlimited mode).",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation breaks the two consumers down per instance, naming perf-demo-worker-a as the degraded consumer and perf-demo-worker-b as unaffected under the same code and load, and uses the twin to rule out the job code, SQS and the producer",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'perf-demo-worker-a (i-1234567890abcdef0_1, standard mode)... perf-demo-worker-b (i-1234567890abcdef0_2, unlimited mode)... It is never throttled.' and 'Two t3.micro consumers run the same AMI, code and config'",
+          "reasoning": "The investigation explicitly breaks down per-instance behavior and uses worker-b as a control/twin to rule out code, SQS, and producer issues since both run identical code/config but only one throttles.",
+          "confidence": "high"
+        },
+        {
+          "text": "Evidence includes CPUCreditBalance together with CPUUtilization and CPUSurplusCreditBalance from CloudWatch for worker-a across the incident window",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'CPU is ~37% from 12:00 UTC while CPUCreditBalance falls from ~83 to ~0.025 by 14:00... perf-demo-worker-b... CPU climbs to ~49.5%, surplus credits rise to the 288 cap, and it is charged ~47 surplus credits/h.'",
+          "reasoning": "CPUUtilization, CPUCreditBalance, and CPUSurplusCreditBalance are all referenced for the workers across the incident window, satisfying the metric evidence requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "The findings compare the incident (afternoon) window with a baseline (morning or overnight) window when credits are healthy and state the rate per period rather than a single snapshot",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'CPU is ~37% from 12:00 UTC while CPUCreditBalance falls from ~83 to ~0.025 by 14:00... CPU is then pinned at exactly ~10.0%... until the peak ends, and credits rebuild overnight' and '4,920 msgs/h, against 420 msgs/h off-peak'",
+          "reasoning": "The investigation implicitly compares peak (afternoon, degraded) vs off-peak/overnight (credits rebuild, healthy) periods and states rates per period (msgs/h, credits/h) rather than single snapshots, though it could be more explicit about a stated 'baseline window' comparison.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The investigation does not read worker-a's baseline-pinned or low CPUUtilization as the instance being idle or simply too small without checking the credit balance (no false idle or false saturation finding)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'CPU is then pinned at exactly ~10.0% (the t3.micro baseline) until the peak ends' is explicitly tied to CPUCreditBalance reaching ~0.025, not read as idle; the finding states 'worker-a's standard-mode CPU credit throttling caps queue throughput' explicitly connecting low CPU to credit exhaustion, not idleness or being too small.",
+          "reasoning": "The output correctly interprets the baseline-pinned low CPU as throttling due to credit exhaustion, explicitly checking the credit balance rather than assuming idle/too-small instance.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation states the onset time of the backlog and matches it to worker-a's CPUCreditBalance reaching zero, hours after the 12:00 arrival increase rather than at that increase",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'consumers keep up for the first ~2\u20133 hours, then deletes level off at ~3,830/h' and 'CPUCreditBalance falls from ~83 to ~0.025 by 14:00... The time worker-a starts throttling matches the time the queue drain rate levels off at ~3,830/h.'",
+          "reasoning": "The investigation explicitly notes the backlog onset (drain rate leveling off) occurs ~2-3 hours after the 12:00 load increase, matching the time credits are exhausted (~14:00), not at the 12:00 arrival increase itself.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation applies a magnitude check: the backlog growth (NumberOfMessagesSent minus NumberOfMessagesDeleted) or worker-a's throughput drop matches the capacity worker-a lost net of what worker-b absorbs",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'the combined drain rate falls from 4,920/h to ~3,830/h, below the 4,920/h send rate' and '~1,090/h shortfall accumulates as backlog' and 'each worker needs ~37% CPU... WorkerA uses up its ~83-credit balance in ~2h and is then held at baseline'",
+          "reasoning": "The investigation quantifies the drain rate drop (4,920 to 3,830/h, a ~1,090/h shortfall) and connects it to worker-a's throttling to baseline (10% vs needed 37%), providing a magnitude check, though it doesn't explicitly do the arithmetic of worker-a's lost capacity vs what worker-b absorbs in exact numbers.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Any configuration change in or near the 12:00 window, if mentioned, is ruled out by timing, scope or history and not treated as the cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'This setting has been in place since launch on 2026-10-26, not a recent change.' and gap note: 'CloudTrail not available... the template, current instance settings and the identical daily pattern all point to a long-standing setting.'",
+          "reasoning": "The investigation explicitly considers and rules out a recent configuration change near the 12:00 window by noting the setting has been in place since launch and the daily recurring pattern supports this, despite not having CloudTrail confirmation.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Does not probe or report on AWS accounts that are not in the request path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Only one account ARN is mentioned: '[redacted ARN]...' \u2014 no other AWS accounts are referenced in the output.",
+          "reasoning": "No evidence of probing or reporting on accounts outside the request path; only a single account (012345678901_1) appears throughout.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Treats the backlog on perf-demo-jobs as its own problem: if another backed-up queue in the account (for example perf-demo-08-jobs) is mentioned, it is kept out of scope and not blamed for perf-demo-jobs",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of perf-demo-08-jobs or any other queue appears anywhere in the investigation; only perf-demo-jobs is discussed throughout.",
+          "reasoning": "The investigation stays scoped to perf-demo-jobs and does not reference or blame any other queue's backlog, satisfying the scope requirement (trivially, since no other queue is mentioned).",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 10,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 10,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m39s",
+    "cost": "$2.32",
+    "context_window": {
+      "utilization": "7.5%",
+      "compaction_count": 0
+    }
+  }
+}
