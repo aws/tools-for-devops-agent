@@ -83,8 +83,9 @@ setting or what an IAM policy allows, your AWS tools answer directly.
 6. Follow up with `conversation_id`. A follow-up keeps the service and time window of the earlier question
    unless you name new ones. Use one conversation for a before and after comparison.
 7. To ask about a Bluebox investigation, pass its `investigation_id` to `ask`.
-8. The connection is pinned to one Bluebox workspace, so leave `workspace_id` unset. If your Agent Space
-   instructions name a different workspace, pass its `workspace_id` on every call, `get_ask_result` included.
+8. The connection reads one Bluebox workspace: the one named in its workspace ID, or with sign-in the signed-in
+   user's default workspace. Leave `workspace_id` unset. If your Agent Space instructions name a different
+   workspace, pass its `workspace_id` on every call, `get_ask_result` included.
 
 ## Reading answers
 - An answer opens with a summary, then Evidence and, when needed, Recommended action. Quote the numbers,
@@ -156,7 +157,7 @@ Right after the change ran:
   decide what runs.
 
 ## When a call fails
-- HTTP 401 or 403: the access token expired or was revoked, or its owner has no access to the workspace.
-  Tell the operator to check the Bluebox access token and workspace ID in the connection. Do not retry.
+- HTTP 401 or 403: the access token or the Bluebox sign-in expired or was revoked, or its owner has no access
+  to the workspace. Tell the operator to check the connection's Bluebox credentials. Do not retry.
 - Timeout or server error: report that Bluebox was unavailable for that step and continue with your other
   tools. Never invent a Bluebox verdict.
