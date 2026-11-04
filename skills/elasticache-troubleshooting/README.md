@@ -71,7 +71,8 @@ The skill loads for investigations and chat about ElastiCache. Example prompts:
 
 | File | Content |
 |---|---|
-| `SKILL.md` | Workflow, symptom-to-cause table, output format, gotchas |
+| `SKILL.md` | Workflow checklist, validation step, output format, gotchas |
+| `references/diagnosis-table.md` | Symptom → cause → evidence → lookalike table |
 | `references/otel-promql.md` | OpenTelemetry PromQL rules, triage batch and interpretation |
 | `references/classic-metrics.md` | Classic CloudWatch metrics by question |
 | `references/error-strings.md` | Engine error replies, how to confirm, how to fix |

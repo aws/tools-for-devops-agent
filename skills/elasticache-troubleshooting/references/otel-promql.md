@@ -17,7 +17,7 @@ Not emitted for serverless caches, Redis OSS, Memcached or Outposts.
        match=['{"valkey.memory.used"}'], start="<window start>", end="<window end>",
    )
    ```
-   If the ID is absent, use `classic-metrics.md`. Do not enumerate metric names; they
+   If the ID is absent, use [classic-metrics.md](classic-metrics.md). Do not enumerate metric names; they
    are listed below.
 2. Run the **triage batch** in parallel as range queries over the incident window,
    `step` 60s, then over a baseline window of the same length before the onset.
@@ -109,7 +109,7 @@ name the hot commands, and memory growth on the shard:
 - Main-thread CPU near 100% (T3): the engine is saturated regardless of vCPU count.
 - `valkey.throttling.active == 1`: traffic management is active; the node is underscaled.
 
-**Errors (T4):** map `valkey.error.type` with `error-strings.md`. `OOM` → memory;
+**Errors (T4):** map `valkey.error.type` with [error-strings.md](error-strings.md). `OOM` → memory;
 `READONLY` → failover or writes to a replica; `MOVED` high or rising → client not
 cluster-aware or resharding.
 
