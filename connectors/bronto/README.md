@@ -22,7 +22,7 @@ A Bronto admin must enable MCP access once for the organization:
 
 ### Sign in (default)
 
-Select **OAuth** in the DevOps Agent connection form, sign in to Bronto with a login method enabled for MCP, and approve the requested access. DevOps Agent completes the OAuth flow; you don't need to create or paste a client secret.
+Sign in to Bronto with a login method enabled for MCP and approve the requested access. You don't need to create a client ID or secret.
 
 The agent acts as the user who signs in, with that user's Bronto permissions. Use a user who can search the datasets the agent should investigate and view monitors. A dedicated user with the **Agent ReadOnly Role** gives the agent read-only access to logs, monitors, dashboards, integrations and SLOs. Do not use a shared administrator account.
 
