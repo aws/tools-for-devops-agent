@@ -79,8 +79,10 @@ Consequences:
 ### When Routes From Multiple DXGW Attachments Do Not Qualify for ECMP
 
 - If one route wins on an attribute (local preference, AS_PATH length, MED), only that DXGW attachment is installed.
-- **[Field knowledge]** If no attribute separates them but they still do not qualify for ECMP (for example, equal AS_PATH length but different ASNs), one attachment is picked deterministically using a hash of the prefix metadata, and only that attachment is installed in the TGW route table. The choice is consistent but not customer-controllable.
-- Documented: for routes with the same CIDR, attachment type and BGP attributes, AWS "can't guarantee a consistent route prioritization order" ([route evaluation order](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)). Do not design around which attachment wins an exact tie.
+- If no attribute separates them but they still do not qualify for ECMP (for example, equal AS_PATH length but different ASNs), only one attachment is installed in the TGW route table, and you can't control which one.
+  - Documented: for routes with the same CIDR, attachment type and BGP attributes, AWS "can't guarantee a consistent route prioritization order" ([route evaluation order](https://docs.aws.amazon.com/vpc/latest/tgw/how-transit-gateways-work.html)). The winner can differ between prefixes and can change over time, for example after a route is withdrawn and re-advertised.
+  - **[Field knowledge]** The pick is made from a hash of the prefix metadata, so in practice a given prefix often lands on the same attachment. That is an observation, not a guarantee.
+  - Do not design around which attachment wins an exact tie. Separate the routes with an attribute (local preference, AS_PATH length or MED), or make them qualify for ECMP.
 
 ### DXGW Amazon-Side ASNs Must Match for ECMP
 
@@ -154,7 +156,7 @@ If two DXGWs on a TGW carry the same prefix, **make the outcome deterministic** 
 Notes:
 - The routes a VPN attachment advertises come from the **TGW route table associated with that VPN attachment**.
 - The 10,000 figure is **TGW-wide** (all route tables combined), **not per route table**.
-- **Escalation path:** hard (non-adjustable) limits go to the service team after SME review. Quotas marked "Contact your SA or TAM" go through the account team.
+- **Requesting changes:** non-adjustable limits can only be changed after AWS reviews and approves the request. For those, and for quotas marked "Contact your SA or TAM", contact your AWS Solutions Architect or Technical Account Manager.
 
 ### Advertisement Selection When the 5,000 VPN Cap Is Hit
 

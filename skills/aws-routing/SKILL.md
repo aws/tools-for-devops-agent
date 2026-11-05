@@ -3,6 +3,7 @@ name: aws-routing
 description: 'Use this skill when the user wants to know which path AWS will pick for their traffic, why traffic took an unexpected route, or how to make AWS prefer a path. Covers Cloud WAN CNE route evaluation, Direct Connect Gateway local vs remote region preference, Transit Gateway route tables, ECMP and peering, VPC longest-prefix-match, BGP traffic engineering (LP communities 7224:7100/7200/7300, AS-path prepending, MED), DX + VPN redundancy and failover, and asymmetric routing. Use it even when the user only describes a symptom, such as "traffic is leaving the region", "not using my local Direct Connect", "routing to the wrong VIF/location", or "path is asymmetric". Read-only: analysis, recommendations, and describe/get/list validation commands grounded in public AWS docs.'
 metadata:
   version: "1.2.6"
+  summary: "Explains which path AWS picks across Cloud WAN, Transit Gateway, Direct Connect and VPN, why traffic took an unexpected route, and how to steer it."
   author: midakin
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
 ---
