@@ -97,10 +97,11 @@ one is granted by the AWS managed
 [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html)
 (checked against policy version v12, October 2026):
 
-- `cloudtrail:DescribeTrails`, `cloudtrail:ListTrails`, `cloudtrail:GetTrail`,
+- `cloudtrail:DescribeTrails`, `cloudtrail:ListTrails`,
   `cloudtrail:GetTrailStatus`, `cloudtrail:GetEventSelectors`,
   `cloudtrail:GetInsightSelectors`, `cloudtrail:ListEventDataStores`,
-  `cloudtrail:GetEventDataStore`
+  `cloudtrail:GetEventDataStore` (`cloudtrail:GetTrail` is granted but never
+  called; `DescribeTrails` returns every field used)
 - `s3:ListAllMyBuckets`, `s3:GetBucketLocation`, `s3:GetBucketVersioning`,
   `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketPublicAccessBlock`
 - `lambda:ListFunctions`, `dynamodb:ListTables` (list calls only; the agent
@@ -241,7 +242,20 @@ what was not assessed, and next steps.
   caps at `Attention`. The CloudTrail API itself permits the read with the full
   ARN; the operator runs `aws cloudtrail get-event-selectors --trail-name <full
   ARN>` from the CLI or the management account to resolve the rows. The skill
-  still makes the one ARN call so a future tool change is picked up.
+  still makes the one ARN call so a future tool change is picked up. The same
+  block applies to `DescribeTrails` with a `trailNameList` that contains the
+  organization trail ARN (the call then returns nothing, so the own trails are
+  lost too) and to `GetTrail` by that ARN; the skill calls `DescribeTrails` per
+  Region with no `trailNameList` and never calls `GetTrail`.
+- Inside DevOps Agent the report is rendered by the Context Gatherer subagent.
+  The chat agent may relay a summary; the full report (Resource Coverage table,
+  20 row Check Matrix, Not Assessed) is in the subagent's output. Ask "show the
+  full report" to get it unchanged. The report's second line is a relay note
+  asking the parent to deliver it unchanged.
+- Pasted data (no account access) prompts are answered by the chat agent
+  directly, so the skill applies only if the chat agent can load it. The chat
+  agent's `skill_read` may report the skill as not found (observed when the
+  asset had just been uploaded); the answer is then the base agent's.
 - Cross account S3 buckets touched by this account's principals are logged by
   an `arn:aws:s3` selector but are not in this account's inventory and are not
   listed.
@@ -290,6 +304,14 @@ what was not assessed, and next steps.
     not an approved `aws-services` value in this repository.)
 12. Management account mode: single account view with "covers resources outside
     this account" notes for this version; organization wide sweep later. OK?
+13. Why does the chat agent's `skill_read` fail for a skill the Context Gatherer
+    loads in the same session? Is skill registration scoped to the subagent
+    profile for `agent-types: CHAT`? Measured: in the functional harness the
+    parent's `skill_read` returned "Skill not found" in 32 of 32 with_skill
+    runs while the Context Gatherer loaded it every time (upload, ACTIVE, 45 s
+    settle, then the task); on a standing agent space the parent loaded the
+    same asset after a longer wait following upload. The harness now probes
+    until the parent's own load succeeds before running the task.
 
 ## Non-production disclaimer
 

@@ -6,7 +6,7 @@ IDs. A check that could not be evaluated shows `AccessDenied`, `ToolingFailure`
 or `NotApplicable` with the call that failed, never a guessed `PASS`. The two
 note rows (N1, N2) always render as `INFO`.
 
-Fields come from `DescribeTrails` and `GetTrail` [S11], `GetEventSelectors`
+Fields come from `DescribeTrails` [S11] (never `GetTrail`), `GetEventSelectors`
 [S4][S5], `GetTrailStatus` [S7] and `GetInsightSelectors`. "Member / Mgmt"
 says from which account type the row is evaluable.
 

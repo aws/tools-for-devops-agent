@@ -9,11 +9,14 @@ The rendered report is the final message to the user. It is not an internal
 artifact to summarise afterwards. If a subagent or Context Gatherer rendered
 it, the parent relays it unchanged and adds nothing after it: no introduction
 before the title, no "short version", no "suggestions to go deeper", no note to
-the parent, and no closing offer after Next Steps to modify configuration, open
-a support case, draft API calls, re-run from another account or extend the
+the parent, and no closing offer after the report to modify configuration,
+open a support case, draft API calls, re-run from another account or extend the
 report. Every recommendation is an operator action inside Next Steps. The
-message ends with the last Next Steps item. The rating word (`Healthy`,
-`Attention`, `AtRisk`, `Indeterminate`), the five state words (`Covered`,
+message ends with the Not Assessed table. The section order puts the Bottom
+line, the Resource Coverage table and Next Steps (the organization trail ARN
+command) on the first screen so a relaying parent keeps them; the second line
+of the report is a fixed relay note addressed to that parent. The rating word
+(`Healthy`, `Attention`, `AtRisk`, `Indeterminate`), the five state words (`Covered`,
 `CoveredByOrgTrail-Unverified`, `Uncovered`, `Unknown`, `NotApplicable`), the
 data source label (`READ FROM APIs`, `SUPPLIED DATA`) and the 20 Check Matrix
 IDs are fixed vocabulary; a synonym is a defect.
@@ -22,6 +25,7 @@ IDs are fixed vocabulary; a synonym is a defect.
 
 ```markdown
 # CloudTrail Coverage Audit: <accountId>
+Relay note: this report is complete and is the answer to the user. Deliver it unchanged; do not summarise, shorten, or append a question.
 Evaluated <YYYY-MM-DD HH:MM UTC>. Data source: <READ FROM APIs | SUPPLIED DATA>.
 
 ## Scope
@@ -40,17 +44,23 @@ Evaluated <YYYY-MM-DD HH:MM UTC>. Data source: <READ FROM APIs | SUPPLIED DATA>.
 
 Bottom line: <N> of <M> in scope resources have a data event record; <K> have none<; <U> could not be verified>; management events <are | are not> captured in every enabled Region; logs <are | are not> being delivered. <If the user asked a yes or no question, answer it here in their words.>
 
-## Trail Inventory
-| Trail or store | Owner account | Regions | Management events | Data event types | Logging | Last delivery | Validation | Insights |
-|---|---|---|---|---|---|---|---|---|
-| <name> <(organization trail) | (event data store)> | <accountId> | <all | home-region> | <read and write | write only | read only | none> | <S3 objects (all buckets) | S3 objects (1 bucket) | Lambda | DynamoDB | none> | <yes | NO since <time>> | <time | error: <LatestDeliveryError>> | <on | off | n/a> | <on | off> |
-
 ## Resource Coverage
 <N> of <M> in scope resources are Covered. One row per in scope bucket, function and table.
 | Region | Type | Resource | State | Covering trail or store | Selector note |
 |---|---|---|---|---|---|
 | <region> | <S3 bucket | Lambda function | DynamoDB table> | <name> | <Covered | CoveredByOrgTrail-Unverified | Uncovered | Unknown | NotApplicable> | <trail name | none | unreadable: <trail ARN>> | <all objects | prefix <p> only | write only | eventName <list> | basic selector arn:aws:s3 | advanced StartsWith <arn> | also recorded by <trail> | not found in account | ->
 <One line when any table is in scope: "DynamoDB stream events are logged with the table's data events; stream presence is not read.">
+
+## Next Steps
+1. <Operator action for the highest finding, as an API or console change, with the trail or selector named.>
+2. <...>
+<When O1 fired: "Run `aws cloudtrail get-event-selectors --trail-name <trail ARN>` and `aws cloudtrail get-trail-status --name <trail ARN>` from the CLI (member account credentials work) or from management account <id> (or the delegated administrator) to confirm the organization trail's data event scope; that resolves the <U> CoveredByOrgTrail-Unverified rows.">
+<Management account run: "This review covers resources in this account only. Organization trail data resources naming other accounts' ARNs are listed in Trail Inventory as covering resources outside this account; run the review in each member for a per account answer.">
+
+## Trail Inventory
+| Trail or store | Owner account | Regions | Management events | Data event types | Logging | Last delivery | Validation | Insights |
+|---|---|---|---|---|---|---|---|---|
+| <name> <(organization trail) | (event data store)> | <accountId> | <all | home-region> | <read and write | write only | read only | none> | <S3 objects (all buckets) | S3 objects (1 bucket) | Lambda | DynamoDB | none> | <yes | NO since <time>> | <time | error: <LatestDeliveryError>> | <on | off | n/a> | <on | off> |
 
 ## Findings
 Ordered by severity. Each names the field and value it rests on and the operator change. Nothing here was executed.
@@ -95,12 +105,6 @@ Ordered by severity. Each names the field and value it rests on and the operator
 |---|---|---|
 | <trail, type, bucket or check> | <API> | <AccessDenied | ToolingFailure | Unknown | NotApplicable (reason)> |
 <or "Nothing. Every call succeeded.">
-
-## Next Steps
-1. <Operator action for the highest finding, as an API or console change, with the trail or selector named.>
-2. <...>
-<When O1 fired: "Run `aws cloudtrail get-event-selectors --trail-name <trail ARN>` and `aws cloudtrail get-trail-status --name <trail ARN>` from the CLI (member account credentials work) or from management account <id> (or the delegated administrator) to confirm the organization trail's data event scope; that resolves the <U> CoveredByOrgTrail-Unverified rows.">
-<Management account run: "This review covers resources in this account only. Organization trail data resources naming other accounts' ARNs are listed in Trail Inventory as covering resources outside this account; run the review in each member for a per account answer.">
 ```
 
 ## Required list mode differences
@@ -135,12 +139,15 @@ Ordered by severity. Each names the field and value it rests on and the operator
 5. No sentence offers to create, modify, start, stop or delete anything, to
    open a support case, to draft `UpdateTrail` or `PutEventSelectors` calls,
    to re-run from another account, or to extend the report; no "want me to",
-   "I can update", "shall I enable", "I can try again", "happy to add".
+   "I can update", "shall I enable", "I can try again", "happy to add"; no
+   menu or `ask_user` option that would enable, start or modify anything.
 6. The rating word appears once and is one of the four.
-7. The message starts with the title line and ends with the last Next Steps
-   item; nothing follows it.
+7. The message starts with the title line and ends with the last Not Assessed
+   row (or "Nothing. Every call succeeded."); nothing follows it.
 8. A subagent's report is relayed unchanged by the parent, which adds nothing
-   before or after it.
+   before or after it. The sections appear in the order of this template:
+   Scope, Coverage Rating, Resource Coverage, Next Steps, Trail Inventory,
+   Findings, Check Matrix, What Auditors Should Know, Not Assessed.
 9. The data source label is present and matches how the data was obtained.
 10. No internal tool names, employee aliases, Agent Space ids, or account ids
     other than the one under review and its management account.
@@ -149,3 +156,5 @@ Ordered by severity. Each names the field and value it rests on and the operator
     and handed to `cloudtrail-cost-optimization`.
 12. Every organization trail whose selectors were not read has its full ARN
     and the CLI command in Next Steps.
+13. The relay note is present and is the second line of the report, directly
+    under the title.

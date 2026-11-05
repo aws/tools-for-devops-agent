@@ -16,8 +16,8 @@ user.
 | `organizations:DescribeOrganization` | once | `Organization.MasterAccountId`, `Organization.Id` | none | Standalone, member or management account |
 | `organizations:ListDelegatedAdministrators` (`ServicePrincipal=cloudtrail.amazonaws.com`) | once | `DelegatedAdministrators[].Id` | `NextToken` | Delegated administrator detection; `AccessDeniedException` from a member is expected |
 | `cloudtrail:ListTrails` | once per Region or once (it lists every trail with `HomeRegion`) | `TrailARN`, `Name`, `HomeRegion` | `NextToken` | Trail inventory [S10] |
-| `cloudtrail:DescribeTrails` (`includeShadowTrails` default true) | once per Region, de duplicate by `TrailARN` | `Name`, `TrailARN`, `HomeRegion`, `IsMultiRegionTrail`, `IsOrganizationTrail`, `IncludeGlobalServiceEvents`, `HasCustomEventSelectors`, `HasInsightSelectors`, `LogFileValidationEnabled`, `S3BucketName`, `S3KeyPrefix`, `KmsKeyId`, `CloudWatchLogsLogGroupArn`, `SnsTopicARN` | none | Trail fields [S9][S11] |
-| `cloudtrail:GetTrail` | per trail, `Name` = **full TrailARN** | same as above | none | Fills fields for a shadow or organization trail |
+| `cloudtrail:DescribeTrails` (`includeShadowTrails=true`, **no `trailNameList`**) | once per Region, de duplicate by `TrailARN` | `Name`, `TrailARN`, `HomeRegion`, `IsMultiRegionTrail`, `IsOrganizationTrail`, `IncludeGlobalServiceEvents`, `HasCustomEventSelectors`, `HasInsightSelectors`, `LogFileValidationEnabled`, `S3BucketName`, `S3KeyPrefix`, `KmsKeyId`, `CloudWatchLogsLogGroupArn`, `SnsTopicARN` | none | Trail fields [S9][S11] |
+| `cloudtrail:GetTrail` | **never called** | none | none | `DescribeTrails` already returns every field used; a `GetTrail` on the organization trail ARN is blocked by the tool like any cross account ARN |
 | `cloudtrail:GetTrailStatus` | per trail, `Name` = **full TrailARN** | `IsLogging`, `LatestDeliveryTime`, `LatestDeliveryError`, `LatestDigestDeliveryTime`, `LatestDigestDeliveryError`, `LatestCloudWatchLogsDeliveryError`, `StartLoggingTime`, `StopLoggingTime` | none | L1, L2, L3, E2 [S7] |
 | `cloudtrail:GetEventSelectors` | per trail, `TrailName` = **full TrailARN** | `EventSelectors[]` (`ReadWriteType`, `IncludeManagementEvents`, `DataResources[]`, `ExcludeManagementEventSources`), `AdvancedEventSelectors[]` (`Name`, `FieldSelectors[]`) | none | Coverage mapping, T1, M1, M2, M3, D1 to D4 [S4][S5] |
 | `cloudtrail:GetInsightSelectors` | per trail, `TrailName` = full TrailARN | `InsightSelectors[].InsightType` | none | I1; `InsightNotEnabledException` means not enabled |
@@ -55,7 +55,7 @@ administrator) account and appears in each member account's `DescribeTrails`
 as a shadow trail with `IsOrganizationTrail` true [S8][S9]. From a member
 account:
 
-- `GetTrailStatus`, `GetTrail`, `GetEventSelectors` and `GetInsightSelectors`
+- `GetTrailStatus`, `GetEventSelectors` and `GetInsightSelectors`
   **must be called with the full `TrailARN`**
   (`arn:aws:cloudtrail:<home-region>:<management-account>:trail/<name>`). The
   documentation states this for `GetTrailStatus` [S7] and that members can run
@@ -73,10 +73,17 @@ account:
   not `AccessDenied`.
 - Make the ARN call **once** for `GetTrailStatus` and once for
   `GetEventSelectors` so a future tool change is picked up; do not retry by
-  name, by Region, or with an account parameter. Skip `GetTrail` and
-  `GetInsightSelectors` on the organization trail when the first ARN call is
-  blocked; `DescribeTrails` already supplied `HasInsightSelectors`,
-  `IsMultiRegionTrail` and `LogFileValidationEnabled`.
+  name, by Region, or with an account parameter. Skip `GetInsightSelectors` on
+  the organization trail when the first ARN call is blocked; `DescribeTrails`
+  already supplied `HasInsightSelectors`, `IsMultiRegionTrail` and
+  `LogFileValidationEnabled`.
+- **`DescribeTrails` is called per Region with `includeShadowTrails=true` and
+  no `trailNameList`.** A `trailNameList` that contains the organization trail
+  ARN is rejected by the same tool validation, and the call then returns
+  nothing, so the account's own trails are lost with it (observed 2026-11-04).
+  **`GetTrail` is never called**: by the organization ARN it is blocked the
+  same way, and for every trail `DescribeTrails` already returns every field
+  this skill uses.
 - Only after the **ARN** call fails or is blocked (`AccessDeniedException`, the
   tool refusal, a guardrail cancellation, or `TrailNotFoundException` with the
   ARN) may the trail's selectors be treated as unreadable, which produces
@@ -99,6 +106,7 @@ the ARN and the command and models the state explicitly instead of saying
 | `AccessDeniedException`, `UnauthorizedOperation`, `AccessDenied` (S3) | `AccessDenied` | Row or source becomes `Unknown`; Not Assessed lists the call; rating caps at `Attention`. Never "no trails", "no buckets" or "not covered" |
 | Guardrail message such as "Cancelled mutative operation" or any tool cancellation (seen on `dynamodb:DescribeTable`, which the skill therefore never calls) | `ToolingFailure` | Same as `AccessDenied`; note that the call is a read and was cancelled by the agent's tool policy |
 | Tool refusal "ARN account <id> not in target accounts" / "Resource validation failed" on an organization trail's full ARN | `ToolingFailure` | `CoveredByOrgTrail-Unverified` for the resources the trail could cover; O1; Not Assessed names the call and the ARN; Next Steps gives the CLI command. Never `AccessDenied`: the request did not reach AWS |
+| The same tool refusal on `DescribeTrails` with a `trailNameList` holding the organization trail ARN, or on `GetTrail` by that ARN | mistake, not evidence | Neither call is made by this skill: re-issue `DescribeTrails` per Region with no `trailNameList`; take the trail fields from that response and never call `GetTrail` |
 | `ThrottlingException`, `TooManyRequestsException`, 5xx | retry up to 3 times with backoff; then `ToolingFailure` | Same as above |
 | `TrailNotFoundException` after a **name** call on an organization trail | not evidence | Retry with the full ARN (section 3) |
 | `TrailNotFoundException` after an **ARN** call | `Unreadable` | `CoveredByOrgTrail-Unverified` for the resources it could cover; O1 |
