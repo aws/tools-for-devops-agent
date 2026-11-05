@@ -34,7 +34,7 @@ Bluebox refuses a workspace the token's owner is not a member of (HTTP 403). The
 Nothing needs to be set up in Bluebox for this option: AWS DevOps Agent registers itself with Bluebox when you connect.
 
 1. When you connect, sign in to Bluebox in your browser.
-2. Read the approval page and approve access. The sign-in grants `mcp:tools`, which lets the agent call Bluebox tools in your workspaces as you. It works only at the Bluebox MCP server.
+2. Read the approval page and approve access. The sign-in grants `mcp:tools`, which lets the agent call Bluebox tools in your workspaces as you. It works only at the Bluebox MCP server. The approval page lists AWS DevOps Agent as an unverified, self-registered app. This is expected: AWS DevOps Agent registers itself when you connect, so Bluebox can't verify its name.
 
 The connection acts as the person who signed in, with that person's current workspace access: the agent sees what they can see in Bluebox, and every question it asks counts against the workspace's daily AI usage. If their role changes or they leave a workspace, the agent's access changes with it.
 
