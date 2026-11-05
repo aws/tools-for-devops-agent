@@ -20,9 +20,12 @@ After saving, enter these values in the connection form:
 | Field | Value | Example |
 |---|---|---|
 | **Halo domain** | The domain you use to access Halo | `example.haloitsm.com` |
+| **Halo port** | `443`, unless your self-hosted Halo uses another port | `443` |
 | **MCP Toolset ID** | The Agent Space's **MCP Toolset ID** | `0f8fad5b-d9cb-469f-a165-70867728950e` |
 | **Client ID** | The Agent Space's **Client ID** | |
 | **Client Secret** | The secret you copied in step 5 | |
+
+If your Halo is self-hosted and isn't reachable from the internet on port 443, create a [private connection](https://docs.aws.amazon.com/devopsagent/latest/userguide/configuring-integrations-and-knowledge-connecting-to-privately-hosted-tools.html) to it, with its port in the port ranges, and select it when you connect.
 
 ## Choose the tools
 
