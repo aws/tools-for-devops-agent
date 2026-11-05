@@ -19,7 +19,7 @@ Bluebox is an observability agent that reads a workspace's live traces, logs, me
 ## Prerequisites
 
 - The Bluebox connector in your Agent Space, connected with a Bluebox access token and workspace ID or by signing in with Bluebox, with its tools enabled. The connector's [setup guide](https://github.com/aws/tools-for-devops-agent/blob/main/connectors/bluebox/README.md) covers the Bluebox side.
-- Services that send OpenTelemetry traces (and optionally logs and metrics) to that Bluebox workspace.
+- Services the workspace's observability backend monitors, through OpenTelemetry or instrumentation already in place.
 
 ## Limitations
 

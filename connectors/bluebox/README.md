@@ -7,7 +7,7 @@ You connect in one of two ways: with an access token and a workspace ID (the def
 ## Before you connect
 
 - A Bluebox workspace with your observability backend connected.
-- Services that send OpenTelemetry traces (and optionally logs and metrics) to that workspace. Check under **Environment** in Bluebox that they show up. Services derived from traces are listed only while they send traffic.
+- Services the observability backend monitors, through OpenTelemetry or instrumentation already in place. Check under **Environment** in Bluebox that they show up. The agent lists only services that sent traces in the last hour.
 
 ## Create an access token
 
