@@ -34,6 +34,7 @@ Metadata:
           - EnableSageMakerAIOpsReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
+          - EnableIacChangeCostPreview
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -169,6 +170,11 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableIacChangeCostPreview:
+    Type: String
+    Description: IaC Change Cost Preview skill (adds pricing:GetProducts, GetAttributeValues and DescribeServices for live Price List lookups).
+    Default: 'true'
+    AllowedValues: ['true', 'false']
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -219,6 +225,7 @@ Conditions:
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
+  SkillIacChangeCostPreview: !Equals [!Ref EnableIacChangeCostPreview, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -726,6 +733,26 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # iac-change-cost-preview: adds the Price List API read actions the skill uses to
+  # price Added/Removed/Resized resources live. Price List data is public and free.
+  PolicyIacChangeCostPreview:
+    Type: AWS::IAM::Policy
+    Condition: SkillIacChangeCostPreview
+    Properties:
+      PolicyName: DevOpsAgentSkill-IacChangeCostPreview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PriceListRead
+            Effect: Allow
+            Action:
+              - pricing:GetProducts
+              - pricing:GetAttributeValues
+              - pricing:DescribeServices
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -758,6 +785,7 @@ Outputs:
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
+        - iac-change-cost-preview: ${EnableIacChangeCostPreview} (pricing:GetProducts, pricing:GetAttributeValues, pricing:DescribeServices)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
