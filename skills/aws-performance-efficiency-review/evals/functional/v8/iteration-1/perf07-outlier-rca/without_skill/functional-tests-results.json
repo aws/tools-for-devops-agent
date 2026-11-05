@@ -1,0 +1,109 @@
+{
+  "version": "v8",
+  "iteration": 1,
+  "eval_id": "perf07-outlier-rca",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies that the perf-demo-07-catalog-pool-b task, a second pool registered in the same shared target group (perf-demo-07-catalog-tg) alongside the main service, has a task definition setting (INDEX_REFRESH_HOLD_MS=280) that causes it to hold a lock/process that delays its requests significantly (~140ms extra, avg 189ms vs ~50ms baseline, p99 341ms), matching the expected root cause of a slow 4th target in the shared target group causing a quarter of requests to be slow due to lock contention. The key details (shared target group, pool-b task, lock-related config causing wait, ~25% of requests affected, latency magnitudes) all align closely with the expected root cause description.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"perf-demo-07-catalog-pool-b:10 (registered 2026-11-02 09:18 UTC, same image s7redesign2) sets INDEX_REFRESH_HOLD_MS=280... Both services register into perf-demo-07-catalog-tg (round robin, cross-zone), so pool-b's single task... serves 25% of requests. Its index_refresh_cycle runs ~211 times/min with hold_ms=280, which keeps the lock held ~98% of the time. Requests wait ~140 ms on top of the normal 50 ms (avg 189 ms, p99 341 ms, 46% over 200 ms).\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause names one member of the load-balanced fleet serving the same requests several times slower than its peers while staying in rotation, separates it from the symptom (afternoon tail latency), and does not attribute it to the service being under-sized, to the load balancer or to a dependency",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Root cause: 'Config drift... pool-b's single task (8da347dd, <private-ip>, us-east-1a) serves 25% of requests. Its index_refresh_cycle runs ~211 times/min with hold_ms=280, which keeps the lock held ~98% of the time.' This is separated from the symptom 'Slow catalog requests via the internal ALB' and is not attributed to under-sizing, LB, or a dependency.",
+          "reasoning": "The root cause clearly names a single member (pool-b task) staying in rotation serving requests slower than peers, and is listed as a separate 'Finding' distinct from the 'Symptom'. No attribution to undersizing, LB, or dependency is made.",
+          "confidence": "high"
+        },
+        {
+          "text": "Evidence states that the target group has four registered targets while perf-demo-07-catalog runs three tasks, and follows that gap to perf-demo-07-catalog-pool-b in the same target group",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output never states target group has four registered targets vs three tasks for perf-demo-07-catalog; it says 'pool-b's single task... serves 25% of requests' implying 4 total targets, but does not explicitly state 'perf-demo-07-catalog runs three tasks' or frame it as a count mismatch/gap.",
+          "reasoning": "The specific framing of counting targets vs tasks and following the gap is not explicitly present; only inferred from 25% figure.",
+          "confidence": "high"
+        },
+        {
+          "text": "Evidence breaks response time down per task or per target and reports three members at about 50 ms and one at roughly 180 to 200 ms, identifying the outlier against its peers rather than a fixed threshold; any per-Availability-Zone difference is treated as a narrowing step, not a zonal fault",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No explicit per-task breakdown of response times is given (e.g., 'three at 50ms, one at 180-200ms'). The output mentions 'avg 189 ms, p99 341 ms' for pool-b and '~17.9 ms to ~51.6 ms' p50 overall, but does not give a clear per-target comparison table or AZ-based narrowing.",
+          "reasoning": "The assertion requires a specific breakdown per task showing three at ~50ms and one at ~180-200ms; this isn't explicitly presented, only inferred.",
+          "confidence": "high"
+        },
+        {
+          "text": "The findings describe two latency populations (median about 50 ms and unchanged, p90 and p99 several times it, about a quarter of requests slow) and apply a magnitude check showing that an average of about 85 ms over four targets implies exactly one slow member",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states p50 rose from ~17.9ms to ~51.6ms and average rose ~75 to ~86ms, but does not explicitly state two latency populations or perform a magnitude check implying exactly one slow member out of four.",
+          "reasoning": "No explicit arithmetic step showing 'average of ~85ms over four targets implies exactly one slow member' is present; the numbers are mentioned separately without this specific magnitude-check framing.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The healthy perf-demo-07-catalog tasks are used as the control (same image, task size, listener, target group and request mix) to rule out the code, task size, request mix, load balancer and schedule",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output mentions 'The main service's perf-demo-07-catalog:9 sets it to 0, and every other setting is identical' as a comparison, but does not explicitly use this as a control to rule out code, task size, request mix, LB, and schedule separately.",
+          "reasoning": "There's an implicit comparison (same image, same settings except env var) but it's not framed as a deliberate control ruling out each of these five factors explicitly.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The findings state that the passing health check and four healthy hosts are not evidence of a healthy member, because the configured check does not measure the request work",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of health checks or '4 healthy hosts' being insufficient evidence of health is found anywhere in the output.",
+          "reasoning": "This specific claim about health check limitations is absent from the summary.",
+          "confidence": "high"
+        },
+        {
+          "text": "The low aggregate CPU of perf-demo-07-catalog and any Overprovisioned right-sizing finding are declined as evidence that the fleet is healthy",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of CPU utilization or Compute Optimizer 'Overprovisioned' findings being declined as evidence of fleet health.",
+          "reasoning": "This assertion's content is entirely absent from the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "The afternoon request-rate step is named as the trigger and ruled out as the cause by capacity arithmetic or by the overnight window showing the same per-member gap, and the onset of the symptom is stated separately from the onset of the cause; any window-start deployment or pre-window target 5XX errors, if mentioned, are ruled out by scope or history",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'Afternoon traffic (~12:00\u201322:00 UTC) is 4 req/s vs 1 req/s the rest of the day' as a symptom driver, but does not explicitly rule out the request-rate step as a cause via capacity arithmetic or overnight comparison showing the same per-member gap; it doesn't separately state onset of symptom vs onset of cause distinctly, though the deploy date (Nov 2 09:00) vs symptom time (09:18) are close but not clearly separated as distinct onsets with reasoning.",
+          "reasoning": "While there's a hint of separating times (deploy at 09:00, pool-b task registered at 09:18), there's no explicit ruling out of the request-rate as the root cause via capacity arithmetic or overnight window check.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The findings compare the incident (afternoon) window with a baseline (overnight or morning) window, and each finding cites a metric name, a time window and an observed value with its unit",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output cites 'TargetResponseTime p50 for perf-demo-07-catalog-tg rose from ~17.9 ms to ~51.6 ms starting 2026-11-02 ~09:00 UTC' and 'Average rose ~75 \u2192 ~86 ms' and 'p99 spiked to ~1.55\u20131.57 s during 08:00\u201310:00 UTC on Nov 2, then settled around ~320\u2013330 ms' \u2014 these include metric names, time windows, and values with units, implicitly comparing before/after the deploy (a baseline vs incident comparison).",
+          "reasoning": "Although not explicitly labeled 'baseline vs incident', the metrics are compared across time periods (before Nov 2 vs after) with specific units and windows, satisfying the substance of the assertion.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 7,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 0.2222
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m29s",
+    "cost": "$2.74",
+    "context_window": {
+      "utilization": "7.3%",
+      "compaction_count": 0
+    }
+  }
+}

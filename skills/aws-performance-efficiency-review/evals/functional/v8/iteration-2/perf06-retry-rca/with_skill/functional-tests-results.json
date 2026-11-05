@@ -1,0 +1,114 @@
+{
+  "version": "v8",
+  "iteration": 2,
+  "eval_id": "perf06-retry-rca",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-performance-efficiency-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's Root Cause finding precisely matches the expected root cause: perf-demo-06-checkout's READ_TIMEOUT_MS=1000 with MAX_ATTEMPTS=3 against perf-demo-06-pricing, where pricing's daytime p50 (~1000ms) and p99 (~1200ms) sit near/above the timeout due to doubled line count in the afternoon (LINES_DAY=6 vs LINES_NIGHT=3). The agent correctly identifies that abandoned/timed-out attempts are not cancelled and keep holding pricing's reserved concurrency (3) slots, causing retries to be throttled (TooManyRequestsException), and that pricing's own Duration/Errors stay normal - the issue is attempt amplification against the concurrency ceiling. The investigation also correctly uses the control twin (perf-demo-06-quote/pricing-quote with 4000ms timeout, 1 attempt, no throttles) as supporting evidence that rules out code/table/schedule issues, matching the expected reasoning exactly. The afternoon rate/line increase is correctly treated as a trigger rather than the root cause, and reserved concurrency is correctly treated as a ceiling rather than the cause itself. All key identifying details (timeout values, attempt counts, concurrency figures, control group comparison) align with the expected root cause description.",
+      "evidence": "\"Root Cause: Checkout pricing read timeout (1000 ms, 3 attempts) is below pricing's daytime duration... The abandoned runs keep holding pricing's 3 reserved concurrency slots, so the retries are throttled... The control twin perf-demo-06-pricing-quote has the same code and concurrency, but its caller uses a 4000 ms timeout with 1 attempt: 1:1 attempts, 0 failures, p99 ~1.26 s.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause names the checkout caller's request policy (a client timeout below the dependency's busy-window latency tail, together with the frontend re-issuing the abandoned call) and separates it from the symptoms (afternoon checkout latency and failed requests), with the pricing function's own duration reported as steady rather than blamed",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Root cause: 'Checkout pricing read timeout (1000 ms, 3 attempts) is below pricing's daytime duration' and 'Secondary amplifier: storefront retries checkout (3000 ms timeout, 3 attempts)'. The summary explicitly separates these from symptoms (listed as 'Symptoms' section: checkout p99 latency, 57% failed, storefront client p99) and states pricing duration is steady: 'The control twin perf-demo-06-pricing-quote has the same code and concurrency, but its caller uses a 4000 ms timeout with 1 attempt: 1:1 attempts, 0 failures, p99 ~1.26 s.' Pricing's own duration (p50 ~1,000ms, p99 ~1,200ms) is reported as a natural consequence of load, not blamed as the root cause itself.",
+          "reasoning": "The root cause finding explicitly names the checkout caller's 1000ms timeout vs pricing's daytime p99, and the storefront retry amplifier is also separated. Pricing duration is reported factually without being blamed.",
+          "confidence": "high"
+        },
+        {
+          "text": "Evidence compares the originating request count with the pricing function's Invocations plus Throttles, states that attempts per user request are well above one in the incident window, and notes that Invocations alone excludes throttled requests",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Daytime demand at one attempt each is ~2.67/s (\u22482.7 slots)... With retries it becomes 7,180 invocations + ~12,500 throttles/hr \u2248 5.5 attempts/s, about 2.6 pricing attempts per checkout run.' Also 'Checkout \u2192 pricing client config... MAX_ATTEMPTS=3'.",
+          "reasoning": "The evidence explicitly combines invocations and throttles to compute attempts/s and states attempts per request (~2.6), well above 1, and implicitly notes invocations alone (7,180/hr) would undercount since throttles (~12,500/hr) are added separately.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation uses perf-demo-06-quote and perf-demo-06-pricing-quote as the control path (same source, memory, reserved concurrency and request size, one attempt, no throttles) to rule out the handler code, request size, table, storefront and schedule",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The control twin perf-demo-06-pricing-quote has the same code and concurrency, but its caller uses a 4000 ms timeout with 1 attempt: 1:1 attempts, 0 failures, p99 ~1.26 s.' Also 'pricing-quote (also reserved 3) only sees 1\u201315 throttles/hr.' and 'The sibling path perf-demo-06-quote \u2192 perf-demo-06-pricing-quote uses READ_TIMEOUT_MS=4000 with MAX_ATTEMPTS=1.'",
+          "reasoning": "The quote/pricing-quote control path is used to rule out handler code and concurrency as causes, showing same code/concurrency but different timeout settings leads to no throttling. However it doesn't explicitly mention request size comparison or ruling out storefront/schedule as separate items - but the overall structure supports ruling out those hypotheses via the twin comparison.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation applies a magnitude check with arithmetic: served rate equals reserved concurrency divided by duration (about 3 per second), arriving attempts equal the user request rate (about 2 per second) times attempts per request, and the two are compared to show the dependency is over capacity",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Pricing capacity is 3 slots \u00f7 1.0 s = 3 attempts/s. Daytime demand at one attempt each is ~2.67/s (\u22482.7 slots)... With retries it becomes 7,180 invocations + ~12,500 throttles/hr \u2248 5.5 attempts/s, about 2.6 pricing attempts per checkout run.'",
+          "reasoning": "This explicitly computes served rate (3 slots/1s=3/s), arrival rate from request rate and attempts/request (2.67/s baseline, 5.5/s with retries), and compares to capacity to show over capacity.",
+          "confidence": "high"
+        },
+        {
+          "text": "The onset is stated at about 12:00 UTC, and the afternoon increases in request size and request rate are named as triggers and distinguished from the cause, with the rate step ruled out by arithmetic",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Checkout p99 latency ~4x higher 12:00\u201322:00 UTC daily' with time '2026-11-02T12:00:00Z'. 'Trigger: 6-line daytime carts push pricing duration past the timeout... LINES_DAY=6 vs LINES_NIGHT=3... The rate change alone (112 \u2192 120/min) stays within capacity.'",
+          "reasoning": "Onset at 12:00 UTC is stated, both request size (lines) and rate increase are named as triggers, and the rate step is explicitly ruled out by arithmetic ('stays within capacity'), distinguishing triggers from the root cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "The pricing function's reserved concurrency is named as a real ceiling but not the root cause, with the quote path or arithmetic as evidence",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Cause: Retry amplification saturates pricing's reserved concurrency of 3' describes concurrency as a real ceiling, and 'Pricing reserved concurrency of 3 throttles daytime load, checkout retries inflate latency' hypothesis is listed with supporting observations, but the root cause is explicitly the checkout timeout issue, not simply the concurrency limit itself.",
+          "reasoning": "The reserved concurrency of 3 is named as a real limiting factor with quote path evidence (pricing-quote also reserved 3 but with only 1-15 throttles/hr due to 1 attempt), while the designated 'Root Cause' is the checkout timeout - concurrency is treated as a contributing/cascading cause not the ultimate root cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any configuration change in or near the window and any checkout errors from before the window, if mentioned, are ruled out by scope, timing or history and not reported as the current cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Hypothesis: Recent deployment (2026-10-29 11:33 UTC)... All perf-demo-06 functions were last modified 2026-10-29 11:33 UTC.' This is listed as a Hypothesis (not Root Cause) with a Gap: 'CloudTrail change history not available... could not be checked.' Checkout Errors=0 throughout is stated ('Lambda Errors and Throttles on checkout stay at 0').",
+          "reasoning": "The deployment hypothesis is listed separately from the Root Cause and not confirmed as the cause (gap noted that CloudTrail couldn't confirm specifics); checkout errors are explicitly stated as 0 throughout, ruling them out as a cause. The deployment date (10/29) is before the window and uniform across all functions, implicitly ruled out by the daily recurring pattern after night/day differences, though not explicitly stated as 'ruled out' - it's left as an unresolved hypothesis with gaps rather than definitively dismissed.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The findings compare the incident (afternoon) window with a baseline (overnight or morning) window and state a latency percentile (p90 or p99, not only the average) and the attempts per request for each",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Checkout Duration p99 ~864 ms off-peak vs ~3.4-3.9 s during 12:00-22:00 UTC' and 'At night pricing takes 440-840 ms, below the timeout, so there are no retries and 100% of requests succeed... During the day pricing takes p50 ~1,000ms and p99 ~1,200ms, so about half of first attempts time out.' Also 'Storefront minute logs show daytime checkout client p99 ~5.1s... At night p99 is ~0.87s.'",
+          "reasoning": "Multiple findings compare daytime vs night/off-peak baseline with p99 percentiles (not just averages) and state attempts per request for each window (night: 1:1 no retries, day: ~2.6 attempts/request with pricing_attempts=3 shown in logs).",
+          "confidence": "high"
+        },
+        {
+          "text": "Each finding cites a metric name, a time window and an observed value with its unit",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'perf-demo-06-pricing has ReservedConcurrentExecutions=3... From 12:00-22:00 UTC its Throttles jump from ~0 to 11.8k-13.2k per hour, and Duration p50 rises ~642 \u2192 ~1,000ms (p99 ~838 \u2192 ~1,200ms).' Also 'Checkout Duration p99 ~864 ms off-peak vs ~3.4-3.9s during 12:00-22:00 UTC.'",
+          "reasoning": "Each finding/observation cites specific metric names (Duration, Throttles, Invocations, Errors), explicit time windows (12:00-22:00 UTC, 2026-11-02, 2026-11-03), and observed values with units (ms, s, /hr, counts).",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 9,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m11s",
+    "cost": "$2.59",
+    "context_window": {
+      "utilization": "9.9%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,222 @@
+{
+  "skill_name": "aws-performance-efficiency-review",
+  "evals": [
+    {
+      "id": "perf02-credits-chat",
+      "task_type": "chat",
+      "prompt": "In us-east-1: The perf-demo-jobs queue falls behind in the afternoons and jobs wait too long. Are the workers sized right, and what should we change? Target: a job should be finished within 60 seconds of landing on perf-demo-jobs at the p99, and the oldest message on the queue should never sit longer than 2 minutes during the afternoon. Peak and growth: the afternoon peak is about 82 jobs per minute (roughly 7 per minute overnight), and we expect about 15 percent growth over the next two quarters, so about 94 jobs per minute. Constraints: up to about 15 percent more infrastructure cost is acceptable; the job payload and the producer's publishing schedule cannot change this week. Dig into it here in chat; do not open a separate investigation, and do not ask me anything else before answering.",
+      "expected_output": "An answer that reads the two queue consumers per-instance, finds that perf-demo-worker-a (t3.micro, standard credit mode) drains its CPUCreditBalance to zero a few hours into the afternoon window and is throttled to baseline while perf-demo-worker-b (unlimited) runs the same load and stays flat, ties the backlog onset to the moment worker-a's credits reach zero rather than to the 12:00 arrival increase, checks CPUUtilization together with the credit balance so the baseline-pinned CPU is not read as idle, and gives ranked recommendations (switch worker-a to unlimited or a non-burstable class first, scale out consumers only as an interim measure) each with a cost direction and a verification metric",
+      "should_trigger": true,
+      "assertions": [
+        "The root cause is CPU credit exhaustion on perf-demo-worker-a (CPUCreditBalance drains to zero and the CPU is throttled to baseline in standard mode), separated from its symptoms (rising per-job duration and the growing queue backlog) and not attributed to the job code, SQS or the producer",
+        "The response breaks the two consumers down per instance, naming perf-demo-worker-a as the degraded consumer and perf-demo-worker-b as unaffected under the same code and load, using the twin to rule out the job code, the queue and the producer",
+        "The response reads CPUCreditBalance together with CPUUtilization and notes that in standard mode the instance cannot borrow surplus (CPUSurplusCreditBalance stays at zero) so it is capped at baseline when the balance is exhausted",
+        "The response does not read worker-a's low, baseline-pinned CPUUtilization as the instance being idle or fine (no false idle or false saturation finding)",
+        "The response states the onset time of the backlog and matches it to worker-a's CPUCreditBalance reaching zero, hours after the 12:00 arrival increase rather than at that increase",
+        "The response applies a magnitude check: the backlog growth (NumberOfMessagesSent minus NumberOfMessagesDeleted) or worker-a's throughput drop matches the capacity worker-a lost net of what worker-b absorbs",
+        "The response compares a busy afternoon window with a quiet morning or overnight window and states the arrival or throughput rate per period rather than a single snapshot",
+        "Any configuration change in or near the 12:00 window, if mentioned, is ruled out by timing, scope or history and not treated as the cause",
+        "Each finding cites a metric name, a time window and an observed value",
+        "Recommendations are ranked and each states both a cost direction (raises, lowers or does not change cost) and the metric that should change if it works",
+        "Scaling out more consumers is ranked below removing the credit cap on worker-a and labelled as an interim or masking measure, because it leaves worker-a throttled",
+        "Treats the backlog on perf-demo-jobs as its own problem: if another backed-up queue in the account (for example perf-demo-08-jobs) is mentioned, it is kept out of scope and not blamed for perf-demo-jobs",
+        "After the intake answers are given, the recommendations are sized against the stated target with arithmetic that reaches the expected result: two consumers at full per-job speed give about 110 jobs per minute of capacity against the stated 82 per minute afternoon peak, so the backlog drains and the oldest-message age returns under the stated 60 seconds, the stated growth to about 94 per minute is shown to sit inside that capacity with headroom, and every recommendation stays within the stated cost ceiling and leaves the job payload and the producer schedule unchanged",
+        {
+          "text": "No raw 12-digit account IDs, ARNs, VPC IDs, private hostnames or private IP addresses are exposed",
+          "evaluator": "regex",
+          "pattern": "(?:\\b\\d{12}\\b|arn:aws[a-z-]*:|vpc-[0-9a-f]+|\\.(?:ec2|compute)\\.internal|\\b(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(?:1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3})\\b)",
+          "match": "absent"
+        }
+      ],
+      "additional_permissions_file": "skills/aws-performance-efficiency-review/evals/additional-permissions.json"
+    },
+    {
+      "id": "perf02-credits-rca",
+      "task_type": "investigation",
+      "prompt": "In us-east-1: Messages on the perf-demo-jobs SQS queue wait much longer in the afternoons (UTC) and processing falls behind. Find the root cause.",
+      "expected_root_cause": "perf-demo-worker-a, a t3.micro consumer in standard credit mode, runs above its baseline during the afternoon day-rate window, so its CPUCreditBalance drains to zero; in standard mode it cannot borrow surplus (CPUSurplusCreditBalance stays at zero), the CPU is throttled to baseline, its per-job duration rises several-fold and its throughput falls, and the queue backlog and age of oldest message grow. The identical consumer perf-demo-worker-b in unlimited mode runs the same load without slowing, which rules out the job code, SQS and the producer. The cause is the burstable credit model on worker-a, not the 12:00 arrival increase, not the window-start config change and not the boot-time errors; overnight the night rate drops worker-a below baseline and credits recover",
+      "should_trigger": true,
+      "assertions": [
+        "The root cause names CPU credit exhaustion on perf-demo-worker-a (CPUCreditBalance reaching zero and the CPU throttled to baseline in standard mode) and separates this cause from its symptoms (rising per-job duration and the growing backlog and age of oldest message), rather than blaming the job code or an inherently too-heavy workload",
+        "The investigation breaks the two consumers down per instance, naming perf-demo-worker-a as the degraded consumer and perf-demo-worker-b as unaffected under the same code and load, and uses the twin to rule out the job code, SQS and the producer",
+        "Evidence includes CPUCreditBalance together with CPUUtilization and CPUSurplusCreditBalance from CloudWatch for worker-a across the incident window",
+        "The findings compare the incident (afternoon) window with a baseline (morning or overnight) window when credits are healthy and state the rate per period rather than a single snapshot",
+        "The investigation does not read worker-a's baseline-pinned or low CPUUtilization as the instance being idle or simply too small without checking the credit balance (no false idle or false saturation finding)",
+        "The investigation states the onset time of the backlog and matches it to worker-a's CPUCreditBalance reaching zero, hours after the 12:00 arrival increase rather than at that increase",
+        "The investigation applies a magnitude check: the backlog growth (NumberOfMessagesSent minus NumberOfMessagesDeleted) or worker-a's throughput drop matches the capacity worker-a lost net of what worker-b absorbs",
+        "Any configuration change in or near the 12:00 window, if mentioned, is ruled out by timing, scope or history and not treated as the cause",
+        "Does not probe or report on AWS accounts that are not in the request path",
+        "Treats the backlog on perf-demo-jobs as its own problem: if another backed-up queue in the account (for example perf-demo-08-jobs) is mentioned, it is kept out of scope and not blamed for perf-demo-jobs"
+      ],
+      "additional_permissions_file": "skills/aws-performance-efficiency-review/evals/additional-permissions.json"
+    },
+    {
+      "id": "perf06-retry-chat",
+      "task_type": "chat",
+      "prompt": "In us-east-1: The perf-demo-06-checkout path gets slow every afternoon (UTC) and some checkout requests fail. Is this path sized right, and what should we change? Target: p99 end-to-end checkout latency at or under 1,500 ms, and at least 99.5 percent of checkout requests should come back with a price; in the afternoon we miss both. Peak and growth: the afternoon peak is about 120 checkout requests per minute, and we expect about 10 percent growth over the next quarter, so about 132 per minute. Constraints: up to about 10 percent more cost is fine; checkout has to keep calling the pricing service synchronously this week (no queue or async redesign), and the pricing logic and its data stay as they are. Dig into it here in chat; do not open a separate investigation, and do not ask me anything else before answering.",
+      "expected_output": "An answer that maps the synchronous path from perf-demo-06-storefront through perf-demo-06-checkout to perf-demo-06-pricing, breaks it down per function, and finds that the checkout frontend abandons its pricing call at about 1,000 ms, near the pricing function's afternoon median and below its afternoon p99 of about 1.2 s, and re-issues the abandoned call up to three times, so the pricing function receives roughly 1.75 to 3 attempts per user request, reaches its reserved concurrency of 3 and throttles the rest. It computes attempts per request from the originating request count against pricing Invocations plus Throttles, reports the pricing function's own duration as steady, uses the identical perf-demo-06-quote and perf-demo-06-pricing-quote path as the control, rules the afternoon request-rate step out by arithmetic, treats reserved concurrency as a real ceiling but not the cause, and ranks a client timeout derived from the measured busy-window p99 with retries at one bounded layer above raising reserved concurrency, memory or provisioned concurrency, each recommendation with a cost direction and a verification metric, sized against the stated 1,500 ms p99, 99.5 percent priced share and 132 requests a minute growth.",
+      "should_trigger": true,
+      "assertions": [
+        "The root cause is the checkout caller's own request policy (a client timeout below the pricing function's afternoon latency tail, together with the checkout frontend re-issuing the abandoned call), separated from its symptoms (afternoon checkout latency and failed or unpriced requests), and the pricing function's own duration is reported as steady rather than blamed",
+        "The response compares the requests the path originates with the attempts the pricing function receives, using the pricing function's Invocations plus Throttles, states that attempts per user request are well above one in the afternoon (roughly 1.5 to 3), and notes that Invocations alone understates the arriving load because throttled requests are not counted in it",
+        "The response uses perf-demo-06-quote and perf-demo-06-pricing-quote as the control path (same source, memory, reserved concurrency and afternoon request size, one attempt per request, no throttles) to rule out the handler code, the request size, the table, the storefront and the schedule; any difference in traffic share is addressed with arithmetic rather than used to dismiss the comparison",
+        "The response applies a magnitude check with arithmetic: the pricing function's served rate is its reserved concurrency divided by its duration (about 3 per second at about 1 s), the arriving attempt rate is the user request rate (about 2 per second) times the attempts per request, and the two are compared to show the dependency is over capacity",
+        "The afternoon request-rate increase (about 7 percent) is named as a trigger and ruled out as the cause by arithmetic, either by showing the path is still over capacity at the overnight rate or by showing that about one in eight afternoon requests would still go unpriced with no throttling at all",
+        "The pricing function's reserved concurrency is named as a real ceiling that produces the throttling but not the root cause, and raising it (or memory or provisioned concurrency) is ranked below the client-policy change and labelled interim or masking",
+        "Any configuration change in or near the window (for example a release-label update) and any checkout errors from before the window, if mentioned, are ruled out by scope, timing or history and not treated as the current cause",
+        "The response compares the busy afternoon window with a quiet overnight or morning window and states the request rate, attempts per request and a latency percentile (p90 or p99, not only the average) for each period",
+        "Each finding cites a metric name, a time window and an observed value with its unit",
+        "Recommendations are ranked, the top one sets the checkout client timeout from the dependency's measured busy-window p99 and keeps re-issue to one bounded layer, and each recommendation states a cost direction (raises, lowers or does not change cost) and the metric that should change if it works",
+        "The recommendations are sized against the stated target with arithmetic: with one attempt per request the pricing function runs at about two thirds of its served rate, checkout p99 falls to about 1.2 s (under 1,500 ms), the priced share returns above 99.5 percent, growth to about 132 a minute (about 2.2 per second) stays inside the served rate, and the fix keeps the call synchronous and within the 10 percent cost allowance",
+        {
+          "text": "No raw 12-digit account IDs, ARNs, VPC IDs, private hostnames or private IP addresses are exposed",
+          "evaluator": "regex",
+          "pattern": "(?:\\b\\d{12}\\b|arn:aws[a-z-]*:|vpc-[0-9a-f]+|\\.(?:ec2|compute)\\.internal|\\b(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(?:1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3})\\b)",
+          "match": "absent"
+        }
+      ],
+      "additional_permissions_file": "skills/aws-performance-efficiency-review/evals/additional-permissions.json"
+    },
+    {
+      "id": "perf06-retry-rca",
+      "task_type": "investigation",
+      "prompt": "In us-east-1: The perf-demo-06-checkout function gets slow every afternoon (UTC) and a share of checkout requests fail. Find the root cause.",
+      "expected_root_cause": "perf-demo-06-checkout abandons its synchronous call to perf-demo-06-pricing after about 1,000 ms, which in the afternoon sits near the pricing function's median and below its p99 of about 1.2 s because afternoon requests carry twice as many lines, and the checkout frontend's own handler loop re-issues the abandoned call up to three times. An abandoned invocation is not cancelled and keeps its concurrency slot, so the pricing function (reserved concurrency 3, served rate about 3 per second) receives roughly 1.75 to 3 attempts per user request against about 2 user requests per second, its Invocations flatten at the ceiling and the excess appears as Throttles. The pricing function's own Duration is steady and Errors is zero, so the evidence is the attempt count (Invocations plus Throttles) against the originating request count. The identical perf-demo-06-quote and perf-demo-06-pricing-quote path, with a timeout above the pricing p99 and one attempt, stays far below the same capacity with no throttles, which rules out the code, the request size, the table, the storefront and the schedule. The afternoon rate step is a trigger, not the cause; reserved concurrency is a real ceiling but not the cause; configuration changes and pre-window errors are not the cause.",
+      "should_trigger": true,
+      "assertions": [
+        "The root cause names the checkout caller's request policy (a client timeout below the dependency's busy-window latency tail, together with the frontend re-issuing the abandoned call) and separates it from the symptoms (afternoon checkout latency and failed requests), with the pricing function's own duration reported as steady rather than blamed",
+        "Evidence compares the originating request count with the pricing function's Invocations plus Throttles, states that attempts per user request are well above one in the incident window, and notes that Invocations alone excludes throttled requests",
+        "The investigation uses perf-demo-06-quote and perf-demo-06-pricing-quote as the control path (same source, memory, reserved concurrency and request size, one attempt, no throttles) to rule out the handler code, request size, table, storefront and schedule",
+        "The investigation applies a magnitude check with arithmetic: served rate equals reserved concurrency divided by duration (about 3 per second), arriving attempts equal the user request rate (about 2 per second) times attempts per request, and the two are compared to show the dependency is over capacity",
+        "The onset is stated at about 12:00 UTC, and the afternoon increases in request size and request rate are named as triggers and distinguished from the cause, with the rate step ruled out by arithmetic",
+        "The pricing function's reserved concurrency is named as a real ceiling but not the root cause, with the quote path or arithmetic as evidence",
+        "Any configuration change in or near the window and any checkout errors from before the window, if mentioned, are ruled out by scope, timing or history and not reported as the current cause",
+        "The findings compare the incident (afternoon) window with a baseline (overnight or morning) window and state a latency percentile (p90 or p99, not only the average) and the attempts per request for each",
+        "Each finding cites a metric name, a time window and an observed value with its unit"
+      ],
+      "additional_permissions_file": "skills/aws-performance-efficiency-review/evals/additional-permissions.json"
+    },
+    {
+      "id": "perf07-outlier-chat",
+      "task_type": "chat",
+      "prompt": "In us-east-1: The perf-demo-07-catalog service behind our internal load balancer feels slow in the afternoons. Is it sized right, and what should we change? Target: through the internal load balancer, p99 response time at or under 160 ms and p90 at or under 125 ms over the afternoon peak; the median already looks acceptable, it is the tail we need to pull down. Peak and growth: the afternoon peak is about 240 requests per minute (roughly a quarter of that overnight), and we expect about 50 percent growth within two quarters, so about 360 per minute. Constraints: up to about 10 percent more cost is acceptable; the per-task size (CPU and memory allocation) cannot change this week. Dig into it here in chat; do not open a separate investigation, and do not ask me anything else before answering.",
+      "expected_output": "An answer that finds the service is not under-sized and that one member of the load-balanced fleet is slow. It notices that the perf-demo-07-catalog-tg target group holds four registered targets while perf-demo-07-catalog runs three tasks, follows that to the second pool perf-demo-07-catalog-pool-b on the same target group, breaks response time down per task, and reports three members at about 50 ms and one at about 190 ms (roughly 3.5 to 4 times its peers). It describes the service-level distribution as two populations (median about 50 ms, p90 about 200 to 230 ms, p99 about 300 to 330 ms, average about 85 ms), shows by arithmetic that the average implies one slow member out of four, uses the healthy tasks as the control, states that the passing health check does not clear the member, declines to read the low aggregate CPU or an Overprovisioned finding as health, rules out the afternoon rate step by arithmetic, and ranks making every member identical plus a health check that measures the work above adding tasks or changing task size, each with a cost direction and a verification metric, sized against the stated 125 ms p90, 160 ms p99 and 360 requests a minute.",
+      "should_trigger": true,
+      "assertions": [
+        "The root cause is one member of the load-balanced fleet serving the same requests several times slower than its peers while staying in rotation, separated from its symptom (the afternoon tail latency), and not attributed to the service being under-sized, to the load balancer or to a dependency",
+        "The response states that the target group has four registered targets while perf-demo-07-catalog runs three tasks, and follows that gap to perf-demo-07-catalog-pool-b, whose task is registered in the same target group",
+        "The response breaks response time down per task or per target and reports three members at about 50 ms and one at roughly 180 to 200 ms (about 3.5 to 4 times its peers), identifying the outlier by comparison with its peers rather than a fixed threshold; any per-Availability-Zone difference is treated as a narrowing step, not a zonal fault",
+        "The response describes the service-level latency as two populations (median about 50 ms, p90 and p99 several times it, about a quarter of requests slow) and applies a magnitude check: average equals healthy time plus the gap divided by the number of targets (about 50 + 140 / 4, about 85 ms), which implies exactly one slow member",
+        "The healthy perf-demo-07-catalog tasks are used as the control (same image, task size, listener, target group and request mix, about 50 ms) to rule out the application code, task size, request mix, load balancer and schedule",
+        "The response states that the passing health check and a healthy host count of four are not evidence that every member is healthy, because the configured check does not measure the request work",
+        "The low aggregate CPU of perf-demo-07-catalog and any Compute Optimizer Overprovisioned finding are declined as evidence that the fleet is healthy, and adding tasks is shown by arithmetic to dilute the average while leaving p99 on the slow population, so scaling out masks the fault",
+        "The afternoon request-rate step is named as a trigger and ruled out as the cause by arithmetic (no target is near its capacity) or by the overnight window showing the same per-member gap; any deployment at the window start or target 5XX errors from before the window, if mentioned, are ruled out by scope or history",
+        "The response compares the busy afternoon window with a quiet overnight or morning window, states the request rate and latency percentiles for each, and each finding cites a metric name, a time window and an observed value with its unit",
+        "Recommendations are ranked with making every member identical (removing the extra work from the odd member or replacing it) and a health check that measures the work above adding tasks, raising task size or changing routing, and each states a cost direction and the metric that should change if it works",
+        "The recommendations are sized against the stated target: with every member at about 50 ms, p90 and p99 fall to roughly 50 ms (under 125 ms and 160 ms), growth to about 360 a minute (about 1.5 per second per member) stays far below member capacity so no scaling is needed, and the fix needs no task-size change and stays within the 10 percent cost allowance",
+        {
+          "text": "No raw 12-digit account IDs, ARNs, VPC IDs, private hostnames or private IP addresses are exposed",
+          "evaluator": "regex",
+          "pattern": "(?:\\b\\d{12}\\b|arn:aws[a-z-]*:|vpc-[0-9a-f]+|\\.(?:ec2|compute)\\.internal|\\b(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(?:1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3})\\b)",
+          "match": "absent"
+        }
+      ],
+      "additional_permissions_file": "skills/aws-performance-efficiency-review/evals/additional-permissions.json"
+    },
+    {
+      "id": "perf07-outlier-rca",
+      "task_type": "investigation",
+      "prompt": "In us-east-1: Requests to perf-demo-07-catalog through the internal load balancer are slow in the afternoons (UTC). Find the root cause.",
+      "expected_root_cause": "One of the four targets in the perf-demo-07-catalog-tg target group answers the same requests about 3.5 to 4 times slower than the other three (about 190 ms against about 50 ms), and the load balancer keeps sending it a full round-robin share. That target is the single task of perf-demo-07-catalog-pool-b, a second pool registered in the same target group, which is why the named service runs three tasks while the target group holds four. Its task definition enables an index-refresh hold that takes a process-wide lock, so each request waits on that lock; the extra time is a wall-clock wait, not CPU work. About a quarter of requests are slow: TargetResponseTime p50 stays at about 50 ms while p90 is about 200 to 230 ms, p99 about 300 to 330 ms and the average about 85 ms (healthy time plus the gap divided by four). Nothing is saturated: each target sees about one request per second against roughly 20 per second of capacity. The configured health check answers as soon as the process listens, so all four targets read healthy. The three perf-demo-07-catalog tasks are the control and rule out the code, task size, request mix, load balancer and schedule. The afternoon rate step is the trigger, not the cause, since the same per-member gap exists overnight; the low aggregate CPU or an Overprovisioned finding describes the healthy tasks, not the fleet.",
+      "should_trigger": true,
+      "assertions": [
+        "The root cause names one member of the load-balanced fleet serving the same requests several times slower than its peers while staying in rotation, separates it from the symptom (afternoon tail latency), and does not attribute it to the service being under-sized, to the load balancer or to a dependency",
+        "Evidence states that the target group has four registered targets while perf-demo-07-catalog runs three tasks, and follows that gap to perf-demo-07-catalog-pool-b in the same target group",
+        "Evidence breaks response time down per task or per target and reports three members at about 50 ms and one at roughly 180 to 200 ms, identifying the outlier against its peers rather than a fixed threshold; any per-Availability-Zone difference is treated as a narrowing step, not a zonal fault",
+        "The findings describe two latency populations (median about 50 ms and unchanged, p90 and p99 several times it, about a quarter of requests slow) and apply a magnitude check showing that an average of about 85 ms over four targets implies exactly one slow member",
+        "The healthy perf-demo-07-catalog tasks are used as the control (same image, task size, listener, target group and request mix) to rule out the code, task size, request mix, load balancer and schedule",
+        "The findings state that the passing health check and four healthy hosts are not evidence of a healthy member, because the configured check does not measure the request work",
+        "The low aggregate CPU of perf-demo-07-catalog and any Overprovisioned right-sizing finding are declined as evidence that the fleet is healthy",
+        "The afternoon request-rate step is named as the trigger and ruled out as the cause by capacity arithmetic or by the overnight window showing the same per-member gap, and the onset of the symptom is stated separately from the onset of the cause; any window-start deployment or pre-window target 5XX errors, if mentioned, are ruled out by scope or history",
+        "The findings compare the incident (afternoon) window with a baseline (overnight or morning) window, and each finding cites a metric name, a time window and an observed value with its unit"
+      ],
+      "additional_permissions_file": "skills/aws-performance-efficiency-review/evals/additional-permissions.json"
+    },
+    {
+      "id": "perf08-ebs-chat",
+      "task_type": "chat",
+      "prompt": "In us-east-1: The perf-demo-08-jobs queue backs up every afternoon and export jobs take much longer to finish. Are the workers sized right, and what should we change? Target: 95 percent of export jobs finished within 60 seconds of being queued, and no backlog left on the queue in the afternoon. Peak and growth: the afternoon peak is about 72 jobs per minute (about 6 per minute overnight and in the morning), and we expect about 15 percent growth over the next quarter, so about 83 jobs per minute. Constraints: up to about 10 percent more monthly cost for this service is fine; the job code and the size of the export files cannot change this month, and the workers cannot be taken down during the afternoon. Dig into it here in chat; do not open a separate investigation, and do not ask me anything else before answering.",
+      "expected_output": "An answer that maps the asynchronous path from perf-demo-08-producer through the perf-demo-08-jobs queue to perf-demo-08-worker-a and perf-demo-08-worker-b and their data disks perf-demo-08-data-a and perf-demo-08-data-b, breaks the work down per worker, and finds that worker-a's data disk is held at its provisioned throughput of 125 MiB/s (the gp3 included baseline) in the afternoon, so its jobs take roughly three times as long as in the morning (about 30 to 35 s against about 10 s) and the pair serves about 60 jobs a minute against about 72 arriving. It compares measured disk bytes per second with each disk's provisioned throughput, uses worker-b (same launch template, code and job shape, disk at 500 MiB/s) as the control, computes bytes per job (about 512 MiB) and the predicted duration, rules out the instance EBS limit, IOPS and CPU, rules out any 12:00 configuration change by scope or history, and ranks raising worker-a's disk throughput to at least about 400 MiB/s first, above more workers or a larger instance, each with a cost direction and a verification metric, sized against the stated 60 s target and 83 jobs a minute growth.",
+      "should_trigger": true,
+      "assertions": [
+        "The root cause is that perf-demo-08-worker-a's data disk (perf-demo-08-data-a) is held at its provisioned throughput (125 MiB/s) in the afternoon, separated from its symptoms (longer job durations on worker-a, queue backlog, age of the oldest message), and not attributed to CPU, the arrival rate or the instance",
+        "The response reads both data disks' configuration (type, IOPS, provisioned throughput) and compares worker-a's measured disk bytes per second (VolumeWriteBytes plus VolumeReadBytes) with its provisioned throughput, showing it sits at that limit in the afternoon",
+        "The response uses perf-demo-08-worker-b as the control (same launch template, instance type, code, settings, queue and job shape), compares the same metrics on both, rules out the code, payload, queue and producer, and names the data disk's provisioned throughput as the configuration difference",
+        "The response applies a magnitude check with arithmetic: bytes per job of about 512 MiB from disk bytes against completed jobs, worker-a's jobs per minute times bytes per job matching about 125 MiB/s, and a predicted worker-a job duration (jobs in flight times bytes per job over throughput, about 30 to 35 s) against the measured one, or the pair's served rate (about 60 a minute) against the arrival rate (about 72 a minute)",
+        "The response checks and rules out the instance-level EBS limit (EBSByteBalance% or instance EBS bytes against the instance type's baseline) and IOPS (operations well below the provisioned 3,000 or VolumeIOPSExceededCheck at zero)",
+        "The response does not read the low CPU as spare capacity or recommend downsizing the workers",
+        "The afternoon arrival-rate step is named as the trigger, not the cause, and cutting the producer rate is not offered as a fix; any configuration change at about 12:00 (release label or log level on both workers), if found, is ruled out by scope or history and not by timing alone",
+        "The response compares the busy afternoon window with a quiet morning window and states a job duration percentile and disk MiB/s per worker for each, without using the overnight backlog drain as the baseline",
+        "Each finding cites a metric name, a time window and an observed value with its unit",
+        "The top-ranked recommendation raises the provisioned throughput of worker-a's data disk, sized with arithmetic to at least about 400 MiB/s (or a stated lower figure with the resulting duration); adding workers or a larger instance is ranked below it and labelled masking; each recommendation states a cost direction (the throughput change adds cost) and the metric that should change if it works",
+        "The recommendations are sized against the stated target: with worker-a's disk at about 400 to 500 MiB/s the pair serves about 94 jobs a minute, the 72 a minute peak runs at about 77 percent with jobs of about 10 s (inside 60 s), growth to about 83 a minute stays inside capacity at about 89 percent, the disk change is made in place with no afternoon downtime, and a third worker is shown to exceed the 10 percent cost allowance",
+        {
+          "text": "No raw 12-digit account IDs, ARNs, VPC IDs, private hostnames or private IP addresses are exposed",
+          "evaluator": "regex",
+          "pattern": "(?:\\b\\d{12}\\b|arn:aws[a-z-]*:|vpc-[0-9a-f]+|\\.(?:ec2|compute)\\.internal|\\b(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(?:1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3})\\b)",
+          "match": "absent"
+        }
+      ],
+      "additional_permissions_file": "skills/aws-performance-efficiency-review/evals/additional-permissions.json"
+    },
+    {
+      "id": "perf08-ebs-rca",
+      "task_type": "investigation",
+      "prompt": "In us-east-1: Export jobs on the perf-demo-08-jobs SQS queue wait much longer every afternoon (UTC) and take longer to finish. Find the root cause.",
+      "expected_root_cause": "perf-demo-08-worker-a's data disk perf-demo-08-data-a is a gp3 volume at the included 125 MiB/s throughput. From about 12:00 UTC the producer sends about 72 jobs a minute instead of about 6, each worker runs up to 8 jobs at once and each job writes and reads back about 512 MiB in total, so a worker asks for up to about 400 MiB/s. worker-a's disk holds at 125 MiB/s (VolumeWriteBytes plus VolumeReadBytes flat at the provisioned throughput, with VolumeThroughputExceededCheck, a high VolumeQueueLength or near-zero VolumeIdleTime), so its jobs take roughly three times as long (about 30 to 35 s against about 10 s) and it completes about 15 jobs a minute. perf-demo-08-worker-b runs the same launch template, code and settings with a 500 MiB/s disk, carries about 400 MiB/s and stays at about 10 s and about 47 jobs a minute. Together they serve about 60 jobs a minute against about 72, so the backlog and the age of the oldest message grow all afternoon. CPU is low on both, the instance EBS bandwidth is well below its baseline and IOPS is well below 3,000, so neither CPU, the instance nor IOPS is the limit. Any 12:00 configuration change reached both workers and is ruled out by scope or history. The fix is to raise worker-a's disk throughput to at least about 400 MiB/s; more workers or a larger instance only mask the limit.",
+      "should_trigger": true,
+      "assertions": [
+        "The root cause is worker-a's data disk (perf-demo-08-data-a) held at its provisioned throughput (125 MiB/s) in the afternoon, separated from the symptoms (job duration on worker-a, queue backlog, age of the oldest message) and not attributed to CPU, the arrival rate or the instance",
+        "Evidence reads both data disks' configuration and compares worker-a's measured disk bytes per second (VolumeWriteBytes plus VolumeReadBytes) with its provisioned throughput, with at least one saturation signal (VolumeThroughputExceededCheck, VolumeQueueLength or VolumeIdleTime)",
+        "The investigation uses perf-demo-08-worker-b as the control (same launch template, code, settings, queue and job shape, higher disk throughput), compares the same metrics on both, and rules out the code, payload, queue and producer",
+        "The investigation applies a magnitude check with arithmetic: bytes per job (about 512 MiB) from disk bytes against completed jobs, worker-a's jobs per minute times bytes per job matching the provisioned throughput, and the predicted job duration against the measured one, or the served rate (about 60 a minute) against the arrival rate (about 72 a minute)",
+        "The instance-level EBS limit and IOPS are checked and ruled out on both workers",
+        "Low CPU is reported as consistent with waiting on the disk, not as spare capacity, and no downsizing is recommended",
+        "Any configuration change at about 12:00 (release label or log level on both workers), if found, is ruled out by scope or history and not by timing alone",
+        "The onset is stated at about 12:00 UTC and the arrival-rate step is named as the trigger, distinguished from the cause",
+        "The findings compare the incident (afternoon) window with a baseline (morning) window and state a job duration percentile and disk MiB/s per worker for each, without using the overnight drain as the baseline; each finding cites a metric name, a time window and an observed value with its unit"
+      ],
+      "additional_permissions_file": "skills/aws-performance-efficiency-review/evals/additional-permissions.json"
+    },
+    {
+      "id": "unrelated-security-question",
+      "task_type": "chat",
+      "prompt": "Which IAM users in this account have access keys older than 90 days?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-concept-question",
+      "task_type": "chat",
+      "prompt": "What is the difference between Amazon SQS standard and FIFO queues?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-cost-allocation",
+      "task_type": "chat",
+      "prompt": "How do I split last month's AWS bill by team using cost allocation tags, and which tags do I need to activate first?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-iam-access-denied",
+      "task_type": "chat",
+      "prompt": "My Lambda function fails with AccessDeniedException when it calls s3:GetObject on one bucket. What do I need to add to its execution role?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-xray-howto",
+      "task_type": "chat",
+      "prompt": "How do I turn on AWS X-Ray active tracing for a Lambda function deployed with CloudFormation?",
+      "should_trigger": false
+    }
+  ]
+}
