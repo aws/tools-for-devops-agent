@@ -1,0 +1,109 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "rr-serverless",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response comprehensively covers all the components listed in the expected output: HTTP API (noted \"No custom domain or failover routing even exists in front of the API\"), Lambda function (mentioned as part of compute layer), DynamoDB table (explicitly discusses point-in-time recovery disabled and single-Region KMS key encryption), SQS queue with DLQ (explicitly notes \"a dead-letter queue on Notifications (max 5 retries)\" already in place), SNS topic, EventBridge bus and rule (mentioned in the roadmap table as Bus, Events), Step Functions state machine (ConfirmationFlow mentioned in roadmap), Cognito user pool (explicitly discusses no replica in another Region, deletion protection off), secret (ProviderKey - explicitly notes no replica Region), and receipts S3 bucket (explicitly notes versioning is on, no replication/backup plan). The report is scoped to the booking-api stack specifically and addresses the two scenarios asked about (Region failure and accidental data deletion) with clear coverage assessment, recommendations, and a structured roadmap. All key facts match the expected output description precisely.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the table is encrypted with a customer managed KMS key that exists only in eu-west-1, and that a copy or replica in another Region needs a key there (for example a multi-Region key).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The table says: 'Bookings (DynamoDB) / Receipts (S3) | Encrypted with a single-Region KMS key (`MultiRegion: false`) | Re-point encryption to a new multi-Region KMS key' and the summary states 'every resource \u2014 including the encryption key \u2014 exists only in eu-west-1 with zero copies anywhere else'.",
+          "reasoning": "The response explicitly states the KMS key is single-Region (not multi-Region) and recommends a multi-Region key for any cross-Region copy, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Cognito user pool booking-api-users has no replica in another Region, so users could not sign in to a recovery Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The roadmap table states: 'Users (Cognito) | Single-Region pool, no replica | Add a Multi-Region replica pool (sign-in/tokens keep working; sign-up and password resets still only work in the primary)'.",
+          "reasoning": "This directly states the Cognito pool has no replica in another Region and implies functionality (sign-up/reset) would not work in a recovery Region without one, consistent with the assertion though it doesn't use the exact pool name booking-api-users.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the HTTP API is Regional and has no custom domain name, so clients are tied to the eu-west-1 endpoint.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'Api / ApiStage | No custom domain, no failover routing | Add a custom domain and Route 53 failover routing in front of both Regions' APIs | Region failure (without this, a working copy can't be reached)' and also 'No custom domain or failover routing even exists in front of the API.'",
+          "reasoning": "This matches the assertion that the API has no custom domain and is tied to the eu-west-1 endpoint, though it doesn't explicitly restate 'Regional' type, the implication is clear from context (API Gateway Regional type is implied by lack of custom domain/failover).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the secret booking-api/payment-provider-key is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The table states: 'ProviderKey (secret) | No replica Region | Replicate the secret to the recovery Region | Region failure | pilot light / low' and earlier mentions 'the Secrets Manager secret (no replica)'.",
+          "reasoning": "This confirms the secret (referred to as ProviderKey) has no replica in another Region, matching the assertion, though the exact secret name 'booking-api/payment-provider-key' is not used verbatim - it's referred to as 'ProviderKey (secret)'.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits what is already in place, such as the dead-letter queue on booking-api-notifications and versioning on the receipts bucket.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'Already in place: S3 bucket versioning on `Receipts`; a dead-letter queue on `Notifications` (max 5 retries); KMS key rotation enabled; IAM roles (account-global, unaffected by a Region event).'",
+          "reasoning": "This directly credits the existing dead-letter queue and S3 versioning as asserted.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response covers the Step Functions state machine and the EventBridge bus and rule, saying they are Regional and must exist in the recovery Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The roadmap states: 'Api, Handler, ConfirmationFlow, Bus, Events, Notifications | Only deployed in eu-west-1 | Redeploy the same CloudFormation stack into the recovery Region'. Step Functions is implied via 'ConfirmationFlow' and EventBridge via 'Bus, Events'.",
+          "reasoning": "The response covers Step Functions (ConfirmationFlow) and EventBridge (Bus, Events) as Regional resources that must exist in the recovery Region, though it doesn't explicitly label them as 'Step Functions state machine' or 'EventBridge bus and rule' by service name, using logical resource names instead. The substance is there even if exact service names aren't spelled out everywhere.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response only discusses booking-api stack resources: Api, Handler, ConfirmationFlow, Bookings (DynamoDB), Receipts (S3), Bus, Events, Notifications, Users (Cognito), ProviderKey (secret). No mention of orders-web, telemetry-pipeline, catalog-k8s, Aurora database-1, or a metrics stack appears anywhere in the output.",
+          "reasoning": "The response stays scoped to the booking-api stack and does not reference any other workloads' resources, satisfying the assertion that it should not mention unrelated stacks or resources.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | yes | All compute/data/messaging is AWS-managed (Lambda, API Gateway, Step Funct\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 9,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m42s",
+    "cost": "$3.34",
+    "context_window": {
+      "utilization": "7.3%",
+      "compaction_count": 0
+    }
+  }
+}

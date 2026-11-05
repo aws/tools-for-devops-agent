@@ -1,0 +1,90 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-k8s",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response covers most of the required elements: it explicitly states the ECR repository is not replicated cross-region (only in eu-west-1, no replication rule), notes the Fargate profile spans only 2 of 3 AZs (eu-west-1a/1b), and clearly states what it could not see inside the cluster (PDBs, replica counts, PVCs/StatefulSets) rather than assuming there is none - explicitly flagging this as \"an open gap\" and \"Unknown.\"\n\nHowever, two specific points from the expected output are missing or weak:\n1. There's no explicit mention of AWS Backup protection status for the cluster \u2014 the response doesn't address whether the cluster is protected by AWS Backup at all. This is a notable omission since AWS Backup is called out specifically in the expected output and is also listed in the domain context services.\n2. The response does not ask how the cluster and workloads would be recreated in another Region, nor does it reference a catalog-k8s CloudFormation stack, Git, or a pipeline. Instead, it asks whether to enable ECR replication/expand AZ coverage or investigate the data store \u2014 not the recreation/IaC question specified in the expected output.\n\nGiven these two specific, named gaps (AWS Backup protection status, and the recreation-via-IaC/pipeline question) are both absent, the response does not fully satisfy the expected criteria, despite doing well on ECR replication, AZ coverage, and acknowledging visibility gaps rather than assuming non-existence.",
+      "evidence": "\"ECR (`catalog-service`) | Exists only in eu-west-1 \u2014 no cross-region replication rule configured... | EKS cluster (`catalog-eks`) | ...the Fargate profile only spans 2 of 3 AZs (eu-west-1a/1b)... | K8s-level resilience (PDBs, replicas, rollout strategy, PVCs) | Unknown \u2014 no cluster credentials available right now to query this directly.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the ECR repository catalog-service is not replicated to another Region, so the recovery Region cannot pull its images.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Exists only in eu-west-1 \u2014 no cross-region replication rule configured, no replica in eu-west-2. A regional outage would block pulling images for failover.\" and \"no secondary ECR region to pull images from\"",
+          "reasoning": "The response explicitly states the ECR repo exists only in eu-west-1 with no cross-region replication, and that this would block pulling images during a regional outage/failover.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the EKS cluster catalog-eks is not protected by AWS Backup and has no counterpart in another Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The table says \"Single region, no secondary/failover cluster.\" but there is no mention of 'AWS Backup' anywhere in the output.",
+          "reasoning": "The response does not mention AWS Backup at all in relation to the EKS cluster. It does state there is no secondary/failover cluster in another region, but never addresses AWS Backup protection.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says what inside the cluster could not be checked (for example deployments, pods or persistent volumes) instead of claiming there are none.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"No cluster credentials available for direct kubectl access here \u2014 so I can't confirm pod disruption budgets, replica counts, or whether catalog-service has any stateful storage (PVCs/StatefulSets) directly. That piece stays an open gap.\" and \"K8s-level resilience (PDBs, replicas, rollout strategy, PVCs) | Unknown \u2014 no cluster credentials available right now to query this directly.\"",
+          "reasoning": "The response explicitly states it could not check PDBs, replica counts, PVCs/StatefulSets, or stateful storage due to lack of cluster credentials, rather than asserting none exist.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits the Fargate profile spreading pods over two Availability Zones, or reports the two subnets the cluster uses.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Runs on Fargate (good \u2014 no node patching), but the Fargate profile only spans 2 of 3 AZs (eu-west-1a/1b).\"",
+          "reasoning": "The response mentions the Fargate profile spans only 2 of 3 AZs (eu-west-1a/1b), which addresses the AZ spread point, though it frames it as a gap (missing the third AZ) rather than purely crediting it. It does identify the specific AZs/subnets involved.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response asks or states how the cluster and its workloads would be recreated in the recovery Region (IaC such as the catalog-k8s stack, Git or a pipeline).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Want me to look into enabling ECR cross-region replication or expanding the Fargate profile to the third AZ as a starting point, or would it help more to first track down what data store catalog-service actually depends on?\" - no mention of IaC, Git, or pipeline-based recreation of the cluster.",
+          "reasoning": "The response does not ask or state anything about how the cluster/workloads would be recreated via IaC, Git, or a pipeline in a recovery region. It only offers to look into ECR replication or expanding the Fargate profile, or tracking down the data store.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.5714
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m0s",
+    "cost": "$1.00",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

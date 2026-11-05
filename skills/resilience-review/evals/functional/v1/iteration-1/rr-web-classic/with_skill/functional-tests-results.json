@@ -1,0 +1,134 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-web-classic",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response delivers a complete resilience report for orders-web that opens with a \"Where you stand today\" summary, then proceeds through six clearly labeled sections (Scenario and scope, Targets, Strategy, Roadmap, First tests, Next decision), matching the expected structure. It identifies the key findings called out in the expected output: the ASG runs a single EC2 instance in one AZ/subnet (eu-west-1a), the Aurora cluster has a single writer with no reader and only 1-day backup retention, EFS has no replication/backups, the S3 bucket has versioning off, and the ALB is internal-only/Regional with no Route 53 hosted zone or DNS failover in front of it. The shared core-network VPC is explicitly treated as a dependency rather than a sibling stack, as required. The full report is included in the response. All core expected elements are present and substantively correct.",
+      "evidence": "\"Single EC2 instance (ASG min=max=desired=1) and a single Aurora writer with no reader\"; \"Aurora automated backups exist (1-day retention)\"; \"EFS has zero backups\"; \"the S3 bucket has versioning off\"; \"the load balancer is internal-only, there's no internet gateway in its VPC, and there's no Route 53 hosted zone\"; \"The shared `core-network` stack is a dependency, not a sibling application.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response starts with a short 'Where you stand today' summary, and the scenario table marks each of the four scenarios as covered today, partly or not.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Response begins with 'Where you stand today: orders-web currently survives none of the four failure scenarios cleanly...' and the scenario table marks each row as 'no', 'no', 'no', 'partly'.",
+          "reasoning": "The summary is present at the start and the table marks each of the four scenarios with a covered/not covered/partly status.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Auto Scaling group orders-web-asg runs a single instance in one subnet or Availability Zone, so one instance or one AZ failure takes the web tier down.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Single EC2 instance (ASG min=max=desired=1)... The ASG, its EC2 instance, and the EFS file system's only mount target all sit in eu-west-1a alone.'",
+          "reasoning": "The response describes the ASG as running a single instance in a single AZ, implying an AZ or instance failure takes down the web tier, though it does not name the ASG as 'orders-web-asg' explicitly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Aurora cluster orders-web-db has only one instance (no replica in another Availability Zone), so there is no automatic failover inside the Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'the Aurora database has a single writer with no reader... losing either takes down compute or the database with no automatic failover'",
+          "reasoning": "The response explicitly states the Aurora cluster has only a single writer with no reader, causing no automatic failover within the region. Though it doesn't name the cluster 'orders-web-db' specifically.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports the 1-day backup retention of orders-web-db and says it limits recovery from bad data.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'only 1-day backup retention' and 'Aurora point-in-time recovery covers only 24 hours' under Bad data scenario marked 'partly'.",
+          "reasoning": "The response reports the 1-day retention and ties it to limited recovery from bad data (PITR only 24 hours).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports that the EFS file system has no replication to another Region and that its automatic backups are off.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'EFS has zero backups' is mentioned, and 'turn on EFS automatic backups' as a quick win, but there is no mention of EFS replication to another Region being off or lacking.",
+          "reasoning": "The response covers EFS backups being off, but does not explicitly state that EFS has no replication to another Region. The long-term roadmap only says 'EFS replication' is a future long-term action, not a current gap explicitly flagged as 'no replication to another Region today'. This is a partial miss on the replication-to-region claim.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response reports that the uploads S3 bucket has versioning off, so overwritten or deleted objects cannot be recovered.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'the S3 bucket has versioning off' under Bad data scenario, and 'turn on S3 bucket versioning' as a quick win.",
+          "reasoning": "The response explicitly reports the S3 bucket versioning is off, implying overwritten/deleted objects cannot be recovered, consistent with the bad data scenario context.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the recovery Region would need its own load balancer and a way to route traffic to it, since there is no DNS failover today.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'no data, image, or secret copy exists outside eu-west-1... no DNS or failover routing exists to send traffic anywhere else' and 'add Route 53/ARC failover routing once the real entry path is confirmed' and 'stand up the network/stack in eu-central-1'.",
+          "reasoning": "The response notes the lack of DNS failover and the need to stand up infrastructure (implying a load balancer) in the recovery region, satisfying this assertion's substance.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response checks whether the launch template's image and the orders-web stack could start the web tier in another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Not checked: AMI resolution in eu-central-1 (access denied to the checking role); the raw CFN template for hardcoded Region references'",
+          "reasoning": "The response explicitly mentions attempting to check AMI resolution in another region and the stack template for region references, demonstrating it checked (or attempted to check) whether the launch template's image and stack could start in another region.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the booking-api, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of booking-api, telemetry-pipeline, catalog-k8s, database-1, or any metrics stack anywhere in the response. Instead it says 'other stacks in eu-west-1 are confirmed separate, unrelated workloads.'",
+          "reasoning": "The response avoids naming or detailing other unrelated workload resources, consistent with the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The complete report is in the response itself (all six sections), not only a pointer to a file.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response opens with 'The report is saved as resilience-review-orders-web-2026-11-05.md and ready to share. Here it is in full:' followed by the content.",
+          "reasoning": "Although the agent claims the report is saved to a file AND then also includes the full report inline ('Here it is in full'), the assertion says the complete report should be in the response itself, not only a pointer to a file. Since the full content is indeed included inline after the pointer, this technically passes the substance test. However, the assertion specifically says 'not only a pointer to a file' - the response includes both a pointer and the full content, so the full content being present actually satisfies this. Reconsidering: the content for all six sections (1-6) is present in the response body, meeting the assertion's requirement despite also mentioning the saved file.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | no | Single EC2 instance (ASG min=max=desired=1) and a single Aurora writer with\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 10,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 12,
+        "pass_rate": 0.8333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m10s",
+    "cost": "$3.58",
+    "context_window": {
+      "utilization": "8.8%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-data-pipeline",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all required findings scoped to the telemetry-pipeline stack: OpenSearch domain telemetry-search has InstanceCount=1, no zone awareness, single subnet/AZ (eu-west-1a), and notes snapshot success isn't verifiable (implicitly tied to that domain). DocumentDB cluster telemetry-metadata is identified as single instance (telemetry-metadata-1, eu-west-1c) with 1-day backup retention/PITR window. Kinesis stream telemetry-events is noted as a 24-hour transient buffer with no cross-region replication/counterpart. The S3 bucket telemetry-raw-012345678901_1 is noted to have versioning on but no replication configuration found. The report also explicitly asks whether the search index/OpenSearch domain can be rebuilt from DocumentDB/S3 raw data multiple times (in the scope table, targets section, and roadmap). All five required elements are present and the report is scoped to the telemetry-pipeline stack (with VPC/subnets/core-network explicitly excluded as a separate stack).",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says OpenSearch automated snapshots cannot restore the data in another Region or domain, and names manual snapshots to S3 or cross-cluster replication as the way to get a copy elsewhere, or asks whether the index can be rebuilt from the raw data.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response asks 'Unclear \u2014 is it rebuildable from DocumentDB/S3, or does it hold anything that exists nowhere else? ... Confirm rebuildability' and separately recommends 'If confirmed not rebuildable: build cross-cluster replication or a custom reindex pipeline to a domain in the recovery Region.' It does not explicitly state that automated snapshots cannot restore cross-region/cross-domain, but it does name cross-cluster replication as the way to get a copy elsewhere and asks whether the index can be rebuilt from raw data.",
+          "reasoning": "The assertion requires either (a) stating automated snapshots can't restore in another region/domain AND naming manual snapshots to S3 or CCR, OR (b) asking if rebuildable from raw data. The response satisfies the latter branch clearly ('Confirm rebuildability', 'If rebuildable... plan a rebuild procedure') and also names cross-cluster replication as the cross-region solution. This meets the disjunctive assertion.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says the recovery Region would need its own Kinesis stream, because the stream telemetry-events keeps its data only in eu-west-1.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The roadmap states for Kinesis stream `telemetry-events`: 'No native cross-region replication' and recommends 'Deploy a duplicate stream in the recovery Region and either fan out producers to both or run a cross-region relay consumer' under 'Region failure' scenario.",
+          "reasoning": "The response explicitly says Kinesis has no cross-region replication and recommends deploying a duplicate stream in the recovery region, which aligns with the assertion that the recovery region needs its own Kinesis stream since telemetry-events only exists in eu-west-1.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits versioning on the raw S3 bucket and says the bucket is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states 'S3 versioning is on for `telemetry-raw-012345678901_1` (good)' and later 'S3 bucket `telemetry-raw-012345678901_1` | No replication configuration found | Enable cross-region replication to a bucket in the recovery Region'.",
+          "reasoning": "The response credits versioning as already in place ('Already in place: S3 versioning on the raw bucket') and explicitly notes no replication configuration exists, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, booking-api and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The entire response only discusses resources within the telemetry-pipeline stack: Lambda telemetry-ingest, DocumentDB telemetry-metadata, OpenSearch telemetry-search, S3 telemetry-raw-012345678901_1, Kinesis telemetry-events, Secrets Manager secret, KMS keys, and security groups. No mention of orders-web, booking-api, catalog-k8s, database-1, or a metrics stack appears anywhere.",
+          "reasoning": "A full scan of the response shows no references to any of the named unrelated workloads or stacks; the scope is explicitly limited to the telemetry-pipeline stack and its shared core-network dependency.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | no | DocumentDB has only one instance (`telemetry-metadata-1`, eu-west-1c) \u2014 no \u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m44s",
+    "cost": "$2.86",
+    "context_window": {
+      "utilization": "7.2%",
+      "compaction_count": 0
+    }
+  }
+}

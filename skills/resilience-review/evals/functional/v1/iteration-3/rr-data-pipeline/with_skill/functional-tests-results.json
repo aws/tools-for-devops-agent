@@ -1,0 +1,86 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "rr-data-pipeline",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all the required findings for the telemetry-pipeline stack: (1) OpenSearch domain telemetry-search runs a single node in a single AZ (eu-west-1a) with zone awareness off, and notes its daily snapshot is not a true point-in-time recovery mechanism (implying it only covers that domain); (2) DocumentDB cluster telemetry-metadata has a single instance with 1-day backup retention, explicitly called out as a quick fix; (3) Kinesis stream telemetry-events is noted as having the 24h default retention with no cross-Region copy, flagged as a data-loss risk during AZ/Region failure; (4) the S3 bucket telemetry-raw has versioning on but lacks cross-Region replication, explicitly stated in the roadmap; (5) the report explicitly asks whether the OpenSearch index can be rebuilt from DocumentDB/S3 (\"Is the OpenSearch index rebuildable from DocumentDB/S3, or does it hold anything that exists nowhere else?\"), treating it as unconfirmed and gating further OpenSearch resilience work on that answer. The report also scopes itself to the telemetry-pipeline stack, distinguishing the shared VPC/core-network as external. All key expected elements are present and substantively correct.",
+      "evidence": "\"DocumentDB runs as a single instance in eu-west-1c only (no reader, no failover target) and OpenSearch runs as a single node in eu-west-1a only (zone awareness off)... Backup retention is 1 day... Kinesis stream `telemetry-events` | Retention is the 24h default... S3 bucket `telemetry-raw` | No cross-Region replication... Is the OpenSearch index rebuildable from DocumentDB/S3, or does it hold anything that exists nowhere else?\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says OpenSearch automated snapshots cannot restore the data in another Region or domain, and names manual snapshots to S3 or cross-cluster replication as the way to get a copy elsewhere, or asks whether the index can be rebuilt from the raw data.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'OpenSearch domain `telemetry-search` | Only an unconfigurable daily snapshot | Register a manual snapshot repository in S3 for a real, restorable recovery point' and 'Set up cross-cluster replication to a domain in the recovery Region; otherwise plan to rebuild the index there from DocumentDB/S3 after failover' and 'Is the OpenSearch index rebuildable from DocumentDB/S3, or does it hold anything that exists nowhere else?'",
+          "reasoning": "The response explicitly notes the daily snapshot is not a true recovery mechanism across regions, recommends a manual snapshot repository and cross-cluster replication, and also asks whether the index is rebuildable from other data stores.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the recovery Region would need its own Kinesis stream, because the stream telemetry-events keeps its data only in eu-west-1.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Kinesis stream, Lambda, event-source mapping | Regional only; no confirmed IaC for the recovery Region | Make sure IaC can redeploy the ingest path there. Kinesis has no native cross-Region copy, so records in flight at failure time are a real data-loss window'",
+          "reasoning": "The response states Kinesis is regional only with no cross-Region copy, implying the recovery Region needs its own stream deployed via IaC, directly matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits versioning on the raw S3 bucket and says the bucket is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Already in place: S3 versioning (object-level recovery from overwrite/delete)' and 'S3 bucket `telemetry-raw` | No cross-Region replication | Add Cross-Region Replication to a bucket in the recovery Region'",
+          "reasoning": "The response credits S3 versioning as already in place for recovery and explicitly states there is no cross-Region replication for the bucket.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, booking-api and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response only discusses telemetry-pipeline resources: Kinesis telemetry-events, Lambda, DocumentDB telemetry-metadata, OpenSearch telemetry-search, S3 bucket telemetry-raw-012345678901_1, docdb-admin secret, security groups, DB subnet group, and the core-network VPC stack. No mention of orders-web, booking-api, catalog-k8s, database-1 Aurora, or a metrics stack.",
+          "reasoning": "A full text review shows no references to the named unrelated resources or stacks; the response stays scoped to telemetry-pipeline and its direct network dependency (core-network).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | partly | Kinesis and Lambda are AWS-managed and inherently multi-AZ, but Documen\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m45s",
+    "cost": "$2.87",
+    "context_window": {
+      "utilization": "7.2%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "rr-data-pipeline",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'resilience-review' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers nearly all required findings for the telemetry-pipeline stack: (1) OpenSearch telemetry-search runs a single node in a single AZ with zone awareness off, and its snapshots only restore to the same domain; (2) DocumentDB telemetry-metadata has a single instance, single AZ, and 1-day backup retention; (3) the raw S3 bucket has versioning enabled but no cross-region replication; (4) no cross-Region copy exists for the pipeline (addressing the Region failure scenario broadly). It also explicitly asks whether the OpenSearch search index can be rebuilt from raw/metadata data (\"Is this index only ever built from raw/metadata, or does anything write data into it that doesn't exist anywhere else?\" and later \"Plan to rebuild the index from S3 + DocumentDB\"), matching the expected question about rebuildability.\n\nThe one point not explicitly mentioned is the Kinesis stream's 24-hour retention period specifically \u2014 the agent states Kinesis spans 3 AZs and is resilient at the ingestion layer, but doesn't call out the exact 24-hour retention detail or explicitly state it has no counterpart in another Region (though it does address the device\u2192Kinesis path lacking failover). This is a minor gap, but the response substantively meets the core expected findings: AZ failure impact on OpenSearch and DocumentDB, backup/snapshot limitations, S3 versioning without replication, and the question about rebuilding the search index. The overall report structure, scope (telemetry-pipeline stack only), and key fix-first recommendation align well with the expected output's intent.",
+      "evidence": "\"telemetry-search' lives only in eu-west-1a... zone awareness off\"; \"OpenSearch's snapshots only restore to the same domain\"; \"DocumentDB backup retention is only 1 day and deletion protection is off\"; \"Single instance, single AZ (eu-west-1c)\"; \"No Cross-Region Replication configured\" for S3 with versioning; \"Is this index only ever built from raw/metadata, or does anything write data into it that doesn't exist anywhere else?\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says OpenSearch automated snapshots cannot restore the data in another Region or domain, and names manual snapshots to S3 or cross-cluster replication as the way to get a copy elsewhere, or asks whether the index can be rebuilt from the raw data.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"OpenSearch's snapshots only restore to the same domain\" and \"Plan to rebuild the index from S3 + DocumentDB via IaC in the recovery Region, rather than replicating it\" and \"only if it holds data that exists nowhere else\" / \"Is this index only ever built from raw/metadata, or does anything write data into it that doesn't exist anywhere else?\"",
+          "reasoning": "The response discusses OpenSearch's snapshot limitations and whether the index can be rebuilt from raw data.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the recovery Region would need its own Kinesis stream, because the stream telemetry-events keeps its data only in eu-west-1.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Device \u2192 Kinesis path | No entry point exists for failover (devices write directly to Kinesis) | Decide how devices redirect to a secondary stream if eu-west-1 is unreachable\" - this implies a secondary stream exists/needed but doesn't explicitly say Kinesis is regional and needs its own stream in the recovery region, nor does it name the stream 'telemetry-events'.",
+          "reasoning": "The response does not explicitly state the recovery Region would need its own Kinesis stream or name a stream 'telemetry-events'. It discusses devices redirecting to a 'secondary stream' but doesn't frame it as needing its own new Kinesis stream in the recovery region, nor names the stream telemetry-events.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response credits versioning on the raw S3 bucket and says the bucket is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"S3 bucket durability spans \u22653 AZs with versioning enabled\" and \"telemetry-raw-012345678901_1 (S3, source of truth) | No Cross-Region Replication configured | Enable CRR to a second Region\"",
+          "reasoning": "The response credits S3 versioning and states no cross-region replication exists.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, booking-api and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'orders-web', 'booking-api', 'catalog-k8s', 'database-1', or a 'metrics stack' anywhere in the output. Only telemetry-pipeline related resources (Kinesis, S3, Lambda, DocumentDB, OpenSearch, core-network VPC) are discussed.",
+          "reasoning": "The response does not mention any of the listed unrelated resources (orders-web, booking-api, catalog-k8s, database-1 Aurora cluster, metrics stack).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails (instance/node lost) | Yes | Partly | Kinesis/S3/Lambda tolerate it; DocumentDB (1 insta\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.8333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m30s",
+    "cost": "$2.74",
+    "context_window": {
+      "utilization": "6.1%",
+      "compaction_count": 0
+    }
+  }
+}
