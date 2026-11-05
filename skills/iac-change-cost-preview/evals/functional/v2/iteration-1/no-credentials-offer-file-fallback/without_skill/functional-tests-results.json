@@ -1,0 +1,100 @@
+{
+  "version": "v2",
+  "iteration": 1,
+  "eval_id": "no-credentials-offer-file-fallback",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to use the paid DynamoDB capacity dimension (StartingRange 18600) because provisioned capacity billing applies the per-unit rate for provisioned RCU/WCU regardless of actual usage falling under a free-tier threshold meant for on-demand/other billing contexts \u2014 the fixture's free-tier rows (0-18600 unit-hours) are a red herring that should be skipped in favor of the paid rate rows, yielding RCU cost = 0.00015 x 730 x 20 = $2.19 and WCU cost = 0.00075 x 730 x 20 = $10.95, for a total net cost of \u2248$81.54/month.\n\nThe agent instead treated the free-tier rows as applicable, calculating DynamoDB costs as $0.00, and arrived at a total of \u2248$68.40/month (with a caveat exploring the paid-rate alternative at \u2248$74.24, still not matching the expected $81.54). The agent's alternate calculation also miscalculated the paid-rate amounts ($2.19 + $3.65 instead of $2.19 + $10.95 \u2014 the WCU rate error compounds the mistake).\n\nAdditionally, the expected output calls for explicit mention of pricing source (offer files, 4 lines), the 2026-10-15 publication date, SKU, and documentation of doc/API failures without a \u26d4 banner \u2014 the agent's response does not include trace details like the offer-file URL, publication date, or SKU, and does not explicitly state that pricing succeeded from public offer files despite no credentials.\n\nThe final total ($68.40, or at best $74.24 in the caveat) does not match the expected \u2248$81.54, and the core reasoning about which pricing dimension to use for provisioned DynamoDB capacity is incorrect. This is a substantive calculation error, not just a presentation difference.",
+      "evidence": "\"LedgerIndex \u2014 DynamoDB 20 RCU | free tier $0 up to 18,600 unit-hrs | 20 \u00d7 730 = 14,600 unit-hrs \u2192 fully within free band | $0.00\" and \"Total added cost: \u2248 $68.40/month\" vs expected \"read capacity uses the paid dimension... 0.00015 x 730 x 20 = $2.19, write capacity 0.00075 x 730 x 20 = $10.95... Net \u2248 +$81.54\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Response reports a net monthly change of about +$81.54 (accept $81.00-$82.00).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Response states 'Total added cost: \u2248 $68.40/month' and offers an alternate scenario of '$74.24/month', never reaching $81-$82.",
+          "reasoning": "The reported total does not match the asserted ~$81.54 figure under any scenario presented.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response prices from the public Price List offer files and says so (in the Price source line or the Pricing trace), with the file URL or the 2026-10-15 publication date shown.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says 'Rate (from fixture)' in the table header and never mentions the pricing file URL or the 2026-10-15 publication date.",
+          "reasoning": "Although the rates match the fixture data, the agent does not explicitly cite the Price List offer file URL or the publication date as the source, instead labeling it 'from fixture'.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response does NOT say pricing is unavailable and does NOT show the \u26d4 'Pricing not available' banner.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response provides full pricing tables and a dollar total; there is no 'Pricing not available' banner or statement that pricing is unavailable.",
+          "reasoning": "The agent proceeded to give concrete pricing figures throughout, with no unavailability disclaimer.",
+          "confidence": "high"
+        },
+        {
+          "text": "ReconcilerInstance is priced at $65.70 from the OnDemand row, not $0.00 from the Reserved row.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Table row: '`ReconcilerInstance` \u2014 EC2 m6g.large | $0.090/hr (OnDemand) | 0.090 \u00d7 730 | **$65.70**' and explicit note: 'Reserved-instance pricing for m6g.large showed $0.00/hr in the EC2 rows... not applicable here since the stack provisions via RunInstances on-demand.'",
+          "reasoning": "The agent correctly used the OnDemand rate of $0.090/hr yielding $65.70, and explicitly rejected the $0.00 Reserved rate.",
+          "confidence": "high"
+        },
+        {
+          "text": "LedgerIndex read and write capacity are priced from the paid dimension ($2.19 and $10.95), not as $0.00 from the free-tier rows.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Main table shows 'LedgerIndex \u2014 DynamoDB 20 RCU | free tier $0 up to 18,600 unit-hrs ... **$0.00**' and 'LedgerIndex \u2014 DynamoDB 20 WCU ... **$0.00**'. The paid-dimension amounts ($2.19 and $3.65, not $10.95) are only mentioned as an alternative scenario, not as the primary priced value.",
+          "reasoning": "The primary total used $0.00 for both RCU and WCU (free tier), not the paid dimension. Even in the alternate scenario, the WCU paid amount given is $3.65, not $10.95 as asserted, and RCU is $2.19 which matches but WCU does not. The main total does not use paid-dimension pricing at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "The topology check is reported either as not needed (new template, no stack name, no explicit names) or as skipped with the credential error quoted or paraphrased, and it causes no adjustment to the total.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response contains no mention of a topology check, stack name lookup, or any credential-error-related skip for topology; it only mentions credential issues implicitly via the EC2 RI note and the user's own stated credential error is not referenced in the output.",
+          "reasoning": "There is no explicit statement about topology check being skipped or not needed, so this assertion cannot be confirmed as satisfied; it appears absent from the response entirely.",
+          "confidence": "low"
+        },
+        {
+          "text": "Response does not ask the user for AWS credentials before giving the estimate.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent provides the full cost estimate and tables without asking for AWS credentials; it ends with a question about breaking out best/worst case or checking shared free tier, not a credential request.",
+          "reasoning": "No request for AWS credentials is made before or during the estimate; the response proceeds directly to pricing figures.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response names the offer-file host",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 5,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 8,
+        "pass_rate": 0.375
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}
