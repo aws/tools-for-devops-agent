@@ -184,5 +184,3 @@ iac-change-cost-preview/
 ├── README.md                     # This file
 └── CHANGELOG.md
 ```
-
-`SKILL.md` deliberately keeps the full Price List API procedure and a dashboard skeleton inline, even though `references/` and `assets/` also exist. In a Release Readiness Review several agents read the skill, and they don't always open extra files. Keeping the API procedure in `SKILL.md` is what lets any agent that loads the skill price the change; in testing, versions that moved it out stopped pricing. This is a known trade-off against the Agent Skills best-practice check for reference material in the body (BP-03), and it is intentional.
