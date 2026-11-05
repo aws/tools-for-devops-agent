@@ -13,19 +13,20 @@ You MUST produce the output in exactly this structure: the same nine sections, i
 - **Empty sections:** keep the heading and write `_None._` under it.
   - If the topology check wasn't needed, write `_Topology check not needed: <why the repo comparison was enough>. Net change equals the repo-based net._` under that heading.
   - If it was needed but skipped, write `_Topology check skipped: needed because <reason>; <error>. Net change equals the repo-based net._` under that heading.
+- **Heading:** fill it from the review or the PR (repository, PR number or branch, base branch, head commit), never from the local checkout. Never write "head", "no base", "workspace" or a folder name in place of the PR or branch.
 - **Placeholders:** replace every `<…>` with a real value from this run. Never output a placeholder, and never copy a value from this template.
 - **When no price line could be priced (Step 5), put one of these two banners directly under the `##` heading.** Pick by what actually happened; a source you never called is "not attempted", not "failed".
-  - **Every source was called and failed:** `> ⛔ **Pricing not available in this run.** verify_aws_claim: <exact error or reason> · Price List API <endpoint>: <exact error> · <endpoint>: <exact error> · <endpoint>: <exact error> · offer files: <exact HTTP or network error>. **Fix:** <one specific action matching the errors: enable verify_aws_claim for this agent type · add pricing:GetProducts, pricing:GetAttributeValues, and pricing:DescribeServices to the Agent Space role · allow the pricing endpoint Region in the AWS tool's Region policy · enable an AWS tool for this agent type · allow outbound HTTPS to pricing.us-east-1.amazonaws.com>.`
-  - **This phase lacks the tools to call a source:** `> ⏭️ **Not priced in this phase.** verify_aws_claim: <exact error, or not available> · Price List API: not attempted (no AWS tool) · offer files: not attempted (no shell or HTTP tool). **If verification testing ran the "IaC cost estimate" test, its dashboard is the priced result; otherwise re-run with pricing access.**` No Fix line: nothing is broken, the environment was never tested. Never write that the price files or the API are unreachable when you did not call them.
+  - **Every source was called and failed:** `> ⛔ **Pricing not available in this run.** Price List API <endpoint>: <exact error> · <endpoint>: <exact error> · <endpoint>: <exact error> · offer files: <exact HTTP or network error> · verify_aws_claim: <exact error, or not available>. **Fix:** <one specific action matching the errors: enable verify_aws_claim for this agent type · add pricing:GetProducts, pricing:GetAttributeValues, and pricing:DescribeServices to the Agent Space role · allow the pricing endpoint Region in the AWS tool's Region policy · enable an AWS tool for this agent type · allow outbound HTTPS to pricing.us-east-1.amazonaws.com>.`
+  - **This phase lacks the tools to call a source:** `> ⏭️ **Not priced in this phase.** Price List API: not attempted (no AWS tool) · offer files: not attempted (no shell or HTTP tool) · verify_aws_claim: <exact error, or not available>. **If verification testing ran the "IaC cost impact" test, its dashboard is the priced result; otherwise re-run with pricing access.**` No Fix line: nothing is broken, the environment was never tested. Never write that the price files or the API are unreachable when you did not call them.
   - In both cases, still fill the Added, Removed, and Resized tables completely, with sizing and quantity. Write `not priced` in every Rate, Monthly, Before monthly, After monthly, and Delta cell, and `—` in Price ref.
   - In the Summary, write `**not priced (see banner)**` for Net monthly change, and `<n> resources · not priced` for Added, Removed, and Resized.
   - Write `_None._` under Pricing trace. Don't repeat the pricing failure as a reason on each row of the Not determinable table; that table is only for resources that failed individually. Skip the arithmetic check.
-- **When verification testing already priced the change** (its "IaC cost estimate" test result is in your context): if that result is already a full dashboard, don't produce a second one; reference it (one dashboard per diff). If it is only a list of priced lines, build the dashboard from those numbers, keep its rates and units in the Pricing trace, and set the Summary's Price source row to `verification testing ("IaC cost estimate" test) · offer files: <n> lines · …`. Do not re-derive or round its figures.
+- **When verification testing already priced the change** (its "IaC cost impact" test result is in your context): if that result is already a full dashboard, don't produce a second one; reference it (one dashboard per diff). If it is only a list of priced lines, build the dashboard from those numbers, keep its rates and units in the Pricing trace, and set the Summary's Price source row to `verification testing ("IaC cost impact" test) · offer files: <n> lines · …`. Do not re-derive or round its figures.
 
 ## Template
 
 ```markdown
-## 💰 IaC cost impact · <repo> · <PR number or branch>
+## 💰 IaC cost impact · <owner/repo> · <PR #number or branch> (<base branch> → <head commit>)
 
 ### 📊 Summary
 | Metric | Value |
@@ -41,7 +42,7 @@ You MUST produce the output in exactly this structure: the same nine sections, i
 | ❔ Not determinable / conditional (not in total) | <n> items |
 | Pricing Region | <region code> · <how it was determined> |
 | Baseline | <base branch> · topology check: <not needed / done (<reason>) / skipped (<reason>; <error>)> |
-| Price source | AWS pricing docs: <n> lines · Price List API: <n> lines · offer files: <n> lines · on-demand list price · queried <YYYY-MM-DD> |
+| Price source | Price List API: <n> lines · offer files: <n> lines · AWS pricing docs: <n> lines · on-demand list price · queried <YYYY-MM-DD> |
 
 ### ➕ Added resources
 | # | Logical ID | Type | Sizing | Qty | Rate | Monthly | Price ref |
@@ -80,7 +81,7 @@ You MUST produce the output in exactly this structure: the same nine sections, i
 ### ❔ Not determinable / conditional (not in total)
 | Logical ID | Type | Reason | Candidates seen |
 |---|---|---|---|
-| <LogicalId> | <AWS::Service::Type> | <no usable rate: docs: <reason> · API: <no matching SKU after retry, last filters sent / only $0.00 match / exact error> · condition `<Name>` false at defaults (created when `<Parameter>=<value>`)> | <SKU or URL: rate / unit, … or —> |
+| <LogicalId> | <AWS::Service::Type> | <no usable rate: docs: <reason> · API: <no matching SKU after retry, last filters sent / only $0.00 match / exact error> · condition `<Name>` false at defaults (created when `<Parameter>=<value>`) · unresolved reference `<expression>` (data source / runtime input / known after apply) · module `<name>` from remote source, inputs don't map to one resource> | <SKU or URL: rate / unit, … or —> |
 
 ### ⚠️ Caveats
 - <every item from "Important Caveats to Always Include" in SKILL.md, applied to this run>
