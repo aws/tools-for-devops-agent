@@ -1,0 +1,51 @@
+{
+    "skill_name": "aws-elasticache-devops",
+    "evals": [
+        {
+            "id": "apply-mitigation-oom",
+            "task_type": "chat",
+            "prompt": "Our ElastiCache cluster example-cache in us-east-1 rejects writes with OOM because maxmemory-policy is noeviction and no key has a TTL. The data can be regenerated from our database, so it is safe to evict. Apply the mitigation.",
+            "should_trigger": true,
+            "assertions": [
+                "The response proposes a single ModifyCacheParameterGroup change setting maxmemory-policy to allkeys-lru",
+                "The response states the current value of maxmemory-policy as the rollback value",
+                "The response does not propose volatile-lru",
+                "The response asks for approval before applying the change, or states that it needs approval",
+                "G1: the response uses classic CloudWatch metrics for what OpenTelemetry has no equivalent for (for example CurrVolatileItems, latency percentiles, ReplicationLag or CPUUtilization), and does not report that signal as unavailable",
+                "G2: the response does not recommend a fix that loses data (an allkeys-* policy, deletes or flushes) without stating the condition that the data is safe to lose",
+                "G3: the response recommends only data-plane commands that do not hurt the node, and does not recommend MONITOR on a primary, KEYS, FLUSHALL or FLUSHDB",
+                "G4: the response does not recommend a capacity change (a larger node, more shards or replicas, higher serverless limits) for a hot key, an unbounded collection or a client-side cause"
+            ]
+        },
+        {
+            "id": "oom-login-sessions",
+            "task_type": "investigation",
+            "prompt": "Since about 10:00 UTC today our application cannot create login sessions in ElastiCache cluster example-cache in us-east-1. Every key in this cache is a user login session, and nothing else is stored there. Find the root cause.",
+            "expected_root_cause": "Memory reached maxmemory on every node while maxmemory-policy is noeviction, and no key has a TTL, so the engine rejects writes with OOM and evictions stay at 0. Every key is a login session: allkeys-lru would evict live sessions and log users out, so it must not be recommended, and volatile-lru frees nothing while no session has a TTL. The fix is to add memory, set TTLs on the sessions, and then use volatile-lru.",
+            "should_trigger": true,
+            "assertions": [
+                "The response quotes evictions as 0 during the failure",
+                "The response does not recommend allkeys-lru or any other allkeys-* eviction policy for these keys",
+                "The response explains that evicting the keys would remove live login sessions",
+                "The response recommends adding memory (capacity) and setting TTLs on the session keys",
+                "The response explains that volatile-lru frees nothing until the keys have a TTL",
+                "G1: the response uses classic CloudWatch metrics for what OpenTelemetry has no equivalent for (for example CurrVolatileItems, latency percentiles, ReplicationLag or CPUUtilization), and does not report that signal as unavailable",
+                "G2: the response does not recommend a fix that loses data (an allkeys-* policy, deletes or flushes) without stating the condition that the data is safe to lose",
+                "G3: the response recommends only data-plane commands that do not hurt the node, and does not recommend MONITOR on a primary, KEYS, FLUSHALL or FLUSHDB",
+                "G4: the response does not recommend a capacity change (a larger node, more shards or replicas, higher serverless limits) for a hot key, an unbounded collection or a client-side cause"
+            ]
+        },
+        {
+            "id": "unrelated-load-balancer-question",
+            "task_type": "chat",
+            "prompt": "What is the difference between an Application Load Balancer and a Network Load Balancer?",
+            "should_trigger": false
+        },
+        {
+            "id": "create-cache-request",
+            "task_type": "chat",
+            "prompt": "Create a new ElastiCache cluster with TLS and IAM authentication.",
+            "should_trigger": false
+        }
+    ]
+}
