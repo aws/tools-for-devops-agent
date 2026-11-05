@@ -18,7 +18,7 @@ Reading error log lines tells an agent what failed, but not where or since when.
 
 ## Prerequisites
 
-- The Bronto connector associated with your Agent Space, using sign-in or an API key with the **API Agent ReadOnly Role**, as described in the connector's README
+- The Bronto connector associated with your Agent Space, using sign-in or an API key with the **Agent Read Only** role, as described in the connector's README
 - The `bronto-log-search` skill, for Bronto's search syntax, and the `bronto-dataset-discovery` skill, when the datasets holding the service's logs aren't known
 - To start investigations from Bronto monitors, the webhook set up as described in the connector's README
 

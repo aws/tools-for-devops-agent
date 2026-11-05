@@ -16,7 +16,7 @@ Bronto's search syntax is SQL-like, with a few rules an agent easily gets wrong:
 
 ## Prerequisites
 
-- The Bronto connector associated with your Agent Space in AWS DevOps Agent, using sign-in or an API key with the **API Agent ReadOnly Role**, as described in the connector's README
+- The Bronto connector associated with your Agent Space in AWS DevOps Agent, using sign-in or an API key with the **Agent Read Only** role, as described in the connector's README
 - The datasets to search. The `bronto-dataset-discovery` skill finds them when they aren't known
 
 ## Limitations

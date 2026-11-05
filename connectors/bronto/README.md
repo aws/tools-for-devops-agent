@@ -1,6 +1,6 @@
 # Set up Bronto
 
-Before you connect, find your Bronto region and choose either signing in or an API key. If you want Bronto monitors to open investigations, also do step 4 after you connect.
+Before you connect, find your Bronto region and choose either signing in or an API key. If you want Bronto monitors to open investigations, also do step 5 after you connect.
 
 ## 1. Find your region
 
@@ -24,7 +24,7 @@ A Bronto admin must enable MCP access once for the organization:
 
 Sign in to Bronto with a login method enabled for MCP and approve the requested access. You don't need to create a client ID or secret.
 
-The agent acts as the user who signs in, with that user's Bronto permissions. Use a user who can search the datasets the agent should investigate and view monitors. A dedicated user with the **Agent ReadOnly Role** gives the agent read-only access to logs, monitors, dashboards, integrations and SLOs. Do not use a shared administrator account.
+The agent acts as the user who signs in, with that user's Bronto permissions. Use a user who can search the datasets the agent should investigate and view monitors. A dedicated user with the **Agent Read Only** role gives the agent read-only access to logs, monitors, dashboards, integrations and SLOs. Do not use a shared administrator account.
 
 ### API key
 
@@ -32,12 +32,19 @@ Use a key when the agent must act as itself, not as a person. Creating an API ke
 
 1. In Bronto, go to **Settings** > **API Keys** and select **Create a new API Key**.
 2. Name it after its purpose, such as `aws-devops-agent`.
-3. Select the **API Agent ReadOnly Role**. It gives read-only access to logs, monitors, dashboards, integrations and SLOs, and no access to API keys, users or billing. Do not use a Search key, which can't read monitors, or Ingestion key.
+3. Select the **Agent Read Only** role. It gives read-only access to logs, monitors, dashboards, integrations and SLOs, and no access to API keys, users or billing. Do not use a Search key, which can't read monitors, or Ingestion key.
 4. Select **Create Key** and copy the key. It is shown only once.
 
 When you connect, paste the key by itself into **Bronto API key**. DevOps Agent sends it in the `X-BRONTO-API-KEY` header.
 
-## 4. Let Bronto monitors open investigations
+## 4. Select the tools
+
+The Bronto skills use `get_datasets`, `get_datasets_by_name`, `get_keys`, `get_key_values`, `get_error_summary`, `timeseries`, `search_logs`, `get_saved_searches` and `run_saved_search`.
+
+- With the **Agent Read Only** role, Bronto offers only its read-only tools, so you can select all of them.
+- With other roles, the tools Bronto offers depend on the role's permissions. If `create_monitor` or `create_saved_search` is offered, leave it unselected. They are the only tools that change anything in Bronto, and the skills never call them. With sign-in the agent has the signed-in user's permissions, so leaving them unselected is what keeps it read-only.
+
+## 5. Let Bronto monitors open investigations
 
 After you connect, the console shows a webhook URL and a signing secret for your Agent Space. Add them to Bronto:
 

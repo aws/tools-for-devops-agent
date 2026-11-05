@@ -26,6 +26,8 @@ Work from summaries to raw events, and only fetch events once you know what to l
 | What do the events say? | `search_logs` - raw events, with a small `limit` and only the columns you need |
 | Is there a saved search for this already? | `get_saved_searches`, then `run_saved_search` |
 
+A saved search runs over the window it was saved with unless you override it. Pass the incident window to `run_saved_search` as `from_ts` and `to_ts`, or as `time_range`, and set `limit`.
+
 `search_logs` returns events only. It rejects `groups` with aggregate `select` columns; use `timeseries` with `group_by_keys` for any grouped count or aggregate.
 
 ## 2. Set the time window
@@ -80,7 +82,7 @@ To see which kinds of message dominate, group by `$pattern_id`. Bronto assigns a
 - Use `select` to return only the columns you need, such as `["log_level", "message", "exception.type"]`. Without it, each event comes back in full and a few dozen events can fill the context.
 - `order_by` sorts, for example `duration_ms DESC` to find the slowest requests.
 - `group_by_patterns: true` collapses repeated events into pattern templates with counts, but events that match no pattern still come back in full. Combine it with a narrow filter and a small `limit`. To see the events behind one pattern, search again with `"$pattern_id" = '<pattern_id>'`.
-- To page through more results, pass the `pagination_token` from the response's `links`.
+- To page through more results, pass the `pagination_token` from the response's `links`. Stop paging once you have the events you need, and after three pages narrow the filter or use `timeseries` instead.
 
 ## 6. Read the results carefully
 
@@ -91,5 +93,6 @@ To see which kinds of message dominate, group by `$pattern_id`. Bronto assigns a
 
 ## Limits
 
+- Make at most 20 Bronto tool calls in this skill before reporting what you found.
 - A query is at most 16,000 characters and 400 expressions.
-- All steps are read-only. Do not create monitors or saved searches unless the user asks.
+- All steps are read-only. Do not create monitors or saved searches as part of this skill.

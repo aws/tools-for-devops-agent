@@ -16,7 +16,7 @@ A Bronto organization can hold hundreds of datasets, grouped into collections, e
 
 ## Prerequisites
 
-- The Bronto connector associated with your Agent Space in AWS DevOps Agent, using sign-in or an API key with the **API Agent ReadOnly Role**, as described in the connector's README
+- The Bronto connector associated with your Agent Space in AWS DevOps Agent, using sign-in or an API key with the **Agent Read Only** role, as described in the connector's README
 - Datasets tagged with `service`, `environment` and `region` give the best results; name matching works without tags
 
 ## Limitations
