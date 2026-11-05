@@ -13,7 +13,7 @@ CloudFormation delta policy are needed.
 | Action | Granted by | Used for |
 |---|---|---|
 | `cloudtrail:DescribeTrails`, `cloudtrail:ListTrails` | `cloudtrail:Describe*`, `cloudtrail:List*` | Trail inventory including shadow trails |
-| `cloudtrail:GetTrail`, `cloudtrail:GetTrailStatus`, `cloudtrail:GetEventSelectors`, `cloudtrail:GetInsightSelectors` | explicit | Trail configuration, delivery health, selectors, Insights |
+| `cloudtrail:GetTrailStatus`, `cloudtrail:GetEventSelectors`, `cloudtrail:GetInsightSelectors` | explicit | Delivery health, selectors, Insights (`cloudtrail:GetTrail` is granted but never called; `DescribeTrails` supplies the trail fields) |
 | `cloudtrail:ListEventDataStores`, `cloudtrail:GetEventDataStore` | `cloudtrail:List*`, explicit | CloudTrail Lake stores as coverage sources |
 | `s3:ListAllMyBuckets`, `s3:GetBucketLocation` | explicit | Bucket inventory and Region |
 | `s3:GetBucketVersioning`, `s3:GetBucketObjectLockConfiguration`, `s3:GetBucketPublicAccessBlock` | explicit | E2 optional destination bucket context |
