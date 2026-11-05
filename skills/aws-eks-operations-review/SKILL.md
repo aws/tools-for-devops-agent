@@ -14,7 +14,7 @@ description: >
   incident investigation.
 metadata:
   author: shyamkulkarni
-  version: "1.9.5"
+  version: "1.9.6"
   aws-devops-agent-skills.agent-types: "CHAT"
 ---
 # EKS Operations Review

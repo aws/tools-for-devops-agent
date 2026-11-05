@@ -1,0 +1,151 @@
+name: Label PR checklist result
+
+# Applies the `needs-checklist` label and an explanatory comment to a PR whose
+# "Validate PR checklist" check failed, and removes the label and updates the
+# comment once the check passes.
+#
+# `needs-checklist` is an *output* of the check and is owned by this workflow
+# alone. Reviewers filter it out: a PR carrying it is on hold and not reviewed.
+#
+# Why a separate workflow: for pull_request events from a fork, GITHUB_TOKEN is
+# read-only regardless of the `permissions:` block, so the validating job cannot
+# label or comment on its own PR. A workflow_run job runs in the base repository's
+# context with write access, and uses the workflow definition from the default
+# branch rather than from the PR.
+#
+# Nothing from the artifact is trusted beyond a fixed list. The validating job runs
+# a workflow definition the PR itself controls, so its artifact can say anything.
+# Hence:
+#   - The PR is resolved from this event's payload, which GitHub writes: an open PR
+#     whose head is the run's head repository, branch and commit. The artifact's
+#     PR number only has to name one of those matches, so it cannot point the
+#     label or comment at another PR. A run whose commit is no longer the PR's head
+#     matches nothing and does nothing, which also keeps a stale run from
+#     overwriting a newer one.
+#   - The comment is fixed text chosen by `outcome` and `reason`, both checked
+#     against the lists below. It links to the run for the unmet items rather than
+#     repeating them, so no text from a PR description is ever posted by the bot.
+#   - `error` means the check did not reach a verdict. The label and comment are
+#     left as they are: neither "incomplete" nor "complete" is a claim anyone is in
+#     a position to make. The validating job has already failed, saying why.
+
+on:
+  workflow_run:
+    workflows: ["Validate PR checklist"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read # download the artifact from the triggering run
+  pull-requests: write # add / remove the label and comment
+
+# Serialized per pull request, not per run. Keying on `workflow_run.id` would make
+# every group unique and the setting a no-op, so two validate runs finishing close
+# together could both reach the commenting step and race. The head repository and
+# branch identify the PR. `cancel-in-progress: false` so a labeler mid-write is
+# never killed; runs queue.
+concurrency:
+  group: label-pr-checklist-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.conclusion == 'success' ||
+      github.event.workflow_run.conclusion == 'failure'
+    steps:
+      - name: Download the check outcome
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: checklist-check-result
+          path: result
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Apply or remove the label and comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const LABEL = "needs-checklist";
+            const MARKER = "<!-- pr-checklist-enforcement -->";
+            const REASONS = { pass: ["complete", "draft", "bot", "predating"], fail: ["incomplete"] };
+            const run = context.payload.workflow_run;
+            const {owner, repo} = context.repo;
+            const read = (name) => {
+              try { return fs.readFileSync(`result/${name}`, "utf8").trim(); } catch { return ""; }
+            };
+
+            const outcome = read("outcome");
+            const reason = read("reason");
+            if (!Object.hasOwn(REASONS, outcome)) {
+              core.notice(`Outcome '${outcome || "none"}': the check reached no verdict, so the label and comment are left as they are.`);
+              return;
+            }
+            if (!REASONS[outcome].includes(reason)) {
+              core.warning(`Unexpected reason '${reason}' for outcome '${outcome}'; the PR is left as it is.`);
+              return;
+            }
+
+            const head = run.head_repository;
+            const claimed = Number(read("pr-number"));
+            if (!head) {
+              core.notice("The run's head repository no longer exists; nothing to label.");
+              return;
+            }
+            const candidates = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: "open", head: `${head.owner.login}:${run.head_branch}`, per_page: 100,
+            });
+            const pr = candidates.find((p) => p.number === claimed && p.head.sha === run.head_sha);
+            if (!pr) {
+              core.warning(`No open PR #${claimed} has ${head.full_name}:${run.head_branch} at ${run.head_sha} as its head; nothing labeled.`);
+              return;
+            }
+
+            // Ensure the label exists.
+            try { await github.rest.issues.getLabel({owner, repo, name: LABEL}); }
+            catch { await github.rest.issues.createLabel({owner, repo, name: LABEL, color: "D93F0B", description: "PR checklist incomplete — not reviewed until resolved"}); }
+
+            const hasLabel = (pr.labels || []).some((l) => l.name === LABEL);
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: pr.number});
+            const prev = comments.find((c) => (c.body || "").includes(MARKER));
+
+            if (outcome === "fail") {
+              if (!hasLabel) await github.rest.issues.addLabels({owner, repo, issue_number: pr.number, labels: [LABEL]});
+              const comment = [
+                MARKER,
+                "### This PR is on hold — checklist incomplete",
+                "",
+                "Required items in the PR description are unchecked. A maintainer will not review this PR until each one is checked **and actually done**.",
+                "",
+                `The [check's summary](${run.html_url}) lists them. Complete the work, tick the boxes, and this clears automatically. CONTRIBUTING.md explains each item.`,
+              ].join("\n");
+              if (prev) await github.rest.issues.updateComment({owner, repo, comment_id: prev.id, body: comment});
+              else await github.rest.issues.createComment({owner, repo, issue_number: pr.number, body: comment});
+              core.notice(`Labeled PR #${pr.number} with ${LABEL}.`);
+              return;
+            }
+
+            // Passing is not the same as complete. Say "complete" only when nothing
+            // was unmet, and otherwise say why it is not enforced, so an author is
+            // never told they are done when they are not. A PR that never had the
+            // comment gets none: there is nothing to correct.
+            if (hasLabel) {
+              try {
+                await github.rest.issues.removeLabel({owner, repo, issue_number: pr.number, name: LABEL});
+              } catch (e) {
+                // 404 is normal: the label was already removed by hand or by a
+                // concurrent run. Anything else is a real failure worth seeing.
+                if (e.status !== 404) core.warning(`Could not remove ${LABEL} from #${pr.number}: ${e.message}`);
+              }
+            }
+            const bodies = {
+              complete: "### Checklist complete ✅\nAll required items are checked. This PR is ready for maintainer review.",
+              draft: "### Checklist not enforced while this PR is a draft\nSome required items are still unmet. Mark the PR ready for review and this check runs again.",
+              bot: "### Checklist not enforced for bot-authored PRs\nThis PR was opened by a bot, so the contribution checklist does not apply.",
+              predating: "### Checklist not enforced on this PR\nIt was opened before this check existed, so the unmet items are reported as warnings in the check's summary rather than blocking. A maintainer can apply `enforce-checklist` to require them.",
+            };
+            if (prev) await github.rest.issues.updateComment({owner, repo, comment_id: prev.id, body: `${MARKER}\n${bodies[reason]}`});
+            core.notice(`PR #${pr.number} passed the checklist check (${reason}).`);

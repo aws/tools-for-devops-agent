@@ -300,10 +300,30 @@ class MetadataTests(CheckSkillTestCase):
         self.assertOneError(tree(skill_md(frontmatter_with(author=None))), '"metadata.author" is required')
         for bad in ('"-octocat"', '"octo cat"', '"octo--cat"', '"a,,b"', '""'):
             with self.subTest(bad=bad):
-                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames")
+                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames or teams")
 
     def test_author_accepts_a_comma_separated_list(self):
         self.assertEqual(self.errors(tree(skill_md(frontmatter_with(author='"octocat, hubot"')))), [])
+
+    def test_author_accepts_a_team(self):
+        for good in ('"octo-org/octo-team"', '"octo-org/octo_team"', '"octocat, octo-org/octo-team"'):
+            with self.subTest(good=good):
+                self.assertEqual(self.errors(tree(skill_md(frontmatter_with(author=good)))), [])
+
+    def test_author_team_shape(self):
+        org_40, team_101 = "o" * 40, "t" * 101
+        for bad in (
+            '"@octo-org/octo-team"',
+            '"octo-org/"',
+            '"/octo-team"',
+            '"octo-org/octo-team/extra"',
+            '"octo--org/octo-team"',
+            '"octo-org/-team"',
+            f'"{org_40}/octo-team"',
+            f'"octo-org/{team_101}"',
+        ):
+            with self.subTest(bad=bad):
+                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames or teams")
 
     def test_version_is_required(self):
         self.assertOneError(tree(skill_md(frontmatter_with(version=None))), '"metadata.version" is required')

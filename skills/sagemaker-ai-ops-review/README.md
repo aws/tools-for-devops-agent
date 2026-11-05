@@ -53,7 +53,7 @@ Three of these are **global** APIs with no regional endpoints — `health`, `ce`
 
 ```bash
 aws cloudformation deploy \
-  --template-file cloudformation/devops-agent-skill-policies.yaml \
+  --template-file cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml \
   --stack-name devops-agent-skill-policies \
   --parameter-overrides ExistingRoleName=<YOUR-DEVOPS-AGENT-ROLE-NAME> EnableSageMakerAIOpsReview=true \
   --capabilities CAPABILITY_NAMED_IAM
@@ -94,7 +94,7 @@ Latency and Stale Endpoint checks read `AWS/SageMaker` CloudWatch metrics, which
 
 ## Agent Types
 
-**Chat tasks** and **Evaluation**. The skill is intended for on-demand and scheduled review runs, not live incident response — for SageMaker access failures during an incident, use the `aiml-access-diagnostics` skill instead.
+**Chat tasks**. The skill is intended for on-demand and scheduled review runs, not live incident response — for SageMaker access failures during an incident, use the `aiml-access-diagnostics` skill instead.
 
 ## Uploading to AWS DevOps Agent
 
@@ -140,7 +140,7 @@ Constraints enforced at upload time:
 1. Navigate to the **Skills** page in your Agent Space Operator Web App.
 2. Choose **Add skill** → **Upload skill**.
 3. Drag and drop `sagemaker-ai-ops-review.zip` (or browse to it).
-4. Select agent type: **Generic** (shown as **All agents** in some console versions). This matters: narrowing the skill to **On-demand** / **Evaluation** can keep it out of a custom agent's skill picker entirely, leaving the agent with no checks to run. Narrow the agent types only if you are driving the skill from Chat alone.
+4. Select agent type: **All agents**. This matters: narrowing the skill to **Chat tasks** can keep it out of a custom agent's skill picker entirely, leaving the agent with no checks to run. Narrow the agent types only if you are driving the skill from Chat alone.
 5. Review the validation results.
 6. Choose **Upload**.
 
@@ -172,9 +172,9 @@ Quota headroom before a launch:
 
 > Check my SageMaker service quota utilization in us-west-2 before we scale up training.
 
-### Evaluation
+### Scheduled reviews
 
-Point an Evaluation agent at the skill and schedule it — weekly ahead of an operational review meeting, or monthly as a posture check. The report is produced in full each run, so successive runs are directly comparable.
+Run the skill on a schedule — weekly ahead of an operational review meeting, or monthly as a posture check. The report is produced in full each run, so successive runs are directly comparable.
 
 To run it on a schedule, add this skill to the [`aws-operation-review`](../../custom-agents/aws-operation-review/) custom agent — the router that composes every `*-operation-review` skill — and attach a schedule trigger there. This skill intentionally ships no custom agent of its own.
 

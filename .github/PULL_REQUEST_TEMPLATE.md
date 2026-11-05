@@ -23,7 +23,7 @@ Fill in every section that applies, and delete the entry-type sections that don'
 <!-- These are gates. A PR is not ready for review until each applicable box is checked. -->
 
 - [ ] **Repository layout is correct** — skills in `/skills`, MCP servers in `/mcp`, custom agents in `/custom-agents`; skills and MCP servers are never mixed in one directory.
-- [ ] **A domain SME has reviewed and signed off.** A named subject-matter expert for this domain — someone other than the author — has reviewed the tool for technical correctness and approved it in this PR. Required, not optional.
+- [ ] **A domain SME has reviewed and signed off.** A named subject-matter expert for this domain — someone other than the author — has reviewed the tool for technical correctness and approved it in this PR. Required for any change to what the tool tells the agent; an edit that changes no technical claim can be marked n/a with the reason, as CONTRIBUTING.md describes.
 - [ ] **Evaluation evidence is included** (see Testing).
 - [ ] **No internal-only or proprietary content** — no internal hostnames, account IDs, customer names, ticket numbers, internal URLs, or secrets in the tool, its examples, or its tests.
 - [ ] **README is complete** — prerequisites, setup/deployment, and at least one sample prompt or usage example.
@@ -44,10 +44,15 @@ REVIEWERS: if this PR adds or changes a skill's `evals/exemptions.json`, that fi
 waives the eval-results requirement for the named test types, so the check cannot
 judge it for you. Check that the `reason` names a real blocker, that the PR carries
 manual with-skill / without-skill DevOps Agent output in place of the missing
-results, and that nothing is exempted that could simply have been run. If a reason
-does not hold, add the `enforce-evals` label: that withdraws every exemption on the
-PR and requires the results after all, and the check's log then names each reason it
-rejected. See the "When a test type can't be run" section in CONTRIBUTING.md.
+results, and that nothing is exempted that could simply have been run. The one
+exception is a partner-managed skill that commits the standard exemption from
+CONTRIBUTING.md: it attaches no manual output, because a maintainer checks that the
+skill installs and loads before the connector that recommends it is promoted. Check
+instead that `metadata.tier` is `partner-managed` and that the author is the
+partner. If a reason does not hold, add the `enforce-evals` label: that withdraws
+every exemption on the PR and requires the results after all, and the check's log
+then names each reason it rejected. See the "When a test type can't be run" section
+in CONTRIBUTING.md.
 
 Also: pull requests that were already open when the eval-results check was
 introduced are listed in the script by number, so the check passes with warnings
@@ -86,6 +91,12 @@ before this check existed" in CONTRIBUTING.md.
 - [ ] The composed tools and skills are listed in the README, and each is already in the catalog or included in this PR.
 - [ ] Any mutative tool the agent can call is identified, with its approval behavior described.
 - [ ] Run mode (on-demand vs scheduled) and the artifact it produces are documented.
+
+## Connectors — complete if this PR adds or changes a connector
+
+<!-- Applies to any change inside a connectors/<name>/ directory. The partner that owns the connector opens the PR; see "Partner Connectors" in CONTRIBUTING.md. This item cannot be marked n/a. -->
+
+- [ ] **I accept the [AWS DevOps Agent Partner Connector Terms and Conditions](https://github.com/aws/tools-for-devops-agent/blob/main/connectors/TERMS.md), version 2026-11-03, on behalf of the company that owns this connector, and I have authority to do so.**
 
 ## Security and safety
 

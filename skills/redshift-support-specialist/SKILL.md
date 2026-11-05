@@ -3,7 +3,7 @@ name: redshift-support-specialist
 description: Amazon Redshift domain expertise for query optimization, operational reviews, and cost optimization on provisioned clusters and Serverless workgroups. Use when a user asks about Redshift query tuning, slow queries, disk spill, distribution/sort key issues, a Redshift health check or operational review, or Redshift cost or RPU sizing. Requires the awslabs.redshift-mcp-server MCP server to be connected.
 compatibility: Requires the awslabs.redshift-mcp-server MCP server (https://pypi.org/project/awslabs.redshift-mcp-server/) to be connected as a capability provider.
 metadata:
-  version: "1.8.1"
+  version: "1.8.2"
   author: aws-samples
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Redshift, Amazon Redshift Serverless"

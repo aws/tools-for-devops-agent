@@ -14,7 +14,7 @@ description: Identify and quantify Amazon GuardDuty cost optimization opportunit
   severity-ranked report of savings.
 metadata:
   author: holmalla
-  version: "1.3.1"
+  version: "1.3.2"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon GuardDuty"
   aws-devops-agent-skills.technical-domains: "Security, Cost Optimization"

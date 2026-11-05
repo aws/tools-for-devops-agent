@@ -138,7 +138,7 @@ aiml-gpu-training-cluster-investigation.zip
 After uploading or replacing the skill, wait up to 15 minutes before testing, and confirm the new version by asking the agent to quote a line that only exists in it. In live testing the Agent Space kept serving the previous version for 5 to 12 minutes after an upload, and reads of its reference files could fail during that window.
 
 Upload the zip in the Operator Web App under **Skills**, and select the **Incident RCA**
-and **On-demand** agent types. See
+and **Chat tasks** agent types. See
 [Creating and uploading skills](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html).
 
 ## How to Use This Skill

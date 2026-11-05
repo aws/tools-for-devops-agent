@@ -30,10 +30,9 @@ Pillars graded: **Resiliency & HA (REL), Observability (OBS), Security (SEC), Op
 
 Intended for these agent types (selected in the Operator Web App at upload time):
 
-- **On-demand** — conversational invocation in Chat ("run an ECS operations review on service X", "ECS security review").
-- **Evaluation** — proactive operational improvement recommendations.
+- **Chat tasks** — conversational invocation in Chat ("run an ECS operations review on service X", "ECS security review").
 
-Select **Generic** to make the skill available to all agent types.
+Select **All agents** to make the skill available to all agent types.
 
 ## Prerequisites
 
@@ -43,7 +42,7 @@ An existing [Agent Space](https://docs.aws.amazon.com/devopsagent/latest/usergui
 
 ### 2. Read-only permissions
 
-The Agent Space IAM role needs read-only (`describe*` / `list*` / `get*`) access to: ECS, CloudWatch, CloudWatch Logs, IAM, Application Auto Scaling, Elastic Load Balancing v2, ECR, EC2/VPC, GuardDuty, and Compute Optimizer. The DevOps Agent managed policy **`AIDevOpsAgentAccessPolicy`** covers all of these except one: it grants no `compute-optimizer` actions, so the PERF8 rightsizing check needs `compute-optimizer:GetECSServiceRecommendations` added. Deploy `cloudformation/devops-agent-skill-policies.yaml` with `EnableEcsOperationReview=true` to attach it as a gated inline policy. Without it the skill still runs — PERF8 is marked N/A under the access-limitation protocol. No cluster-level access entry or kubectl connectivity is required — ECS is assessed entirely through AWS control-plane APIs.
+The Agent Space IAM role needs read-only (`describe*` / `list*` / `get*`) access to: ECS, CloudWatch, CloudWatch Logs, IAM, Application Auto Scaling, Elastic Load Balancing v2, ECR, EC2/VPC, GuardDuty, and Compute Optimizer. The DevOps Agent managed policy **`AIDevOpsAgentAccessPolicy`** covers all of these except one: it grants no `compute-optimizer` actions, so the PERF8 rightsizing check needs `compute-optimizer:GetECSServiceRecommendations` added. Deploy `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml` with `EnableEcsOperationReview=true` to attach it as a gated inline policy. Without it the skill still runs — PERF8 is marked N/A under the access-limitation protocol. No cluster-level access entry or kubectl connectivity is required — ECS is assessed entirely through AWS control-plane APIs.
 
 ### 3. AWS Knowledge MCP
 
@@ -81,7 +80,7 @@ Upload-time constraints: `SKILL.md` required with `name` + `description` frontma
 1. Open the **Skills** page in your Agent Space Operator Web App.
 2. **Add skill** → **Upload skill**.
 3. Drag and drop `ecs-operation-review.zip`.
-4. Select agent types: **On-demand** and **Evaluation** (or **Generic**).
+4. Select agent types: **Chat tasks** (or **All agents** if you want to apply the skill to all agent types).
 5. Review validation results → **Upload**.
 
 ## Usage

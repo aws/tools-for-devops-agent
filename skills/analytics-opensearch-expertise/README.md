@@ -32,7 +32,7 @@ Most are covered by `AIDevOpsAgentAccessPolicy`; attach the supplemental policy 
 ## How to use it with DevOps Agent
 
 1. Zip this skill directory and upload it to your DevOps Agent Space.
-2. Select relevant subagents (Chat, Investigations / Incident RCA).
+2. Select the **Chat tasks** agent type.
 3. Prompt in natural language without naming the skill, e.g.:
    - "Is my OpenSearch domain healthy? ARN: `arn:aws:es:us-east-1:123456789012:domain/my-domain`"
    - "Review the cluster configuration and security posture of this OpenSearch domain."
