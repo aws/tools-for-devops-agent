@@ -6,7 +6,7 @@ Follow the steps below to set up a connection with Halo, allowing investigations
 
 1. In Halo, go to **Configuration** > **Integrations** > **AWS DevOps Agent** and enable the module by clicking the plus icon.
 2. Add a new **Agent Space** and give it a name, such as the name of your Agent Space in AWS.
-3. Under **Webhook Setup**, paste the webhook URL and secret your Agent Space shows in AWS.
+3. Leave **Webhook Setup** for now. AWS shows the webhook URL and secret once you connect, and you add them in the last section below.
 4. In the MCP section, choose the **Agent to log in as**. The DevOps Agent's Halo function calls run with this agent's identity and permissions.
 5. Copy the **Client Secret** for later.
 6. Save the Agent Space.
@@ -33,7 +33,7 @@ By default, the toolset includes functions to search knowledge base articles, se
 
 ## Let Halo tickets open investigations
 
-1. On the Agent Space, under **Webhook Setup**, you can define the payload that Halo should send to the agent.
+1. On the Agent Space, under **Webhook Setup**, paste the webhook URL and secret that AWS shows after you connect. You can also define the payload that Halo should send to the agent here.
 2. Go to **Configuration** > **Tickets** > **Actions** and add an action with the system use **Run AWS DevOps Agent**, then select your Agent Space.
 3. Add the action to the Workflows where it should be used.
 
