@@ -170,7 +170,12 @@ The skill performs no write actions. It never creates stacks, change sets, or an
 
 **Option A: GitHub integration.** Fork or copy this repository and import the skill through the Agent Space GitHub integration.
 
-**Option B: Direct upload.** Zip the skill and upload it as a user-defined skill in the Agent Space console.
+**Option B: Direct upload.** Zip the skill and upload it as a user-defined skill in the Agent Space console. The zip includes only the skill files and leaves out `README.md`, `CHANGELOG.md` and `evals/`:
+
+```bash
+cd skills
+zip -r iac-change-cost-preview.zip iac-change-cost-preview/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' '*/CHANGELOG.md' '*/evals/*'
+```
 
 ## Files
 
