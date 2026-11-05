@@ -1,0 +1,134 @@
+[
+  {
+    "id": "elasticache-serverless-discovery-called",
+    "prompt": "Run an EOS cost analysis for ElastiCache in us-east-1. Which discovery APIs did you call?",
+    "expected_output": "Discovery calls DescribeCacheClusters, DescribeReplicationGroups, and DescribeServerlessCaches, because serverless caches are a distinct resource type not returned by DescribeCacheClusters.",
+    "assertions": [
+      "The output calls or states it calls elasticache:DescribeServerlessCaches in addition to elasticache:DescribeCacheClusters",
+      "The output treats serverless caches as a separate resource type from node-based cache clusters",
+      "The output does not rely only on DescribeCacheClusters for ElastiCache coverage"
+    ]
+  },
+  {
+    "id": "rds-aurora-describe-db-clusters-called",
+    "prompt": "Analyze RDS and Aurora Extended Support exposure in us-east-1. Explain how you determine the engine version for Aurora clusters.",
+    "expected_output": "Discovery calls both rds:DescribeDBInstances and rds:DescribeDBClusters, using the cluster EngineVersion as authoritative for Aurora because the instance-level version can lag.",
+    "assertions": [
+      "The output calls or states it calls rds:DescribeDBClusters in addition to rds:DescribeDBInstances",
+      "The output uses the Aurora cluster EngineVersion as the authoritative version",
+      "The output does not rely only on rds:DescribeDBInstances for Aurora version data"
+    ]
+  },
+  {
+    "id": "rds-usagetype-region-prefix-outside-us-east-1",
+    "prompt": "You found an Aurora MySQL instance in us-west-2 that is in Extended Support. How do you construct the AWS Pricing API usagetype to get its Extended Support rate?",
+    "expected_output": "Outside us-east-1 the RDS ExtendedSupport usagetype carries a region prefix (e.g. USW2-ExtendedSupport:Yr1-Yr2:AuroraMySQL2 for us-west-2), resolved via pricing:GetAttributeValues; only us-east-1 uses the bare, prefix-free form.",
+    "assertions": [
+      "The output applies a region prefix (such as USW2-) to the RDS ExtendedSupport usagetype for us-west-2, not the bare prefix-free form",
+      "The output resolves the region prefix via pricing:GetAttributeValues (or an equivalent live lookup) rather than hardcoding or omitting it",
+      "The output does not claim RDS never uses a region prefix; it recognizes the bare form applies only to us-east-1"
+    ]
+  },
+  {
+    "id": "rds-multi-az-doubles-cost",
+    "prompt": "An RDS PostgreSQL instance in us-east-1 is Multi-AZ, uses a db.r6g.xlarge instance class, and is past End of Standard Support. Query the AWS Pricing API for its Extended Support rate and calculate its monthly Extended Support cost, showing the rate you retrieved.",
+    "expected_output": "The agent calls the Pricing API for the RDS PostgreSQL ExtendedSupport rate, then computes cost = vCPUs (4 for db.r6g.xlarge) x the retrieved per-vCPU rate x 730 hours, doubled because Multi-AZ bills Extended Support on both the primary and the standby.",
+    "assertions": [
+      "The output multiplies the Extended Support cost by 2 for the Multi-AZ instance",
+      "The output maps db.r6g.xlarge to 4 vCPUs rather than guessing",
+      "The output retrieves the per-vCPU Extended Support rate from the AWS Pricing API (shows a queried rate), rather than only using a hardcoded or reference figure"
+    ]
+  },
+  {
+    "id": "approaching-eos-zero-current-cost",
+    "prompt": "An EKS cluster's Kubernetes version reaches End of Standard Support in 3 months. Report its current and projected monthly Extended Support cost.",
+    "expected_output": "Current (reactive) monthly ES cost is $0 because the resource is APPROACHING_EOS and not yet in Extended Support; the projected (proactive) cost is the full ES rate that starts on the EOS date.",
+    "assertions": [
+      "The output reports the current monthly Extended Support cost as $0 for the APPROACHING_EOS resource",
+      "The output reports a non-zero projected cost that begins at the EOS date",
+      "The output keeps the current (reactive) and projected (proactive) figures separate rather than collapsing them into one number"
+    ]
+  },
+  {
+    "id": "eos-date-not-guessed",
+    "prompt": "You discovered an OpenSearch domain on Elasticsearch_7.10 and another on OpenSearch_2.11. How do you determine each one's End of Standard Support date?",
+    "expected_output": "Each engine family and version is verified independently against AWS documentation; an Elasticsearch version's EOS date is never applied to an OpenSearch version, and dates are never guessed.",
+    "assertions": [
+      "The output verifies the EOS date for each engine family and version independently",
+      "The output does not reuse one version's EOS date for the other engine family",
+      "The output does not fabricate or guess an EOS date when documentation does not confirm one"
+    ]
+  },
+  {
+    "id": "rds-usagetype-engine-version-suffix",
+    "prompt": "An RDS for PostgreSQL 13 instance in eu-west-1 is past End of Standard Support. Give the exact AWS Pricing API usagetype for its Year 3 Extended Support rate, and confirm that it exists.",
+    "expected_output": "The usagetype is EU-ExtendedSupport:Yr3:PostgreSQL13, with the EU- prefix for eu-west-1 (not EUW1-) and the major version in the engine suffix, and the answer shows it was confirmed against the Pricing API.",
+    "assertions": [
+      "The usagetype includes the major version in the engine suffix, such as PostgreSQL13, not just PostgreSQL",
+      "The usagetype uses the EU- prefix for eu-west-1, not EUW1-",
+      "The output confirms the usagetype against the AWS Pricing API (for example a GetProducts or GetAttributeValues lookup) instead of presenting it as a guess"
+    ]
+  },
+  {
+    "id": "rds-billed-instance-count",
+    "prompt": "Three RDS for PostgreSQL 13 deployments in us-east-1 are past End of Standard Support, all in Year 1-2 of Extended Support: a Multi-AZ DB instance (one standby) on db.m6g.large, a read replica of it on db.m6g.large, and a Multi-AZ DB cluster with a writer and two readable standbys on db.m6gd.large. How many instances are billed for Extended Support, and what is the total monthly Extended Support cost?",
+    "expected_output": "Six instances are billed: the Multi-AZ DB instance and its standby (2), the read replica (1), and all three Multi-AZ DB cluster instances (3). Each class has 2 vCPUs, so 12 vCPUs \u00d7 $0.10 per vCPU-hour \u00d7 730 hours = about $876 per month.",
+    "assertions": [
+      "The output counts the Multi-AZ DB instance's standby as a billed instance (2 for that deployment)",
+      "The output counts the read replica as a billed instance",
+      "The output counts all three instances of the Multi-AZ DB cluster (3), not the writer doubled",
+      "The output arrives at 6 billed instances or 12 vCPUs, about $876 per month"
+    ]
+  },
+  {
+    "id": "aurora-per-instance-and-serverless",
+    "prompt": "An Aurora PostgreSQL 13 cluster in us-east-1 is in Year 1-2 of Extended Support. It has a writer and a reader on db.r6g.large, and a db.serverless reader that averaged 4 ACUs over the last two weeks. What is its monthly Extended Support cost?",
+    "expected_output": "The two provisioned instances are priced once each, never doubled: 2 \u00d7 2 vCPUs \u00d7 $0.10 \u00d7 730 = about $292. The db.serverless reader is priced per ACU-hour from the ASv2 usagetype: 4 ACU \u00d7 $0.085 \u00d7 730 = about $248. Total about $540 per month.",
+    "assertions": [
+      "The output prices each provisioned Aurora instance once, without doubling for Multi-AZ or for the reader",
+      "The output prices the db.serverless instance per ACU-hour (an ASv2 usagetype), not by mapping it to vCPUs",
+      "The output arrives at about $292 for the provisioned instances and about $248 for the serverless instance, or a total of about $540 per month"
+    ]
+  },
+  {
+    "id": "opensearch-nih-normalization-factor",
+    "prompt": "An OpenSearch Service domain in us-east-1 runs Elasticsearch 7.10 with three r6g.large.search data nodes and three c6g.large.search dedicated master nodes. Assuming it is in Extended Support at the standard per-NIH rate, what is its monthly Extended Support charge?",
+    "expected_output": "Using the published normalization factors (medium = 2, large = 4), each large node is 4 NIH per hour. Six large nodes across both node groups = 24 NIH per hour \u00d7 $0.0065 \u00d7 730 = about $113.88 per month.",
+    "assertions": [
+      "The output uses a normalization factor of 4 for large instances (medium = 2), not 2",
+      "The output includes the dedicated master nodes as well as the data nodes",
+      "The output arrives at 24 NIH per hour and about $113.88 per month"
+    ]
+  },
+  {
+    "id": "opensearch-extension-period-instance-cost",
+    "prompt": "An OpenSearch Service domain in us-east-1 runs Elasticsearch 7.4 on three m7g.medium.search data nodes. What will its Extended Support charge be per month in December 2026?",
+    "expected_output": "Elasticsearch 7.4 is in the extension period from November 7, 2026 to November 7, 2027, when the Extended Support charge equals the instance's own price rather than the per-NIH rate: 3 \u00d7 $0.068 \u00d7 730 = about $148.92 per month, on top of the normal instance cost.",
+    "assertions": [
+      "The output recognises that Elasticsearch 7.4 is in the November 7, 2026 to November 7, 2027 extension period",
+      "The output charges Extended Support at the instance's own hourly price (m7g.medium.search, about $0.068 per hour), not at $0.0065 per NIH",
+      "The output arrives at about $148.92 per month"
+    ]
+  },
+  {
+    "id": "elasticache-only-redis-oss-in-scope",
+    "prompt": "Four ElastiCache resources in us-east-1: a Valkey 7.2 cluster, a Memcached 1.6.17 cluster, a Redis OSS 7.1 cluster, and a Redis OSS 5.0.6 cluster with two cache.r6g.large nodes. Which of them incur Extended Support charges, and how much per month?",
+    "expected_output": "Only the Redis OSS 5.0.6 cluster: Extended Support covers Redis OSS v4, v5 and v6 only. Two cache.r6g.large nodes \u00d7 $0.165 \u00d7 730 = about $240.90 per month. Valkey, Memcached and Redis OSS 7.1 incur no Extended Support charge.",
+    "assertions": [
+      "The output says only the Redis OSS 5.0.6 cluster incurs Extended Support charges",
+      "The output says Valkey and Memcached have no Extended Support charge",
+      "The output arrives at about $240.90 per month for the two nodes"
+    ]
+  },
+  {
+    "id": "unverified-eos-date-reporting",
+    "prompt": "During an EOS cost analysis you discover a resource whose exact engine version has no published End of Standard Support date in AWS documentation. How should it appear in the report: its eos_status, urgency, cost columns, and whether it counts toward the totals?",
+    "expected_output": "Its eos_status and urgency are both UNVERIFIED, the current cost is UNVERIFIED, and the resource is listed separately and kept out of the dollar totals. A date from a similar version is not substituted.",
+    "assertions": [
+      "The output sets eos_status to UNVERIFIED",
+      "The output sets urgency to UNVERIFIED",
+      "The output keeps the resource out of the totals while still listing it",
+      "The output does not substitute another version's date"
+    ]
+  }
+]
