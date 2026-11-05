@@ -7,8 +7,9 @@ description: >-
   desynchronization on STANDARD channels, or schedule and input-switch anomalies, including
   SCTE-35 schedule actions. Covers channel state, per-input-type diagnosis (MediaConnect, RTP/RTMP
   push, pull, Link input devices, SRT), encoding health (ActiveAlerts, DroppedFrames, FillMsec,
-  SvqTime), per-output-group analysis, STANDARD pipeline synchronization, and schedule
-  verification. Not for upstream transport loss on a MediaConnect flow (use
+  SvqTime), per-output-group analysis including the MQCS quality score on CMAF Ingest output
+  groups, STANDARD pipeline synchronization, and schedule verification. Not for upstream
+  transport loss on a MediaConnect flow (use
   aws-mediaconnect-investigate), downstream packaging and origin faults (use
   aws-mediapackage-investigate), or SCTE-35 field meanings (use aws-media-spec-reference).
 metadata:
@@ -48,7 +49,7 @@ steps in order; skip a conditional step only when its condition says so, and say
 - [ ] Step 1: Channel state analysis
 - [ ] Step 2: Input diagnosis
 - [ ] Step 3: Encoding diagnosis
-- [ ] Step 4: Output diagnosis
+- [ ] Step 4: Output diagnosis (with the MQCS check when a CMAF Ingest group exists)
 - [ ] Step 5: Schedule verification
 - [ ] Step 6: Compile findings
 
@@ -165,8 +166,11 @@ InputLossSeconds > 0?
   ├─ YES, PULL input → Source URL unreachable or auth failure
   └─ YES, INPUT_DEVICE → Link device disconnected or misconfigured
 
-ChannelInputErrorSeconds > 0, InputLossSeconds = 0?
-  → Input arriving but malformed (codec mismatch, resolution mismatch)
+ChannelInputErrorSeconds > 0?
+  → Seconds with unrecoverable packets in the input (RTP push, SRT, MediaConnect)
+  ├─ MEDIACONNECT input → hand off to aws-mediaconnect-investigate with the window;
+  │   its Step 3 loss counters are the upstream evidence
+  └─ Other push input → loss on the path to the channel or a malformed source
 
 NetworkIn = 0?
   → No data reaching channel at all — upstream delivery failure
@@ -201,6 +205,12 @@ DroppedFrames > 0 means the encoder cannot keep up with the input:
 FillMsec measures the duration of inserted fill/black frames in the output,
 capped at 60,000 ms (1 minute). After the cap, the metric stays at 60,000
 until it drops to zero.
+
+Fill content follows `GlobalConfiguration.InputLossBehavior`: repeat the last
+frame for `RepeatFrameMsec` (default 1000 ms), then black for `BlackFrameMsec`
+(default 1000 ms), then the `InputLossImageType` slate or color for as long as
+the loss lasts. Viewers seeing black during an upstream loss is this behaviour,
+scored by `MqcsFillFrameInsertion` in Step 4, not by the black frame detector.
 
 FillMsec > 0 WITH input issues (InputLossSeconds > 0):
 → **PROPAGATED** from input — fill frames replace missing input content
@@ -311,6 +321,52 @@ Causes of sync loss:
 - One pipeline is processing more slowly (resource contention)
 - After a pipeline restart (RECOVERING), sync may take 30–60 seconds to re-establish
 
+### MQCS quality score (CMAF Ingest output groups)
+
+MediaLive generates a media quality confidence score (MQCS, 0 to 100, where 100
+means no problem detected) for every output in a CMAF Ingest output group whose
+destination is a MediaPackage channel. Emission is automatic. No MediaLive
+setting turns it on or off, and the MediaPackage v2 channel settings
+`OutputHeaderConfiguration.PublishMQCS` (CMSD headers to the CDN) and
+`InputSwitchConfiguration.MQCSInputSwitching` (input switching) only consume the
+score. Never conclude that MediaLive's MQCS metrics are unavailable from either
+MediaPackage setting.
+
+1. From the output group list above, note each group whose type is
+   `CmafIngestGroupSettings` and its `Name`. No such group: MQCS is not
+   applicable to this channel; say so, not "unavailable".
+2. Discover the metric names. The documented minimum score metric is `MinMQCS`;
+   the console and field runs have shown `MinMqcs` and `MinVideoMqcs`, and
+   CloudWatch metric names are case sensitive:
+   ```
+   aws cloudwatch list-metrics --namespace AWS/MediaLive \
+     --dimensions Name=ChannelId,Value=$CHANNEL_ID \
+     --query "Metrics[?contains(MetricName,'qcs')]" --no-cli-pager --output json
+   ```
+3. Query each minimum score metric found with `ChannelId` + `Pipeline` +
+   `OutputGroupName` (the CMAF Ingest group's Name), statistic Minimum, period
+   60. Without `OutputGroupName` the query returns no datapoints.
+4. Query the six components with `ChannelId` + `Pipeline` only, Minimum:
+   `MqcsBlackFrameDetected`, `MqcsFreezeFrameDetected`, `MqcsFillFrameInsertion`,
+   `MqcsVideoFrameDrops`, `MqcsContinuityCounterErrors`, `MqcsSvq`. Pipeline is
+   0 only on SINGLE_PIPELINE, 0 and 1 on STANDARD.
+
+Reading the values: any Minimum below 100 is degradation in that period; below
+80 is the level at which MediaLive logs the drop, and alert 6045 (low MQCS)
+fires at a level AWS does not publish. Black and freeze score valid source
+frames that are black or frozen. Loss damage shows in the other components:
+`MqcsFillFrameInsertion` (input loss handling active), `MqcsVideoFrameDrops` and
+`MqcsContinuityCounterErrors` (unrecovered packets). A minimum score dip with
+black and freeze at 100 is therefore a real event; read the other four
+components for its cause and compare `ChannelInputErrorSeconds` and
+`InputLossSeconds` in the same minutes. A CMAF Ingest group present with no
+MQCS datapoints means the query is wrong (missing `OutputGroupName`, wrong
+casing, wrong Pipeline), not that the score is off.
+
+Table, queries and the MediaPackage side of the score:
+[references/mqcs-metrics.md](references/mqcs-metrics.md). Load it when a CMAF
+Ingest group exists.
+
 ### Destination type-specific checks
 
 When Output4xxErrors, Output5xxErrors or NetworkOut anomalies point at a destination,
@@ -369,7 +425,7 @@ question that follows from it. Report sections:
 1. **Channel identity**: ID, state, class, pipelines running, log level
 2. **Input health**: Per-input status, type-specific findings, failover state
 3. **Encoding health**: Alerts, dropped frames, fill, SvqTime
-4. **Output health**: Per-output-group status (4xx/5xx, ActiveOutputs, PipelinesLocked)
+4. **Output health**: Per-output-group status (4xx/5xx, ActiveOutputs, PipelinesLocked), MQCS minimum and components for CMAF Ingest groups or "not applicable"
 5. **Schedule**: Any actions in window and correlation with anomalies
 6. **Data gaps**: LogLevel=DISABLED, missing EventBridge rules, etc.
 7. **Open questions**: Ranked by severity using the classifications in the steps above
@@ -387,3 +443,4 @@ Check the compiled findings and fix anything that fails before presenting them:
 - Every signal that was not observable is reported as a DATA GAP with its reason, never as a healthy zero.
 - No account IDs, ARNs, secrets or passphrases are reproduced; resources are named by type and name.
 - Every metric finding states which Pipeline dimension it came from; a dual-pipeline average is never reported as a pipeline finding.
+- MQCS is reported as not applicable only when the channel has no CMAF Ingest output group; a MediaPackage `PublishMQCS` or `MQCSInputSwitching` setting is never given as the reason MQCS data is missing.

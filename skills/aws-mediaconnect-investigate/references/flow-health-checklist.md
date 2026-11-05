@@ -48,6 +48,9 @@ while the flow is active and ingesting/transmitting data).
 - For protocols without SourceConnected (RIST, RTP, UDP, CDI, ST 2110):
   infer connectivity from `SourceBitRate > 0` and `SourceTotalPackets > 0`.
 
+**Gate**: this section never produces a verdict on its own. Section 3 must be
+evaluated, with datapoints present, before the source is reported as healthy.
+
 **Exception**: For Zixi/entitled flows, SourceBitRate < MaxBitrate is acceptable
 if SourceTotalPackets > 0, NotRecoveredPackets = 0, and no network distress
 metrics are rising. This is null-packet substitution on repetitive content.
@@ -58,6 +61,8 @@ metrics are rising. This is null-packet substitution on repetitive content.
 |---|---|---|---|
 | NotRecoveredPackets Sum = 0 | ✅ | Sum > 0 | High — content loss likely |
 | SourceNotRecoveredPackets Sum = 0 | ✅ | Sum > 0 | High — per-source |
+| SourceDroppedPackets Sum = 0 | ✅ | Sum > 0 with NotRecovered = 0 | Medium — recovered loss, reported as such, never as clean |
+| Datapoints present for the two counters | ✅ | No datapoints on an ACTIVE flow | Query error, not a pass |
 
 If FAIL: This is the most critical metric — any value > 0 indicates packet
 loss that may cause viewer-visible corruption depending on the affected

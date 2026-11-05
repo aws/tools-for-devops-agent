@@ -26,6 +26,17 @@ subsection the table belongs to; the surrounding instructions stay in SKILL.md.
 | CDI | ❌ (CDI payload metrics instead²) | ❌ | ❌ | ❌ |
 | ST 2110 JPEG XS | ❌ | ❌ | ❌ | ❌ |
 
+¹ NDI emits a separately defined `SourceConnected` indicating connection to an
+NDI sender. It also emits `SourceAudioFrames`, `SourceVideoFrames`, and
+`SourceDiscoveredSources`. Flows with NDI outputs require `FlowSize=LARGE`.
+
+² CDI uses payload-level metrics instead of transport-stream metrics:
+`SourceDroppedPayloads`, `SourceLatePayloads`, `SourceTotalPayloads`.
+
+**Deprecated**: Fujitsu QoS (`fujitsu-qos`) is no longer supported by
+MediaConnect. The protocol value is retained in the API only for legacy
+flows. Do not include it in new flow configurations or active troubleshooting.
+
 ## Step 3: Packet loss analysis (protocol-layered): Layer 1: Raw loss detection
 
 | Metric | Meaning | Severity |

@@ -5,7 +5,8 @@ description: >-
   MediaConnect problem or when evidence in a media pipeline investigation points at the
   contribution/transport layer: source disconnections, packet loss, zero or degraded source
   bitrate, entitlement issues between accounts, bridge/gateway faults, or router problems. Covers
-  source connectivity, protocol-aware packet loss (ARQ/FEC recovery layering), TR 101 290
+  source connectivity, a mandatory loss gate (SourceNotRecoveredPackets before any verdict),
+  protocol-aware packet loss (ARQ/FEC recovery layering), TR 101 290
   transport stream health, per-output delivery, content quality monitoring, entitlement
   verification, bridge/gateway inspection, and router diagnostics. MediaConnect emits no
   CloudWatch Logs, so diagnosis works from CloudWatch metrics, describe-flow error messages, and
@@ -64,8 +65,8 @@ Copy this list into your working notes and tick each step as you complete it. Ru
 steps in order; skip a conditional step only when its condition says so, and say so.
 
 - [ ] Step 1: Flow state and error messages
-- [ ] Step 2: Source connectivity analysis
-- [ ] Step 3: Packet loss analysis (protocol-layered)
+- [ ] Step 2: Source connectivity analysis (ends with the loss gate; no verdict before it)
+- [ ] Step 3: Packet loss analysis (protocol-layered; mandatory, never skipped)
 - [ ] Step 4: Transport stream health (TR 101 290)
 - [ ] Step 5: Per-output health
 - [ ] Step 6: Content quality monitoring
@@ -108,18 +109,7 @@ cross-Region route rather than a long SRT pull.
 
 Not all metrics emit for all protocols. Check the source protocol first:
 
-Table: [Step 2: Source connectivity analysis: Protocol-specific metric availability](references/lookup-tables.md#step-2-source-connectivity-analysis-protocol-specific-metric-availability). Load it when you run this step.
-
-¹ NDI emits a separately defined `SourceConnected` indicating connection to an
-NDI sender. It also emits `SourceAudioFrames`, `SourceVideoFrames`, and
-`SourceDiscoveredSources`. Flows with NDI outputs require `FlowSize=LARGE`.
-
-² CDI uses payload-level metrics instead of transport-stream metrics:
-`SourceDroppedPayloads`, `SourceLatePayloads`, `SourceTotalPayloads`.
-
-**Deprecated**: Fujitsu QoS (`fujitsu-qos`) is no longer supported by
-MediaConnect. The protocol value is retained in the API only for legacy
-flows. Do not include it in new flow configurations or active troubleshooting.
+Table: [Step 2: Source connectivity analysis: Protocol-specific metric availability](references/lookup-tables.md#step-2-source-connectivity-analysis-protocol-specific-metric-availability), with the NDI, CDI and deprecated protocol notes. Load it when you run this step.
 
 For protocols without SourceConnected (RIST, RTP, UDP, CDI, ST 2110):
 connectivity is inferred from SourceBitRate > 0 and SourceTotalPackets > 0.
@@ -178,6 +168,33 @@ latency, ask the customer whether the device's video input or uplink changed at
 those times, and compare `SourceNotRecoveredPackets`: network loss raises it, an
 encoder pause does not.
 
+### Loss gate (mandatory before any verdict)
+
+`SourceConnected` = 1 and a steady `SourceBitRate` prove that packets are
+arriving. They say nothing about packets that did not arrive. Do not report the
+transport as clean, healthy or ruled out from this step. Query the loss counters
+now, over the whole incident window, and carry the numbers into Step 3:
+
+```
+aws cloudwatch get-metric-statistics --namespace AWS/MediaConnect \
+  --metric-name SourceNotRecoveredPackets \
+  --dimensions Name=FlowARN,Value=$FLOW_ARN \
+  --start-time $START --end-time $END --period 60 --statistics Sum \
+  --no-cli-pager --output json
+```
+
+Repeat for `SourceDroppedPackets` (Sum). Read the two together:
+- `SourceNotRecoveredPackets` Sum > 0 in any period: content loss left the flow;
+  the flow is impaired, and Step 3 says how badly and why.
+- `SourceNotRecoveredPackets` = 0 with `SourceDroppedPackets` Sum > 0: recovered
+  loss. Report it as such with the Step 3 raw loss percentage, never as clean.
+- Both 0 with datapoints present: no loss on this source in the window; say so.
+- No datapoints on an ACTIVE flow: wrong dimension or window. Fix the query;
+  never record a zero.
+
+With failover or merge, `FlowARN` shows only the active source; repeat the
+queries per `SourceARN`.
+
 ## Step 3: Packet loss analysis (protocol-layered)
 
 Packet loss analysis must layer metrics by error correction mechanism.
@@ -185,6 +202,12 @@ Packet loss analysis must layer metrics by error correction mechanism.
 ### Layer 1: Raw loss detection
 
 Table: [Step 3: Packet loss analysis (protocol-layered): Layer 1: Raw loss detection](references/lookup-tables.md#step-3-packet-loss-analysis-protocol-layered-layer-1-raw-loss-detection). Load it when you run this step.
+
+For SRT, Zixi and RIST, `SourceDroppedPackets` is the raw loss before ARQ. Raw
+loss percent over the window is `SourceDroppedPackets` Sum divided by
+`SourceTotalPackets` Sum, times 100, or `SourcePacketLossPercent` Maximum where
+that metric emits. Raw loss describes the network; what the downstream encoder
+received is Layer 3.
 
 ### Layer 2: Recovery mechanisms
 
@@ -205,9 +228,25 @@ viewer-visible corruption** depending on the affected payload (reference
 frames vs. B-frames) and downstream decoder error concealment. Treat as
 high severity regardless.
 
+A large raw loss with a small unrecovered count (a quarter of the packets
+dropped, a few dozen not recovered) means ARQ recovered nearly everything, and
+not everything. The unrecovered packets are what the encoder decoded; a handful
+is enough for continuity errors, fill frames and a visible glitch. Report the
+flow as impaired and hand off to aws-medialive-investigate with the window:
+`ChannelInputErrorSeconds`, `MqcsContinuityCounterErrors` and
+`MqcsFillFrameInsertion` are the downstream evidence.
+
 ### Layer 4: Network path health
 
 Table: [Step 3: Packet loss analysis (protocol-layered): Layer 4: Network path health](references/lookup-tables.md#step-3-packet-loss-analysis-protocol-layered-layer-4-network-path-health). Load it when you run this step.
+
+SRT, Zixi and RIST: compare `SourceRoundTripTime` Maximum with the source's
+configured `MinLatency` (describe-flow, `Source.Transport.MinLatency`; SRT
+defaults to 2000 ms). Latency below 3 times the peak RTT leaves too few
+retransmission rounds, and MediaConnect reports the stream error "Latency may
+be too low for RoundTripTime" with an increased risk of NotRecoveredPackets.
+`SourceJitter` Maximum above 40 ms is a concern; above 500 ms, disconnects and
+downstream frame loss follow.
 
 ### CDI-specific loss detection
 
@@ -221,7 +260,7 @@ Table: [Step 3: Packet loss analysis (protocol-layered): CDI-specific loss detec
 NotRecoveredPackets > 0?
   ├─ YES → CONTENT LOSS CONFIRMED
   │   ├─ SourceARQRequests also rising? → Network path degrading, ARQ buffer exhausted
-  │   ├─ SourceRoundTripTime > 100ms? → Latency too high for ARQ recovery window
+  │   ├─ SourceRoundTripTime Maximum × 3 > MinLatency? → Latency too low for the RTT; retransmissions cannot complete in time
   │   ├─ SourceFECRecovered also rising? → FEC partially recovering, but overwhelmed
   │   └─ No recovery metrics rising? → Sudden packet loss (routing change, burst)
   │
@@ -427,46 +466,22 @@ Router-specific metrics (dimensions include `RouterInputName`, `RouterInputID`,
 | OutputEnabled | Whether the router output is enabled (0/1) |
 | OutputBitrate | Bitrate at the router output |
 
-Router input source metadata and thumbnails:
-```
-aws mediaconnect get-router-input-source-metadata \
-  --arn $ARN --no-cli-pager --output json
-aws mediaconnect get-router-input-thumbnail \
-  --arn $ARN --no-cli-pager --output json
-```
+Router input source metadata and thumbnails: `aws mediaconnect
+get-router-input-source-metadata --arn $ARN` and `aws mediaconnect
+get-router-input-thumbnail --arn $ARN`.
 
 If no router resources found, skip this step.
 
 ## Step 10: EventBridge event check
 
-MediaConnect emits state change events to EventBridge. Check if a forwarding
-rule exists:
-
-```
-aws events list-rules \
-  --no-cli-pager --output json \
-  --query "Rules[?contains(EventPattern, 'mediaconnect')]"
-```
-
-If a rule exists that forwards to CloudWatch Logs, query those logs:
-```
-aws logs filter-log-events \
-  --log-group-name <TARGET_LOG_GROUP> \
-  --start-time $START_MS --end-time $END_MS \
-  --filter-pattern '"aws.mediaconnect"' \
-  --limit 50 --no-cli-pager --output json
-```
-
-If no forwarding rule exists:
-```
-DATA GAP: No EventBridge rule forwards "aws.mediaconnect" events to
-CloudWatch Logs. State change events (flow state transitions, source
-health changes) are not being captured. Only real-time metrics and
-describe-flow Messages.Errors[] are available for this flow.
-```
-
-See [references/eventbridge-events.md](references/eventbridge-events.md) for
-the full event taxonomy.
+MediaConnect emits state change and health events to EventBridge. Check for a
+rule whose pattern names `mediaconnect` (`aws events list-rules`); if one
+forwards to CloudWatch Logs, filter that log group for `"aws.mediaconnect"` in
+the window. If no rule exists, report the DATA GAP: state change events are
+emitted but not captured, and only metrics and `Messages.Errors[]` remain.
+Commands, the DATA GAP wording and the event taxonomy are in
+[references/eventbridge-events.md](references/eventbridge-events.md). Load it
+when you run this step.
 
 ## Step 11: Compile findings
 
@@ -476,7 +491,7 @@ why? Do not declare a definitive root cause; surface evidence and the precise
 question that follows from it. Report sections:
 
 1. **Flow identity**: ARN, status, source protocol, source address
-2. **Source health**: Connected/disconnected, bitrate vs expected, packet loss layers
+2. **Source health**: Connected/disconnected, bitrate vs expected, packet loss layers (the Step 3 counters stated with their window, even when zero)
 3. **Transport stream**: TR 101 290 P1/P2 findings (or CDI payload metrics)
 4. **Output health**: Per-output status (connected, bitrate, disconnections, enabled/disabled)
 5. **Content quality**: Monitoring results or DATA GAP
@@ -501,3 +516,4 @@ Check the compiled findings and fix anything that fails before presenting them:
 - Every signal that was not observable is reported as a DATA GAP with its reason, never as a healthy zero.
 - No account IDs, ARNs, secrets or passphrases are reproduced; resources are named by type and name.
 - Loss findings cite NotRecoveredPackets, not PacketLossPercent alone, before loss is said to have reached an output.
+- The transport layer is called clean, healthy or ruled out only after the Step 2 loss gate and Step 3 ran; the finding states the `SourceNotRecoveredPackets` Sum, the `SourceDroppedPackets` Sum and the window. Connectivity and bitrate alone never support that verdict.

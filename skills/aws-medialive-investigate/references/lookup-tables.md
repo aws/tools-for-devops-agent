@@ -32,7 +32,7 @@ subsection the table belongs to; the surrounding instructions stay in SKILL.md.
 | Metric | Statistic | Meaning |
 |---|---|---|
 | InputLossSeconds | Sum | Any > 0 = input not received for that duration |
-| ChannelInputErrorSeconds | Sum | Any > 0 = input received but with errors |
+| ChannelInputErrorSeconds | Sum | Any > 0 = seconds with unrecoverable packets in the input (RTP push, SRT, MediaConnect) |
 | NetworkIn | Average | Should match source output bitrate |
 | InputVideoFrameRate | Average, Minimum | Should be stable at source frame rate |
 | RtpPacketsReceived | Sum | RTP inputs only — packet count baseline |

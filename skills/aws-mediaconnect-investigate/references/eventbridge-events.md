@@ -17,7 +17,14 @@ aws events list-rules \
 ```
 
 If no rule exists, these events are emitted but not captured anywhere
-queryable. Report as a DATA GAP.
+queryable. Report as a DATA GAP, with this wording:
+
+```
+DATA GAP: No EventBridge rule forwards "aws.mediaconnect" events to
+CloudWatch Logs. State change events (flow state transitions, source
+health changes) are not being captured. Only real-time metrics and
+describe-flow Messages.Errors[] are available for this flow.
+```
 
 ## Event envelope
 

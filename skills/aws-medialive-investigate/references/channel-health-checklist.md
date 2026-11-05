@@ -82,6 +82,8 @@ Dimensions: ChannelId + Pipeline + OutputGroupName
 | Output5xxErrors Sum = 0 | ✅ | Sum > 0 | Critical — downstream server errors |
 | ActiveOutputs Minimum > 0 | ✅ | = 0 (unexpected) | Critical — output delivery stopped |
 | ActiveOutputs Minimum = 0 (InputLossAction=PAUSE_OUTPUT) | Expected | — | Informational (deliberate) |
+| MQCS minimum score Minimum = 100 (CMAF Ingest groups; ChannelId + Pipeline + OutputGroupName) | ✅ | < 100 | High below 80 — quality degradation; not applicable without a CMAF Ingest group |
+| Mqcs* components Minimum = 100 (ChannelId + Pipeline) | ✅ | < 100 | High — names the cause (fill, frame drops, continuity, black, freeze, SVQ) |
 
 **InputLossAction check:** This is a per-output-group setting, not a global
 channel setting. Check each output group type:

@@ -1,6 +1,6 @@
 # MediaLive Deep Investigation: AWS DevOps Agent Skill
 
-Deep investigation of a single AWS Elemental MediaLive channel: channel state, per-input-type diagnosis (MediaConnect, RTP/RTMP push, pull, Link devices, SRT), encoding health (ActiveAlerts, DroppedFrames, FillMsec, SvqTime), per-output-group 4xx/5xx analysis, STANDARD pipeline synchronization, schedule verification, and encoder log parsing.
+Deep investigation of a single AWS Elemental MediaLive channel: channel state, per-input-type diagnosis (MediaConnect, RTP/RTMP push, pull, Link devices, SRT), encoding health (ActiveAlerts, DroppedFrames, FillMsec, SvqTime), per-output-group 4xx/5xx and MQCS quality score analysis, STANDARD pipeline synchronization, schedule verification, and encoder log parsing.
 
 > **Non-production disclaimer.** This skill is sample code. It is not intended for production use without additional review and testing. Validate it in a non-production environment first, and review the IAM permissions it uses against your organization's security policies.
 
