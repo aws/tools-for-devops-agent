@@ -1,0 +1,360 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  iam-drift-diff MCP Server for AWS DevOps Agent.
+  A single Lambda exposes four read-only tools over Streamable HTTP (via Lambda
+  Web Adapter + a Function URL with AWS_IAM / SigV4 auth):
+    * iam_snapshot_capture  - exhaustive, paginated snapshot of IAM state
+    * iam_snapshot_diff      - exact set-difference between two snapshots
+    * iam_snapshot_list      - list stored snapshots with coverage
+    * iam_snapshot_get_entity - drill down into one principal
+  The server is READ-ONLY against IAM; the only writes are its own snapshot
+  objects (and a small baseline pointer) to its own private, encrypted S3
+  bucket in the same account.
+
+Globals:
+  Function:
+    Timeout: 300
+    Runtime: python3.12
+    MemorySize: 512
+
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+  AllowedAccounts:
+    Type: CommaDelimitedList
+    Description: >
+      REQUIRED. Comma-separated 12-digit account IDs this server may operate in.
+      No default and '*' is refused: the allowlist is the boundary, so it must be
+      explicit. The server also refuses to start without it.
+    AllowedPattern: '^[0-9]{12}$'
+    ConstraintDescription: >
+      AllowedAccounts must be one or more 12-digit AWS account IDs. No wildcard.
+  SourceAccount:
+    Type: String
+    Description: >
+      The account ID that owns the invoking DevOps Agent space. Used as the
+      confused-deputy guard on who may invoke the Function URL.
+    AllowedPattern: '^[0-9]{12}$'
+  SnapshotRetain:
+    Type: Number
+    Default: 12
+    MinValue: 4
+    Description: >
+      Number of most-recent snapshots to keep (older are pruned). Minimum 4. The
+      snapshot pair the last drift report used is never pruned.
+  MinCaptureIntervalSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    Description: >
+      Captures closer together than this return the latest snapshot instead of
+      writing a new one, so repeated captures cannot push older snapshots out.
+  RestrictInvokeToFunctionUrl:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      When 'true', the invoke role may call lambda:InvokeFunction only through
+      the Function URL (lambda:InvokedViaFunctionUrl). Set 'false' only if your
+      DevOps Agent registration fails with 403 after enabling it.
+
+Conditions:
+  RestrictInvokeViaUrl: !Equals [!Ref RestrictInvokeToFunctionUrl, 'true']
+
+Resources:
+
+  # ---- private, encrypted snapshot store --------------------------------
+  SnapshotKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: CMK for iam-drift-diff snapshots
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAccountAdmin
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+          # Data-key use only through S3 in this account, so the key cannot be
+          # used to decrypt snapshot material directly (threat model T007).
+          - Sid: DenyCryptoUseOutsideS3
+            Effect: Deny
+            Principal: '*'
+            Action:
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+              - kms:ReEncrypt*
+            Resource: '*'
+            Condition:
+              StringNotEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+          - Sid: DenyCryptoUseFromOtherAccounts
+            Effect: Deny
+            Principal: '*'
+            Action:
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+              - kms:ReEncrypt*
+            Resource: '*'
+            Condition:
+              StringNotEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+
+  SnapshotBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub iam-drift-diff-snapshots-${AWS::AccountId}-${StageName}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref SnapshotKey
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+      # S3 server access logs go to a separate bucket (the S3 logging service
+      # writes there, never to this bucket, so the write lockdown below is
+      # unaffected).
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogBucket
+        LogFilePrefix: snapshot-access/
+
+  # ---- S3 server access logs for the snapshot bucket ---------------------
+  # SSE-S3, not the snapshot CMK: S3 server access log delivery does not
+  # support a customer managed KMS key on the destination bucket.
+  AccessLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub iam-drift-diff-access-logs-${AWS::AccountId}-${StageName}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-access-logs
+            Status: Enabled
+            ExpirationInDays: 90
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+
+  AccessLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AccessLogBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt AccessLogBucket.Arn
+              - !Sub ${AccessLogBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+          - Sid: AllowS3ServerAccessLogDelivery
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub ${AccessLogBucket.Arn}/snapshot-access/*
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:s3:::iam-drift-diff-snapshots-${AWS::AccountId}-${StageName}
+
+  SnapshotBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SnapshotBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt SnapshotBucket.Arn
+              - !Sub ${SnapshotBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+          # Only the server's own execution role may write or delete objects
+          # (threat model T001-T003). This blocks account admins too, by design;
+          # see README "Security model" for the teardown step.
+          - Sid: DenyObjectWritesExceptServerRole
+            Effect: Deny
+            Principal: '*'
+            Action:
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:DeleteObjectVersion
+            Resource: !Sub ${SnapshotBucket.Arn}/*
+            Condition:
+              ArnNotEquals:
+                aws:PrincipalArn: !GetAtt IamDriftDiffFunctionRole.Arn
+
+  # ---- Lambda (Lambda Web Adapter, Streamable HTTP) ---------------------
+  IamDriftDiffFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub iam-drift-diff-mcp-${StageName}
+      Handler: run.sh
+      CodeUri: src/
+      Description: iam-drift-diff MCP Server - Streamable HTTP via Lambda Web Adapter
+      Architectures:
+        - x86_64
+      Layers:
+        # Public Lambda Web Adapter layer (x86_64).
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+        - !Ref DependenciesLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          AWS_LWA_PORT: '8000'
+          AWS_LWA_READINESS_CHECK_PATH: /mcp
+          AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS: 500
+          AWS_LWA_INVOKE_MODE: response_stream
+          AWS_LWA_READINESS_CHECK_PROTOCOL: http
+          AWS_LWA_ASYNC_INIT: 'true'
+          PYTHONPATH: /opt/python:/var/task
+          ALLOWED_ACCOUNTS: !Join [',', !Ref AllowedAccounts]
+          SNAPSHOT_BUCKET: !Ref SnapshotBucket
+          SNAPSHOT_RETAIN: !Ref SnapshotRetain
+          MIN_CAPTURE_INTERVAL_SECONDS: !Ref MinCaptureIntervalSeconds
+      Policies:
+        - Statement:
+            - Sid: IamReadOnlyForDrift
+              Effect: Allow
+              Action:
+                - iam:GetAccountAuthorizationDetails
+              Resource: '*'
+            - Sid: SnapshotBucketObjectsOnly
+              Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+                - s3:ListBucket
+              Resource:
+                - !GetAtt SnapshotBucket.Arn
+                - !Sub ${SnapshotBucket.Arn}/snapshots/*
+            - Sid: SnapshotEncryptionKeyOnly
+              Effect: Allow
+              Action:
+                - kms:GenerateDataKey
+                - kms:Decrypt
+              Resource: !GetAtt SnapshotKey.Arn
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: RESPONSE_STREAM
+
+  # Role DevOps Agent assumes to SigV4-sign calls to this MCP. Register the MCP
+  # with this role's ARN (mcpserversigv4 authorizationConfig.roleArn). Its only
+  # permission is invoking THIS function's URL. Trust is limited to the DevOps
+  # Agent service from the owning account (confused-deputy conditions).
+  McpInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub DevOpsAgentRole-IamDriftDiffMcp-${StageName}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: aidevops.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref SourceAccount
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:aidevops:${AWS::Region}:${SourceAccount}:service/*
+      Policies:
+        - PolicyName: invoke-iam-drift-diff-url
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InvokeThisMcpUrlOnly
+                Effect: Allow
+                Action: lambda:InvokeFunctionUrl
+                Resource: !GetAtt IamDriftDiffFunction.Arn
+              # Function URLs also require lambda:InvokeFunction. Limit it to
+              # calls made through the URL (threat model T012).
+              - !If
+                - RestrictInvokeViaUrl
+                - Sid: InvokeThisMcpViaUrlOnly
+                  Effect: Allow
+                  Action: lambda:InvokeFunction
+                  Resource: !GetAtt IamDriftDiffFunction.Arn
+                  Condition:
+                    Bool:
+                      lambda:InvokedViaFunctionUrl: 'true'
+                - Sid: InvokeThisMcpFunction
+                  Effect: Allow
+                  Action: lambda:InvokeFunction
+                  Resource: !GetAtt IamDriftDiffFunction.Arn
+
+  # ---- dependencies layer (FastMCP + boto3), platform-pinned ------------
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub iam-drift-diff-mcp-deps-${StageName}
+      Description: FastMCP and boto3 for the iam-drift-diff MCP server
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes:
+        - python3.12
+      CompatibleArchitectures:
+        - x86_64
+    Metadata:
+      BuildMethod: makefile
+
+Outputs:
+  MCPEndpointUrl:
+    Description: >
+      MCP server endpoint. Register this in your DevOps Agent Space (SigV4 /
+      AWS_IAM auth) WITH /mcp appended (the bare URL 404s; a trailing-slash
+      redirect breaks the signature). Register via mcpserversigv4.
+    Value: !GetAtt IamDriftDiffFunctionUrl.FunctionUrl
+  SnapshotBucketName:
+    Value: !Ref SnapshotBucket
+  AccessLogBucketName:
+    Description: Receives S3 server access logs for the snapshot bucket (prefix snapshot-access/).
+    Value: !Ref AccessLogBucket
+  McpInvokeRoleArn:
+    Description: Pass as roleArn in the mcpserversigv4 registration.
+    Value: !GetAtt McpInvokeRole.Arn
+  FunctionArn:
+    Value: !GetAtt IamDriftDiffFunction.Arn
