@@ -1,4 +1,4 @@
-# Estimate New Resource Costs
+# IaC Change Cost Preview
 
 See what a pull request will do to your AWS bill before you merge it.
 
@@ -8,18 +8,22 @@ This skill for AWS DevOps Agent reads the infrastructure-as-code change in a pul
 
 ⚠️ This skill is sample code, not intended for production use without additional review and testing. Validate it in a non-production environment first.
 
-## Why use it
+## Purpose
 
 A Release Readiness Review tells you whether a change is safe to deploy. It doesn't tell you that the same PR adds a Multi-AZ database, a NAT gateway, and doubles a worker fleet, for a few hundred dollars a month before a single request is served. This skill puts that number in the review, next to the risk findings, so the reviewer can ask "is this spend expected?" before approving.
 
-## What it does
+## How the estimate is built
 
-1. **Picks up the change.** It runs automatically in every Release Readiness Review that touches CloudFormation, SAM, CDK-synthesized, or Terraform templates. You can also ask for it in chat. If the PR touches no templates, it says there is nothing to price.
+1. **Picks up the change.** It runs in Release Readiness Reviews that touch CloudFormation, SAM, CDK-synthesized, or Terraform templates. You can also ask for it in chat. If the PR touches no templates, it says there is nothing to price.
+
+   For CDK, the skill prices the synthesized template (`cdk.out/*.template.json`), not the CDK source. If the PR has no synthesized template, a review can generate one with `cdk synth`; otherwise the skill reports the change as not priced rather than guessing.
 2. **Compares the PR with the repo.** It compares the template on the base branch with the template on the PR branch and sorts every resource:
    - **Added:** the cost goes up.
    - **Removed:** the cost goes down.
    - **Resized** (instance type, storage, Multi-AZ, node count, desired capacity…): the cost changes by the difference.
    - **Unchanged for cost** (tags, policies, descriptions): counted, not priced.
+
+   Every value is traced to a literal in the repo or the deploy workflow (parameter defaults, Terraform variables and tfvars, module inputs). Anything that only exists at deploy time, such as a data source or a runtime input, is reported as not determinable rather than guessed. For Terraform, a plan JSON attached to the PR gives exact values; without one the estimate is derived from the HCL. Recommended CI step: `terraform plan -out=plan.out && terraform show -json plan.out > plan.json`, attached to the PR.
 3. **Checks the live account, only if the repo comparison isn't enough.** For a normal PR, the comparison in step 2 is the answer and this step is reported as "not needed". It runs, read-only, when:
    - the base version of the template can't be fetched;
    - the template is new, renamed or moved, and the repo names the stack it deploys to;
@@ -27,16 +31,16 @@ A Release Readiness Review tells you whether a change is safe to deploy. It does
    - the template or PR text describes changes to resources the base branch doesn't have;
    - or you ask for it.
 
-   When it runs, an "added" resource that already exists isn't counted as new cost, and a "removed" resource that was never deployed isn't counted as a saving. It matches resources through the deployed CloudFormation stack, or by exact name. A similar-looking name such as `MyRole-a1b2c3` never counts as a match for `MyRole`.
+   When it runs, an "added" resource that already exists isn't counted as new cost, and a "removed" resource that was never deployed isn't counted as a saving. It matches resources through the deployed CloudFormation stack, or by exact name.
 4. **Looks up live prices,** trying three official AWS sources in order:
-   1. Public AWS pricing documentation, through `verify_aws_claim`.
-   2. The AWS Price List API.
-   3. The public AWS Price List files, which need no AWS credentials.
+   1. The AWS Price List API: exact, current rates with SKUs.
+   2. The public AWS Price List files, the same data.
+   3. Public AWS pricing documentation, through `verify_aws_claim`.
 
    For each resource it picks the standard on-demand price (not reservation, Extended Support, or free-tier rows), converts units correctly, and multiplies by the size and count declared in the template.
 5. **Shows a cost dashboard:** the net monthly change at the top, then tables for added, removed, and resized resources, what the account check changed, and where every price came from. Charges that depend on usage (requests, data transfer, GB processed) are listed without a dollar figure.
 
-## How it works
+## Workflow
 
 ```mermaid
 flowchart TD
@@ -46,17 +50,17 @@ flowchart TD
     Q -- yes --> D["4 · Look up live prices"]
     Q -- "no: missing base, new stack name,<br/>explicit names, conflicting signals" --> C["3 · Check the live account (read-only)<br/>Already deployed? Really deployed?"]
     C --> D
-    D --> D1["AWS pricing docs<br/>verify_aws_claim"]
-    D1 -- no usable rate --> D2["AWS Price List API"]
-    D2 -- no access --> D3["Public Price List files<br/>no credentials needed"]
+    D --> D1["AWS Price List API"]
+    D1 -- no AWS tool / access --> D2["Public Price List files<br/>no credentials needed"]
+    D2 -- line still unpriced --> D3["AWS pricing docs<br/>verify_aws_claim"]
     D1 --> E
     D2 --> E
     D3 --> E["5 · Cost dashboard<br/>Net change per month + breakdown"]
 ```
 
-## What you get
+## Dashboard sections
 
-Every run uses the same layout, so reviews are easy to compare:
+Every run uses the same layout:
 
 | Section | What it shows |
 |---|---|
@@ -72,7 +76,7 @@ If pricing can't be reached at all, a banner at the top quotes the exact error f
 
 ### Example
 
-Abridged output for a PR that adds a database and a NAT gateway, removes a Redis cache, and doubles a worker fleet. The rates are real eu-west-1 on-demand prices from the AWS Price List file published 2026-10-15. Prices change over time.
+Abridged output for a PR that adds a database and a NAT gateway, removes a Redis cache, and doubles a worker fleet. The rates shown are illustrative only; the skill looks up current on-demand rates on every run.
 
 ```markdown
 ## 💰 IaC cost impact · acme/payments-infra · PR #14
@@ -88,7 +92,7 @@ Abridged output for a PR that adds a database and a NAT gateway, removes a Redis
 | 🔁 Resized | 1 resource · +$134.36 |
 | Pricing Region | eu-west-1 · from the deploy workflow |
 | Baseline | `main` · topology check: not needed |
-| Price source | AWS pricing docs: 0 lines · Price List API: 0 lines · offer files: 8 lines |
+| Price source | Price List API: 0 lines · offer files: 8 lines · AWS pricing docs: 0 lines |
 
 ### ➕ Added resources
 | # | Logical ID | Type | Sizing | Qty | Rate | Monthly |
@@ -125,38 +129,26 @@ _Topology check not needed: the base and PR versions of the template were both a
 
 The real output also includes the full pricing trace, with the source and filters for each rate, the not-determinable table, and the caveats. Some columns are trimmed here to keep the example short.
 
+### Pricing basis and discounts
+
+Every rate comes from public AWS on-demand list prices. The estimate doesn't include Savings Plans, Reserved Instances, Enterprise Discount Program or private pricing terms, credits, or free tier, so your actual bill may be lower.
+
+If you have discounts, add them yourself when you clone the skill: put a reference file such as `references/discounts.md` in the skill folder with your rates or percentage discounts per service, and link it from Step 5 of `SKILL.md` with an instruction to apply it after the list price is found. Keep the list-price line in the Pricing trace so reviewers can see both figures. Don't put confidential pricing in a public fork.
+
 ## Prerequisites
 
 - **AWS DevOps Agent** with an Agent Space.
-- **Release Readiness Review** enabled on the repository, for the automatic path.
+- **Release Readiness Review** on the repository, for the automatic path. Automatic reviews run only on private repositories, when "Auto trigger change review" is enabled for the Agent Space and the pull request matches the configured trigger filters; see [the Release Readiness Review documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/release-management-release-readiness-code-review.html). Otherwise, start the review manually or use the chat path.
 - **A repository integration** (GitHub or GitLab), so the skill can read a PR's diff and files. No CI/CD pipeline is needed.
-- **At least one pricing source.** The skill tries them in order and uses the first that works:
+- **A pricing source.** The skill tries these in order:
 
   | Source | What it needs |
   |---|---|
-  | AWS pricing docs | The `verify_aws_claim` tool available to the agent |
   | AWS Price List API | An AWS tool in the agent with the permissions below |
-  | Public Price List files | Outbound HTTPS to `pricing.us-east-1.amazonaws.com` (no credentials) |
+  | Public Price List files | Outbound HTTPS to `pricing.us-east-1.amazonaws.com` |
+  | AWS pricing docs | The `verify_aws_claim` tool available to the agent |
 
-  IAM policy for the Price List API, added to the role the Agent Space assumes:
-
-  ```json
-  {
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Sid": "ResolveLivePricing",
-        "Effect": "Allow",
-        "Action": [
-          "pricing:GetProducts",
-          "pricing:GetAttributeValues",
-          "pricing:DescribeServices"
-        ],
-        "Resource": "*"
-      }
-    ]
-  }
-  ```
+  The Price List API needs `pricing:GetProducts`, `pricing:GetAttributeValues` and `pricing:DescribeServices`, which the default `AIDevOpsAgentAccessPolicy` doesn't grant. Deploy this repository's [`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml) with the `EnableIacChangeCostPreview` parameter set to `true` (the default); it attaches the `DevOpsAgentSkill-IacChangeCostPreview` inline policy to the Agent Space role. This enables the Price List API in chat and in any agent that has an AWS tool. The report phase of a Release Readiness Review has no AWS tool, so its prices come from verification testing.
 
   Price List data is public and free to query. The API is called in `us-east-1`, with `eu-central-1` and `ap-south-1` as fallbacks, whatever Region your resources run in. If your AWS tool is restricted to certain Regions, allow one of these.
 
@@ -164,34 +156,9 @@ The real output also includes the full pricing trace, with the source and filter
 
 The skill performs no write actions. It never creates stacks, change sets, or any other resource.
 
-## Getting prices in Release Readiness Reviews (recommended)
+## Usage
 
-A Release Readiness Review runs in phases, and they don't all have the same tools. The analysis phase, which writes the report, usually can't fetch prices. [Verification testing](https://docs.aws.amazon.com/devopsagent/latest/userguide/release-management-release-readiness-code-review.html) has a shell and can reach `*.amazonaws.com`, which includes the public Price List files, and its findings are added to the final report. Without guidance, the tester doesn't always price the change, and the cost dashboard then shows the ⛔ banner.
-
-To make pricing part of every review, add this to the `AGENTS.md` at the root of each repository that holds infrastructure code. AWS DevOps Agent reads `AGENTS.md` to tune how verification testing runs.
-
-```markdown
-## Verification testing: IaC cost estimate
-
-When a change touches CloudFormation, SAM, CDK-synthesized or Terraform files, always add a test named
-"IaC cost estimate" to the test plan and run it:
-
-1. Follow the estimate-new-resource-costs skill, Steps 1–5: compare the base and PR versions of each
-   template, then collect sizing, quantity and Region.
-2. Fetch on-demand rates from the public AWS Price List files with an HTTP GET (no credentials needed):
-   https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/<ServiceCode>/current/<region-code>/index.csv
-   Stream the file line by line and keep only rows where TermType is OnDemand.
-3. Report one line per priced item as the test result: logical ID, sizing, quantity, SKU, rate, unit,
-   monthly amount, plus the net monthly change. List usage-based charges without a figure.
-
-Use read-only calls only. Never deploy, create change sets, or call any AWS API that changes resources.
-```
-
-The analysis phase then reuses those recorded prices to build the dashboard in the final report.
-
-## How to use it
-
-**In a Release Readiness Review:** nothing to do. The cost section appears whenever the PR touches a template.
+**In a Release Readiness Review:** once the review runs on a PR (automatically, under the conditions in Prerequisites, or started manually), the cost section appears whenever the PR touches a template.
 
 **In chat:** name the repository, the PR or branch, and ideally the Region:
 
@@ -199,23 +166,23 @@ The analysis phase then reuses those recorded prices to build the dashboard in t
 - "Compare `cloudformation/payments-ledger.yaml` on `feature/ledger-rds-nat` against `main` and estimate the monthly change."
 - "This repo has no pipeline. Fetch PR #12 yourself and tell me the net monthly cost change."
 
-## Uploading to AWS DevOps Agent
+## Installation
 
 **Option A: GitHub integration.** Fork or copy this repository and import the skill through the Agent Space GitHub integration.
 
-**Option B: Direct upload.** Zip the skill and upload it as a user-defined skill in the Agent Space console. Run from inside the skill folder, so that `SKILL.md` sits at the root of the zip:
+**Option B: Direct upload.** Zip the skill and upload it as a user-defined skill in the Agent Space console.
 
-
-## Skill contents
+## Files
 
 ```
-estimate-new-resource-costs/
+iac-change-cost-preview/
 ├── SKILL.md                      # Workflow checklist, both checks, the pricing core, a dashboard skeleton, caveats
 ├── references/
 │   └── pricing-sources.md        # Full procedure for each pricing source (read in Step 5)
 ├── assets/
 │   └── output-template.md        # Full dashboard template and formatting rules (read in Step 7)
-└── README.md                     # This file
+├── README.md                     # This file
+└── CHANGELOG.md
 ```
 
 `SKILL.md` deliberately keeps the full Price List API procedure and a dashboard skeleton inline, even though `references/` and `assets/` also exist. In a Release Readiness Review several agents read the skill, and they don't always open extra files. Keeping the API procedure in `SKILL.md` is what lets any agent that loads the skill price the change; in testing, versions that moved it out stopped pricing. This is a known trade-off against the Agent Skills best-practice check for reference material in the body (BP-03), and it is intentional.
