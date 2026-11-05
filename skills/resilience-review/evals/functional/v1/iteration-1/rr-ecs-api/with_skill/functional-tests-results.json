@@ -1,0 +1,97 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-ecs-api",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'resilience-review' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The response follows a six-section structure (Scenario and scope, Targets, Strategy, Roadmap, First tests, Next decision) and covers nearly all required content: it maps the workload by layer (compute/ECS, RDS, DynamoDB, ElastiCache, SQS/Lambda, VPC/networking), explicitly flags the ECS service runs a single task in a single AZ (\"the ECS service's only subnet is eu-central-1a \u2014 losing that AZ takes the whole service down\"), notes absence of a load balancer/failover routing (\"no load balancer, API Gateway, or Route 53 record\"), addresses whether the CloudFormation stack dr-demo-backend could recreate the service in eu-west-1 (noting GetTemplateSummary was denied, template portability not verified, and proposes reviewing for hard-coded Region references as an action item), and proposes both a restore/rebuild test and named AWS FIS failure tests (AZ: Power Interruption, Cross-Region: Connectivity). It also explicitly avoids inventing targets (\"No RPO or RTO has been agreed yet... Today's capability (not a target)\").\n\nThe response does cover the container image/ECR replication point reasonably well (\"ECR pull-through repo for the container image - No cross-Region replication configured; image not pullable from eu-west-1 today\"), satisfying that requirement.\n\nThe one point not explicitly addressed is the secret (Secrets Manager `dr-demo/api-key`) replication status to another Region \u2014 the secret is mentioned in the in-scope list but its replication status to the recovery Region is not explicitly flagged as a gap like the other items. This is a minor omission relative to the otherwise very thorough and well-structured report that hits nearly every other requirement.\n\nGiven the overwhelming majority of expected elements are present and correctly structured, with only the explicit secret-replication flag being weaker (though the secret is listed as in-scope), this should be judged as passing, with the omission noted.",
+      "evidence": "\"The compute layer runs as a single Fargate task in one subnet/AZ with nothing in front of it that we could find (no load balancer, API Gateway, or Route 53 record)... ECR pull-through repo for the container image | No cross-Region replication configured; image not pullable from eu-west-1 today... CloudFormation `GetTemplateSummary` was denied \u2014 couldn't verify whether the stack's template is portable to another Region... AWS FIS scenario **AZ: Power Interruption**... AWS FIS scenario **Cross-Region: Connectivity**... No RPO or RTO has been agreed yet.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The Roadmap section groups the actions under Quick wins, Quick fixes and Long-term, and every action names a specific resource and change.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The Roadmap section has subsections 'Quick wins', 'Quick fixes', and 'Long-term', each with a table listing Resource, Finding, Action, Scenario/Strategy, Cost. E.g. 'RDS dr-demo-mysql | Deletion protection is off | Turn on deletion protection' and 'ECS service dr-demo-api | Single task, single subnet (eu-central-1a only) | Raise desired count to 2+ and use both subnets'.",
+          "reasoning": "Every row names a specific resource (e.g., RDS dr-demo-mysql, SQS dr-demo-events, ECS service dr-demo-api, VPC/subnets/security groups/VPC endpoints) and a specific change (turn on deletion protection, add a DLQ, raise desired count, add a load balancer, etc.), satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Quick wins and quick fixes do not depend on RPO or RTO targets the business has not agreed; Region-level work whose size depends on the targets is under Long-term.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Quick wins/fixes items like 'Turn on deletion protection', 'Add a DLQ', 'Raise desired count to 2+', 'Add a load balancer' are independent of RPO/RTO. Long-term items explicitly note dependency on targets, e.g. 'If RTO/RPO need tightening, add a cross-Region read replica' and 'If near-zero RPO is needed, convert to a global table'.",
+          "reasoning": "The Quick wins and Quick fixes sections contain only actions that are not gated on RPO/RTO agreement (deletion protection, DLQ, alarm, snapshot retention, desired count, load balancer, ECR replication, restore testing, template review). The Long-term section explicitly ties region-level replication actions (read replica, global table, Global Datastore) to RPO/RTO being tightened, matching the assertion's structure.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the ECS service runs a single task in a single Availability Zone.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'the compute layer runs as a single Fargate task in one subnet/AZ' and in the table: 'ECS service dr-demo-api | Single task, single subnet (eu-central-1a only)'",
+          "reasoning": "The response explicitly states the ECS service runs a single task in a single AZ/subnet multiple times.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the Secrets Manager secret used by the task is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of Secrets Manager secret replication status anywhere in the output; the secret dr-demo/api-key is only mentioned once as 'the Secrets Manager secret (dr-demo/api-key)' in the in-scope list, with no finding about cross-Region replication.",
+          "reasoning": "The assertion requires the response to flag that the Secrets Manager secret is not replicated to another Region. The output lists the secret as in-scope but never discusses its replication status, unlike other resources (RDS, DynamoDB) which have explicit replication findings.",
+          "confidence": "high"
+        },
+        {
+          "text": "The First tests section contains both a restore or rebuild test and a failure test that names an AWS FIS scenario.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Restore dr-demo-mysql and dr-demo-players to a point in time | Bad data | AWS Backup restore testing...' and 'Lose AZ eu-central-1a | One AZ fails | AWS FIS scenario AZ: Power Interruption...' and 'Lose connectivity to eu-central-1 | A whole Region fails | AWS FIS scenario Cross-Region: Connectivity...'",
+          "reasoning": "The First tests table includes a restore test (AWS Backup restore testing / point-in-time restore) and failure tests naming specific AWS FIS scenarios ('AZ: Power Interruption', 'Cross-Region: Connectivity'), satisfying both parts of the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Resources that share only a tag with the ECS service, and are not in its CloudFormation stack dr-demo-backend, get no roadmap actions. Resources in the same stack (such as dr-demo-mysql, dr-demo-valkey, dr-demo-players, dr-demo-events) are connected by configuration and may be in scope.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Possible members, please confirm: none found linked only by tag or name \u2014 everything discovered traces back to the dr-demo-backend stack by configuration.' All roadmap actions reference resources explicitly named as part of dr-demo-backend stack (dr-demo-mysql, dr-demo-valkey, dr-demo-players, dr-demo-events, dr-demo-api, VPC/subnets/security groups).",
+          "reasoning": "The response explicitly confirms no tag-only-linked resources were found and all roadmap items are scoped to resources within the dr-demo-backend stack, matching the assertion's requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.8571
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m48s",
+    "cost": "$3.39",
+    "context_window": {
+      "utilization": "7.1%",
+      "compaction_count": 0
+    }
+  }
+}

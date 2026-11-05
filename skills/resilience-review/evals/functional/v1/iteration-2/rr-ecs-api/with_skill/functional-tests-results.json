@@ -1,0 +1,90 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "rr-ecs-api",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'resilience-review' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response contains exactly six numbered sections in order (Scenario and scope, Targets, Strategy, Roadmap, First tests, Next decision), matching the expected six-section resilience report structure.\n\nChecking each required element:\n1. Maps workload by layer: Section 1 lists the full workload (ECS cluster, task def, ECR image, secret, VPC, RDS, DynamoDB, ElastiCache, SQS, Lambda) and a scenario table.\n2. Flags single task/single AZ: \"the ECS service itself runs only 1 task... pinned to a single subnet/AZ (eu-central-1a)\" - explicitly flagged in summary, scenario table, and roadmap.\n3. Reports container image location and replication status: \"the container image... only exist in eu-central-1 with no replication\" and roadmap item \"Turn on ECR cross-Region replication to eu-west-1\" with finding \"No replication rule; image doesn't exist in eu-west-1\".\n4. Secret not replicated: \"its secret only exist in eu-central-1 with no replication\" and roadmap \"Hardcoded eu-central-1 ARN, no replica... Enable multi-Region replication.\"\n5. No load balancer/failover routing: \"there's no load balancer or internet gateway in front of it at all today\" and \"No load balancer, API Gateway, or DNS record in front of the service anywhere\" plus \"Traffic routing: No cross-Region failover routing exists.\"\n6. CloudFormation stack dr-demo-backend recreation feasibility: explicitly named stack and states \"No proof the stack can be redeployed in eu-west-1 as-is\" with action to build/test IaC.\n7. Proposes restore/rebuild test and named AWS FIS test: Section 5 includes PITR restore test, RDS Multi-AZ failover test, and AWS FIS scenarios \"AZ: Power Interruption\" and \"Cross-Region: Connectivity\" - these are specific named FIS scenarios.\n8. Targets not invented: Section 2 explicitly states \"No RPO or RTO has been set for this workload yet\" and asks the business to define them rather than inventing values.\n\nAll required elements are substantively present and well-organized matching the expected structure.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The Roadmap section groups the actions under Quick wins, Quick fixes and Long-term, and every action names a specific resource and change.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Roadmap section has three tables titled 'Quick wins', 'Quick fixes', and 'Long-term', each row names a specific resource (e.g., 'ECR image (nginx/nginx:stable-alpine)', 'dr-demo-api (ECS service)', 'dr-demo-mysql (RDS)') and a specific change (e.g., 'Turn on ECR cross-Region replication to eu-west-1', 'Raise desired count and spread tasks across both existing subnets (1a + 1b)').",
+          "confidence": "high"
+        },
+        {
+          "text": "Quick wins and quick fixes do not depend on RPO or RTO targets the business has not agreed; Region-level work whose size depends on the targets is under Long-term.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Quick wins/fixes items like ECR replication, secret replication, alarm on backup failure, ALB addition, DLQ addition are all independent of RPO/RTO. Long-term items explicitly say 'If RTO needs minutes not hours: add a cross-Region read replica or move to Aurora Global Database' and 'Not agreed yet' appears in First tests tied to targets, consistent with Region-sized work being deferred to Long-term pending targets.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response flags that the ECS service runs a single task in a single Availability Zone.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'the `dr-demo-api` runs as a single Fargate task in a single subnet/AZ' and in the Quick fixes table: '`dr-demo-api` (ECS service) | 1 task, pinned to a single subnet/AZ'.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the Secrets Manager secret used by the task is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The summary states 'the container image and its secret only exist in `eu-central-1` with no replication' and the Quick wins table lists 'Secrets Manager secret (`dr-demo/api-key`) | Hardcoded `eu-central-1` ARN, no replica | Enable multi-Region replication to `eu-west-1`'.",
+          "confidence": "high"
+        },
+        {
+          "text": "The First tests section contains both a restore or rebuild test and a failure test that names an AWS FIS scenario.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "First tests table includes 'Point-in-time restore of dr-demo-mysql and dr-demo-players' (a restore test) and 'AZ power interruption' using 'AWS FIS scenario \"AZ: Power Interruption\"' and 'Cross-Region connectivity loss' using 'AWS FIS scenario \"Cross-Region: Connectivity\"' (failure tests naming FIS scenarios).",
+          "confidence": "high"
+        },
+        {
+          "text": "Resources that share only a tag with the ECS service, and are not in its CloudFormation stack dr-demo-backend, get no roadmap actions. Resources in the same stack (such as dr-demo-mysql, dr-demo-valkey, dr-demo-players, dr-demo-events) are connected by configuration and may be in scope.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Roadmap actions only cover resources explicitly listed as in the dr-demo-backend stack (ECR image, secret, backup plan, dr-demo-valkey, dr-demo-api, dr-demo-players, RDS KMS key, dr-demo-events, dr-demo-mysql). The 'Not checked' section even flags concern about 'whether the Backup plan's tag-based resource selection could sweep in anything outside this workload,' showing awareness to exclude tag-only-shared resources; no roadmap action targets a resource outside the stated stack.",
+          "confidence": "medium"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m5s",
+    "cost": "$3.53",
+    "context_window": {
+      "utilization": "6.5%",
+      "compaction_count": 0
+    }
+  }
+}

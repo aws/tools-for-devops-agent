@@ -32,6 +32,7 @@ Metadata:
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
+          - EnableResilienceReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
       - Label:
@@ -169,6 +170,12 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableResilienceReview:
+    Type: String
+    Description: Resilience review skill (adds drs:DescribeSourceServers and lambda:GetFunction read-only).
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -218,6 +225,7 @@ Conditions:
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
+  SkillResilienceReview: !Equals [!Ref EnableResilienceReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
@@ -726,6 +734,29 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # resilience-review: only the read actions NOT already granted by
+  # AIDevOpsAgentAccessPolicy. Checked with iam:SimulateCustomPolicy against the
+  # managed policy: 60 of the 62 actions the skill uses are already allowed.
+  # drs:DescribeSourceServers shows whether AWS Elastic Disaster Recovery replicates
+  # the servers; lambda:GetFunction shows where function code lives. Both are
+  # optional: without them the skill says what it could not read.
+  PolicyResilienceReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillResilienceReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-ResilienceReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ResilienceReviewRead
+            Effect: Allow
+            Action:
+              - drs:DescribeSourceServers
+              - lambda:GetFunction
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -757,6 +788,7 @@ Outputs:
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
+        - resilience-review: ${EnableResilienceReview} (drs:DescribeSourceServers, lambda:GetFunction)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines

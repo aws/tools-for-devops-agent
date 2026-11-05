@@ -1,0 +1,133 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "rr-web-classic",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response delivers a resilience report scoped to orders-web, beginning with a \"Where you stand today\" summary followed by six clearly numbered sections (Scenario and scope, Targets, Strategy, Roadmap, First tests, Next decision) \u2014 matching the expected six-section structure.\n\nKey findings match expectations:\n- ASG single instance in one AZ/subnet: \"the application tier runs as exactly one EC2 instance in one Availability Zone (eu-west-1a)... ASG is Min=Max=Desired=1\"\n- Aurora orders-web-db single instance, 1-day backup retention: \"Aurora has one writer, no reader... Aurora backs up for only 1 day with deletion protection off\"\n- EFS no replication, automatic backups off: \"EFS has no backups at all... turn on EFS automatic backups\" (quick win) implying it was off; \"EFS replication (pending EFS classification)\" shows no replication exists\n- Uploads bucket versioning off: \"S3 has no versioning\" and \"turn on S3 versioning\" as a quick win\n- Load balancer: mentions \"the public-facing entry point in front of this internal-only ALB isn't part of this stack and wasn't reviewed\" and ALB spans 2 AZs \u2014 however the expected output says \"internal load balancer is Regional with no DNS failover in front of it\" \u2014 the agent notes ALB is internal-only and doesn't mention DNS failover explicitly, but does note the public entry point wasn't reviewed, which is close but not an exact match on \"Regional with no DNS failover.\" This is a partial gap but the overall report quality and structure strongly aligns.\n\nVPC as dependency - the report doesn't explicitly call out \"shared core-network VPC\" as a dependency, though it mentions \"VPC subnets and the Aurora DB subnet group already span 3 AZs\" which touches on VPC context but doesn't explicitly frame it as a shared dependency.\n\nDespite minor gaps (not explicitly calling out VPC as a \"shared dependency\" and not explicitly noting \"no DNS failover\" for the LB), the report substantively covers all major required findings and follows the required structure. This is a strong match overall.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response starts with a short 'Where you stand today' summary, and the scenario table marks each of the four scenarios as covered today, partly or not.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response opens with 'Where you stand today:' summary paragraph, followed by a scenario table marking each of the four rows (One service fails, One AZ fails, A whole Region fails, Bad data) as 'no' or 'partly' in the 'Covered today?' column.",
+          "reasoning": "The summary and table structure matches exactly what is asserted.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Auto Scaling group orders-web-asg runs a single instance in one subnet or Availability Zone, so one instance or one AZ failure takes the web tier down.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states 'the application tier runs as exactly one EC2 instance in one Availability Zone (eu-west-1a), with no second instance' and in the table 'ASG is Min=Max=Desired=1 (one EC2 instance).' and 'The ASG, its instance, and the EFS mount target all live in eu-west-1a only.'",
+          "reasoning": "The substance of the assertion (single instance, single AZ, risk of failure) is covered, though the specific name 'orders-web-asg' is not mentioned explicitly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Aurora cluster orders-web-db has only one instance (no replica in another Availability Zone), so there is no automatic failover inside the Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response says 'no database reader' and 'Aurora has one writer, no reader.' in the scenario table.",
+          "reasoning": "This matches the assertion about Aurora having only one instance with no replica, though it doesn't explicitly name 'orders-web-db' in that exact sentence (it does elsewhere, e.g., 'Aurora orders-web-db').",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports the 1-day backup retention of orders-web-db and says it limits recovery from bad data.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states 'the database backs up for just 1 day with deletion protection off' and 'Aurora backs up for only 1 day with deletion protection off; S3 has no versioning; EFS has no backups at all.' Also 'Today's capability (not a target): Aurora restores to any point within the last 24 hours only.'",
+          "reasoning": "This directly reports the 1-day retention and ties it to limited recovery from bad data.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports that the EFS file system has no replication to another Region and that its automatic backups are off.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says 'EFS has no backups at all' and 'EFS replication (pending EFS classification)' as a long-term roadmap item, but does not explicitly state that EFS currently has no replication to another Region as a finding - it only states backups are off and lacks a current-state replication statement.",
+          "reasoning": "While backups-off is explicitly stated, the explicit finding that EFS has no replication to another Region today is not directly stated as a current-state fact; it's implied by the lack of any region coverage statement ('no data, image, or infrastructure copy exists outside eu-west-1') but not specifically tied to EFS's replication status explicitly in the backup/bad-data section. This is borderline - judged as not fully meeting the specific claim about EFS replication to another region explicitly mentioned per EFS resource, though the general whole-region coverage statement covers all resources. Given ambiguity, I lean towards pass actually since 'no data, image, or infrastructure copy exists outside eu-west-1' covers EFS too and backups are explicitly off. I will reconsider to pass with medium confidence.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response reports that the uploads S3 bucket has versioning off, so overwritten or deleted objects cannot be recovered.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states 'S3 has no versioning' directly in section 1 comparison table context.",
+          "reasoning": "This matches the assertion that the uploads bucket has versioning off, limiting recovery of overwritten/deleted objects, which is the exact point being made in the bad-data row context.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the recovery Region would need its own load balancer and a way to route traffic to it, since there is no DNS failover today.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The roadmap section mentions 'set up Region failover routing' as a long-term item, and 'Not checked' mentions 'the public-facing entry point in front of this internal-only ALB isn't part of this stack and wasn't reviewed.' There's no explicit statement that the recovery region needs its own load balancer.",
+          "reasoning": "The response does not explicitly say the recovery Region would need its own load balancer; it only generically mentions failover routing as a future need, without specifically calling out the load balancer requirement.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response checks whether the launch template's image and the orders-web stack could start the web tier in another Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not mention checking the launch template's AMI/image for cross-region availability or whether the orders-web stack could be deployed to another region explicitly as a check performed; it only lists 'deploy compute/IaC to the recovery Region' as a long-term roadmap action, not a check already done.",
+          "reasoning": "There's no evidence the agent verified the launch template image's availability in another Region or examined the orders-web CloudFormation template for portability; this is listed only as a future action.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the booking-api, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response does not mention booking-api, telemetry-pipeline, catalog-k8s, database-1, or any metrics stack anywhere in the text.",
+          "reasoning": "No other-workload resources are referenced; the report stays scoped to orders-web resources (Aurora orders-web-db, S3 orders-web-uploads, EFS fs-0d5e38c95aaf19c28, ALB, VPC).",
+          "confidence": "medium"
+        },
+        {
+          "text": "The complete report is in the response itself (all six sections), not only a pointer to a file.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent's final response includes all six numbered sections (1. Scenario and scope, 2. Targets, 3. Strategy, 4. Roadmap, 5. First tests, 6. Next decision) fully spelled out in the message itself, not just a reference to the saved file.",
+          "reasoning": "Although the response notes the report is saved as a file, it also reproduces the complete report content inline with all six sections present.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | no | ASG is Min=Max=Desired=1 (one EC2 instance). Aurora has one writer, no read\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 9,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 12,
+        "pass_rate": 0.75
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m9s",
+    "cost": "$3.56",
+    "context_window": {
+      "utilization": "9.0%",
+      "compaction_count": 0
+    }
+  }
+}

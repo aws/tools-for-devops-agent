@@ -1,0 +1,110 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-serverless",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'resilience-review' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response addresses every component listed in the expected output: HTTP API (noted no custom domain, regional), Lambda, DynamoDB table booking-api-bookings (explicitly noting PITR off and single-Region KMS key 'DataKey'), SQS queue with DLQ (noted as already in place), SNS topic, EventBridge bus and rule (with archive gap noted), Step Functions state machine (included in stack scope), Cognito user pool (noted no replica in another Region, deletion protection off), Secrets Manager secret (noted not replicated), and the S3 receipts bucket (versioning on, no replication noted). The report is scoped specifically to booking-api stack, covers resilience across AZ/region/service failure and bad-data scenarios, and provides a structured roadmap. This matches the expected output comprehensively and accurately.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the table is encrypted with a customer managed KMS key that exists only in eu-west-1, and that a copy or replica in another Region needs a key there (for example a multi-Region key).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"`DataKey` (KMS) | Single-Region key \u2014 can't decrypt a cross-Region copy of anything it protects | Evaluate converting to a multi-Region key\"",
+          "reasoning": "The response explicitly names the KMS key 'DataKey' as single-Region and recommends converting to a multi-Region key for a copy/replica in another Region. It doesn't explicitly say 'customer managed' but implies it is a customer-controlled key (DataKey, under Section 1 resource list 'KMS key').",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says the Cognito user pool booking-api-users has no replica in another Region, so users could not sign in to a recovery Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"`eu-west-1_uddXzE0rE` (Cognito) | No replica pool | Consider a Multi-Region user pool replica if sign-in must survive a Region loss\"",
+          "reasoning": "The response identifies the Cognito user pool (by ID rather than name 'booking-api-users') as having no replica, meaning sign-in would not work in a recovery region. Substance matches even though the exact name 'booking-api-users' isn't used.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says the HTTP API is Regional and has no custom domain name, so clients are tied to the eu-west-1 endpoint.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"`Api` (API Gateway) | No custom domain, no failover routing possible | Decide on a custom domain + ACM certificate\" and \"the API has no custom domain, so traffic has nowhere else to go.\"",
+          "reasoning": "The response explicitly states the API Gateway has no custom domain and that clients have nowhere else to go, tying them to the eu-west-1 endpoint. It doesn't use the word 'Regional' explicitly but conveys the same substance.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says the secret booking-api/payment-provider-key is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"`booking-api/payment-provider-key` (Secrets Manager) | Secret exists only in eu-west-1 | Replicate it to a second Region (e.g. eu-central-1)\"",
+          "reasoning": "The response explicitly names the secret and states it exists only in eu-west-1, confirming it is not replicated.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits what is already in place, such as the dead-letter queue on booking-api-notifications and versioning on the receipts bucket.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"the notifications SQS queue has a dead-letter queue (maxReceiveCount 5); DynamoDB's AWS Backup 'advanced features' are already turned on... S3 receipts bucket has versioning enabled\"",
+          "reasoning": "The response explicitly credits existing protections: DLQ on the notification queue and S3 versioning, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response covers the Step Functions state machine and the EventBridge bus and rule, saying they are Regional and must exist in the recovery Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The roadmap lists 'Full stack (API Gateway, Lambda, Step Functions, EventBridge, SNS, SQS)' together with action 'confirm the pipeline can redeploy the stack' / 'pre-deploy the stack there', but does not separately call out Step Functions and EventBridge bus/rule as Regional resources needing to exist in the recovery region with specific detail.",
+          "reasoning": "While Step Functions and EventBridge are mentioned in the in-scope resource list and bundled into the 'Full stack' roadmap row, the response does not explicitly say these specific components are Regional and must individually exist in the recovery Region the way it does for DynamoDB, S3, Secrets Manager, Cognito, and KMS. The EventBridge archive recommendation only addresses event replay for bad data, not region failover. Coverage is thin/implicit rather than explicit as asserted.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'orders-web', 'telemetry-pipeline', 'catalog-k8s', 'database-1', or any 'metrics stack' appears anywhere in the response.",
+          "reasoning": "The response stays scoped entirely to the booking-api stack and its 23 resources, with no reference to other account resources or stacks.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | yes | Lambda, API Gateway, DynamoDB, SQS, SNS, EventBridge, Step Functions and C\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 8,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 9,
+        "pass_rate": 0.8889
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m14s",
+    "cost": "$3.11",
+    "context_window": {
+      "utilization": "7.0%",
+      "compaction_count": 0
+    }
+  }
+}
