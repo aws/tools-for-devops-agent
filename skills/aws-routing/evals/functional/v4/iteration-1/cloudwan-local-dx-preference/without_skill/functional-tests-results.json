@@ -1,0 +1,68 @@
+{
+  "version": "v4",
+  "iteration": 1,
+  "eval_id": "cloudwan-local-dx-preference",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a specific two-stage evaluation process unique to AWS Cloud WAN + Direct Connect Gateway integration: (1) DXGW performs VIF selection per prefix using local-region local preference (LP) first, then AS-path among remote paths, and reflects the chosen route to the CNE; (2) the CNE then runs its own longest-prefix-match evaluation. It specifies that AS-path prepending does NOT override local-region LP (a key nuance the agent gets wrong), and that the correct fix is to use DXGW Local Preference (LP) BGP communities (7224:7300/7200/7100) to deterministically prefer the local DX. It also lists specific root causes: local DX not advertising the prefix, a more-specific prefix from elsewhere, an LP community preferring a remote DX, or a mismatch between the connection's associated Region and the CNE's Region.\n\nThe agent's response instead describes a generic Cloud WAN route evaluation order (most specific prefix, then static/system/VPC-propagated, then AS-path/MED tiebreak, then random tiebreak), and recommends shortening AS-path or lowering MED, or using a Cloud WAN routing policy to set-med. This directly contradicts the expected output, which states that AS-path prepending does NOT override local-region LP \u2014 the agent recommends AS-path/MED manipulation as a primary fix, which is the wrong mechanism per the expected answer. The agent never mentions the two-lookup DXGW-then-CNE model, never mentions Local Preference (LP) communities (7224:7300/7200/7100), and never mentions the \"associated Region\" mismatch cause. This is a materially different and partially incorrect technical explanation compared to the expected output.\n\nWhile the agent's answer is coherent and offers plausible-sounding Cloud WAN routing concepts (most specific prefix wins, AS path/MED tiebreak, random tiebreak), it does not match the specific correct mechanism described in the expected output, and recommends a fix (AS-path shortening/MED) that the expected output explicitly says does not work (AS-path prepending does not override local-region LP). This is a failure to meet the expected technical content.</reasoning>\n<parameter name=\"evidence\">Expected: \"the DXGW selects a VIF per prefix (local-region local preference first, then AS-path among remote paths)... AS-path prepending does not override local-region LP. Recommends LP communities (7224:7300/7200/7100).\" Agent said: \"shorten the AS path or lower the MED on the local DX's BGP advertisement... use a Cloud WAN routing policy to set-med on the DX gateway attachment's outbound advertisement\" \u2014 contradicting the expected mechanism and omitting LP communities, the two-stage DXGW/CNE model, and the associated-Region cause.</parameter>\n<parameter name=\"confidence\">high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "references longest prefix match in Cloud WAN route evaluation",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Most specific prefix wins \u2014 this is the first and biggest factor... specificity beats everything else in evaluation\"",
+          "reasoning": "The agent explicitly discusses most-specific-prefix-wins, which is the substance of longest prefix match, even though it doesn't use the exact phrase 'longest prefix match'.",
+          "confidence": "high"
+        },
+        {
+          "text": "explains that the DXGW applies local-region local preference before AS-path, so AS-path prepending does not override it",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output lists evaluation order as: static routes, system routes, VPC-propagated same region, then AS path/MED comparison, then source-type preference (DXGW propagated -> Connect -> VPN -> other). It never mentions a 'local-region local preference' attribute applied by DXGW before AS-path, nor does it state that AS-path prepending is overridden by this local preference.",
+          "reasoning": "The assertion requires a specific claim about DXGW applying local-region local preference before AS-path such that AS-path prepending doesn't matter. The agent instead recommends shortening AS path or lowering MED as a remedy, which contradicts the idea that AS-path prepending wouldn't matter. This assertion is not satisfied.",
+          "confidence": "high"
+        },
+        {
+          "text": "recommends tagging VIF advertisements with Direct Connect LP communities (7224:7xxx) as a deterministic remedy",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output mentions using 'Cloud WAN routing policy to set-med on the DX gateway attachment's outbound advertisement' and states 'DX/TGW peering attachments don't support BGP communities' - it does not mention tagging VIF advertisements with Direct Connect LP communities (7224:7xxx).",
+          "reasoning": "The agent explicitly states BGP communities aren't supported on DX attachments and never mentions the 7224:7xxx LP community tagging remedy, which is the opposite of what's asserted.",
+          "confidence": "high"
+        },
+        {
+          "text": "does not contain 'error'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No occurrence of the word 'error' appears anywhere in the output text.",
+          "reasoning": "Scanning the full response, the word 'error' does not appear.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "13s",
+    "cost": "$0.11",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}
