@@ -1,7 +1,7 @@
 {
   "version": "v1",
   "iteration": 1,
-  "timestamp": "2026-11-04T16:16:36Z",
+  "timestamp": "2026-11-05T14:08:25Z",
   "test_type": "best-practices",
   "passing_score": 100,
   "score": 100,
@@ -22,8 +22,8 @@
       "name": "Effective description",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The description uses imperative phrasing ('Use this skill when...'), focuses on user-facing symptoms (timeouts, latency, memory full, error replies) rather than implementation details, explicitly lists many trigger contexts including cases where the operator doesn't name the domain directly, clarifies scope exclusions (not for create/size/migrate), and remains a concise paragraph.",
-      "evidence": "Use this skill when an operator is investigating a problem with an Amazon ElastiCache cache, or with any Valkey, Redis OSS or Memcached cache on AWS, even if they only describe the symptom. Triggers include application timeouts or latency talking to the cache, session or cache writes failing, high cache CPU or one hot shard, memory full, keys disappearing or a falling hit rate...",
+      "reasoning": "The description uses imperative phrasing ('Use this skill when...'), focuses on user-observable symptoms/intent (timeouts, latency, errors, memory full, etc.) rather than implementation details, lists an extensive set of explicit trigger contexts including error codes and vague symptom descriptions, explicitly scopes out-of-bounds use (create/size/migrate), and remains a concise single paragraph.",
+      "evidence": "Use this skill when an operator is investigating a problem with an Amazon ElastiCache cache, or with any Valkey, Redis OSS or Memcached cache on AWS, even if they only describe the symptom. Triggers include application timeouts while the cache dashboard looks healthy, latency talking to the cache, session or cache writes failing...",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/optimizing-descriptions"
     },
     {
@@ -31,8 +31,8 @@
       "name": "Verbosity and conciseness",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The body jumps directly into domain-specific procedures (AWS CLI calls, specific metric names, PromQL delegation logic) without explaining general concepts like what ElastiCache or CloudWatch are. It assumes the agent knows AWS basics and focuses on non-obvious specifics.",
-      "evidence": "Group-level aggregates hide skew. Always break down by node or shard.",
+      "reasoning": "The body jumps directly into ElastiCache-specific procedures, AWS CLI/use_aws calls, metric names, and domain-specific gotchas without explaining general concepts like what a cache or CloudWatch is. It assumes operator/agent familiarity with AWS and goes straight to non-obvious specifics.",
+      "evidence": "`EngineCPUUtilization` is the engine's single main thread. `CPUUtilization` is the whole host and stays low on nodes with 4 or more vCPUs while the engine is saturated.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#add-what-the-agent-lacks-omit-what-it-knows"
     },
     {
@@ -40,7 +40,7 @@
       "name": "Detailed reference materials must not be in body",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "Detailed reference material (metric thresholds, error tables, diagnosis rows, PromQL queries) is consistently offloaded to references/ files rather than embedded in the body, even within conditional branches like Step 1's deployment-type decision.",
+      "reasoning": "Detailed reference data (metric thresholds, error-string tables, diagnosis tables, PromQL queries) is consistently offloaded to references/ files and loaded conditionally rather than embedded in the body. The body only contains short inline snippets (CLI calls, a slow-log query) needed for immediate execution.",
       "evidence": "Load [references/diagnosis-table.md](references/diagnosis-table.md) now; it is required for every investigation.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#structure-large-skills-with-progressive-disclosure"
     },
@@ -49,7 +49,7 @@
       "name": "Reference files must be linked",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "All five reference files are linked with markdown links in the body.",
+      "reasoning": "All five reference files are linked with proper markdown link syntax in the body.",
       "evidence": "[references/otel-promql.md](references/otel-promql.md), [references/classic-metrics.md](references/classic-metrics.md), [references/diagnosis-table.md](references/diagnosis-table.md), [references/error-strings.md](references/error-strings.md), [references/engine-followups.md](references/engine-followups.md)"
     },
     {
@@ -57,7 +57,7 @@
       "name": "Reference links must specify when to load",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "Each reference link is accompanied by a specific condition for when to load it, such as cache type/engine or when an error reply is present.",
+      "reasoning": "Each reference link is accompanied by a clear condition for when to load it (e.g., node-based Valkey path, when error strings are quoted, when engine data is required).",
       "evidence": "When the operator quotes an engine error reply, or the error metrics show one, load [references/error-strings.md](references/error-strings.md) to map it to its cause.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#structure-large-skills-with-progressive-disclosure"
     },
@@ -66,7 +66,7 @@
       "name": "Reference path format",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "All reference links use relative paths of the form references/<filename>.md without absolute paths or traversals.",
+      "reasoning": "All reference links use relative paths of the form references/<filename>.md with no absolute paths or traversals.",
       "evidence": "[references/classic-metrics.md](references/classic-metrics.md)",
       "agent_skills_spec_reference": "https://agentskills.io/specification#file-references"
     },
@@ -75,17 +75,17 @@
       "name": "Prescription vs description",
       "result": "passed",
       "confidence": "medium",
-      "reasoning": "Fragile, destructive-risk operations (read-only rule, exact AWS CLI calls, exact Logs Insights query) are prescribed exactly, while flexible judgment areas (choosing which lookalike to rule out, how to phrase remediation) leave room for agent reasoning with rationale given (e.g., why read-only matters, why baseline windows matter).",
-      "evidence": "Read-only. Never run `modify-*`, `reboot-*`, `test-failover`... Present every change as a recommendation for the operator to run, with its impact.",
+      "reasoning": "Fragile operations (read-only rules, slow log query, exact CLI parameters) are prescriptive, while diagnostic reasoning (separating cause from lookalikes, interpreting metrics) explains rationale and gives the agent room to reason through evidence.",
+      "evidence": "**Evidence over symptoms.** Every finding quotes the metric, the node or shard, the value and the time, compared with a baseline window of the same length before the onset.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#match-specificity-to-fragility"
     },
     {
       "id": "BP-08",
       "name": "Defaults, not menus",
       "result": "passed",
-      "confidence": "high",
-      "reasoning": "Step 1 clearly designates a default metrics path per deployment type (OpenTelemetry for node-based Valkey vs classic metrics for serverless/Redis/Memcached) rather than listing all options as equal.",
-      "evidence": "Node-based Valkey: load [references/otel-promql.md]... Serverless (any engine), Redis OSS, Memcached, or gaps in the OpenTelemetry path: load [references/classic-metrics.md]",
+      "confidence": "medium",
+      "reasoning": "Where multiple metrics paths exist (OpenTelemetry vs classic), the skill designates a clear default/branch logic based on deployment type rather than listing them as equal menu options.",
+      "evidence": "**Node-based Valkey:** load [references/otel-promql.md]... **Serverless (any engine), Redis OSS, Memcached, or gaps in the OpenTelemetry path:** load [references/classic-metrics.md]",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#provide-defaults-not-menus"
     },
     {
@@ -93,7 +93,7 @@
       "name": "Favor procedures over declarations",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The workflow teaches a generalizable diagnostic procedure (identify deployment, check events, rule out lookalikes, check config, validate, report) applicable to any ElastiCache incident, not a one-off instance-specific task.",
+      "reasoning": "The skill teaches a generalizable diagnostic procedure (identify deployment, check events, rule out lookalikes, validate, report) that applies to any ElastiCache incident, not a one-off instance-specific task.",
       "evidence": "Name the root cause of an ElastiCache incident from evidence, rule out the lookalike cause that produces the same symptom, and give the operator a fix.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#favor-procedures-over-declarations"
     },
@@ -102,8 +102,8 @@
       "name": "Gotchas section",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The skill has a detailed Gotchas section with concrete, non-obvious environment-specific facts (CPU metric semantics, MOVED vs READONLY behavior, connection churn interpretation).",
-      "evidence": "A high rate of `HELLO`/`CLIENT SETINFO`/`AUTH`/`PING` with no data commands is what each *new* connection sends. Current connections stay flat because each connection lives only milliseconds.",
+      "reasoning": "The skill includes a detailed Gotchas section with concrete, non-obvious corrections specific to the ElastiCache domain.",
+      "evidence": "`EngineCPUUtilization` is the engine's single main thread... Serverless has no OpenTelemetry metrics and no parameter groups, and evicts only keys that have a TTL.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#gotchas-sections"
     },
     {
@@ -111,8 +111,8 @@
       "name": "Templates and outputs missing",
       "result": "passed",
       "confidence": "medium",
-      "reasoning": "The skill provides an explicit five-part report structure for its structured output (root cause, evidence, ruled out, remediation, gaps), satisfying the need for a template.",
-      "evidence": "Always give all five parts, even when the cause looks obvious. 1. Root cause... 2. Evidence... 3. Ruled out... 4. Remediation... 5. Gaps",
+      "reasoning": "The skill specifies a structured report format with five required parts directly in Step 6, satisfying the need for output structure without requiring a separate template file.",
+      "evidence": "1. **Root cause:** ... 2. **Evidence:** ... 3. **Ruled out:** ... 4. **Remediation:** ... 5. **Gaps:** ...",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#templates-for-output-format"
     },
     {
@@ -120,8 +120,8 @@
       "name": "Templates and outputs must not be in body",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The report template in Step 6 is short (5 bullet points, well under 20 lines) and stays inline in the body appropriately.",
-      "evidence": "1. Root cause: one sentence naming the mechanism, not the symptom. 2. Evidence... 3. Ruled out... 4. Remediation... 5. Gaps",
+      "reasoning": "The inline output template (Step 6's five-part report) is short, well under 20 lines, so it is appropriate to keep inline rather than moving to assets/.",
+      "evidence": "1. **Root cause:** one sentence naming the mechanism, not the symptom.\n2. **Evidence:** metric, node/shard, value and time, against the baseline.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#templates-for-output-format"
     },
     {
@@ -147,8 +147,8 @@
       "name": "Step-by-step guidance",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "The workflow is presented as a checkbox checklist with Step N format, and the detailed sections below use '### Step N:' headings matching the checklist numbers.",
-      "evidence": "- [ ] Step 1: Identify the deployment and choose the metrics path ... ### Step 1: Identify the deployment and choose the metrics path",
+      "reasoning": "The workflow is presented as a checkbox checklist with 'Step N' labels, and the detailed sections below reference those same step numbers (### Step 1:, ### Step 2:, etc.), matching the checklist.",
+      "evidence": "- [ ] Step 1: Identify the deployment and choose the metrics path\n...\n### Step 1: Identify the deployment and choose the metrics path",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#checklists-for-multi-step-workflows"
     },
     {
@@ -156,8 +156,8 @@
       "name": "Validation loops",
       "result": "passed",
       "confidence": "high",
-      "reasoning": "Step 5 explicitly instructs the agent to validate its own draft findings against checklist criteria before reporting, including checking that evidence is quoted not estimated and lookalikes are ruled out with evidence.",
-      "evidence": "Check your draft against each point. If one fails, go back to the step that produces the missing evidence, then check again.",
+      "reasoning": "The skill has an explicit self-validation step before reporting, checking the draft against specific criteria for errors and completeness.",
+      "evidence": "### Step 5: Validate before reporting\n\nCheck your draft against each point. If one fails, go back to the step that produces the missing evidence, then check again.",
       "agent_skills_spec_reference": "https://agentskills.io/skill-creation/best-practices#validation-loops"
     }
   ]

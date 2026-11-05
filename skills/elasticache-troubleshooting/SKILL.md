@@ -2,13 +2,14 @@
 name: elasticache-troubleshooting
 description: Use this skill when an operator is investigating a problem with an Amazon
   ElastiCache cache, or with any Valkey, Redis OSS or Memcached cache on AWS, even if
-  they only describe the symptom. Triggers include application timeouts or latency
-  talking to the cache, session or cache writes failing, high cache CPU or one hot
-  shard, memory full, keys disappearing or a falling hit rate, connection errors or
-  spikes, stale reads from replicas, a failover, serverless throttling, and error
-  replies such as OOM, MOVED, CROSSSLOT, READONLY, NOAUTH or CLUSTERDOWN. Use it to find
-  the root cause, rule out the lookalike cause, and give the operator a fix. Do not use
-  it to create, size or migrate caches.
+  they only describe the symptom. Triggers include application timeouts while the cache
+  dashboard looks healthy, latency talking to the cache, session or cache writes
+  failing, high cache CPU or one hot shard, memory full, keys disappearing or a falling
+  hit rate, connection errors or spikes, authentication failures, stale reads from
+  replicas, a failover, serverless throttling, and error replies such as OOM, MOVED,
+  CROSSSLOT, READONLY, NOAUTH or CLUSTERDOWN. Use it to find the root cause, rule out
+  the lookalike cause, and give the operator a fix. Do not use it to create, size or
+  migrate caches.
 metadata:
   author: PopaCarlaDiana
   version: "1.0.0"
@@ -110,9 +111,11 @@ confirm it with metrics.
 Load [references/diagnosis-table.md](references/diagnosis-table.md) now; it is required
 for every investigation. Anchor on the reported symptom and onset, then use the row for
 that symptom. Rows cover: `OOM` write failures; evictions and hit-rate drops; latency on
-every shard; periodic latency spikes; one hot shard; one shard's memory high; big keys;
-latency with low engine CPU; `maxclients`; connection churn; replication lag; failovers;
-serverless throttling.
+every shard; periodic latency spikes; one hot shard; one shard's memory high or
+climbing; big keys; command timeouts while the cluster looks healthy; retry bursts;
+network limits; climbing connections; `maxclients`; connection churn; replication lag;
+failovers; authentication errors and IAM token expiry; TLS mismatch; serverless
+throttling.
 
 When the operator quotes an engine error reply, or the error metrics show one, load
 [references/error-strings.md](references/error-strings.md) to map it to its cause.
@@ -171,6 +174,9 @@ Always give all five parts, even when the cause looks obvious.
 - Units: request latency and slow log durations are microseconds; `ReplicationLag` is
   seconds; memory percentages are 0-100.
 - Group-level aggregates hide skew. Always break down by node or shard.
+- Burstable nodes (`cache.t3`, `cache.t4g`): `CPUCreditBalance` near 0 matters only when
+  CPU is actually high. Never recommend a bigger node when CPU and latency are normal; a
+  healthy cluster with client timeouts is a client-side cause.
 - Serverless has no OpenTelemetry metrics and no parameter groups, and evicts only keys
   that have a TTL.
 - In cluster mode, a low steady `MOVED` rate is normal. Writes sent to a replica return

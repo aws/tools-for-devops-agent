@@ -42,7 +42,9 @@ use_aws(service_name="cloudwatch", operation_name="get_metric_data", parameters=
 | Replication? | `ReplicationLag` (seconds), `ReplicationBytes`, `SaveInProgress`, `IsMaster`, `MasterLinkHealthStatus` | n/a (managed) |
 | Network limits? | `NetworkBandwidthInAllowanceExceeded`, `NetworkBandwidthOutAllowanceExceeded`, `NetworkPacketsPerSecondAllowanceExceeded`, `NetworkConntrackAllowanceExceeded` | n/a |
 | Underscaled? | `TrafficManagementActive` = 1 | `ThrottledCmds` > 0 |
-| Auth failures? | `AuthenticationFailures`, `CommandAuthorizationFailures`, `KeyAuthorizationFailures` | same |
+| Auth failures? | `AuthenticationFailures`, `CommandAuthorizationFailures`, `KeyAuthorizationFailures`, `IamAuthenticationExpirations`, `IamAuthenticationThrottling` | same |
+| Latency percentiles (timeout comparison)? | `SuccessfulReadRequestLatency`, `SuccessfulWriteRequestLatency` with `p99` and `Maximum` (µs) | same |
+| Burstable nodes? | `CPUCreditBalance`, `CPUCreditUsage` (only relevant when CPU is high) | n/a |
 
 Memcached: `CPUUtilization`, `Evictions`, `CurrConnections`, `GetHits`, `GetMisses`,
 `CurrItems`, `BytesUsedForCacheItems`, `SwapUsage`. No replication or persistence.
