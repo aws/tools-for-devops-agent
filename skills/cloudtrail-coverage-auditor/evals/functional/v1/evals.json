@@ -1,0 +1,244 @@
+{
+  "skill_name": "cloudtrail-coverage-auditor",
+  "evals": [
+    {
+      "id": "cloudtrail-audit-gap-l1-auditors",
+      "task_type": "chat",
+      "prompt": "Audit our CloudTrail configuration in this account. Our auditors need to know exactly what is and is not being captured.",
+      "should_trigger": true,
+      "expected_output": "A full coverage audit read from the account's APIs. It names every trail visible to the account (own trails and the organization trail) with whether each logs management events, which data event types it logs, and whether it is logging now. It states whether management events are captured in every enabled Region and whether global service events are captured, naming the trail that provides each. It lists every S3 bucket, Lambda function and DynamoDB table it inventoried individually, each with whether any trail or event data store records its data events and which one, so the covered bucket is attributed to nebula-data-events-trail and the fixture buckets, functions and table with no own trail selector are each reported as having no data event record from any trail this account owns, with the organization trail named as the only possible remaining source. The organization trail is reported as attempted with its full trail ARN and blocked by the agent's AWS tool (not an AWS permission denial), the affected resources carry an explicit unverified state rather than being called covered or uncovered, and the report gives the full trail ARN and the GetEventSelectors command for the operator to run from the CLI or the management account. Delivery health is stated per trail from the status fields. Log file validation being off on nebula-single-region-trail is a finding with the operator change. The 90 day, management only limit of Event history and how AWS service and service linked role activity is attributed in events are both explained. Nothing is created, modified, started, stopped or deleted, and the answer does not end by offering to make a change.",
+      "assertions": [
+        "Every trail visible to the account is named, and for each the response says whether it logs management events, which data event types it logs (or none), and whether it is currently logging.",
+        "The response states whether management events are captured for all enabled Regions and whether global service events are captured, and names the trail that provides that coverage.",
+        "Every S3 bucket, Lambda function and DynamoDB table the agent inventoried is listed individually with whether any trail or event data store records its data events and, where one does, which trail or store it is; a blanket statement such as 'no data events are configured' without the per resource list does not satisfy this.",
+        "The bucket whose name starts with nebula-audit-covered- is identified as having its data events recorded by nebula-data-events-trail, and the buckets whose names start with nebula-audit-uncovered-a- and nebula-audit-uncovered-b-, the functions nebula-audit-fn-a and nebula-audit-fn-b, and the table nebula-audit-table are each reported as having no data event record from any trail or event data store this account owns, with the organization trail named as the only possible remaining source and its state given as unverified rather than covered or uncovered.",
+        "The organization trail is reported as attempted with its full trail ARN and blocked by the agent's tooling before reaching AWS (not an AWS permission denial), the resources it could cover are given an explicit unverified state distinct from uncovered, and the response gives the full trail ARN and the GetEventSelectors command for the operator to run from the CLI or the management account.",
+        "The response states that CloudTrail Event history keeps only 90 days of management events and does not replace a trail for data events or audit retention.",
+        "The response explains how activity performed by AWS services or service linked roles is attributed in CloudTrail events (for example via userIdentity invokedBy, a sessionIssuer under aws-service-role, or the AwsServiceEvent event type).",
+        "Delivery health is stated per trail from status fields (logging on or off, last delivery time, presence or absence of a delivery error) and the response makes clear the result was read from the account's APIs rather than assumed.",
+        "Log file validation being disabled on nebula-single-region-trail is reported as a finding with the operator change to enable it.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-gap-l2-would-record",
+      "task_type": "chat",
+      "prompt": "If someone deletes an object from one of our S3 buckets or invokes a Lambda function, would CloudTrail record it? Check our trails.",
+      "should_trigger": true,
+      "expected_output": "A direct answer grounded in the trails' event selectors: an object delete is confirmed recorded only for the bucket whose name starts with nebula-audit-covered- (by nebula-data-events-trail); no other bucket and no Lambda function has a data event record from any trail or event data store this account owns. Each bucket and each function is listed with its own answer rather than a blanket 'no data events'. The covering selector is named as the reason: an advanced event selector on nebula-data-events-trail with resources.ARN StartsWith the covered bucket. The organization trail is reported as attempted with its full ARN and blocked by the agent's tooling, the other resources are given an explicit unverified state rather than a flat no, and the response gives the trail ARN and the GetEventSelectors command for the operator. The response states that Event history does not show data events. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The response answers directly that an S3 object delete is confirmed recorded only for the bucket whose name starts with nebula-audit-covered-, and that no other bucket in the account has a data event record from any trail this account owns.",
+        "The response answers directly that no Lambda function invocation in the account is recorded by any trail or event data store this account owns.",
+        "Each bucket and each function the agent found is listed with its own recorded or not recorded answer, rather than a single blanket statement about data events.",
+        "The response names the covering selector as the reason the covered bucket is recorded: an advanced event selector on nebula-data-events-trail whose resources.ARN StartsWith condition matches that bucket.",
+        "The organization trail is reported as attempted with its full trail ARN and blocked by the agent's tooling (not an AWS permission denial), the buckets and functions it could cover are given an explicit unverified state distinct from not recorded, and the response gives the trail ARN and the GetEventSelectors command for the operator to run from the CLI or the management account.",
+        "The response states that CloudTrail Event history does not show data events, so it cannot be used to see object deletes or function invocations.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-gap-l3-single-trail-gaps",
+      "task_type": "chat",
+      "prompt": "Review the trail nebula-single-region-trail and tell me what visibility gaps it has.",
+      "should_trigger": true,
+      "expected_output": "A review of nebula-single-region-trail that states it is a single Region trail scoped to us-east-1, does not include global service events, logs no data events for any resource type, has log file validation disabled, and has Insights disabled. For each gap the response says whether another trail in the account already closes it (management and global service events are provided by the account's multi Region management trail) or whether it remains an account wide gap (data events for buckets, functions and tables). Each remaining gap carries the operator change. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The response states that nebula-single-region-trail is a single Region trail whose scope is us-east-1 only.",
+        "The response states that nebula-single-region-trail does not include global service events.",
+        "The response states that nebula-single-region-trail logs no data events for any resource type (S3 objects, Lambda functions, DynamoDB tables).",
+        "The response states that log file validation is disabled on nebula-single-region-trail.",
+        "The response states that CloudTrail Insights is not enabled on nebula-single-region-trail.",
+        "The response distinguishes gaps that another trail in the account already closes (management events and global service events, provided by the account's multi Region management trail) from gaps that remain account wide (data events for buckets, functions and tables), naming the other trail.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-required-list",
+      "task_type": "chat",
+      "prompt": "Our audit requires data event logging on these resources: the S3 buckets named nebula-audit-covered and nebula-audit-uncovered-a (both suffixed with our account id), Lambda function nebula-audit-fn-a, and DynamoDB table nebula-audit-table in us-east-1. Check which of them CloudTrail actually captures today.",
+      "should_trigger": true,
+      "expected_output": "A required list check. The covered bucket is reported as captured, naming nebula-data-events-trail as the capturing trail. The uncovered bucket, the function and the table are each reported as not captured by any trail or event data store this account owns, with the organization trail as the only possible remaining source in an explicit unverified state. The overall judgement states that the audit requirement is not confirmed met, and that it is not met unless the organization trail covers those three. The exact operator change is given (add the three resource ARNs, or a type wide data event selector for each type, to a logging trail) and is not executed. The organization trail is reported as attempted with its full ARN and blocked by the agent's tooling, with the ARN and the GetEventSelectors command for the operator. If a required resource is not found in the account, it is reported as not found rather than assumed uncovered. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The bucket whose name starts with nebula-audit-covered- is reported as captured, with nebula-data-events-trail named as the trail that records its data events.",
+        "The bucket whose name starts with nebula-audit-uncovered-a-, the function nebula-audit-fn-a and the table nebula-audit-table are each reported as not captured by any trail or event data store this account owns, with their final state given as unverified pending the organization trail rather than as captured.",
+        "The overall judgement states that the audit requirement is not confirmed met: at least one required resource has no data event record from any trail this account owns and the only remaining possible source is unverified.",
+        "The response gives the exact operator change (adding the missing resource ARNs, or a type wide data event selector for S3 objects, Lambda functions and DynamoDB tables, to a logging trail) and states that it was not executed.",
+        "The organization trail is reported as attempted with its full trail ARN and blocked by the agent's tooling (not an AWS permission denial), and the response gives the full trail ARN and the GetEventSelectors command for the operator to run from the CLI or the management account to resolve the unverified resources.",
+        "If any required resource could not be found in the account, the response reports it as not found rather than reporting it as uncovered; if all were found, this assertion passes.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-org-trail-member",
+      "task_type": "chat",
+      "prompt": "We are a member account in an AWS organization. Which part of our CloudTrail coverage comes from the organization trail, and can our auditors rely on CloudTrail Event history instead of a trail?",
+      "should_trigger": true,
+      "expected_output": "The organization trail is identified by name and by the management account id that owns it, and the response says the read was attempted with the full trail ARN and blocked by the agent's AWS tool before reaching AWS, so what it contributes is unverified from inside the agent; the response gives the full trail ARN and the GetEventSelectors command for the operator to run from the CLI or the management account. The account's own multi Region management trail is named as the confirmed source of management event coverage, so no management coverage depends on the organization trail. The Event history answer is no for audit retention: 90 days, management events only, one Region per search, not an organization wide view. The response names what the management account would need to change for the organization trail to contribute, as an operator action. The result is labelled as read from the account's APIs. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The organization trail is identified by name and by the account id that owns it, and the response states that the read was attempted with the full trail ARN and blocked by the agent's tooling before reaching AWS, not by an AWS permission denial.",
+        "The response states that the organization trail's contribution to this account is unverified from inside the agent (its selectors could not be read), gives the full trail ARN and the GetEventSelectors command for the operator to run from the CLI or the management account, and does not describe the trail's selectors as if they had been read.",
+        "The response names the account's own multi Region management trail as the source of management event coverage for this account.",
+        "The response answers that auditors cannot rely on Event history in place of a trail, because it keeps 90 days of management events only, is searched one Region at a time, and is not an organization wide view.",
+        "Any change the management account might make to the organization trail is written as an operator action inside the next steps, not something the agent performs or offers to perform.",
+        "The response makes clear that its findings were read from the account's APIs rather than assumed.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-region-delivery",
+      "task_type": "chat",
+      "prompt": "Check CloudTrail coverage for us-east-1 only. Is anything in that Region not being logged, and are the logs actually being delivered?",
+      "should_trigger": true,
+      "expected_output": "A coverage check limited to us-east-1 that says explicitly that resources in other Regions were excluded from the resource table. The buckets, functions and tables located in us-east-1 are listed with their data event coverage. Delivery is stated per trail from the status fields: whether it is logging, its last delivery time, and whether a delivery error is present (including any trail whose delivery is failing, if one exists). Management event coverage for us-east-1 is confirmed with the name of the trail that provides it. The response makes no claim about Regions it did not sweep. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The response limits its resource coverage to us-east-1 and states explicitly that resources in other Regions were excluded from the check.",
+        "The S3 buckets, Lambda functions and DynamoDB tables located in us-east-1 are listed with whether their data events are recorded and by which trail or store.",
+        "Delivery is stated per trail from status fields: whether the trail is logging, its last delivery time, and whether a delivery error is present; if any trail reports a delivery error, that trail and the error are named.",
+        "Management event coverage for us-east-1 is confirmed and the trail that provides it is named.",
+        "The response does not claim coverage or gaps for Regions it did not sweep.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-negative-cost",
+      "task_type": "chat",
+      "prompt": "why is my CloudTrail bill so high this month? it roughly doubled and I did not add any trails",
+      "should_trigger": false,
+      "expected_output": "A cost investigation: paid additional copies of management events, data event volume, CloudTrail Lake ingestion and retention, and how to attribute the increase. No coverage audit, no per resource coverage table, no check matrix.",
+      "assertions": [
+        "The response addresses CloudTrail cost drivers (paid management event copies, data events, CloudTrail Lake, Insights) and does not produce a coverage audit, a per resource coverage table or a check matrix."
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-negative-who-deleted",
+      "task_type": "chat",
+      "prompt": "Who deleted the S3 bucket nebula-ct-gap-logs last week? Find the CloudTrail event and tell me the principal.",
+      "should_trigger": false,
+      "expected_output": "An event lookup for a DeleteBucket event on the named bucket, reporting the principal found or that no event was found in the searchable window. No trail configuration audit and no list of uncovered resources.",
+      "assertions": [
+        "The response performs or describes a lookup of the DeleteBucket event for the named bucket and does not audit trail configuration or list resources without data event coverage."
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-inline-basic-selector",
+      "task_type": "chat",
+      "prompt": "Here is our trail config, we have no console access right now. Tell me which of these buckets and functions have data events logged. DescribeTrails: one trail named audit-trail, IsMultiRegionTrail true, IsLogging true. GetEventSelectors for audit-trail: EventSelectors [{ReadWriteType: All, IncludeManagementEvents: true, DataResources: [{Type: AWS::S3::Object, Values: [arn:aws:s3]}]}]. Buckets: logs-a, data-b, data-c. Functions: fn-x, fn-y.",
+      "should_trigger": true,
+      "expected_output": "An evaluation from the supplied data alone, with no account calls. All three buckets (logs-a, data-b, data-c) are covered by audit-trail because the basic selector value arn:aws:s3 means every bucket in the account. Both functions (fn-x, fn-y) are not covered because the selector has no AWS::Lambda::Function data resource. Management events are covered for reads and writes. The result is labelled as based on the supplied data rather than a live read, and the 90 day Event history note is present. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The response reports logs-a, data-b and data-c as covered by audit-trail and explains that the selector value arn:aws:s3 matches every S3 bucket in the account.",
+        "The response reports fn-x and fn-y as not covered because the trail has no Lambda function data resource in its event selectors.",
+        "The response states that management events are recorded for both reads and writes by audit-trail (ReadWriteType All with management events included).",
+        "The response makes clear that its conclusions are based on the configuration supplied in the prompt rather than on a live read of the account.",
+        "The response states that CloudTrail Event history keeps 90 days of management events only and does not show data events.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-inline-advanced-eventname",
+      "task_type": "chat",
+      "prompt": "Evaluate this advanced selector for our audit, no account access. GetEventSelectors AdvancedEventSelectors: [{Name: \"s3 writes\", FieldSelectors: [{Field: eventCategory, Equals: [Data]}, {Field: resources.type, Equals: [AWS::S3::Object]}, {Field: eventName, Equals: [PutObject, DeleteObject]}, {Field: resources.ARN, NotStartsWith: [arn:aws:s3:::scratch-bucket/]}]}]. Buckets: scratch-bucket, finance-bucket, hr-bucket.",
+      "should_trigger": true,
+      "expected_output": "finance-bucket and hr-bucket are covered for the two named events only; scratch-bucket is not covered because of the NotStartsWith exclusion. The eventName allowlist misses multipart uploads (CreateMultipartUpload, UploadPart, CompleteMultipartUpload), bulk deletes (DeleteObjects) and all reads, which is stated as a gap for an audit. The fix is described as widening or removing the eventName condition, to be applied by an operator. No claim is made about Lambda functions or DynamoDB tables beyond noting that none were supplied. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The response reports finance-bucket and hr-bucket as covered only for the PutObject and DeleteObject events named in the selector.",
+        "The response reports scratch-bucket as not covered and attributes that to the resources.ARN NotStartsWith exclusion.",
+        "The response states that the eventName allowlist misses multipart upload operations (CreateMultipartUpload, UploadPart, CompleteMultipartUpload), the bulk DeleteObjects operation and all read operations, and presents this as a gap for an audit.",
+        "The response describes the fix as widening or removing the eventName condition and states that an operator applies it; the agent does not apply it.",
+        "The response does not claim coverage or gaps for Lambda functions or DynamoDB tables beyond noting that none were supplied.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-inline-org-trail-name-vs-arn",
+      "task_type": "chat",
+      "prompt": "Member account 123456789012, no account access from here. DescribeTrails shows an organization trail arn:aws:cloudtrail:us-east-1:111122223333:trail/org-trail with IsOrganizationTrail true, HasCustomEventSelectors true, IsMultiRegionTrail true, and our own trail member-trail which logs management events only. Running get-event-selectors --trail-name org-trail returned TrailNotFoundException. Buckets: payroll, archive. Are payroll and archive covered?",
+      "should_trigger": true,
+      "expected_output": "The response points out that the selector read used the trail name, which fails from a member account, and must be retried with the full trail ARN arn:aws:cloudtrail:us-east-1:111122223333:trail/org-trail. Until that succeeds, payroll and archive are reported as possibly covered by the organization trail but unverified, which is explicitly distinguished from not covered anywhere. member-trail covers neither bucket because it logs management events only. The next step names account 111122223333 (the management account or a delegated administrator) as where to confirm. The overall judgement is limited by the unverified state rather than failing the buckets. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The response points out that get-event-selectors was called with the trail name, which fails from a member account, and says the call must be retried with the full trail ARN arn:aws:cloudtrail:us-east-1:111122223333:trail/org-trail.",
+        "Until the ARN call succeeds, payroll and archive are reported as possibly covered by the organization trail but unverified, and the response explicitly distinguishes that from having no data event coverage anywhere.",
+        "The response states that member-trail covers neither payroll nor archive because it logs management events only.",
+        "The next step names account 111122223333 (the management account or a delegated administrator) as where to confirm the organization trail's data event scope.",
+        "The overall judgement or rating is explicitly limited by the unverified state (it is not final) rather than declaring the buckets uncovered.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "cloudtrail-audit-inline-delivery-error-service-events",
+      "task_type": "chat",
+      "prompt": "Audit this status for me, no account access. GetTrailStatus for main-trail: IsLogging true, LatestDeliveryError \"AccessDenied\", LatestDeliveryTime 2026-10-20T03:10:00Z, LatestDigestDeliveryError \"AccessDenied\". GetEventSelectors for main-trail: AdvancedEventSelectors [{Name: Management, FieldSelectors: [{Field: eventCategory, Equals: [Management]}, {Field: eventType, NotEquals: [AwsServiceEvent]}, {Field: userIdentity.arn, NotStartsWith: [arn:aws:sts::444455556666:assumed-role/aws-service-role/]}]}]. Today is 2026-11-02.",
+      "should_trigger": true,
+      "expected_output": "Delivery to the S3 bucket is failing with an access error since 2026-10-20, about 13 days of logs have not been delivered, and the destination bucket policy is where to fix it. IsLogging true does not mean logs are arriving. The selector excludes AWS service originated events and service linked role sessions, so automated system actions will not appear in this trail and auditors must know that. The response explains how such events are normally attributed (userIdentity invokedBy, a sessionIssuer under aws-service-role, eventType AwsServiceEvent). The result is labelled as based on the supplied data. No bucket, function or table coverage is invented. Nothing is changed and no change is offered.",
+      "assertions": [
+        "The response states that log delivery for main-trail is failing with an S3 access error, that the last successful delivery was 2026-10-20, that roughly 13 days of logs have not been delivered as of 2026-11-02, and that the destination bucket policy (or bucket access) is where the fix lies.",
+        "The response states that IsLogging being true does not mean logs are arriving in the bucket.",
+        "The response states that the selector excludes AWS service originated events and service linked role sessions, so actions taken by automated systems will not appear in this trail, and presents this as something auditors must know.",
+        "The response explains how AWS service and service linked role activity is normally attributed in CloudTrail events (userIdentity invokedBy, a sessionIssuer role under aws-service-role, or the AwsServiceEvent event type).",
+        "The response makes clear that its conclusions are based on the status and selector data supplied in the prompt rather than on a live read of the account.",
+        "The response does not invent coverage or gaps for any S3 bucket, Lambda function or DynamoDB table, since none were supplied.",
+        "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action.",
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "pattern": "(?i)(called|ran|executed|applied|performed|invoked)\\s+`?(cloudtrail[: ])?(CreateTrail|UpdateTrail|DeleteTrail|PutEventSelectors|PutInsightSelectors|StartLogging|StopLogging)",
+          "match": "absent"
+        }
+      ]
+    }
+  ]
+}
