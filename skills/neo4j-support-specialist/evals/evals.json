@@ -1,0 +1,135 @@
+{
+ "skill_name": "neo4j-support-specialist",
+ "evals": [
+  {
+   "id": "eks-store-lock-restart-loop",
+   "task_type": "investigation",
+   "prompt": "The Neo4j pod neo4j-core-0 in namespace graph on EKS cluster neo4j-eval keeps restarting after this morning's node drain. Find out why.",
+   "should_trigger": true,
+   "expected_root_cause": "A second Neo4j process holds the store lock: the previous container output (kubectl logs --previous) shows 'Lock file has been locked by another process: /data/databases/store_lock' and the container exits 1. The evidence is tied to the volume setup (a ReadWriteMany or EFS-backed PVC, or an old pod still terminating), and the fix is one Neo4j process per ReadWriteOnce EBS volume.",
+   "assertions": [
+    "Reads the previous container's output, not only the current one",
+    "Quotes 'Lock file has been locked by another process' with its source",
+    "Reports exit code 1 as a startup error",
+    "Checks the PVC access mode or PV driver, or the presence of another pod on the same volume",
+    "Does not recommend deleting the store_lock file while another process may run",
+    "Does not propose or perform any change itself"
+   ]
+  },
+  {
+   "id": "ecs-container-memory-kill",
+   "task_type": "investigation",
+   "prompt": "Our Neo4j ECS service graph-db in cluster neo4j-eval had its task replaced twice in the last hour. Investigate.",
+   "should_trigger": true,
+   "expected_root_cause": "The container was killed for exceeding its memory limit: stopped tasks show exit code 137 with 'OutOfMemoryError: container killed due to memory usage' and nothing in the container output. Heap plus page cache from the NEO4J_server_memory_* environment variables leaves too little of the container memory for native memory.",
+   "assertions": [
+    "Reads stopped tasks and quotes the stop reason or container reason with exit code 137",
+    "States that the container output has no error for this failure mode, rather than treating the clean log as healthy",
+    "Compares configured heap and page cache with the container memory limit using numbers from the task definition",
+    "Recommends sizing with neo4j-admin server memory-recommendation or explicit heap and page cache values that leave headroom",
+    {
+     "text": "Does not attribute the kill to a Java heap OutOfMemoryError",
+     "evaluator": "regex",
+     "pattern": "Java heap space",
+     "match": "absent"
+    }
+   ]
+  },
+  {
+   "id": "eks-heap-oom-container-running",
+   "task_type": "chat",
+   "prompt": "Applications get 'Server at neo4j-core.graph.svc:7687 is no longer available' but the pod neo4j-core-0 in namespace graph on EKS cluster neo4j-eval shows Running and Ready with no restarts. What's going on?",
+   "should_trigger": true,
+   "expected_output": "Finds java.lang.OutOfMemoryError on the container's stderr, explains that Neo4j 2026.x doesn't exit on a heap OOM by default and that the Helm chart's TCP probes keep passing, so the pod looks healthy while the JVM is degraded. Recommends restarting the server, adding -XX:+ExitOnOutOfMemoryError to server.jvm.additional, and finding the memory-heavy queries.",
+   "assertions": [
+    "Quotes the OutOfMemoryError line from the container output",
+    "Explains that the TCP readiness and liveness probes pass while the JVM is degraded",
+    "Checks server.jvm.additional for -XX:+ExitOnOutOfMemoryError",
+    "Recommends adding -XX:+ExitOnOutOfMemoryError"
+   ]
+  },
+  {
+   "id": "eks-volume-full-panic",
+   "task_type": "investigation",
+   "prompt": "Writes to Neo4j in namespace graph on EKS cluster neo4j-eval started failing with 'Failed to apply transaction' errors about 20 minutes ago. Investigate.",
+   "should_trigger": true,
+   "expected_root_cause": "The data volume is full: container output shows 'Panic detected' and the database stopped with 'System is out of disk space for store file'. The container keeps running. Fix is to grow the EBS-backed PVC (if the StorageClass allows expansion) and restart the database, without deleting transaction log files by hand.",
+   "assertions": [
+    "Quotes 'Panic detected' or 'out of disk space' with its source",
+    "Identifies the PVC and EBS volume and its size",
+    "Does not claim a fill percentage unless a filesystem metric was actually read",
+    "Warns against deleting files under /data/transactions or /data/databases by hand",
+    "States that live database state was not read and gives the operator the Cypher or neo4j-admin command to confirm it"
+   ]
+  },
+  {
+   "id": "offline-database-default-logging",
+   "task_type": "chat",
+   "prompt": "Queries to the neo4j database fail with 'Database neo4j is unavailable', but the Neo4j pod neo4j-core-0 in namespace graph on EKS cluster neo4j-eval is Running, Ready and its log ends with 'Started.'. Only default logging is configured. What's wrong?",
+   "should_trigger": true,
+   "expected_output": "Explains that a database can be offline while the server runs, that default logging writes the reason only to debug.log under /logs, which isn't readable, and that the clean container log and passing probes don't show database state. Gives the operator SHOW DATABASES (with statusMessage) and how to copy debug.log out, and lists likely causes such as missing transaction logs after a restore or a full volume.",
+   "assertions": [
+    "States that the container output does not show database state and that debug.log was not readable",
+    "Gives the operator SHOW DATABASES or an equivalent command including the status message",
+    "Explains how to retrieve /logs/debug.log from the pod",
+    "Does not claim a specific root cause as confirmed without evidence"
+   ]
+  },
+  {
+   "id": "cluster-never-forms",
+   "task_type": "investigation",
+   "prompt": "We installed a three-member Neo4j cluster (releases core-1, core-2, core-3) in namespace graph on EKS cluster neo4j-eval and none of the pods become Ready. Investigate.",
+   "should_trigger": true,
+   "expected_root_cause": "The members can't form a cluster: no member's container output reaches 'Started.', the containers keep running and the startup probe keeps failing. The cause is in discovery: members missing or pending, differing neo4j.name values, missing internals Services, or cluster ports 6000 and 7000 blocked between nodes.",
+   "assertions": [
+    "Reads container output from more than one member",
+    "Notes that no member logged 'Started.'",
+    "Checks the members' discovery configuration or internals Services",
+    "Checks network access for ports 6000 and 7000 between members",
+    "Notes that the startup probe allows a long time before restart"
+   ]
+  },
+  {
+   "id": "apoc-version-mismatch",
+   "task_type": "chat",
+   "prompt": "After upgrading the image of our Neo4j ECS service graph-db (cluster neo4j-eval) to neo4j:2026.10.1-enterprise, the task stops immediately. Why?",
+   "should_trigger": true,
+   "expected_output": "Finds 'Component apoc.ApocConfig ... failed to initialize' with a NoSuchMethodError in the container output and exit code 1, explains that an APOC jar built for an older Neo4j version stayed in the plugins folder, and recommends the APOC Core release matching 2026.10.x or NEO4J_PLUGINS='[\"apoc\"]'.",
+   "assertions": [
+    "Quotes the ApocConfig 'failed to initialize' line or the NoSuchMethodError",
+    "Relates the failure to the APOC jar version versus the Neo4j version",
+    "Recommends the matching APOC Core version or NEO4J_PLUGINS"
+   ]
+  },
+  {
+   "id": "unknown-setting-after-plugin-removal",
+   "task_type": "chat",
+   "prompt": "We removed the Bloom plugin from the Neo4j ECS service graph-db (cluster neo4j-eval) and now its tasks exit right after they start.",
+   "should_trigger": true,
+   "expected_output": "Finds 'Unrecognized setting. No declared setting with name: dbms.bloom...' in the stopped task's container output with exit code 1, explains that server.config.strict_validation.enabled defaults to true in the Docker image so a leftover plugin setting stops startup, and recommends removing the NEO4J_dbms_bloom_* environment variable from the task definition and validating with neo4j-admin server validate-config.",
+   "assertions": [
+    "Quotes the 'Unrecognized setting' line naming the setting",
+    "Mentions server.config.strict_validation.enabled",
+    "Points to the task definition environment variable that sets it"
+   ]
+  },
+  {
+   "id": "negative-aura-password",
+   "task_type": "chat",
+   "prompt": "I lost the password for my Neo4j AuraDB Free instance. How do I get back in?",
+   "should_trigger": false
+  },
+  {
+   "id": "negative-rds-connections",
+   "task_type": "chat",
+   "prompt": "Our RDS PostgreSQL instance is running out of connections during peak hours. What should we check?",
+   "should_trigger": false
+  },
+  {
+   "id": "negative-cypher-howto",
+   "task_type": "chat",
+   "prompt": "How do I write a Cypher query that finds the shortest path between two people?",
+   "should_trigger": false
+  }
+ ]
+}
