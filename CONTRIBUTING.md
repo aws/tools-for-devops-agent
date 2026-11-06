@@ -485,6 +485,7 @@ MCP server" names three types at once, so they cannot decide it.
 | Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
 | Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
 | Anything under `custom-agents/` | The same, with the Custom agents section |
+| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
 
 So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
 a CHANGELOG or an SME sign-off, because none of it means anything for that change.
@@ -513,11 +514,13 @@ is the part being judged. And **it has to be on the same line as the checkbox**:
 the check reads line by line, so a reason wrapped onto the next line leaves the
 box looking plainly unchecked. Keep the item on one line however long it gets.
 
-Two items can never be waived this way:
+Three items can never be waived this way:
 
 - **no internal-only or proprietary content**, because this repository is public
   and the claim is about every file in the PR
 - the **licence confirmation**, which is a statement only you can make
+- the **partner terms acceptance** on a connector PR, which only the partner can
+  give (see [Partner Connectors](#partner-connectors))
 
 Use the escape rather than either of the alternatives. Ticking something untrue is
 caught at review and sends the PR back. Deleting the line is worse: the check
@@ -562,6 +565,39 @@ leaves the label and comment as they were: nothing was concluded about your PR.
 The check runs on the PR being opened, edited, pushed to, reopened, marked ready
 for review, labelled, and unlabelled. Ticking a box edits the description, so the check
 re-runs and clears on its own; there is nothing to ask a maintainer to re-trigger.
+
+## Partner Connectors
+
+A connector lists a partner's MCP server in AWS DevOps Agent. Before its
+connector merges, the partner accepts the
+[AWS DevOps Agent Partner Connector Terms and Conditions](connectors/TERMS.md) by
+ticking the box in the pull request template's Connectors section, and names a
+corporate work email address in `contact_email` in its `connector.yaml`, where AWS
+can reach it about the connector, including security notices. Every pull request
+that changes a `connectors/<name>/` directory carries the box, and the
+[checklist check](#the-pull-request-checklist) fails if the box is unticked or
+`contact_email` is missing.
+
+The partner opens its own pull request, from the account of someone who can
+accept the terms for the company. If an AWS Solutions Architect opens one for a
+partner, as an exception, they link the partner's written authorization in the
+pull request description, and a maintainer approves the exception before review.
+A partner whose connector merged before the terms existed accepts them, and adds
+`contact_email`, in a new pull request.
+
+The box names the version of the terms, the date at the end of `TERMS.md`, so
+each pull request records the version its partner accepted. One acceptance covers
+every later contribution from that partner, connector and skills alike, and a
+pull request that removes a connector needs no `contact_email`. A connector is a
+definition, not a tool, so no other checklist item applies unless the pull request
+also changes a skill.
+
+**Revising the terms (maintainers).** AWS Legal approves the new text and updates
+its record of the terms. One pull request then updates `TERMS.md`, its
+`Date last updated`, and the version named in the pull request template's terms
+box; a test fails if the two dates differ. Partners already listed don't accept
+again: under Section 6(b) of the terms, continuing to list a connector after a
+revision is posted accepts it.
 
 ## Reporting Bugs/Feature Requests
 

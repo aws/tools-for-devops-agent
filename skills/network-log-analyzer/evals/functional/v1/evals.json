@@ -1,0 +1,196 @@
+{
+  "skill_name": "network-log-analyzer",
+  "evals": [
+    {
+      "id": "nacl-response-reject",
+      "task_type": "chat",
+      "prompt": "Flow logs on eni-0abc123def456789 show an ACCEPT for ICMP from 203.0.113.12 to 172.31.16.139 and a REJECT for ICMP from 172.31.16.139 back to 203.0.113.12. Is this a security group or a network ACL problem?",
+      "should_trigger": true,
+      "expected_output": "Network ACL: security groups are stateful so the reply to allowed inbound traffic is allowed, network ACLs are stateless so the outbound reply was evaluated and denied. Recommends a read-only describe-network-acls check and does not apply changes.",
+      "assertions": [
+        "The response identifies the network ACL, not the security group, as the cause",
+        "The response explains that security groups are stateful and network ACLs are stateless",
+        "The response does not run or recommend running a mutating command now; any mutating command shown (for example for rollback) is explicitly labelled as not to run",
+        {
+          "text": "A read-only network ACL check is given",
+          "evaluator": "regex",
+          "pattern": "describe-network-acls"
+        }
+      ]
+    },
+    {
+      "id": "lone-reject-ambiguity",
+      "task_type": "chat",
+      "prompt": "Flow logs show a single REJECT for TCP 10.0.1.5:51000 -> 10.0.2.9:3389 and nothing in the reverse direction. Which rule blocked it?",
+      "should_trigger": true,
+      "expected_output": "Flow logs alone cannot distinguish security group from network ACL for a lone REJECT of initial traffic; check the security group inbound rules first, then the network ACL.",
+      "assertions": [
+        "The response states flow logs alone cannot tell whether the security group or the network ACL rejected the traffic",
+        "The response does not claim certainty about which rule blocked it",
+        {
+          "text": "A read-only security group check is given",
+          "evaluator": "regex",
+          "pattern": "describe-security-groups"
+        }
+      ]
+    },
+    {
+      "id": "dns-not-in-flow-logs",
+      "task_type": "chat",
+      "prompt": "I searched our VPC flow logs for DNS queries from i-0abc123def456789 to the VPC resolver and found nothing. Does that mean the queries are failing?",
+      "should_trigger": true,
+      "expected_output": "Flow logs do not record traffic to the Amazon DNS server, so absence proves nothing; recommends a packet capture or Route 53 Resolver query logs and the linklocal_allowance_exceeded counter.",
+      "assertions": [
+        "The response states that flow logs do not capture traffic to the Amazon-provided DNS server",
+        "The response does not conclude the queries failed based on missing flow log records",
+        {
+          "text": "An alternative evidence source is named",
+          "evaluator": "regex",
+          "pattern": "(?i)linklocal_allowance_exceeded|resolver query log|packet capture"
+        }
+      ]
+    },
+    {
+      "id": "pcap-needs-text-export",
+      "task_type": "chat",
+      "prompt": "I have a 40 MB pcapng from the client where connections to 10.0.2.20:443 hang. Can you analyze it?",
+      "should_trigger": true,
+      "expected_output": "Explains that binary pcap/pcapng cannot be read or attached and asks for tshark text exports (protocol hierarchy, TCP conversations, expert info, a header-only problem-packet CSV, handshakes) plus the capture point, without asking for payloads.",
+      "assertions": [
+        "The response asks for the capture point, meaning where the capture was taken",
+        "The response asks for header fields only and does not ask the user to share packet payloads or followed streams",
+        {
+          "text": "tshark statistics are requested",
+          "evaluator": "regex",
+          "pattern": "-z (expert|conv|io,phs)"
+        }
+      ]
+    },
+    {
+      "id": "acked-unseen-is-capture-gap",
+      "task_type": "chat",
+      "prompt": "tshark -z expert on a capture from a busy EC2 instance shows hundreds of 'ACKed segment that wasn't captured' and 'Previous segment(s) not captured' warnings but very few retransmissions. Is the network dropping packets?",
+      "should_trigger": true,
+      "expected_output": "ACKed unseen means the receiver acknowledged data the capture never saw, so the capture missed packets; with few retransmissions this is not evidence of network loss; both are common at capture start; suggests a larger capture buffer or tighter filter.",
+      "assertions": [
+        "The response explains these warnings indicate the capture missed packets rather than network loss",
+        "The response suggests improving the capture, such as a larger buffer, a tighter filter, or a different capture point",
+        "The response does not conclude that the network is dropping packets"
+      ]
+    },
+    {
+      "id": "tso-not-mtu",
+      "task_type": "chat",
+      "prompt": "A tcpdump taken on my EC2 instance shows 20,000-byte TCP segments even though the instance MTU is 9001. Is the MTU misconfigured?",
+      "should_trigger": true,
+      "expected_output": "Those are TSO/GRO offload super-packets seen on the host, not wire packets; Wireshark flags them as tcp.options.mss.exceeded; do not diagnose MTU from packet sizes in a host capture.",
+      "assertions": [
+        "The response states packet sizes in a host capture are not the sizes on the wire",
+        "The response does not conclude that the MTU is misconfigured",
+        {
+          "text": "Offload is named as the cause",
+          "evaluator": "regex",
+          "pattern": "(?i)TSO|GRO|offload"
+        }
+      ]
+    },
+    {
+      "id": "rst-not-security-group",
+      "task_type": "chat",
+      "prompt": "Connections to 10.0.4.40:8080 immediately fail with 'connection refused' and tshark shows RST,ACK coming back from 10.0.4.40. Should I open the security group?",
+      "should_trigger": true,
+      "expected_output": "No: an RST means the host is reachable and nothing is listening or a host firewall refused; security groups drop silently and do not send RST. Check the listener and bind address.",
+      "assertions": [
+        "The response explains that a security group does not send RST and drops traffic silently",
+        "The response points to the listening service, bind address, or host firewall",
+        "The response does not recommend changing the security group as the fix"
+      ]
+    },
+    {
+      "id": "nat-original-source",
+      "task_type": "chat",
+      "prompt": "Flow logs on my NAT gateway ENI show srcaddr 10.0.0.9 for all internet traffic. How do I find which instance is sending it?",
+      "should_trigger": true,
+      "expected_output": "On a zonal NAT gateway ENI, the original instance appears as srcaddr on the instance-to-NAT leg (dstaddr = the NAT private IP 10.0.0.9, pkt-dstaddr = the internet destination); this is visible even in the default format. On the NAT-to-internet leg both srcaddr and pkt-srcaddr are the NAT IP, so pkt-srcaddr there does not identify the instance. The format of an existing flow log cannot be changed; adding pkt-dstaddr needs a new flow log.",
+      "assertions": [
+        "The response identifies the instance as srcaddr on the instance-to-NAT leg (records whose dstaddr is the NAT private IP)",
+        "The response does not claim that pkt-srcaddr on the NAT-to-internet leg reveals the instance",
+        "The response notes the format of an existing flow log cannot be changed and a new flow log is required to add fields",
+        {
+          "text": "The NAT private IP is used as the destination filter",
+          "evaluator": "regex",
+          "pattern": "(?i)dst_?addr\\s*=+\\s*\"?10\\.0\\.0\\.9"
+        }
+      ]
+    },
+    {
+      "id": "vpn-large-transfers-hang",
+      "task_type": "investigation",
+      "prompt": "Since this morning, large file downloads from our on-premises file server to EC2 instance i-0abc123def456789 over the Site-to-Site VPN hang, while small API calls over the same tunnel still work. A tshark capture on the instance shows segments over 1500 bytes being retransmitted and no ICMP messages arriving. Work out why.",
+      "expected_root_cause": "A path MTU black hole: AWS Site-to-Site VPN supports a maximum MTU of 1446 bytes (MSS 1406, lower depending on the encryption algorithm and NAT-T) and does not support Path MTU Discovery, so large segments with DF set are dropped and no ICMP reaches the sender. The cause is labelled as inferred from the documented limits plus the observed large-segment retransmissions; the response names the measurement that would confirm it (for example the MSS advertised in the handshake) and leads the fix with MSS clamping on the customer gateway rather than relying on ICMP.",
+      "should_trigger": true,
+      "assertions": [
+        "Each candidate cause carries an evidence label such as Observed, Inferred, or Heuristic rather than being asserted as fact",
+        "The response separates what the capture observed from what is inferred from documented AWS behavior",
+        "The fix is described as a recommendation, such as MSS clamping, allowing ICMP fragmentation-needed, or lowering the MTU for that path, and is not applied",
+        {
+          "text": "The VPN-specific MTU/MSS limit or MSS clamping is cited",
+          "evaluator": "regex",
+          "pattern": "(?i)1446|1406|MSS clamp"
+        },
+        {
+          "text": "Path MTU discovery is named",
+          "evaluator": "regex",
+          "pattern": "(?i)fragmentation.needed|PMTUD|path MTU"
+        },
+        "The response does not rely on Path MTU Discovery or ICMP fragmentation-needed as the primary fix for the VPN path"
+      ]
+    },
+    {
+      "id": "nlb-idle-resets",
+      "task_type": "investigation",
+      "prompt": "Database connections from our application tier to a database behind a Network Load Balancer started getting reset. The resets happen on connections that sat idle for about six minutes; busy connections are fine. Find the cause.",
+      "expected_root_cause": "The documented 350-second TCP idle timeout for flows through a Network Load Balancer closes idle connections; the fix is TCP keepalives or connection-pool idle settings below 350 seconds. Labelled as inferred from the documented timeout and the observed idle pattern, with the capture or metric that would confirm it.",
+      "should_trigger": true,
+      "assertions": [
+        "The response recommends TCP keepalives or connection-pool idle settings shorter than the timeout",
+        "The response states what evidence would confirm the cause, such as the idle gap before the RST in a capture",
+        {
+          "text": "The 350-second timeout is cited",
+          "evaluator": "regex",
+          "pattern": "350"
+        }
+      ]
+    },
+    {
+      "id": "negative-routing-preference",
+      "task_type": "chat",
+      "prompt": "How do I make my Transit Gateway prefer one Direct Connect location over another?",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-s3-bucket",
+      "task_type": "chat",
+      "prompt": "Create an S3 bucket with versioning enabled using the AWS CLI.",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-cost-trend",
+      "task_type": "chat",
+      "prompt": "Summarize this quarter's EC2 cost trend.",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-python-script",
+      "task_type": "chat",
+      "prompt": "Write a Python script that sorts a list of numbers.",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-private-hosted-zone-nxdomain",
+      "task_type": "chat",
+      "prompt": "An EC2 instance in our VPC gets NXDOMAIN when it resolves db.internal.example.com. The record exists in a Route 53 private hosted zone for internal.example.com. Why isn't the name resolving?",
+      "should_trigger": false
+    }
+  ]
+}

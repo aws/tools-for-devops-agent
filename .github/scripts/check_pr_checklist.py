@@ -19,6 +19,12 @@ a tool PR an item that genuinely does not apply can be marked ``n/a:`` with a
 reason on its own line, and the reviewer judges the reason; the universal items
 cannot be waived that way.
 
+A PR that changes a connector directory, ``connectors/<name>/``, is also held to
+the Connectors section, whose partner terms acceptance can never be marked
+``n/a``, and each such connector's ``connector.yaml`` must set ``contact_email``.
+A connector is a definition, not a tool, so it adds no other tool items; the
+shared files directly in ``connectors/`` and ``connectors/schema/`` call for nothing.
+
 Exit status: 0 pass, 1 fail, 2 the check could not run. An error says nothing
 about the PR, and the labeler leaves the PR's label and comment alone on it.
 """
@@ -45,8 +51,15 @@ ENFORCE_LABEL = "enforce-checklist"
 ALWAYS_SECTIONS = ("Required before review", "License confirmation")
 TOOL_SECTION = "Security and safety"
 TOOL_DIRS = {"skills/": "Skills", "mcp/": "MCP servers", "custom-agents/": "Custom agents"}
-# connectors/ is not a tool directory here, deliberately: connector submissions are
-# not open yet, and the template has no connector section to enforce.
+# Every item in this section is enforced and none can be marked n/a: accepting the
+# partner terms is a statement only the partner can make.
+CONNECTOR_SECTION = "Connectors"
+CONNECTOR_DIR = re.compile(r"^connectors/(?!schema/)([^/]+)/")
+# contact_email is optional in schema v1 only because connectors merged before it
+# have none; every connector a PR changes must set it. Its format is the schema's
+# job, so this looks only for the top-level key with a plain or quoted value, not a
+# block scalar (> or |), whose trailing newline the schema's pattern would refuse.
+CONTACT_EMAIL = re.compile(r"""^contact_email:[ \t]*(?![>|]|""|'')[^\s#]""", re.M)
 
 # Items every PR is held to, tool or not, and that can never be marked n/a: the
 # repository is public, and the licence is a statement only the author can make.
@@ -82,6 +95,28 @@ def find_section(found: dict[str, list[str]], prefix: str) -> list[str] | None:
     return None
 
 
+def changes_connector(paths: list[str]) -> bool:
+    return any(CONNECTOR_DIR.match(p) for p in paths)
+
+
+def missing_contact(paths: list[str], read) -> list[str]:
+    """Unmet entries for each changed connector whose connector.yaml sets no
+    contact_email. ``read`` returns a file's text at the PR head, or None when the
+    file is not there. A connector directory without connector.yaml, which every
+    connector must have, is a connector the PR removes, so it needs no contact."""
+    names = sorted({m.group(1) for m in map(CONNECTOR_DIR.match, paths) if m})
+    unmet = []
+    for name in names:
+        path = f"connectors/{name}/connector.yaml"
+        text = read(path)
+        if text is None:
+            continue
+        if not CONTACT_EMAIL.search(text):
+            unmet.append(f"{CONNECTOR_SECTION} → {path} sets no contact_email, the corporate work email "
+                         "address where AWS can reach the company about this connector")
+    return unmet
+
+
 def required_sections(paths: list[str]) -> tuple[list[str], bool]:
     """The sections the changed files call for, and whether this is a tool PR."""
     tool_dirs = [d for d in TOOL_DIRS if any(p.startswith(d) for p in paths)]
@@ -89,6 +124,8 @@ def required_sections(paths: list[str]) -> tuple[list[str], bool]:
     if tool_dirs:
         names.append(TOOL_SECTION)
         names += [TOOL_DIRS[d] for d in tool_dirs]
+    if changes_connector(paths):
+        names.append(CONNECTOR_SECTION)
     return names, bool(tool_dirs)
 
 
@@ -110,7 +147,7 @@ def evaluate(body: str, paths: list[str]) -> tuple[list[str], list[str], bool]:
             item = UNCHECKED.sub("", line).replace("**", "").strip()
             if not item:
                 continue
-            universal = any(p.search(item) for p in UNIVERSAL_ITEMS)
+            universal = name == CONNECTOR_SECTION or any(p.search(item) for p in UNIVERSAL_ITEMS)
             if not is_tool and not universal:
                 continue
             if NA_WITH_REASON.search(item):
@@ -141,13 +178,16 @@ def decide(pr: dict, unmet: list[str]) -> tuple[str, str]:
     return "fail", "incomplete"
 
 
-def summary(unmet: list[str], waived: list[str], is_tool: bool, reason: str) -> str:
+def summary(unmet: list[str], waived: list[str], is_tool: bool, reason: str, is_connector: bool) -> str:
     lines = ["## PR checklist", ""]
     lines.append(
         "This PR touches a tool directory, so every required item applies."
         if is_tool
         else "This PR touches no tool directory, so only the items that apply to every contribution are enforced."
     )
+    if is_connector:
+        lines.append("It changes a connector, so the partner terms in the Connectors section must be accepted, "
+                     "and each changed connector's connector.yaml must set contact_email.")
     if waived:
         lines += ["", "Marked n/a, with a reason:", ""] + [f"- {w}" for w in waived]
     heading = {
@@ -161,6 +201,21 @@ def summary(unmet: list[str], waived: list[str], is_tool: bool, reason: str) -> 
     if unmet:
         lines += [""] + [f"- {u}" for u in unmet]
     return "\n".join(lines) + "\n"
+
+
+def read_at(head_ref: str):
+    """Reads a file at ``head_ref``: its text, or None when the path is not in that
+    tree. A ref git cannot read raises, so main() reports an error rather than
+    blaming the PR for a missing file."""
+    def read(path: str) -> str | None:
+        listed = subprocess.run(["git", "ls-tree", head_ref, "--", path], capture_output=True, text=True)
+        if listed.returncode != 0:
+            raise RuntimeError(f"git ls-tree {head_ref} failed: {listed.stderr.strip()}")
+        if not listed.stdout.strip():
+            return None
+        shown = subprocess.run(["git", "show", f"{head_ref}:{path}"], check=True, capture_output=True)
+        return shown.stdout.decode("utf-8", "replace")
+    return read
 
 
 def changed_paths(base_ref: str, head_ref: str) -> list[str]:
@@ -184,9 +239,11 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         pr = json.loads(Path(args.event).read_text(encoding="utf-8"))["pull_request"]
-        unmet, waived, is_tool = evaluate(pr.get("body") or "", changed_paths(args.base_ref, args.head_ref))
+        paths = changed_paths(args.base_ref, args.head_ref)
+        unmet, waived, is_tool = evaluate(pr.get("body") or "", paths)
+        unmet += missing_contact(paths, read_at(args.head_ref))
         outcome, reason = decide(pr, unmet)
-        report = summary(unmet, waived, is_tool, reason)
+        report = summary(unmet, waived, is_tool, reason, changes_connector(paths))
         step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if step_summary:
             with open(step_summary, "a", encoding="utf-8") as f:
