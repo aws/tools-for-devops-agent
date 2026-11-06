@@ -118,3 +118,22 @@
   `lakeformation:GetDataAccess` rule.
 - Grounded Lake Formation permission coverage on the AWS Lake Formation permissions reference
   (per-resource permission taxonomy, DESCRIBE vs SELECT, DATA_LOCATION_ACCESS, hybrid access mode).
+
+## [Unreleased] - 2026-11-05
+### Fixed
+- Contribution-guide audit found two internal-data leaks and a missing gitignore,
+  all now resolved:
+  - The branch root carried the local test-mirror's own `README.md`, a minimal
+    `.gitignore`, and a `validate.sh` with no upstream counterpart - restored the
+    real `aws/tools-for-devops-agent` root `README.md`/`.gitignore` verbatim and
+    dropped `validate.sh`.
+  - `evals/functional/v2/_metadata.json` and 27 per-run `outputs/classified_output.json`
+    files leaked the real sandbox AWS account id - as CloudFormation stack ARNs in
+    the former, and in 4 of the 27 transcripts, inside the agent's own streamed
+    response text (split across token chunks, so it did not show up on a plain
+    full-string search). Root cause: the fork was missing `skills/.gitignore`, which
+    upstream uses to exclude exactly these files - only `functional-tests-results.json`
+    and `outputs/journal_records.json` are meant to be committed per scenario run.
+    Added the missing `skills/.gitignore` (verbatim from upstream) and removed the
+    55 files it covers. Confirmed zero remaining matches for the account id, including
+    split-token forms, across every tracked file in the repo.
