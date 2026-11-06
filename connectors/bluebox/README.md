@@ -54,7 +54,7 @@ All seven tools only read your Bluebox data. Enable all of them. `ask` is annota
 
 ## Token expiry and rotation
 
-Access tokens expire after 30 days. Before a token expires, create a new one, update the connection's credential in AWS DevOps Agent, then revoke the old token. Bluebox keeps several tokens active at once, so the connection keeps working while you switch. If tool calls start failing with HTTP 401, the token has expired or was revoked: create a new one and update the connection.
+Access tokens expire after 30 days. Before a token expires, create a new one and connect again with it: remove Bluebox from each Agent Space, deregister it under **Capability Providers**, then add it again with the new token. Removing it also deletes the `bluebox-observability` skill, so install it again. Then revoke the old token. If tool calls start failing with HTTP 401, the token has expired or was revoked: create a new one and connect again the same way.
 
 ## More information
 
