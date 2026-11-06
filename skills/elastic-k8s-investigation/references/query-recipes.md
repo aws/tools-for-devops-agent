@@ -1,7 +1,7 @@
 # Query recipes
 
 Ready-made queries for the common investigation paths. Every ES|QL query here runs via `POST /_query`; the alert lookup
-runs via `GET kbn:/api/alerting/rules/_find`. See the `## Operations` table in `SKILL.md` for the CLI bindings.
+runs via `GET kbn:/api/alerting/rules/_find`.
 
 ## Most-restarting pods in a namespace
 

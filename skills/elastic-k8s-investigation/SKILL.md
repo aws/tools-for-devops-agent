@@ -34,7 +34,7 @@ root cause across the workload, node, and control-plane layers.
 This skill reads Elastic through the Elastic Agent Builder MCP tools connected to AWS DevOps Agent: run ES|QL with
 `platform.core.execute_esql`, list indices and data streams with `platform.core.list_indices`, and read field mappings
 with `platform.core.get_index_mapping`. Operations below are written in HTTP-shorthand form (e.g., `POST /_query`); the
-[Operations](#operations) table maps each one to its tool. If no connected tool covers an operation, say what you would
+[Operations](#operations) table lists every operation this skill uses. If no connected tool covers an operation, say what you would
 check and why instead of calling the HTTP API another way.
 
 <!-- end-partial: preamble -->
@@ -50,8 +50,8 @@ query, index, and field that would settle the question — and which Elastic too
 the check is useful without a cluster; one that only asks for setup is not.
 
 Every ES|QL query in this skill and in [references/query-recipes.md](references/query-recipes.md) runs via
-`platform.core.execute_esql`. Alert state is read with the `kibana-alerting-rules` skill. Field-presence checks use
-`platform.core.get_index_mapping`. The [Operations](#operations) table maps each to its MCP tool.
+`platform.core.execute_esql`. Field-presence checks use `platform.core.get_index_mapping`. The
+[Operations](#operations) table lists every operation this skill uses.
 
 ## Scope
 

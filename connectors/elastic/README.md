@@ -1,6 +1,6 @@
 # Set up Elastic for AWS DevOps Agent
 
-Connect AWS DevOps Agent to your Elastic data through the **Elastic Agent Builder MCP server**. Before connecting, select or deploy Elastic, copy your MCP URL, and create an API key. To start investigations automatically from Elastic alerts, also complete step 4.
+Connect AWS DevOps Agent to your Elastic data through the **Elastic Agent Builder MCP server**. Before connecting, select or deploy Elastic, find your project alias and region, and create an API key. To start investigations automatically from Elastic alerts, also complete sections 4 and 5.
 
 ## 1. Deploy or select your Elastic environment
 
@@ -38,7 +38,7 @@ You can also find the URL in Agent Builder: open **Agents / Agent Builder** → 
 ### Cloud Hosted deployments
 Your connection alias is the first part of your Kibana URL. For example, in `https://my-deployment-abc123.kb.us-east-1.aws.elastic.cloud`, the connection alias is `my-deployment-abc123` and the region is `us-east-1`.
 
-Use the **Kibana endpoint**, not the Elasticsearch endpoint or Elastic Cloud sign-in URL. Preserve any configured base path. For a custom space, use its URL identifier, which may differ from its display name.
+Use the **Kibana** URL, not the Elasticsearch endpoint or the Elastic Cloud sign-in URL.
 
 The connection uses your deployment's or project's default Kibana space.
 
@@ -77,7 +77,7 @@ Create the key inside the deployment or project you are connecting.
 5. Replace the index patterns with the data the agent should investigate. For a custom space, replace `space:default` with `space:<space-id>`.
 6. Create the key and securely copy its **encoded** value. It is shown only once.
 
-This descriptor supports the basic index-query tools listed in step 4. Tools that use Elasticsearch inference endpoints additionally need `monitor_inference`; tools using Kibana connectors need `feature_actions.read`. Add privileges only for the tools you enable.
+This descriptor supports the basic index-query tools listed below. Tools that use Elasticsearch inference endpoints additionally need `monitor_inference`; tools using Kibana connectors need `feature_actions.read`. Add privileges only for the tools you enable.
 
 Elastic expects this HTTP header:
 
@@ -231,7 +231,6 @@ Add an HTTP action to the workflow. Use the configured Webhook connector ID inst
       title: "{{ steps.fetch_case.output.case.title }}"
       description: "{{ steps.fetch_case.output.case.description }}"
       timestamp: "{{ steps.fetch_case.output.case.created_at }}"
-      service: "AWS"
       data:
         caseStatus: "{{ steps.fetch_case.output.case.status }}"
         caseSeverity: "{{ steps.fetch_case.output.case.severity }}"
@@ -282,7 +281,6 @@ steps:
         title: "{{ steps.fetch_case.output.case.title }}"
         description: "{{ steps.fetch_case.output.case.description }}"
         timestamp: "{{ steps.fetch_case.output.case.created_at }}"
-        service: "AWS"
         data:
           caseStatus: "{{ steps.fetch_case.output.case.status }}"
           caseSeverity: "{{ steps.fetch_case.output.case.severity }}"

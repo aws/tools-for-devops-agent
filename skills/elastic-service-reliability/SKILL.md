@@ -34,8 +34,7 @@ Reliability instruments are not interchangeable. An SLO measures a user-visible 
 threshold rule fires on a raw condition; an anomaly job finds deviations where no fixed threshold exists; a synthetics
 monitor is the only one of the four that can see a service that has stopped emitting telemetry entirely. Choosing wrong
 produces alerts that are technically correct and operationally useless. For diagnosing a service that is already
-degraded, and for the incident workflow itself, use the **elastic-sre-triage** skill; for general rule lifecycle
-mechanics use the **kibana-alerting-rules** skill.
+degraded, and for the incident workflow itself, use the **elastic-sre-triage** skill.
 
 <!-- begin-partial: preamble -->
 
@@ -44,7 +43,7 @@ mechanics use the **kibana-alerting-rules** skill.
 This skill reads Elastic through the Elastic Agent Builder MCP tools connected to AWS DevOps Agent: run ES|QL with
 `platform.core.execute_esql`, list indices and data streams with `platform.core.list_indices`, and read field mappings
 with `platform.core.get_index_mapping`. Operations below are written in HTTP-shorthand form (e.g., `POST /_query`); the
-[Operations](#operations) table maps each one to its tool. If no connected tool covers an operation, say what you would
+[Operations](#operations) table lists every operation this skill uses. If no connected tool covers an operation, say what you would
 check and why instead of calling the HTTP API another way.
 
 <!-- end-partial: preamble -->
@@ -56,7 +55,7 @@ evidence in their question (metric values, counts, status reasons, log lines, al
 from that evidence and deliver the conclusion.
 
 When you genuinely do need data the user has not provided, still say what you would check and how — name the specific
-query, index, and field that would settle the question — and then ask for CLI setup. An answer that names the check is
+query, index, and field that would settle the question — and then ask for cluster access. An answer that names the check is
 useful without a cluster; one that only asks for setup is not.
 
 SLO and alerting operations run against Kibana and use the `kbn:` prefix (for example,

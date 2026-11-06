@@ -40,7 +40,7 @@ itself is the harness's job.
 This skill reads Elastic through the Elastic Agent Builder MCP tools connected to AWS DevOps Agent: run ES|QL with
 `platform.core.execute_esql`, list indices and data streams with `platform.core.list_indices`, and read field mappings
 with `platform.core.get_index_mapping`. Operations below are written in HTTP-shorthand form (e.g., `POST /_query`); the
-[Operations](#operations) table maps each one to its tool. If no connected tool covers an operation, say what you would
+[Operations](#operations) table lists every operation this skill uses. If no connected tool covers an operation, say what you would
 check and why instead of calling the HTTP API another way.
 
 <!-- end-partial: preamble -->
@@ -58,8 +58,7 @@ useful without a cluster; one that only asks for setup is not.
 Every ES|QL query in this skill and in the provider references runs via `POST /_query`. Discovering which data streams
 and fields a deployment actually has uses `GET /_resolve/index/<pattern>` and `GET /_field_caps` (the way to learn
 whether a sparse counter has ever been mapped — see Guidelines). Active alerts are read with
-`GET kbn:/api/alerting/rules/_find`; shipped SLOs with `GET kbn:/api/observability/slos`. The [Operations](#operations)
-table maps each to its `elastic` CLI equivalent. Express predicates natively in ES|QL; do not use Query DSL or the `KQL`
+`GET kbn:/api/alerting/rules/_find`; shipped SLOs with `GET kbn:/api/observability/slos`. Express predicates natively in ES|QL; do not use Query DSL or the `KQL`
 function.
 
 ## Router — read the provider reference first
