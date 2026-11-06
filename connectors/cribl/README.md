@@ -31,7 +31,7 @@ You can confirm both parts under **Settings > Global > Information**.
 
 ### 2b. Cribl On-Prem
 
-If using Cribl On-Prem, take note of your Cribl On-Prem Leader hostname and API port and paste it in the AWS DevOps Agent console.
+If using Cribl On-Prem, take note of your Leader's hostname and API port. The AWS DevOps Agent console asks for each one in its own field. If the Leader isn't reachable from the internet on port 443, create a [private connection](https://docs.aws.amazon.com/devopsagent/latest/userguide/configuring-integrations-and-knowledge-connecting-to-privately-hosted-tools.html) to it, with the API port in its port ranges, and select it when you connect.
 
 ## 3. Get your Bearer token
 Use the applicable instructions depending if you're using Cribl.Cloud (3a) or Cribl On-prem (3b):
