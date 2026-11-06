@@ -32,6 +32,14 @@ Metadata:
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
+          - EnableMediaConnectInvestigate
+          - EnableMediaLiveInvestigate
+          - EnableMediaPackageInvestigate
+          - EnableMediaTailorInvestigate
+          - EnableMediaCloudFrontInvestigate
+          - EnableMediaCostOptimize
+          - EnableMediaSpekeDrmReference
+          - EnableMediaSpecReference
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
       - Label:
@@ -42,6 +50,7 @@ Metadata:
           default: Optional Add-On Permissions
         Parameters:
           - EnableConfigAthenaCiAnalysis
+          - EnableMediaSpekeDrmDiagnostics
 
 Parameters:
   ExistingRoleName:
@@ -169,6 +178,54 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableMediaConnectInvestigate:
+    Type: String
+    Description: MediaConnect investigation skill (adds read-only mediaconnect flow, Router, bridge, entitlement and Link input device reads plus events:ListRules).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableMediaLiveInvestigate:
+    Type: String
+    Description: MediaLive investigation skill (adds read-only medialive channel, input, device, schedule, alert, cluster alert and multiplex alert reads plus events:ListRules).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableMediaPackageInvestigate:
+    Type: String
+    Description: MediaPackage investigation skill, v1 and v2 (adds read-only mediapackage and mediapackagev2 channel, endpoint, policy and harvest job reads).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableMediaTailorInvestigate:
+    Type: String
+    Description: MediaTailor investigation skill, SSAI and Channel Assembly (adds read-only mediatailor playback configuration, prefetch schedule, channel, schedule, program, source location, VOD and live source, policy and alert reads; not covered by the managed policy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableMediaCloudFrontInvestigate:
+    Type: String
+    Description: CloudFront investigation skill for media origins (adds read-only cloudfront distribution, cache policy and origin request policy reads).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableMediaCostOptimize:
+    Type: String
+    Description: Media Services cost review skill (adds pricing:DescribeServices and pricing:GetProducts plus read-only list, describe, reservation and offering reads across MediaConnect, MediaLive, MediaPackage, MediaTailor and CloudFront; nothing under ce:*).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableMediaSpekeDrmReference:
+    Type: String
+    Description: SPEKE / DRM reference skill (no IAM needed; see EnableMediaSpekeDrmDiagnostics for the optional runbook diagnostics).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableMediaSpecReference:
+    Type: String
+    Description: Media spec reference skill, AV1, SCTE-35, SCTE-104 and MediaPackage v2 response headers (no IAM needed).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -193,6 +250,16 @@ Parameters:
       (testing only — not recommended).
     Default: ''
 
+  EnableMediaSpekeDrmDiagnostics:
+    Type: String
+    Description: >
+      Optional read-only diagnostics used by the aws-media-speke-drm-reference troubleshooting
+      runbook (API Gateway REST API and ACM certificate inspection of the SPEKE key provider).
+      The reference skill itself needs no IAM; enable this only if you want the agent to run
+      those diagnostics directly. apigateway:GET is scoped to REST API resources so API key
+      values and client certificates stay out of reach.
+    AllowedValues: ['true', 'false']
+    Default: 'false'
   EnableEosCostAnalysis:
     Type: String
     Description: >
@@ -216,6 +283,20 @@ Conditions:
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
+  SkillMediaConnectInvestigate: !Equals [!Ref EnableMediaConnectInvestigate, 'true']
+  SkillMediaLiveInvestigate: !Equals [!Ref EnableMediaLiveInvestigate, 'true']
+  SkillMediaPackageInvestigate: !Equals [!Ref EnableMediaPackageInvestigate, 'true']
+  SkillMediaTailorInvestigate: !Equals [!Ref EnableMediaTailorInvestigate, 'true']
+  SkillMediaCloudFrontInvestigate: !Equals [!Ref EnableMediaCloudFrontInvestigate, 'true']
+  SkillMediaCostOptimize: !Equals [!Ref EnableMediaCostOptimize, 'true']
+  MediaSpekeDrmDiagnostics: !Equals [!Ref EnableMediaSpekeDrmDiagnostics, 'true']
+  SkillAnyMediaInvestigate: !Or
+    - !Condition SkillMediaConnectInvestigate
+    - !Condition SkillMediaLiveInvestigate
+    - !Condition SkillMediaPackageInvestigate
+    - !Condition SkillMediaTailorInvestigate
+    - !Condition SkillMediaCloudFrontInvestigate
+    - !Condition SkillMediaCostOptimize
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
@@ -726,6 +807,257 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # aws-mediaconnect-investigate: read-only MediaConnect flow, Router, bridge and entitlement reads, MediaLive Link input device reads, events:ListRules
+  PolicyMediaConnectInvestigate:
+    Type: AWS::IAM::Policy
+    Condition: SkillMediaConnectInvestigate
+    Properties:
+      PolicyName: DevOpsAgentSkill-MediaConnectInvestigate
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MediaConnectInvestigate
+            Effect: Allow
+            Action:
+              - mediaconnect:DescribeFlow
+              - mediaconnect:ListFlows
+              - mediaconnect:ListEntitlements
+              - mediaconnect:ListBridges
+              - mediaconnect:DescribeBridge
+              - mediaconnect:ListRouterInputs
+              - mediaconnect:ListRouterOutputs
+              - mediaconnect:GetRouterInput
+              - mediaconnect:GetRouterOutput
+              - mediaconnect:GetRouterInputSourceMetadata
+              - mediaconnect:GetRouterInputThumbnail
+              - events:ListRules
+              - medialive:ListInputDevices
+              - medialive:DescribeInputDevice
+            Resource: '*'
+
+  # aws-medialive-investigate: read-only MediaLive channel, input, input device, schedule and alert reads (channel, cluster, multiplex), events:ListRules
+  PolicyMediaLiveInvestigate:
+    Type: AWS::IAM::Policy
+    Condition: SkillMediaLiveInvestigate
+    Properties:
+      PolicyName: DevOpsAgentSkill-MediaLiveInvestigate
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MediaLiveInvestigate
+            Effect: Allow
+            Action:
+              - medialive:DescribeChannel
+              - medialive:DescribeInput
+              - medialive:DescribeInputDevice
+              - medialive:DescribeSchedule
+              - medialive:ListChannels
+              - medialive:ListAlerts
+              - medialive:ListClusterAlerts
+              - medialive:ListMultiplexAlerts
+              - events:ListRules
+            Resource: '*'
+
+  # aws-mediapackage-investigate: read-only MediaPackage v1 and v2 channel, endpoint, policy and harvest job reads
+  PolicyMediaPackageInvestigate:
+    Type: AWS::IAM::Policy
+    Condition: SkillMediaPackageInvestigate
+    Properties:
+      PolicyName: DevOpsAgentSkill-MediaPackageInvestigate
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MediaPackageInvestigate
+            Effect: Allow
+            Action:
+              - mediapackage:DescribeChannel
+              - mediapackage:ListChannels
+              - mediapackage:ListOriginEndpoints
+              - mediapackage:DescribeOriginEndpoint
+              - mediapackage:ListHarvestJobs
+              - mediapackage:DescribeHarvestJob
+              - mediapackagev2:GetChannel
+              - mediapackagev2:ListChannelGroups
+              - mediapackagev2:ListChannels
+              - mediapackagev2:ListOriginEndpoints
+              - mediapackagev2:GetChannelPolicy
+              - mediapackagev2:GetOriginEndpoint
+              - mediapackagev2:GetOriginEndpointPolicy
+              - mediapackagev2:ListHarvestJobs
+              - mediapackagev2:GetHarvestJob
+            Resource: '*'
+
+  # aws-mediatailor-investigate: read-only MediaTailor playback configuration, prefetch schedule, channel, schedule, program, source and alert reads
+  PolicyMediaTailorInvestigate:
+    Type: AWS::IAM::Policy
+    Condition: SkillMediaTailorInvestigate
+    Properties:
+      PolicyName: DevOpsAgentSkill-MediaTailorInvestigate
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MediaTailorInvestigate
+            Effect: Allow
+            Action:
+              - mediatailor:GetPlaybackConfiguration
+              - mediatailor:ListPlaybackConfigurations
+              - mediatailor:ListChannels
+              - mediatailor:DescribeChannel
+              - mediatailor:GetChannelSchedule
+              - mediatailor:DescribeProgram
+              - mediatailor:ListSourceLocations
+              - mediatailor:DescribeSourceLocation
+              - mediatailor:ListVodSources
+              - mediatailor:DescribeVodSource
+              - mediatailor:GetChannelPolicy
+              - mediatailor:ListAlerts
+              - mediatailor:ListPrefetchSchedules
+              - mediatailor:ListLiveSources
+            Resource: '*'
+
+  # aws-media-cloudfront-investigate: read-only CloudFront distribution, cache policy and origin request policy reads
+  PolicyMediaCloudFrontInvestigate:
+    Type: AWS::IAM::Policy
+    Condition: SkillMediaCloudFrontInvestigate
+    Properties:
+      PolicyName: DevOpsAgentSkill-MediaCloudFrontInvestigate
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MediaCloudFrontInvestigate
+            Effect: Allow
+            Action:
+              - cloudfront:GetDistribution
+              - cloudfront:GetDistributionConfig
+              - cloudfront:ListDistributions
+              - cloudfront:GetCachePolicy
+              - cloudfront:ListCachePolicies
+              - cloudfront:GetOriginRequestPolicy
+              - cloudfront:ListOriginRequestPolicies
+            Resource: '*'
+
+  # aws-media-cost-optimize: Price List Query API reads plus inventory, reservation and offering reads; no ce:*, no purchase, update, stop or delete
+  PolicyMediaCostOptimize:
+    Type: AWS::IAM::Policy
+    Condition: SkillMediaCostOptimize
+    Properties:
+      PolicyName: DevOpsAgentSkill-MediaCostOptimize
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MediaCostOptimizeReadOnly
+            Effect: Allow
+            Action:
+              - pricing:DescribeServices
+              - pricing:GetProducts
+              - medialive:ListChannels
+              - medialive:DescribeChannel
+              - medialive:ListInputs
+              - medialive:DescribeInput
+              - medialive:ListReservations
+              - medialive:DescribeReservation
+              - medialive:ListOfferings
+              - medialive:DescribeOffering
+              - mediaconnect:ListFlows
+              - mediaconnect:DescribeFlow
+              - mediaconnect:ListEntitlements
+              - mediaconnect:ListReservations
+              - mediaconnect:DescribeReservation
+              - mediaconnect:ListOfferings
+              - mediaconnect:DescribeOffering
+              - mediaconnect:ListRouterInputs
+              - mediaconnect:ListRouterOutputs
+              - mediaconnect:GetRouterInput
+              - mediaconnect:GetRouterOutput
+              - mediapackage:ListChannels
+              - mediapackage:DescribeChannel
+              - mediapackage:ListOriginEndpoints
+              - mediapackage:DescribeOriginEndpoint
+              - mediapackagev2:ListChannelGroups
+              - mediapackagev2:ListChannels
+              - mediapackagev2:GetChannel
+              - mediapackagev2:ListOriginEndpoints
+              - mediapackagev2:GetOriginEndpoint
+              - mediatailor:ListPlaybackConfigurations
+              - mediatailor:GetPlaybackConfiguration
+              - mediatailor:ListChannels
+              - mediatailor:DescribeChannel
+              - cloudfront:ListDistributions
+              - cloudfront:GetDistribution
+              - cloudfront:GetDistributionConfig
+              - cloudfront:GetCachePolicy
+              - cloudfront:ListCachePolicies
+              - cloudfront:GetMonitoringSubscription
+            Resource: '*'
+
+  # Shared by the six media investigation and cost skills above: CloudWatch metrics, Logs
+  # Insights reads and vended-log delivery discovery. Log-group scope is account-wide because customers name their own
+  # media log groups; narrow Resource to known log-group ARNs if your posture requires it.
+  PolicyMediaSharedObservability:
+    Type: AWS::IAM::Policy
+    Condition: SkillAnyMediaInvestigate
+    Properties:
+      PolicyName: DevOpsAgentSkill-MediaSharedObservability
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MediaSharedObservabilityReadOnly
+            Effect: Allow
+            Action:
+              - cloudwatch:ListMetrics
+              - cloudwatch:GetMetricData
+              - cloudwatch:GetMetricStatistics
+              - logs:DescribeLogGroups
+              - logs:FilterLogEvents
+              - logs:StartQuery
+              - logs:GetQueryResults
+              - logs:StopQuery
+              - logs:DescribeDeliverySources
+              - logs:DescribeDeliveries
+              - logs:DescribeDeliveryDestinations
+            Resource: '*'
+
+  # aws-media-speke-drm-reference optional diagnostics: SPEKE key provider API Gateway and ACM
+  # reads. apigateway:GET is scoped to REST API resources only; unscoped it would also permit
+  # reading API key values (/apikeys) and client certificates.
+  PolicyMediaSpekeDrmDiagnostics:
+    Type: AWS::IAM::Policy
+    Condition: MediaSpekeDrmDiagnostics
+    Properties:
+      PolicyName: DevOpsAgentSkill-MediaSpekeDrmDiagnostics
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SpekeDrmApiGatewayReadOnly
+            Effect: Allow
+            Action:
+              - apigateway:GET
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:apigateway:*::/restapis'
+              - !Sub 'arn:${AWS::Partition}:apigateway:*::/restapis/*'
+          - Sid: SpekeDrmCertificateMetadata
+            Effect: Allow
+            Action:
+              - acm:DescribeCertificate
+              - acm:ListCertificates
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -755,6 +1087,14 @@ Outputs:
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
+        - aws-mediaconnect-investigate: ${EnableMediaConnectInvestigate} (mediaconnect:DescribeFlow/ListFlows/ListEntitlements/ListBridges/DescribeBridge/ListRouterInputs/ListRouterOutputs/GetRouterInput/GetRouterOutput/GetRouterInputSourceMetadata/GetRouterInputThumbnail, events:ListRules, medialive:ListInputDevices/DescribeInputDevice)
+        - aws-medialive-investigate: ${EnableMediaLiveInvestigate} (medialive:DescribeChannel/DescribeInput/DescribeInputDevice/DescribeSchedule/ListChannels/ListAlerts/ListClusterAlerts/ListMultiplexAlerts, events:ListRules)
+        - aws-mediapackage-investigate: ${EnableMediaPackageInvestigate} (mediapackage:DescribeChannel/ListChannels/ListOriginEndpoints/DescribeOriginEndpoint/ListHarvestJobs/DescribeHarvestJob, mediapackagev2:GetChannel/ListChannelGroups/ListChannels/ListOriginEndpoints/GetChannelPolicy/GetOriginEndpoint/GetOriginEndpointPolicy/ListHarvestJobs/GetHarvestJob)
+        - aws-mediatailor-investigate: ${EnableMediaTailorInvestigate} (mediatailor:GetPlaybackConfiguration/ListPlaybackConfigurations/ListChannels/DescribeChannel/GetChannelSchedule/DescribeProgram/ListSourceLocations/DescribeSourceLocation/ListVodSources/DescribeVodSource/GetChannelPolicy/ListAlerts/ListPrefetchSchedules/ListLiveSources)
+        - aws-media-cloudfront-investigate: ${EnableMediaCloudFrontInvestigate} (cloudfront:GetDistribution/GetDistributionConfig/ListDistributions/GetCachePolicy/ListCachePolicies/GetOriginRequestPolicy/ListOriginRequestPolicies)
+        - aws-media-cost-optimize: ${EnableMediaCostOptimize} (pricing:DescribeServices/GetProducts plus the List, Describe and Get reads the inventory step needs on MediaConnect, MediaLive, MediaPackage v1 and v2, MediaTailor and CloudFront, including reservations and offerings; every action is listed in the README; nothing under ce:*)
+        - media investigation and cost skills, shared: cloudwatch:ListMetrics/GetMetricData/GetMetricStatistics, logs:DescribeLogGroups/FilterLogEvents/StartQuery/GetQueryResults/StopQuery/DescribeDeliverySources/DescribeDeliveries/DescribeDeliveryDestinations (applied when any of the six above is enabled)
+        - aws-media-speke-drm-reference diagnostics add-on: ${EnableMediaSpekeDrmDiagnostics} (apigateway:GET on REST APIs, acm:DescribeCertificate/ListCertificates)
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
@@ -764,3 +1104,4 @@ Outputs:
         - eos-cost-analysis resource discovery (eks/rds/lambda/elasticache/es List/Describe already granted on * by the managed policy; only the Pricing API needs the add-on above)
       No IAM required:
         - skip-scheduled-maintenance
+        - aws-media-speke-drm-reference (reference material; diagnostics add-on above is optional), aws-media-spec-reference
