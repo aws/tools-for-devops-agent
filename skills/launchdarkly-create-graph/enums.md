@@ -33,6 +33,7 @@ Each expression MUST have both keys:
 - `Min`
 - `Avg`
 - `P50`
+- `P75`
 - `P90`
 - `P95`
 - `P99`
@@ -63,12 +64,8 @@ Default: `Timestamp`. Usually fine to omit or leave as default. For non-time agg
 
 ## `get-keys` argument formats
 
-Different from `create-graph` — `get-keys` wants lowercase `productType` and full ISO timestamps:
-
-- `productType`: lowercase — `logs`, `traces`, `sessions`, `errors`, `metrics`, `paevents`, `events`
-- `startDate` / `endDate`: full ISO with time component — `2026-03-04T00:00:00Z`, not date-only `2026-03-04`
-
-The graph tools take `productType` in any case; `get-keys` needs it lowercase.
+- `productType`: `logs`, `traces`, `sessions`, `errors`, `metrics`, `paevents`, or `events`. Like the graph tools, `get-keys` accepts any casing; lowercase is conventional here.
+- `startDate` is required: ISO 8601 (`2026-03-04T00:00:00Z`), a date, a relative time (`now-7d`), or epoch seconds. `endDate` takes the same formats and defaults to now.
 
 ## Quick sanity check
 

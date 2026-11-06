@@ -79,7 +79,7 @@ If it is **new**, the onset is the `start` of the current episode; carry on.
 
 ### 4. Reuse the automatic investigation
 
-If the firing has an `investigation_conversation_id`, call `get-investigation` with it. Cite its conclusion as its conclusion, and check the key claims against current data before you repeat them. If it says the investigation is not shared with you, do not retry.
+If the firing has an `investigation_conversation_id`, call `get-investigation` with it as `conversationId`. Cite its conclusion as its conclusion, and check the key claims against current data before you repeat them. If it says the investigation is not shared with you, do not retry.
 
 ### 5. Investigate the cause
 

@@ -148,7 +148,7 @@ If issues arise or you need to halt the rollout, call `stop-guarded-rollout`:
 }
 ```
 
-This immediately stops the progressive rollout and locks the flag at its current state.
+Without `outcome`, stopping rolls back: the flag serves the control variation. To keep the new variation instead, pass `outcome: "rollForward"`; that can fail if the rollout has already moved past that phase. For a rollout on a targeting rule rather than the default rule, add its `ruleId`.
 
 ## Edge Cases
 

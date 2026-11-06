@@ -50,7 +50,7 @@ When the user's request is purely about visualizing data, stay on task — don't
 
 ## Duplicating existing graphs
 
-When asked to duplicate or copy a graph, call `get-dashboards` to retrieve the full configuration (expressions, product type, query, groupBy, display settings), then replicate those values in `create-graph`. Do not guess from the graph title alone — titles drift from the underlying config.
+When asked to duplicate or copy a graph, call `create-graph` with `dashboardId` set to the target dashboard and `cloneFrom` set to the source graph's `dashboardId` and `graphId` (both from `get-dashboards`). It copies the graph's series, formulas, and display settings; any field you pass alongside overrides the copy. To read a graph's full configuration first, call `get-dashboards` with its `dashboardId`. Do not rebuild a graph from its title alone — titles drift from the underlying config.
 
 ## Guidelines
 

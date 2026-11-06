@@ -98,7 +98,7 @@ Use the appropriate tool for the change. Every tool below, and `copy-flag-config
 
 - **`toggle-flag`**: Specify `on: true` or `on: false`, the `env`, and a `comment`.
 - **`update-rollout`**: Use `rolloutType: "percentage"` with human-friendly weights (e.g., 80 for 80%) that sum to 100, or `rolloutType: "variation"` with a `variationIndex`.
-- **`update-targeting-rules`**: Instructions support `addRule`, `removeRule`, `updateRuleVariationOrRollout`, `addClauses`, `removeClauses`, `reorderRules`.
+- **`update-targeting-rules`**: Instructions support `addRule`, `removeRule`, `updateRuleVariationOrRollout`, `addClauses`, `removeClauses`, `addValuesToClause`, `removeValuesFromClause`, `updateClause`, and `reorderRules`. To add or remove values on an existing clause, use `addValuesToClause` or `removeValuesFromClause` with the rule and clause `_id`s from `get-flags`, not `removeClauses` plus `addClauses`.
 - **`update-flag-targeting`**: Instructions support `addTargets`, `removeTargets`, and `replaceTargets`, plus `addPrerequisite` and `removePrerequisite`. `addTargets` and `removeTargets` take an optional `contextKind`.
 
 See [Targeting Patterns](references/targeting-patterns.md) for detailed instruction examples.

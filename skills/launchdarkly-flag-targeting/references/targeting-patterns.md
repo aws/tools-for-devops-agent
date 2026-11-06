@@ -215,6 +215,21 @@ Rule order matters: rules evaluate top to bottom, first match wins.
 }
 ```
 
+### Add or remove values on an existing clause
+
+To change which values a clause matches (for example "add Canada to the rule"), edit the clause in place. Take the rule `_id` and the clause `_id` from `get-flags` with `flagKey`:
+
+```json
+{
+  "kind": "addValuesToClause",
+  "ruleId": "<rule-id>",
+  "clauseId": "<clause-id>",
+  "values": ["CA"]
+}
+```
+
+`removeValuesFromClause` takes the same fields. To change a clause's attribute, operator, context kind or negation, send `updateClause` with `ruleId`, `clauseId` and the full replacement `clause`. Don't use `removeClauses` and `addClauses` to change a clause's values: that replaces the whole clause and makes the change hard to review.
+
 ## Individual Targets
 
 Individual targets are the highest priority: they override all rules.

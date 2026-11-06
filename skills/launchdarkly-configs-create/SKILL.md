@@ -178,7 +178,7 @@ Print this checklist verbatim to the user after Step 4, then wait for confirmati
 
 Then call `get-agent-configs` with `configKey`, `section: "targeting"`, and `env` to confirm the default rule serves that variation.
 
-If the response has `requiresApproval: true`, the environment needs an approved change and nothing was changed: ask the user who should review it, then submit the returned instructions with `create-agent-config-approval`.
+If the response has `requiresApproval: true`, the environment needs an approved change and nothing was changed: ask the user who should review it, then submit the returned instructions with `create-agent-config-approval`, with a `description` of the change and at least one reviewer, as in Step 5 of `launchdarkly-configs-targeting`.
 
 Do not use `turnTargetingOn` — that semantic-patch instruction does **not** work for configs. Setting the fallthrough is what makes the config serve the new variation.
 

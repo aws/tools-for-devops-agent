@@ -72,7 +72,7 @@ Use `create-ai-tool` with:
 
 ### Step 3: Attach to Variation
 
-Use `update-agent-config` with `resource: "variation"` to attach tools. **Pass only the `tools` field** (plus `projectKey`, `configKey`, `variationKey`, and `confirm`). Do not bundle `instructions`, `messages`, `model`, or `parameters` into this PATCH unless the user has explicitly asked you to also update those fields. Those fields may have been edited in the LaunchDarkly UI since the variation was created, and including them in a tool-attachment PATCH will silently clobber the UI edits.
+Use `update-agent-config` with `resource: "variation"` to attach tools. **Pass only the `tools` field** (plus `projectKey`, `configKey`, `resource`, `variationKey`, and `confirm`). Do not bundle `instructions`, `messages`, `model`, or `parameters` into this PATCH unless the user has explicitly asked you to also update those fields. Those fields may have been edited in the LaunchDarkly UI since the variation was created, and including them in a tool-attachment PATCH will silently clobber the UI edits.
 
 ```json
 {

@@ -162,7 +162,7 @@ Individual targets override every rule.
 
 ### Step 5: Submit for Approval When Required
 
-If `update-agent-config` returns `requiresApproval: true`, the change wasn't made. Ask the user who should review it; if they name a person, find their member ID with `search-members`. Then call `create-agent-config-approval` with the environment, at least one reviewer in `notifyMemberIds` or `notifyTeamKeys`, and the returned instructions. Show the user the request's `approvalRequest.url`: a person approves or declines it in LaunchDarkly, and you can't. When the user says it has been reviewed, check it once with `get-agent-config-approvals` and the request's `id`. Only when `reviewStatus` is `approved`, apply it with `apply-agent-config-approval` (`id` and `confirm: true`). If it is pending or declined, tell the user and don't apply it.
+If `update-agent-config` returns `requiresApproval: true`, the change wasn't made. Ask the user who should review it; if they name a person, find their member ID with `search-members`. Then call `create-agent-config-approval` with `projectKey`, `configKey`, `env`, a one-line `description` of the change (required), at least one reviewer in `notifyMemberIds` or `notifyTeamKeys`, and the returned instructions. Show the user the request's `approvalRequest.url`: a person approves or declines it in LaunchDarkly, and you can't. When the user says it has been reviewed, check it once with `get-agent-config-approvals` and the request's `id`. Only when `reviewStatus` is `approved`, apply it with `apply-agent-config-approval` (`id` and `confirm: true`). If it is pending or declined, tell the user and don't apply it.
 
 ### Step 6: Verify
 

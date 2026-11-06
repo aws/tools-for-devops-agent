@@ -188,11 +188,11 @@ Use `get-metrics` with `metricKey` for one metric, or without it for all of them
 
 ## 4. Update Metric
 
-Call `update-metric` with the project key, the metric key and only the fields to change. Each field replaces the current value, so `tags` must list every tag the metric should keep. Tell the user what will change and wait for their confirmation before the call, then confirm the result with `get-metrics` and `metricKey`.
+Call `update-metric` with `projectKey`, `metricKey`, only the fields to change, and `confirm: true`. Each field replaces the current value, so `tags` must list every tag the metric should keep. Tell the user what will change and pass `confirm: true` only after they agree, then confirm the result with `get-metrics` and `metricKey`.
 
 ## 5. Delete Metric
 
-Deleting a metric is permanent. Call `get-metrics` with `metricKey` first to see what uses it, tell the user, and call `delete-metric` only after they confirm. LaunchDarkly refuses to delete a metric that a flag, experiment, guarded rollout, metric group or release policy still uses.
+Deleting a metric is permanent. Call `get-metrics` with `metricKey` first to see what uses it, tell the user, and call `delete-metric` with `projectKey`, `metricKey` and `confirm: true` only after they agree. LaunchDarkly refuses to delete a metric that a flag, experiment, guarded rollout, metric group or release policy still uses.
 
 ## Session Metrics Tracker
 

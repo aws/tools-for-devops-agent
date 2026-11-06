@@ -72,6 +72,7 @@ This is the step that finds the cause most often, and the one agents skip. Compa
 
    ```json
    {
+     "projectKey": "<project>",
      "productType": "traces",
      "startDate": "<anomaly start>", "endDate": "<anomaly end>",
      "query": "span_kind=Server has_errors=true",
