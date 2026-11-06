@@ -1,0 +1,120 @@
+name: Label skill evals result
+
+# Applies the `needs-evals` label to a PR whose "Validate skill evals" check
+# failed, and removes it once the check passes.
+#
+# `needs-evals` is an *output* of the check and is owned by this workflow alone. It
+# is not the same label as `enforce-evals`, which is an input a maintainer applies
+# to make the check strict for one PR. The two cannot be merged into one: this
+# workflow clears its label as soon as the check passes, which would discard the
+# enforcement decision and let the next push delete the results again and go green.
+# Nothing here reads or writes `enforce-evals`.
+#
+# Why a separate workflow: for pull_request events from a fork, GITHUB_TOKEN is
+# read-only regardless of the `permissions:` block, so the validating job cannot
+# label its own PR — and most contributions to this repo come from forks. A
+# workflow_run job runs in the base repository's context with write access, and
+# uses the workflow definition from the default branch rather than from the PR.
+#
+# The PR number is read from an artifact rather than from the workflow_run
+# payload, because `workflow_run.pull_requests` is empty for fork PRs.
+
+on:
+  workflow_run:
+    workflows: ["Validate skill evals"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read # download the artifact from the triggering run
+  pull-requests: write # add / remove the label
+
+concurrency:
+  group: label-skill-evals-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    # A cancelled or skipped validation run has nothing to report.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' ||
+      github.event.workflow_run.conclusion == 'failure'
+    steps:
+      - name: Download the check outcome
+        id: artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: evals-check-result
+          path: result
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Read outcome
+        id: outcome
+        run: |
+          if [ ! -f result/pr-number ] || [ ! -f result/outcome ]; then
+            echo "::notice::No outcome artifact found; nothing to label."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          pr=$(tr -dc '0-9' < result/pr-number)
+          outcome=$(tr -dc 'a-z' < result/outcome)
+
+          if [ -z "$pr" ] || { [ "$outcome" != "pass" ] && [ "$outcome" != "fail" ]; }; then
+            echo "::warning::Unexpected artifact contents (pr='$pr' outcome='$outcome')."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+
+      - name: Apply or remove the label
+        if: steps.outcome.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Required. `gh` resolves the target repository from git remotes, and this
+          # job deliberately does no checkout, so without GH_REPO every `gh` call
+          # here fails with "fatal: not a git repository" before reaching the API.
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.outcome.outputs.pr }}
+          OUTCOME: ${{ steps.outcome.outputs.outcome }}
+          LABEL: needs-evals
+        run: |
+          if [ "$OUTCOME" = "fail" ]; then
+            # Idempotent: creating an existing label, or adding one a PR already
+            # has, is a no-op and emits no `labeled` event, so this cannot loop.
+            gh label create "$LABEL" \
+              --description "Skill eval results are missing or incomplete" \
+              --color D93F0B 2>/dev/null || true
+            gh pr edit "$PR" --add-label "$LABEL"
+            echo "::notice::Labeled PR #$PR with $LABEL."
+          else
+            # Checked rather than attempted-and-ignored. `--remove-label` errors when
+            # the label is absent, so suppressing that error also suppressed every
+            # other error, including the missing-GH_REPO failure this step used to
+            # hit on both branches.
+            #
+            # The lookup is a separate statement on purpose. Piping it straight into a
+            # test — `gh pr view ... | grep -qx true` — reproduces the same pathology:
+            # a failed lookup prints nothing, the test simply doesn't match, and the
+            # step reports "the label wasn't set" and exits 0. `set -e` does not catch
+            # it, because a command failing inside an `if` condition is exempt from
+            # errexit. As its own assignment, a failed lookup fails the job, while an
+            # absent label stays benign.
+            #
+            # LABEL is read from the environment by jq rather than interpolated into
+            # the jq program text; `gh --jq` has no `--arg`.
+            has_label=$(gh pr view "$PR" --json labels \
+                          --jq '[.labels[].name] | index(env.LABEL) != null')
+            if [ "$has_label" = "true" ]; then
+              gh pr edit "$PR" --remove-label "$LABEL"
+              echo "::notice::PR #$PR passed; removed $LABEL."
+            else
+              echo "::notice::PR #$PR passed; $LABEL was not set."
+            fi
+          fi

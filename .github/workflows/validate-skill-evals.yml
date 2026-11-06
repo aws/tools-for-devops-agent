@@ -1,0 +1,142 @@
+name: Validate skill evals
+
+# Gates pull requests that touch skills/ on each touched skill shipping complete
+# eval results: evals.json, structure/structure-tests-results-v<N>.json, and a
+# complete v<N>/ run under both best-practices/ and functional/.
+#
+# Rollout is gradual (see .github/scripts/validate_skill_evals.py): skills added
+# by the PR — and skills already migrated to the new layout — fail the job, while
+# pre-existing skills on the old flat evals/ layout only get warnings.
+#
+# A skill promotes itself from warning to enforced as soon as its migration lands
+# on the base branch, so no change here is needed as the backlog is worked through.
+# Adding --strict to the run below enforces on *unmigrated* skills too, which turns
+# every PR touching one into a blocker — a lever for forcing that migration rather
+# than a cleanup step to apply afterwards.
+#
+# Pull requests already open when this check was introduced are listed by number in
+# the script, so every skill they touch only warns. Applying the `enforce-evals`
+# label to a PR reverses that and enforces every skill it touches, whatever the
+# derived mode — a per-PR form of --strict, and the way a maintainer holds one of
+# those pull requests to the requirement after all. The label also withdraws every
+# exemption those skills claim in evals/exemptions.json, without which it could not
+# reach a PR exempting all three test types: an exemption removes the violations
+# that enforcement only decides the severity of. Only users with triage or write
+# access can label, so a contributor cannot use it to unblock themselves.
+#
+# A companion workflow (label-skill-evals-result.yml) applies or removes the
+# `needs-evals` label based on this job's outcome. It has to be a separate
+# workflow_run job because GITHUB_TOKEN is read-only for pull_request events from
+# forks, which is where most contributions here come from.
+#
+# NOTE: a red check does not block merging on its own. An admin must add the job's
+# name ("validate-skill-evals") to the required status checks for `main` in branch
+# protection. Until then this workflow is advisory.
+
+on:
+  pull_request:
+    # `labeled` is included for two reasons. It lets a maintainer force a run on an
+    # already-open PR by adding any label — useful for PRs opened before this
+    # workflow existed, which otherwise report no status at all and sit blocked
+    # without a log. And it makes `enforce-evals` take effect the moment it is
+    # applied, with no push needed from the author.
+    #
+    # Use a label other than `needs-evals` when only forcing a run: the companion
+    # workflow applies `needs-evals` itself, so adding it by hand makes its own
+    # behavior unobservable. Note also that a label applied by GITHUB_TOKEN raises
+    # no `labeled` event, so the companion workflow cannot re-trigger this one.
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    # Deliberately NOT filtered with `paths: skills/**`. A required status check
+    # that never runs is reported as pending forever, so a path filter here would
+    # permanently block every PR that doesn't touch skills/. Instead the job always
+    # runs and the script exits 0 when the PR touches no skill directory.
+
+# Read-only: the job just inspects the checked-out tree, so PRs from forks work
+# without any elevated permissions. Labeling happens in the companion workflow.
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-skill-evals-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # The job id and its display name are kept identical, because the display name is
+  # the status check context that branch protection matches on. Contexts are global
+  # across all workflows in the repo, so it is spelled out rather than left as a
+  # generic "validate" another workflow could collide with. Renaming either one
+  # later means updating the required checks list too.
+  validate-skill-evals:
+    name: validate-skill-evals
+    runs-on: ubuntu-latest
+    # No `if:` guard here on purpose. Skipping this job would report the required
+    # check as "skipped", which branch protection can treat as satisfied — so a
+    # guard keyed on a label would let anyone unblock a failing PR by labeling
+    # it. Labels are read by the script instead, where they can only make the check
+    # stricter and the job still reports a real status.
+    # The cost is one redundant run when the companion workflow applies
+    # `needs-evals`; that run cannot cascade, because re-adding a label a PR
+    # already has emits no new `labeled` event.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the script can compute the merge base with the base
+          # branch and inspect the base tree to decide each skill's mode.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check evals layout of touched skills
+        id: check
+        # Never fails the step: the outcome is recorded, published for the
+        # labeling workflow, and only then turned into a job failure. Without this
+        # the artifact would not be uploaded on failure — the case that needs a label.
+        continue-on-error: true
+        # Every value from the event payload is passed through the environment
+        # rather than interpolated into the command, and quoted on use. Label names
+        # in particular are attacker-controllable in principle.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # JSON array of label names. The script reads one of them,
+          # `enforce-evals`, as a per-PR instruction to enforce every touched skill.
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          # Make sure the base branch is available locally as a remote-tracking ref
+          # so the merge base can be computed.
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+          set +e
+          python3 .github/scripts/validate_skill_evals.py \
+            --base-ref "origin/${BASE_REF}" \
+            --head-ref HEAD \
+            --pr-number "${PR_NUMBER}" \
+            --labels "${PR_LABELS}"
+          code=$?
+          set -e
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          exit "${code}"
+
+      - name: Publish outcome for the labeling workflow
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OUTCOME: ${{ steps.check.outputs.code == '0' && 'pass' || 'fail' }}
+        run: |
+          mkdir -p evals-check-result
+          printf '%s\n' "$PR_NUMBER" > evals-check-result/pr-number
+          printf '%s\n' "$OUTCOME" > evals-check-result/outcome
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evals-check-result
+          path: evals-check-result/
+          retention-days: 1
+
+      - name: Fail the job when the check failed
+        if: steps.check.outputs.code != '0'
+        run: |
+          echo "::error::Skill evals validation failed — see the log above."
+          exit 1

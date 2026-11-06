@@ -1,0 +1,56 @@
+name: Label tool-type on requests
+
+# Reads the "What type of tool is this?" checkboxes from the "Suggest a new tool"
+# issue form and applies routing labels (skill / custom-agent / mcp-server / iac / other)
+# so cards land in the matching roadmap tab. Runs only on issues carrying the "request"
+# label, so bug reports and other issues are left untouched.
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'request')
+    steps:
+      - name: Apply tool-type labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || "";
+
+            // Map the checkbox label text (as rendered in the issue body) to a repo label.
+            const mapping = [
+              { text: "Skill",        label: "skill" },
+              { text: "Custom agent", label: "custom-agent" },
+              { text: "MCP server",   label: "mcp-server" },
+              { text: "IaC (Infrastructure as Code) template", label: "iac" },
+              { text: "Other",        label: "other" },
+            ];
+
+            // A checked box renders as "- [x] <text>" (x may be upper/lower case).
+            const isChecked = (text) => {
+              const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              const re = new RegExp(`^\\s*[-*]\\s*\\[[xX]\\]\\s*${escaped}\\b`, "m");
+              return re.test(body);
+            };
+
+            const toAdd = mapping.filter(m => isChecked(m.text)).map(m => m.label);
+
+            if (toAdd.length === 0) {
+              core.info("No tool-type checkboxes checked; nothing to label.");
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              labels: toAdd,
+            });
+
+            core.info(`Applied labels: ${toAdd.join(", ")}`);
