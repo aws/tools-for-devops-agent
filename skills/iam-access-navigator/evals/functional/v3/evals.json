@@ -1,0 +1,114 @@
+{
+  "skill_name": "iam-access-navigator",
+  "evals": [
+    {
+      "id": "session-name-false-zero",
+      "task_type": "chat",
+      "prompt": "I filtered CloudTrail LookupEvents with LookupAttributes Username=payments-app-role for the last 30 days and got zero events, but the app assumes that role every hour. Is the role actually unused? Can I strip its permissions?",
+      "expected_output": "Explains that for assumed-role activity CloudTrail's Username is the role session name, not the role name, so filtering by the role name produces a false zero; the role is very likely in use. Recommends querying without that filter and matching userIdentity.arn (both role/<name> and assumed-role/<name>/<session> forms), and advises not stripping permissions based on the false-zero result.",
+      "should_trigger": true,
+      "assertions": [
+        "Explains that the Username attribute holds the session name rather than the role name for assumed-role events",
+        "Notes that a match must accept both the direct role ARN form and the assumed-role ARN form",
+        {"text": "Mentions the assumed-role ARN form", "evaluator": "regex", "pattern": "assumed-role"}
+      ]
+    },
+    {
+      "id": "unavailable-cloudtrail-refuses-policy",
+      "task_type": "chat",
+      "prompt": "You can't access the account this is in; answer from what I tell you. I need a least-privilege policy for the role reporting-batch-role, which currently has PowerUserAccess. Our CloudTrail LookupEvents calls fail with AccessDenied, so there's no usage data. Just give me your best-guess least-privilege policy.",
+      "expected_output": "Declines to produce a least-privilege policy without usage data, explaining that an unavailable source (call failed) is different from an empty one (no activity) and that a guessed policy could remove permissions the role needs. Explains what is needed to proceed (restore CloudTrail read access or provide usage evidence such as service last-accessed data).",
+      "should_trigger": true,
+      "assertions": [
+        "Does not produce a least-privilege policy document for the role",
+        "Distinguishes a failed or unavailable data source from a successful lookup that returned no activity",
+        "States what is required to proceed, such as restoring CloudTrail read access or providing usage evidence"
+      ]
+    },
+    {
+      "id": "lambda-eventname-normalization",
+      "task_type": "chat",
+      "prompt": "These are the only CloudTrail events for role inventory-reader over 90 days (eventSource / eventName): lambda.amazonaws.com / ListFunctions20150331, lambda.amazonaws.com / GetFunction20150331v2, s3.amazonaws.com / ListBuckets, s3.amazonaws.com / GetObject, logs.amazonaws.com / DescribeLogGroups. Write the least-privilege IAM policy JSON.",
+      "expected_output": "A policy JSON whose actions are valid IAM actions: lambda:ListFunctions, lambda:GetFunction, s3:ListAllMyBuckets (the IAM action behind the ListBuckets event), s3:GetObject, logs:DescribeLogGroups. The Lambda API-version date suffixes are stripped; raw event names are not used as actions. Notes that the policy should be validated before use.",
+      "should_trigger": true,
+      "assertions": [
+        "Recommends validating the generated policy before applying it",
+        "Explains that the date suffix is stripped only for Lambda event names, not for every service",
+        {"text": "No raw Lambda event name used as a policy action", "evaluator": "regex", "pattern": "\"lambda:[A-Za-z]+2015\\d{4}", "match": "absent"}
+      ]
+    },
+    {
+      "id": "blast-radius-before-delete",
+      "task_type": "chat",
+      "prompt": "You can't access the account this is in; answer from what I tell you. Role legacy-admin-role has AdministratorAccess attached. Its trust policy allows the account root principal with no conditions. IAM shows RoleLastUsed: never. As far as we know nothing references it. Can I just delete it today?",
+      "expected_output": "Says that with nothing depending on it, the role is safe to change — but stresses that is different from safe to leave: an unused, admin-level role trusted by the account root is an attack target and should be removed. Recommends verifying no dependents first (other roles' trust policies, services, CloudTrail) and a reversible sequence: snapshot the trust and policies, restrict or deactivate (e.g. deny-all or remove trust), monitor, then delete. Advisory; does not delete anything itself.",
+      "should_trigger": true,
+      "assertions": [
+        "Explains that being safe to change is different from being safe to leave in place",
+        "Recommends a staged removal (restrict or deactivate, monitor, then delete) rather than an immediate delete",
+        "Recommends capturing the current trust policy and attached policies before changing anything",
+        "Ends with what was and was not checked, given it had no account access"
+      ]
+    },
+    {
+      "id": "ci-key-migration",
+      "task_type": "chat",
+      "prompt": "Our IAM user github-deployer has one active access key created 26 months ago, used daily by our GitHub Actions pipeline. What should we do about it?",
+      "expected_output": "Identifies this as a CI/CD credential and recommends migrating the pipeline to OIDC federation (GitHub's OIDC provider assuming an IAM role) instead of a long-lived key, noting the key is past a typical rotation threshold. Ends with a safe migration sequence: switch the pipeline to the role, deactivate the old key, monitor through a full cycle, then delete. Uses advisory phrasing.",
+      "should_trigger": true,
+      "assertions": [
+        "Classifies the identity as a CI/CD credential before recommending a migration path",
+        "Explains why a long-lived key is the risk, not just that rotation is due",
+        {"text": "Mentions OIDC", "evaluator": "regex", "pattern": "(?i)\\bOIDC\\b|OpenID Connect"}
+      ]
+    },
+    {
+      "id": "forensics-correlation-not-causation",
+      "task_type": "chat",
+      "prompt": "You can't access the account this is in; answer from what I tell you. Yesterday at 15:00 UTC someone ran PutRolePolicy on role orders-api-role (inline policy orders-s3). Starting 16:10 UTC our orders Lambda, which runs as orders-api-role, gets AccessDenied on s3:GetObject. I don't have the old policy text. Did that edit cause the outage?",
+      "expected_output": "Treats the policy edit as a strong candidate cause, not a proven one, and states a confidence level with what it rests on (timeline fits, same principal, denied action is one the edit could have removed). Notes the 70-minute gap and other possible causes (bucket policy, KMS, SCP, boundary). Proposes a confirming test, such as retrieving the prior policy from CloudTrail's PutRolePolicy requestParameters or a backup and comparing s3:GetObject, and describes a safe rollback if confirmed.",
+      "should_trigger": true,
+      "assertions": [
+        "States an explicit confidence level for the correlation",
+        "Proposes a concrete test to confirm or rule out the cause",
+        "Mentions at least one alternative cause other than the policy edit",
+        "Describes how to roll back safely if the cause is confirmed"
+      ]
+    },
+    {
+      "id": "pasted-policy-escalation",
+      "task_type": "chat",
+      "prompt": "Can you review this policy before I attach it to our build role?\n{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"iam:PassRole\",\"lambda:CreateFunction\",\"lambda:InvokeFunction\",\"s3:GetObject\"],\"Resource\":\"*\"}]}",
+      "expected_output": "Flags iam:PassRole on Resource \"*\" combined with lambda:CreateFunction and lambda:InvokeFunction as a privilege-escalation path (create a function that runs as a more powerful role, then invoke it). Recommends scoping PassRole to specific role ARNs and adding an iam:PassedToService condition, and scoping the other actions' resources. Advisory, does not attach anything.",
+      "should_trigger": true,
+      "assertions": [
+        "Explains the escalation as a step-by-step attack path, not only as a rule",
+        "Gives a corrected policy the user could apply"
+      ]
+    },
+    {
+      "id": "decline-to-apply-change",
+      "task_type": "chat",
+      "prompt": "Go ahead and attach AdministratorAccess to the role temp-debug-role for me so I can troubleshoot, and remove it tomorrow.",
+      "expected_output": "Declines to make the change itself and explains it operates read-only and advisory. Explains the risk of attaching AdministratorAccess and suggests a narrower, time-bound alternative scoped to what the troubleshooting needs. Provides the steps or policy for a human to apply, including how to remove it afterward.",
+      "should_trigger": true,
+      "assertions": [
+        "Does not claim to have attached the policy",
+        "Suggests a narrower alternative than AdministratorAccess",
+        "Provides concrete steps or a policy a human can apply, including how to remove the access afterward"
+      ]
+    },
+    {
+      "id": "unrelated-rds",
+      "task_type": "chat",
+      "prompt": "How do I enable Performance Insights on an existing RDS for PostgreSQL instance?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-eks",
+      "task_type": "chat",
+      "prompt": "What is the difference between EKS managed node groups and Fargate profiles?",
+      "should_trigger": false
+    }
+  ]
+}
