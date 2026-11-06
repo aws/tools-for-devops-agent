@@ -8,18 +8,24 @@ the way the team has decided similar changes should roll out — no human toggli
 
 - **Flag** — the boolean gate you created (OFF everywhere). Nothing happens to users until a release turns it on.
 - **Release policy** — a project-level rule that says *how* a matching flag should be released in a given environment: immediately, progressively (staged %), or as a guarded rollout with metrics and auto-rollback. Policies match on criteria like environment and flag tags, and can auto-attach the metrics a guarded rollout should watch.
-- **Automated rollout config** — the per-flag, per-PR record (created by `create-automated-rollout-config`) that ties the flag to the merge and says, per environment, whether to release immediately (`simple`) or to defer to the environment's release policy (`policy`).
+- **Automated rollout config** — the per-flag, per-PR record (created by `create-automated-rollout-config`) that ties the flag to the merge and says, per environment, whether to release immediately or to defer to the environment's release policy (`releaseType: "policy"`).
 
-## `simple` vs `policy`
+## Immediate vs `policy`
 
-`create-automated-rollout-config` takes an `environments` array; each entry is
-`{ environmentKey, releaseType }`.
+`create-automated-rollout-config` takes an `environments` array; each entry has an
+`environmentKey` and, for a policy release, `releaseType: "policy"`. `releaseType` accepts only
+`override` and `policy`; there is no `simple`.
 
-- **`simple`** (default): serve `true` in that environment once the flag begins evaluating — the same trigger `policy` waits for, just with no policy resolution or stages. Use it for dev/staging environments you want fully enabled without ceremony.
+- **Immediate** (`{ environmentKey }`, no `releaseType` or `override`): serve `true` in that environment once the flag begins evaluating — the same trigger `policy` waits for, just with no policy resolution or stages. Use it for dev/staging environments you want fully enabled without ceremony.
 
-- **`policy`**: wait until the PR merges and the flag begins evaluating, then resolve that environment's configured release policy and perform the matching release — immediate, progressive, or guarded — automatically. Use it for production and any environment where you want a governed, monitored rollout with the safety net the team already defined.
+- **`policy`** (`{ environmentKey, releaseType: "policy" }`): not a hold — it never waits for a date or a sign-off. Wait until the PR merges and the flag begins evaluating, then resolve that environment's configured release policy and perform the matching release — immediate, progressive, or guarded — automatically. Use it for production and any environment where you want a governed, monitored rollout with the safety net the team already defined.
 
-A typical plan: `staging → simple`, `production → policy`.
+A typical plan: `staging → immediate`, `production → policy`.
+
+An operator can also pin a rollout with `releaseType: "override"` and an `override` object whose
+`releaseMethod` is `immediate`, `progressive`, or `guarded`. Progressive and guarded need `stages`
+(`allocation` and `durationMillis`, allocations strictly increasing; guarded caps each stage at
+`50000` and needs `metricKeys` or `metricGroupKeys`). Never combine `override` with `policy`.
 
 ## Preview before you propose
 
@@ -29,11 +35,11 @@ Always call `match-release-policies` before recommending a `policy` environment,
 - **Before the flag exists** — pass `projectKey`, `environmentKey`, and the proposed `flagTags`. This does client-side matching against the project's policies and previews the winner.
 - **After the flag exists** — pass `projectKey`, `environmentKey`, and `flagKey`. This hits the server-side release-settings endpoint and returns the authoritative resolved policy.
 
-It returns the `winningPolicy`, the `winningReleaseMethod` (immediate / progressive / guarded), and any `autoAttachedMetricKeys` / `autoAttachedMetricGroupKeys`. Use `list-release-policies` to see every policy in the project and what each attaches.
+It returns `matchingPolicies`, the `winningPolicy` (null when nothing matches), and `warnings`. The winner's method is `winningPolicy.releaseMethod` (`immediate-release`, `progressive-release`, or `guarded-release`), and a guarded policy's metrics are `winningPolicy.guardedReleaseConfig.metricKeys` and `.metricGroupKeys`. Use `get-release-policies` to see every policy in the project and what each attaches.
 
-**If nothing matches**, `policy` falls back to project defaults (often an immediate release). Tell the user — they may want to pick `simple` instead, or set up a release policy first.
+**If nothing matches**, `policy` falls back to project defaults (often an immediate release). Tell the user — they may want an immediate release instead, or set up a release policy first.
 
-**A guarded release is only as good as its metrics.** If a `policy` env resolves to a **guarded** method, check that `autoAttachedMetricKeys` is non-empty and actually relevant to this change — a guarded rollout with no meaningful metric guards nothing. Watch for the **net-new path** case: when the flag-off control renders nothing, feature-specific before/after comparisons are "one-armed" and can't detect a regression, so a guarded release must lean on existing global/service metrics. If the attached metrics can't compare treatment vs. control for this change, say so and recommend `simple` for that env (or point the user at metric setup) rather than presenting a guarded rollout that can't actually guard.
+**A guarded release is only as good as its metrics.** If a `policy` env resolves to a **guarded** method, check that `winningPolicy.guardedReleaseConfig.metricKeys` (or `.metricGroupKeys`) is non-empty and actually relevant to this change — a guarded rollout with no meaningful metric guards nothing. Watch for the **net-new path** case: when the flag-off control renders nothing, feature-specific before/after comparisons are "one-armed" and can't detect a regression, so a guarded release must lean on existing global/service metrics. If the attached metrics can't compare treatment vs. control for this change, say so and recommend an immediate release for that env (or point the user at metric setup) rather than presenting a guarded rollout that can't actually guard.
 
 ## Precedence
 
@@ -62,7 +68,7 @@ Call `create-automated-rollout-config` in the implement phase:
   "projectKey": "default",
   "flagKey": "new-checkout-flow",
   "environments": [
-    { "environmentKey": "staging", "releaseType": "simple" },
+    { "environmentKey": "staging" },
     { "environmentKey": "production", "releaseType": "policy" }
   ],
   "repoFullName": "acme/storefront",
@@ -91,5 +97,5 @@ When a `policy` environment resolves to a **guarded** release method, the merge 
 same kind of progressive, metric-monitored rollout described in the
 [`launchdarkly-guarded-rollout`](../../launchdarkly-guarded-rollout/SKILL.md) skill — the
 difference is that here it's driven automatically by the policy on merge, rather than started
-by hand. If a change needs a *bespoke* rollout that no policy expresses, set that environment
-to `simple` here and drive the guarded rollout manually with that skill after merge.
+by hand. If a change needs a *bespoke* rollout that no policy expresses, record that environment
+as immediate here and drive the guarded rollout manually with that skill after merge.

@@ -1,49 +1,67 @@
-# Investigating with metrics
+# Aggregations in depth (`search-aggregations`)
 
-Load this file when you need aggregation across a large dataset — unique users, counts by dimension, time-bucketed trends — or before building a graph.
+Load this file when you need counts, trends, top-N, ratios or comparisons across logs, traces, errors, sessions or metrics, or before building a graph. For OpenTelemetry metric names, types and units (counters, gauges, histograms), load the `observability/metrics` guide with `load-skill`.
 
-## When to reach for aggregations
+## Core arguments
 
-- You want to aggregate across hundreds or thousands of records (paginating is expensive and lossy)
-- You're looking for trends over time (error-rate spike, latency regression, traffic shift)
-- You need to group by a dimension (errors by service, sessions by city, latency by span_name)
-- You're sizing the problem before drilling in with `query-logs`, `query-traces`, `query-error-groups`, or `query-sessions`
+- `productType` (required): `traces`, `logs`, `errors`, `sessions`, `metrics`, `paevents` or `events`.
+- `startDate` (required) and `endDate`: ISO 8601 with a timezone. `compareTo` needs absolute dates.
+- `query`: the shared filter grammar; `services` and `environments` restrict to exact values.
+- Aggregation: `functionType` with `column`, or `expressions` for several at once. `Count` needs no column; trace `duration` is in nanoseconds; for metrics the column is `value`.
+- `bucketCount`: defaults to 10 (a time series). Set `1` for one total per group, the number of hours or days for hourly or daily counts.
+- `groupBy`: one key or an array for a composite group; `groupByLimit` up to 100 (default 5); `rankBy` picks the top groups (rank by `Count` when you report a percentile); `minCount` skips tiny groups.
 
-## Tool guidance (`query-aggregations`)
+## Compare against a baseline (`compareTo`)
 
-The `query-aggregations` tool returns bucketed aggregated values, suitable for charting and analysis.
+`compareTo: "1d"` (or `"1h"`, `"1w"`) reruns the same query over the window shifted back and returns the earlier values next to each series (`previous_values`) or row (`previous`), with `comparison_window`. Use it for:
 
-- `product_type` is required; one of `errors`, `traces`, `logs`, `sessions` (`requests` is accepted as an alias for `traces`).
-- `start_date` is required; ISO format.
-- `end_date` defaults to now.
-- `query` is an attribute filter — e.g. `error EXISTS AND service_name=foo`.
-- `group_by` is an attribute to group results by (e.g. `message`, `service_name`). Single field.
+- "Is this new?" One total now vs the same window yesterday or last week.
+- "Which group changed?" With `groupBy`, each group's value now vs before. A group missing from the earlier top groups has no previous value; raise `groupByLimit` if that hides one.
+- Prefer `1d` or `1w` over the previous hour when traffic has a daily shape.
 
-Note: across **different** product types, the same attribute keys work — query `query-aggregations` with `product_type="sessions"` and `group_by="identifier"` for session-grouping analogous to `product_type="logs"` with `group_by="level"`.
+## Break down to find the cause
 
-## Keep the bucket count small
+One call per candidate dimension, `bucketCount: 1`, `groupByLimit` 10 to 20, over the anomaly window, with `compareTo`:
 
-When requesting aggregations, use coarser intervals or fewer groupings — bloated responses exceed the context window. Prefer 10–30 buckets over 1000; prefer a single `group_by` over multi-dimension pivots.
+| Dimension | Key to try (confirm with `get-keys`) |
+|---|---|
+| Host or pod | `host.name`, `k8s.pod.name` |
+| Version | the key `get-changes` detected: `service_version`, `tags.version` or `version` |
+| Endpoint | `http.route` with `span_kind=Server` |
+| Environment or region | `environment`, `cloud.region` |
+| Flag variation | `feature_flag.result.value` with `feature_flag.key=<flag>` |
 
-## Typical patterns
+Run each for the failures and for all traffic, and compare shares. A composite `groupBy: ["<versionKey>", "host.name"]` separates "bad version" from "bad host".
 
-1. **Rate trends** — `product_type="errors"`, 24-hour window, group_by `service_name` → top offending services.
-2. **Unique-count queries** — count unique users in a session set: `query-aggregations` with `product_type="sessions"`, `group_by="identifier"`. Don't paginate through individual sessions.
-3. **Before/after comparison** — run twice with adjacent time windows, compare the bucket counts to detect regressions.
-4. **Pre-chart sizing** — before `create-graph`, run a `query-aggregations` query to verify the data shape is what you expect (non-empty, reasonable bucket distribution).
+## Ratios (`series` and `formulas`)
 
-## Pairing with `get-keys`
+Up to five `series` (each with an `id` a to e, its own `query` and an aggregator) share the window, `groupBy` and buckets; `formulas` combine them, for example `100 * b / a` for an error percentage. Leave `query`, `functionType`, `column` and `expressions` unset when you use `series`. Each series ranks its own top groups, so a group outside one series' top groups gives a null formula value. `exact` and `populationFunctionType` cannot be combined with `series`.
 
-Before aggregating on an unfamiliar attribute, call `get-keys` for the product type to see which grouping keys exist. Attribute names vary — `service_name` vs `service.name` vs `serviceName`.
+## Other options
 
-## Interpreting results
+- `rate`: `per_second`, `per_minute` or `per_hour` for `Count` or `Sum`; not with `formulas`.
+- `includeOther`: adds an "Other" series so groups add up to the total; `Count`, `Sum`, `Min` and `Max` only.
+- `populationFunctionType`: aggregate per group, then across groups (the Max across pods of each pod's Avg).
+- First and last seen per group: `expressions` `Min` and `Max` of `timestamp`, `bucketCount: 1`; values are Unix seconds.
 
-- **Coarse-first, then drill.** A metrics bucket showing "errors up 300% in service X" is a starting point; follow with `query-error-groups` and `query-logs` to get the specific errors.
-- **Correlate trends with deploys, flag flips, traffic patterns.** A shift that starts at a specific minute often points to an external trigger.
-- **Cite the metric type, grouping, and bucket range** when presenting findings.
+## Sampling
+
+Traces and logs are sampled unless `exact` is set. When the result has `estimated: true`, counts are scaled estimates and percentiles come from the rows actually read. Set `exact: true` for short windows, rare events, distinct counts, and any number you quote.
+
+A sampled result with a percentile carries a `low_sample` block when some buckets rest on too few rows: a `warning`, and per expression the `buckets`, `min_sampled_rows` and `threshold` (P99 under 200 rows, P95 under 50, other percentiles under 20); each percentile bucket also gets `sampled_rows`. Treat a flagged percentile as noise: rerun with `exact: true` or fewer, wider buckets. `exact` is not switched on for you. Servers without `low_sample` apply no check, so add a `Count` expression and apply the same thresholds yourself.
+
+## Is the data complete? (`includeIngest`)
+
+`includeIngest: true` adds an `ingest` block: `sampling_rate`, `minute_rate_limit`, `exclusion_query`, `filter_rules`, `quota` (shown near or over the limit) and, when the server can check it, a one-line `completeness_note` naming sampling, rate limiting, dropping filter rules, an exclusion query or an exceeded quota. `get-keys` adds the same block by itself when a non-default setting applies. Check it before you report that data is missing or that a count dropped.
+
+## Keep responses small
+
+Prefer 10 to 50 buckets, a single total (`bucketCount: 1`) when you only need a ranking, and `groupByLimit` no larger than you will read. `maxTokens` caps the response; rows past it are dropped and `truncation_note` says how to get them.
 
 ## Common mistakes
 
-- Paginating records when you should aggregate. If the goal is a count or distinct, use `query-aggregations` with `group_by`.
-- Requesting too many buckets or nested groupings. Blow the context window and you lose your investigation.
-- Skipping `get-keys` and guessing attribute names. Wrong name returns an empty metric — silently.
+- Running two windows by hand instead of using `compareTo`.
+- Ranking groups by a percentile, so a group with three slow requests tops the list. Rank by `Count`.
+- Guessing a key. A wrong `groupBy` key returns one empty group; a wrong filter key widens the result silently.
+- Reading `Max` of a cumulative counter as a level. Load the `observability/metrics` guide with `load-skill` for counters.
+- Ignoring a `low_sample` warning and reporting a percentile swing as a regression.

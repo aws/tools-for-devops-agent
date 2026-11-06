@@ -21,14 +21,13 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 
 **Required MCP tools:**
 - `create-agent-graph` -- create a new graph with nodes and edges
-- `get-agent-graph` -- inspect a graph's structure and edges
-- `list-agent-graphs` -- browse existing graphs in the project
+- `get-agent-graphs` -- browse existing graphs in the project; with `graphKey`, inspect one graph's structure and edges
 
 **Optional MCP tools:**
 - `update-agent-graph` -- modify edges, root config, or description
 - `delete-agent-graph` -- permanently remove a graph
-- `get-agentcontrol-config` -- inspect individual configs that serve as nodes
-- `create-agentcontrol-config` -- create new configs to use as graph nodes
+- `get-agent-configs` -- inspect individual configs that serve as nodes
+- `create-agent-config` (`resource: "config"`) -- create new configs to use as graph nodes
 
 ## Core Concepts
 
@@ -80,15 +79,15 @@ Before creating anything:
 2. Map the routing: which agent hands off to which?
 3. Define handoff data: what context does each edge carry?
 4. Identify the root config: which agent receives initial input?
-5. Check existing graphs with `list-agent-graphs` to avoid duplicates
-6. Check existing configs with `get-agentcontrol-config` to see what nodes already exist
+5. Check existing graphs with `get-agent-graphs` to avoid duplicates
+6. Check existing configs with `get-agent-configs` to see what nodes already exist
 
 ### Step 2: Ensure Nodes Exist
 
 Each node in the graph must be an existing config. If configs don't exist yet:
-1. Use `create-agentcontrol-config` to create each agent config
-2. Set up variations with appropriate models and prompts for each agent's role
-3. Verify each config exists with `get-agentcontrol-config`
+1. Use `create-agent-config` with `resource: "config"` to create each agent config
+2. Set up variations with appropriate models and prompts for each agent's role (`resource: "variation"`, or pass the first variation's fields in the same call)
+3. Verify each config exists with `get-agent-configs` and its `configKey`
 
 ### Step 3: Create the Graph
 
@@ -126,7 +125,7 @@ Use `create-agent-graph` with:
 
 ### Step 4: Verify
 
-1. Use `get-agent-graph` to confirm the graph was created with the correct structure
+1. Use `get-agent-graphs` with the `graphKey` to confirm the graph was created with the correct structure
 2. Verify edges connect the right source and target configs
 3. Check that the root config key matches the intended entry point
 4. Confirm handoff data is present on edges that need it
@@ -140,10 +139,10 @@ Use `create-agent-graph` with:
 
 | Situation | Action |
 |-----------|--------|
-| Config doesn't exist yet | Create it first with `create-agentcontrol-config` before referencing in a graph |
+| Config doesn't exist yet | Create it first with `create-agent-config` before referencing in a graph |
 | Circular routing | Allowed but warn user — ensure there's a termination condition in the agent logic |
 | Single-node graph | Valid but unusual — consider if a graph is actually needed |
-| Updating edges | Use `update-agent-graph` — provide the complete new edge list |
+| Updating edges | Use `update-agent-graph` with `confirm: true` — provide the complete new edge list |
 
 ## What NOT to Do
 

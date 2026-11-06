@@ -21,13 +21,12 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 
 **Required MCP tools:**
 - `create-prompt-snippet` -- create a new reusable text block
-- `list-prompt-snippets` -- browse existing snippets in the project
-- `get-prompt-snippet` -- inspect a specific snippet's content
+- `get-prompt-snippets` -- browse existing snippets in the project; with `snippetKey`, inspect one snippet's content
 
 **Optional MCP tools:**
 - `update-prompt-snippet` -- edit a snippet's text, name, or tags
 - `delete-prompt-snippet` -- permanently remove a snippet
-- `update-agentcontrol-config-variation` -- update variation prompts to reference snippets
+- `update-agent-config` with `resource: "variation"` -- update variation prompts to reference snippets
 
 ## Core Concepts
 
@@ -67,10 +66,10 @@ When a snippet is updated, a new version is created. Config variations that refe
 
 Before creating snippets, understand what's shared:
 
-1. List existing configs in the project using `get-agentcontrol-config` for each
+1. List existing configs in the project with `get-agent-configs`, then read each one with its `configKey`
 2. Look for repeated text across variation prompts
 3. Identify text that should stay consistent (guardrails, personas, formats)
-4. Check existing snippets with `list-prompt-snippets` to avoid duplicates
+4. Check existing snippets with `get-prompt-snippets` to avoid duplicates
 
 ### Step 2: Create Snippets
 
@@ -94,8 +93,8 @@ Use `create-prompt-snippet` with:
 
 ### Step 3: Verify
 
-1. Use `get-prompt-snippet` to confirm the snippet was created with the correct text
-2. Use `list-prompt-snippets` to see it in the project listing
+1. Use `get-prompt-snippets` with the `snippetKey` to confirm the snippet was created with the correct text
+2. Use `get-prompt-snippets` without `snippetKey` to see it in the project listing
 3. Check that version is 1 for newly created snippets
 
 **Report results:**
@@ -121,7 +120,7 @@ Each update creates a new version. Existing config variations referencing the sn
 
 | Situation | Action |
 |-----------|--------|
-| Snippet key already exists | Use `get-prompt-snippet` to check, then either update or choose a different key |
+| Snippet key already exists | Use `get-prompt-snippets` with the `snippetKey` to check, then either update or choose a different key |
 | Very long text | Snippets can hold large blocks — but consider splitting into multiple snippets for modularity |
 | Snippet referenced by configs | Update carefully — changes propagate to all referencing configs |
 | Deleting a referenced snippet | Warn the user that configs will lose the reference. Use `delete-prompt-snippet` with `confirm: true` |
@@ -131,7 +130,7 @@ Each update creates a new version. Existing config variations referencing the sn
 - Don't create snippets for text used in only one place
 - Don't put an entire prompt in a single snippet — break it into focused pieces
 - Don't delete snippets without checking which configs reference them
-- Don't duplicate existing snippets — check `list-prompt-snippets` first
+- Don't duplicate existing snippets — check `get-prompt-snippets` first
 
 ## More resources
 

@@ -29,16 +29,17 @@ Use the LaunchDarkly MCP server tools: they authenticate with the connection the
 
 | Tool | Use it to |
 |------|-----------|
-| `get-agentcontrol-config-targeting` | Read the variations, individual targets, rules, default rule and off variation in one environment (read-only) |
-| `get-agentcontrol-config` | Read variation keys and what each variation contains (read-only) |
-| `get-agentcontrol-config-status-envs` | See where the config is active before you change it (read-only) |
-| `update-agentcontrol-config-rollout` | Set the default rule: one variation, or a percentage split |
-| `update-agentcontrol-config-targeting` | Add, remove, reorder or replace custom rules and their clauses |
-| `update-agentcontrol-config-targets` | Add or remove individual contexts |
-| `create-agentcontrol-config-approval` | Submit a change for review when the environment requires approval |
-| `query-change-history` | Find earlier targeting changes, with `resourceKind: "aiconfig"` (read-only) |
+| `get-agent-configs` with `configKey`, `section: "targeting"` and `env` | Read the variations, individual targets, rules, default rule and off variation in one environment (read-only) |
+| `get-agent-configs` with `configKey` | Read variation keys and what each variation contains (read-only) |
+| `get-agent-configs` with `configKey` and `section: "status"` | See where the config is active before you change it (read-only) |
+| `update-agent-config` with `resource: "targeting"` | Change one environment's targeting in one write: turn it on or off (`on`), set the default rule (`fallthrough`), and change rules and individual targets (`targetingInstructions`) |
+| `create-agent-config-approval` | Submit a change for review when the environment requires approval |
+| `get-agent-config-approvals` | Check whether a submitted change was approved (read-only) |
+| `apply-agent-config-approval` | Apply a change after a person approved it |
+| `search-members` | Find a reviewer's member ID (read-only) |
+| `search-change-history` | Find earlier targeting changes, with `resourceKind: "aiconfig"` (read-only) |
 
-The update tools change what live traffic receives. Before calling one, tell the user what the config serves now and what will change, and wait for their confirmation.
+`update-agent-config` with `resource: "targeting"` changes what live traffic receives and requires `confirm: true`. Before calling it, tell the user what the config serves now and what will change, and pass `confirm: true` only after they agree.
 
 ## Core Concepts
 
@@ -50,54 +51,72 @@ Targeting rules evaluate in this order (same as feature flags):
 2. **Custom rules** - Attribute or segment conditions, top to bottom; the first match wins
 3. **Default rule** - Fallthrough for all others
 
-Targeting for a config is always on. `toggle-agentcontrol-config` and the `turnTargetingOn` instruction always fail; to start serving a variation, change the default rule.
+When an environment's targeting is off (`on: false`), every context gets the off variation instead. A new config's default rule serves an auto-generated disabled variation, so to start serving a variation, change the default rule. The `turnTargetingOn` instruction does not work for configs; use the `on` field.
 
 ### Key Concepts
 
-- **variationKey**: Every update tool takes a variation key from `get-agentcontrol-config`, or a variation name from `get-agentcontrol-config-targeting`. You don't need variation UUIDs or indexes.
-- **Percentages**: `update-agentcontrol-config-rollout` takes whole percentages that sum to 100.
+- **variationKey**: `fallthrough` and `targetingInstructions` take a `variationKey`: a variation key or name from `get-agent-configs`. You don't need variation UUIDs or indexes.
+- **Percentages**: a `fallthrough` split takes whole percentages that sum to 100.
 - **Clause logic**: Multiple clauses = AND, multiple values = OR
 - **Null attributes**: Rules with null/missing attributes are skipped
-- **Approvals**: When the environment requires approval, an update tool makes no change and returns `requiresApproval: true` with the instructions to submit (Step 5).
+- **Approvals**: When the environment requires approval, `update-agent-config` makes no change and returns `requiresApproval: true` with the instructions to submit (Step 5).
 
 ## Workflow
 
 ### Step 1: Read the Current Targeting
 
-Call `get-agentcontrol-config-targeting` with the project key, config key and environment key. Note the variation names, each rule's `ruleId` and `clauseId` values, and what the default rule serves. Call `get-agentcontrol-config` if you need variation keys.
+Call `get-agent-configs` with `projectKey`, `configKey`, `section: "targeting"` and `env`. Note the variation keys and names, each rule's `_id` and its clauses' `_id` values, the individual targets, and what the default rule serves. Call `get-agent-configs` with only `projectKey` and `configKey` to see what each variation contains.
 
 ### Step 2: Edit the Default Rule
 
-Call `update-agentcontrol-config-rollout`:
+Call `update-agent-config` with `resource: "targeting"` and a `fallthrough`:
 
-- To serve one variation to every context no rule matches: `rolloutType: "variation"` and `variationKey`.
-- To split that traffic: `rolloutType: "percentage"` with weights, for example `[{ "variationKey": "v1-gpt4o", "percent": 80 }, { "variationKey": "v2-claude", "percent": 20 }]`.
+```json
+{
+  "projectKey": "my-project",
+  "configKey": "chat-assistant",
+  "resource": "targeting",
+  "env": "production",
+  "fallthrough": {"variationKey": "v1-gpt4o"},
+  "confirm": true
+}
+```
+
+- To serve one variation to every context no rule matches: `"fallthrough": {"variationKey": "v1-gpt4o"}`.
+- To split that traffic: `"fallthrough": {"weights": [{"variationKey": "v1-gpt4o", "percent": 80}, {"variationKey": "v2-claude", "percent": 20}]}`.
 
 > **Important:** A new config's default rule serves an auto-generated disabled variation. Until you point the default rule at a real variation, the SDK returns `enabled=False` to every context.
 
-The response returns the stored default rule and `previousFallthrough`. Tell the user both, so they can undo the change.
+Tell the user what the default rule served before (from Step 1) and what it serves now, so they can undo the change.
 
 ### Step 3: Add Targeting Rules
 
-Call `update-agentcontrol-config-targeting` with one or more instructions. The kinds are `addRule`, `removeRule`, `addClauses`, `removeClauses`, `reorderRules`, `replaceRules`, `updateRuleDescription`, `addValuesToClause`, `removeValuesFromClause` and `updateClause`. Take `ruleId` and `clauseId` from Step 1.
+Call `update-agent-config` with `resource: "targeting"` and one or more `targetingInstructions`. The rule kinds are `addRule`, `removeRule`, `addClauses`, `removeClauses`, `reorderRules`, `replaceRules`, `updateRuleDescription`, `addValuesToClause`, `removeValuesFromClause` and `updateClause`. Take `ruleId` and `clauseId` from the `_id` values in Step 1.
 
 **Attribute-based rule:**
 
 ```json
 {
-  "kind": "addRule",
-  "variationKey": "sonnet",
-  "clauses": [{
-    "contextKind": "user",
-    "attribute": "selectedModel",
-    "op": "contains",
-    "values": ["sonnet"],
-    "negate": false
-  }]
+  "projectKey": "my-project",
+  "configKey": "model-selector",
+  "resource": "targeting",
+  "env": "production",
+  "targetingInstructions": [{
+    "kind": "addRule",
+    "variationKey": "sonnet",
+    "clauses": [{
+      "contextKind": "user",
+      "attribute": "selectedModel",
+      "op": "contains",
+      "values": ["sonnet"],
+      "negate": false
+    }]
+  }],
+  "confirm": true
 }
 ```
 
-**Segment rule:**
+**Segment rule** (the instruction only):
 
 ```json
 {
@@ -121,14 +140,21 @@ Each rule serves one variation. For a percentage split inside a rule, or a progr
 
 ### Step 4: Target Individual Contexts
 
-Call `update-agentcontrol-config-targets`. The kinds are `addTargets`, `removeTargets`, `clearTargets` and `replaceTargets`:
+Use `targetingInstructions` with `addTargets`, `removeTargets`, `clearTargets` or `replaceTargets`. `addTargets` and `removeTargets` require `contextKind` and `values`:
 
 ```json
 {
-  "kind": "addTargets",
-  "variationKey": "v1-gpt4o",
-  "contextKind": "user",
-  "values": ["user-key-1"]
+  "projectKey": "my-project",
+  "configKey": "chat-assistant",
+  "resource": "targeting",
+  "env": "production",
+  "targetingInstructions": [{
+    "kind": "addTargets",
+    "variationKey": "v1-gpt4o",
+    "contextKind": "user",
+    "values": ["user-key-1"]
+  }],
+  "confirm": true
 }
 ```
 
@@ -136,20 +162,22 @@ Individual targets override every rule.
 
 ### Step 5: Submit for Approval When Required
 
-If an update tool returns `requiresApproval: true`, the change wasn't made. Ask the user who should review it; if they name a person, find their member ID with `find-members`. Then call `create-agentcontrol-config-approval` with the environment key, the reviewers and the returned instructions. A person approves the request in LaunchDarkly; once it's approved, `apply-agentcontrol-config-approval` applies it. `list-agentcontrol-config-approvals` shows its progress.
+If `update-agent-config` returns `requiresApproval: true`, the change wasn't made. Ask the user who should review it; if they name a person, find their member ID with `search-members`. Then call `create-agent-config-approval` with the environment, at least one reviewer in `notifyMemberIds` or `notifyTeamKeys`, and the returned instructions. Show the user the request's `approvalRequest.url`: a person approves or declines it in LaunchDarkly, and you can't. When the user says it has been reviewed, check it once with `get-agent-config-approvals` and the request's `id`. Only when `reviewStatus` is `approved`, apply it with `apply-agent-config-approval` (`id` and `confirm: true`). If it is pending or declined, tell the user and don't apply it.
 
 ### Step 6: Verify
 
-Call `get-agentcontrol-config-targeting` again and confirm that the default rule, rules and individual targets match the request. `get-agentcontrol-config-health` reports, for each environment, whether the config serves a variation that isn't disabled.
+Call `get-agent-configs` with `section: "targeting"` again and confirm that the default rule, rules and individual targets match the request. `section: "status"` shows the config's status in every environment, and `section: "health"` reports missing variations, models, prompts and tool references.
 
 ## Roll Back a Config
 
 When a variation misbehaves, for example after a model or prompt change:
 
-1. Call `get-agentcontrol-config-targeting` to find what serves the variation: individual targets, a rule or the default rule.
-2. Find the variation that served before with `query-change-history` (`resourceKind: "aiconfig"`, `resourceKey` set to the config key, and the environment). If the history doesn't show it, ask the user which variation to restore.
-3. If the default rule serves it, call `update-agentcontrol-config-rollout` with `rolloutType: "variation"` and the earlier variation's key. If a rule or individual targets serve it, change that rule (Step 3) or those targets (Step 4).
+1. Call `get-agent-configs` with `section: "targeting"` and the environment to find what serves the variation: individual targets, a rule or the default rule.
+2. Find the variation that served before with `search-change-history` (`resourceKind: "aiconfig"`, `resourceKey` set to the config key, and the environment). If the history doesn't show it, ask the user which variation to restore.
+3. If the default rule serves it, call `update-agent-config` with `resource: "targeting"` and `"fallthrough": {"variationKey": "<earlier variation>"}`. If a rule or individual targets serve it, change that rule (Step 3) or those targets (Step 4). If no earlier variation is safe to serve, turning targeting off with `on: false` serves the off variation to every context in that environment.
 4. Verify as in Step 6, and tell the user what you changed.
+
+If the variation itself was edited (its prompt or model changed, not which variation serves), restore its earlier version as described in `launchdarkly-configs-update`.
 
 ## Operators Reference
 
@@ -188,8 +216,8 @@ When a variation misbehaves, for example after a model or prompt change:
 | `requiresApproval: true` | The environment requires approval | Submit the change for review (Step 5) |
 | 400 | Invalid instruction | Check the instruction kind and the clause `op`, which is case-sensitive |
 | 403 | The connected member can't change this config's targeting | Ask the user to reconnect the LaunchDarkly connector as a member with that access |
-| 404 | Config not found | Verify projectKey and configKey with `list-agentcontrol-configs` |
-| Unknown variation | `variationKey` matches no variation | Use a key from `get-agentcontrol-config` or a name from `get-agentcontrol-config-targeting` |
+| 404 | Config not found | Verify projectKey and configKey: `get-agent-configs` without `configKey` lists the project's configs |
+| Unknown variation | `variationKey` matches no variation | Use a variation key or name from `get-agent-configs` |
 
 ## Next Steps
 
@@ -198,13 +226,14 @@ After configuring targeting:
    ```
    https://app.launchdarkly.com/projects/{projectKey}/ai-configs/{configKey}
    ```
-2. **Check health** with `get-agentcontrol-config-health`
+2. **Check health** with `get-agent-configs` and `section: "health"`
 3. **Attach judges** with `launchdarkly-online-evals`
 
 ## Related Skills
 
 - `launchdarkly-configs-create` - Create configs with variations
 - `launchdarkly-configs-variations` - Manage variations
+- `launchdarkly-configs-update` - Restore an earlier version of a variation
 - `launchdarkly-online-evals` - Attach judges
 
 ## Other Resources

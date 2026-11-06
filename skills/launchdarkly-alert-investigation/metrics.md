@@ -1,33 +1,29 @@
-# Alert investigation — metrics
+# Alert investigation: metrics
 
-Load this file when investigating a metric-based alert (aggregated metric threshold, custom metric anomaly, composite alert).
+Load this file for an OpenTelemetry metric alert (a threshold on `metric_name` values, a composite or formula alert). Load the `observability/metrics` guide too (with `load-skill`) for the metric's type and unit.
 
-## What the alert context carries
+## Before you look for a cause
 
-Metric alerts carry:
-- `alertID`, `alertName`, `alertValue` — threshold and value
-- `group`, `groupValue` — the dimension (if grouped)
-- `query` — the metric query
-- `thresholdWindow` — hold duration
-- `metricsLink` — deep link
-- `timeRange` — alert window
+- **Replay the firing** with the `replay` arguments from `get-alert-firing-history`. Confirm you see the value that crossed the threshold, then add `compareTo: "1w"`.
+- **Check the aggregator suits the metric.** `Max` of a cumulative counter only ever grows, so it fires on uptime, not on a problem. `Avg` of `system.cpu.utilization` across its `state` and `cpu` attributes is meaningless; group by `state`. A `Sum` of a gauge across hosts grows with the host count. An alert built on the wrong aggregator is a finding: recommend the right one.
+- **Look at the onset.** Replay from two or three alert windows before the first firing with `bucketCount` 24 to 48: a sharp step, a slow drift, or a daily cycle that crosses the threshold every day?
 
 ## Investigation shape
 
-1. **Replay the alert's metric query** using the `query-aggregations` tool, same `product_type`, `query`, and time window as the alert. Confirm you see the same value that breached.
-2. **Expand the time window just enough** to see onset — if the threshold was crossed at T, pull `query-aggregations` from `T - 2 * thresholdWindow` to `T` to see the rise.
-3. **Drill into the underlying records.** A metric alert on `errors` points to specific error groups; on `sessions` to specific sessions; on `traces` to specific traces. Pull the relevant record-level data for the top contributing dimension.
-4. **Check external triggers.** Deploy correlation, flag flip, traffic surge, dependency issue.
+1. **Which series moved:** group the replay by the metric's attributes (`host.name`, `service_name`, `k8s.pod.name`; list them with `get-keys`) with `bucketCount: 1` and `compareTo`. One host or pod off its peers is the usual cause.
+2. **What else that host or service reports:** `search-aggregations` with `productType: "metrics"`, the slice filter and `groupBy: "metric_name"` lists its metrics, such as pool sizes, memory and queue depth.
+3. **Tie it to requests:** traces and error logs for the same service and host in the window (see `launchdarkly-investigate`).
+4. **What changed:** `get-changes` for the service.
 
 ## What goes in the diagnosis
 
-- **What triggered** — alert name, threshold, alertValue, and (if grouped) which dimension value crossed it.
-- **Likely cause** — specific underlying records (error group IDs, trace IDs, session IDs) that drove the metric up. Quote one or two.
-- **Scope** — affected count, time-window pattern, whether this is a sharp spike or a drift.
-- **Next steps** — concrete actions per the root cause found; if the metric reflects underlying behavior that needs fixing, point to the record-level remediation.
+- **What triggered:** metric name, aggregator, threshold, the replayed value with its unit, and the group.
+- **Verdict:** new, chronic or misconfigured.
+- **Likely cause:** the series that moved and the records behind it (trace IDs, log templates).
+- **Next steps:** the fix, or the alert retune.
 
 ## Common mistakes
 
-- Only reporting the metric value without drilling into record-level evidence. The metric is a summary; the cause lives in the records.
-- Mis-attributing a spike to a specific cause without correlating with a deploy/flag/dependency timeline.
-- Querying too-wide a time range and washing out the signal. Stay near the alert window.
+- Reporting the metric value without record-level evidence.
+- Reading a counter's `Max` as a level.
+- Quoting a value without its unit.

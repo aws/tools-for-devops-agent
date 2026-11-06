@@ -13,7 +13,7 @@ metadata:
 
 # LaunchDarkly Guarded Rollouts
 
-You're using a skill that will guide you through configuring guarded rollouts in LaunchDarkly. Your job is to design rollout stages, select monitoring metrics, configure regression thresholds, and start the rollout.
+You're using a skill that will guide you through configuring guarded rollouts in LaunchDarkly. Your job is to design rollout stages, select monitoring metrics, choose which regressions roll back automatically, and start the rollout.
 
 ## Prerequisites
 
@@ -21,8 +21,8 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 
 **Required MCP tools:**
 - `start-guarded-rollout` -- start a progressive rollout with monitoring
-- `get-flag` -- inspect the flag and its variations
-- `list-metrics` -- find metrics to monitor during the rollout
+- `get-flags` -- inspect the flag and its variations
+- `get-metrics` -- find metrics to monitor during the rollout
 
 **Optional MCP tools:**
 - `stop-guarded-rollout` -- halt an active rollout immediately
@@ -43,16 +43,14 @@ A guarded rollout progressively increases traffic to a new feature flag variatio
 | **Control variation** | The existing/baseline variation |
 | **Stages** | Steps with increasing traffic percentage and monitoring windows |
 | **Metrics** | What to monitor for regressions (error rate, latency, etc.) |
-| **Regression threshold** | How much a metric can degrade before triggering action |
-| **On regression** | Whether to notify, rollback, or both when a threshold is breached |
+| **Auto-rollback** | Per metric: whether a regression rolls back automatically or only notifies |
 
 ### Rollout Weight Units
 
 Rollout weights use thousandths (basis points):
 - `1000` = 1%
 - `10000` = 10%
-- `50000` = 50%
-- `100000` = 100%
+- `50000` = 50%, the maximum for a guarded stage
 
 ### Monitoring Window
 
@@ -65,7 +63,7 @@ The monitoring window is specified in milliseconds:
 
 1. **Start Small**: Begin with a low percentage (1-5%) to catch issues early
 2. **Monitor What Matters**: Choose metrics that reflect user experience
-3. **Set Realistic Thresholds**: Too tight = false alarms; too loose = missed regressions
+3. **Choose Rollback Deliberately**: Auto-roll back on metrics that signal real harm; notify only on noisy ones
 4. **Allow Time**: Each stage needs enough monitoring time for signal to emerge
 5. **Have a Rollback Plan**: Always configure at least notification on regression
 
@@ -75,9 +73,9 @@ The monitoring window is specified in milliseconds:
 
 Before starting a guarded rollout:
 
-1. Use `get-flag` to inspect the flag — note the variation IDs for test and control
-2. Use `list-metrics` to find metrics suitable for monitoring
-3. Ensure the flag is **on** in the target environment (use `toggle-flag` if needed)
+1. Use `get-flags` with `flagKey` and `env` to inspect the flag — note the variation IDs for test and control
+2. Use `get-metrics` to find metrics suitable for monitoring
+3. Ensure the flag is **on** in the target environment (if needed, call `toggle-flag` with `on: true` and `confirm: true`)
 4. Confirm there's no active guarded rollout on this flag already
 
 ### Step 2: Design Stages
@@ -89,17 +87,18 @@ Plan the rollout progression. A typical pattern:
 | 1 | 1% | 1 hour | Smoke test — catch obvious crashes |
 | 2 | 10% | 24 hours | Early signal on metrics |
 | 3 | 50% | 24 hours | Confidence building |
-| 4 | 100% | 24 hours | Full rollout with monitoring |
+
+Each stage's `rolloutWeight` is capped at 50000 (50%). Do not add a 100% stage: after the last stage passes, LaunchDarkly completes the rollout.
 
 ### Step 3: Configure Metrics
 
-Select metrics that indicate problems:
+Select metrics that indicate problems. Each metric entry takes exactly `key` (a metric or metric group key), `isGroup`, and `autoRollback` (roll back automatically on regression, or only notify):
 
-| Metric Type | Example | Threshold | Action |
-|-------------|---------|-----------|--------|
-| Error rate | `api-error-rate` | 0.05 (5% increase) | Rollback |
-| Latency | `p99-response-time` | 0.2 (20% increase) | Notify |
-| Conversion | `checkout-completed` | 0.1 (10% decrease) | Notify + Rollback |
+| Metric Type | Example | `autoRollback` |
+|-------------|---------|----------------|
+| Error rate | `api-error-rate` | `true` |
+| Latency | `p99-response-time` | `false` (notify only) |
+| Conversion | `checkout-completed` | `true` |
 
 ### Step 4: Start the Rollout
 
@@ -116,27 +115,18 @@ Use `start-guarded-rollout`:
   "stages": [
     {"rolloutWeight": 1000, "monitoringWindowMilliseconds": 3600000},
     {"rolloutWeight": 10000, "monitoringWindowMilliseconds": 86400000},
-    {"rolloutWeight": 50000, "monitoringWindowMilliseconds": 86400000},
-    {"rolloutWeight": 100000, "monitoringWindowMilliseconds": 86400000}
+    {"rolloutWeight": 50000, "monitoringWindowMilliseconds": 86400000}
   ],
   "metrics": [
-    {
-      "metricKey": "api-error-rate",
-      "onRegression": {"notify": true, "rollback": true},
-      "regressionThreshold": 0.05
-    },
-    {
-      "metricKey": "checkout-completed",
-      "onRegression": {"notify": true, "rollback": false},
-      "regressionThreshold": 0.1
-    }
+    {"key": "api-error-rate", "isGroup": false, "autoRollback": true},
+    {"key": "checkout-completed", "isGroup": false, "autoRollback": true}
   ]
 }
 ```
 
 ### Step 5: Verify
 
-1. Use `get-flag` to confirm the guarded rollout is active
+1. Use `get-flags` with `flagKey` and `env` to confirm the guarded rollout is active
 2. Check that the flag shows the rollout configuration in the environment
 3. Monitor for any immediate regression notifications
 
@@ -147,13 +137,14 @@ Use `start-guarded-rollout`:
 
 ## Stopping a Rollout
 
-If issues arise or you need to halt the rollout:
+If issues arise or you need to halt the rollout, call `stop-guarded-rollout`:
 
 ```json
 {
   "projectKey": "my-project",
   "flagKey": "new-checkout-flow",
-  "environmentKey": "production"
+  "environmentKey": "production",
+  "confirm": true
 }
 ```
 
@@ -163,14 +154,13 @@ This immediately stops the progressive rollout and locks the flag at its current
 
 | Situation | Action |
 |-----------|--------|
-| Flag is off | Turn it on first with `toggle-flag` — rollouts require the flag to be on |
+| Flag is off | Turn it on first with `toggle-flag` (`on: true`, `confirm: true`) — rollouts require the flag to be on |
 | Active rollout exists | Stop it first with `stop-guarded-rollout` before starting a new one |
 | No suitable metrics | Create metrics first with `create-metric` |
-| Approval required | If the environment requires approvals, the tool will return an approval URL |
+| Approval required | The tool returns `requiresApproval: true` and how to submit the change with `create-approval-request`; share that request's `approvalRequest.url` |
 
 ## What NOT to Do
 
 - Don't start a guarded rollout on a flag that's turned off
 - Don't skip the monitoring window design — rushing through stages defeats the purpose
-- Don't set regression thresholds to 0 — small fluctuations are normal
 - Don't forget to configure at least one metric — a rollout without monitoring is just a regular rollout

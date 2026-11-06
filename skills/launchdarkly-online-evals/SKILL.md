@@ -62,12 +62,13 @@ Judges can only be attached to **completion mode** configs in the UI. Attaching 
 
 ### Step 1: Create Custom Judges (Optional)
 
-For domain-specific evaluation, create a judge config with `create-agentcontrol-config`:
+For domain-specific evaluation, create a judge config with `create-agent-config` and `resource: "config"`:
 
 ```json
 {
   "projectKey": "{projectKey}",
-  "key": "security-judge",
+  "resource": "config",
+  "configKey": "security-judge",
   "name": "Security Judge",
   "mode": "judge",
   "evaluationMetricKey": "$ld:ai:judge:security",
@@ -77,14 +78,15 @@ For domain-specific evaluation, create a judge config with `create-agentcontrol-
 
 > **Note:** `evaluationMetricKey` must start with `$ld:ai:judge:`. Set `isInverted: true` for metrics like toxicity where 0.0 is better.
 
-Then add a variation with the evaluation prompt using `create-agentcontrol-config-variation`. Get `modelConfigKey` from `list-agentcontrol-model-configs`:
+Then add a variation with the evaluation prompt using `create-agent-config` with `resource: "variation"`. Get `modelConfigKey` from `get-ai-model-configs`:
 
 ```json
 {
   "projectKey": "{projectKey}",
+  "resource": "variation",
   "configKey": "security-judge",
-  "key": "default",
-  "name": "Default",
+  "variationKey": "default",
+  "variationName": "Default",
   "modelConfigKey": "OpenAI.gpt-4o-mini",
   "modelName": "gpt-4o-mini",
   "parameters": {"temperature": 0.3},
@@ -101,19 +103,21 @@ Then add a variation with the evaluation prompt using `create-agentcontrol-confi
 
 ### Step 2: Attach Judges to Variations
 
-Use `update-agentcontrol-config-variation` with `judgeConfiguration`. Get `variationKey` from `get-agentcontrol-config`:
+Use `update-agent-config` with `resource: "variation"` and `judgeConfiguration`. Get `variationKey` from `get-agent-configs`:
 
 ```json
 {
   "projectKey": "{projectKey}",
   "configKey": "{configKey}",
+  "resource": "variation",
   "variationKey": "{variationKey}",
   "judgeConfiguration": {
     "judges": [
       {"judgeConfigKey": "security-judge", "samplingRate": 1.0},
       {"judgeConfigKey": "api-contract-judge", "samplingRate": 0.5}
     ]
-  }
+  },
+  "confirm": true
 }
 ```
 
@@ -121,19 +125,20 @@ Use `update-agentcontrol-config-variation` with `judgeConfiguration`. Get `varia
 
 ### Step 3: Set Fallthrough on Judges
 
-Each judge config needs its fallthrough set to the enabled variation in every environment that runs it. Configs default to the "disabled" variation. Use `update-agentcontrol-config-rollout`:
+Each judge config needs its fallthrough set to the enabled variation in every environment that runs it. Configs default to the "disabled" variation. Use `update-agent-config` with `resource: "targeting"` and a `fallthrough`:
 
 ```json
 {
   "projectKey": "{projectKey}",
   "configKey": "security-judge",
+  "resource": "targeting",
   "env": "production",
-  "rolloutType": "variation",
-  "variationKey": "default"
+  "fallthrough": {"variationKey": "default"},
+  "confirm": true
 }
 ```
 
-Then run `get-agentcontrol-config-health` on the judge to confirm it's targetable.
+Then call `get-agent-configs` with the judge's configKey and `section: "health"` to confirm it's targetable.
 
 ## SDK: Inline Evaluation
 

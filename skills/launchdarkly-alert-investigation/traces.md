@@ -1,34 +1,31 @@
-# Alert investigation — traces
+# Alert investigation: traces
 
-Load this file when investigating a trace-based alert (latency threshold, span-error rate, trace-level anomaly).
+Load this file for a trace alert: latency (a percentile or average of `duration`), span error rate, or span count.
 
-## What the alert context carries
+## Before you look for a cause
 
-Trace alerts carry:
-- `alertID`, `alertName`, `alertValue` — the value that crossed threshold
-- `group`, `groupValue` — trace dimension the alert watches (e.g. `span_name=checkout`, `service_name=api`)
-- `query` — the trace filter
-- `thresholdWindow` — duration the condition held
-- `tracesLink` — deep link to the traces UI
-- `timeRange` — alert window
+- **Replay the firing** with the `replay` arguments from `get-alert-firing-history`, then again with `compareTo: "1w"`. Latency alerts are the most common source of noise; a value that matches last week's is a standing condition.
+- **Count the rows.** Check the replay for a `low_sample` block, and add a `Count` expression. A P99 over about 600 spans per window is the sixth-slowest span, and over sampled data the rows read are far fewer than the spans. Set `exact: true` for the alert window. If the alert's percentile rests on a few dozen rows, the alert is fragile; recommend P95, a longer window or a minimum count.
+- **Compare the firing group with its siblings.** For an alert grouped by `task.type` or `http.route`, replay with the alert's `groupBy` and `bucketCount: 1`: is only the firing group slow, and was it already slow last week?
 
 ## Investigation shape
 
-1. **Pull representative slow or failing traces** using the `query-traces` tool with the alert's `query` and `timeRange`. Limit to 5–10 to start; you don't need all of them.
-2. **Identify the dominant span.** In a slow trace, which span owns most of the duration? If spans error, which span is the originating failure (lowest in the hierarchy)?
-3. **Compare against baseline.** If the alert is a latency regression, pull a trace for the same operation from before the alert window. Apples-to-apples: same `span_name`, same service version.
-4. **Look for external signals.** Deploy correlating with the onset? Upstream dependency failure? Traffic shift?
+1. **Slowest or failing spans in the window:** `search-traces` with the alert's query, `sortColumn: "duration"`, `sortDirection: "DESC"`, `limit` 5; or `has_errors=true` for error-rate alerts.
+2. **Read the slowest trace** with `get-trace` (pass `timestamp`). `top_self_time` and `critical_path` name the span that owns the time (`self_ms`, `share_of_root`); without them, subtract the children's durations from the parent's. For errors, find the lowest error span.
+3. **Is that span the pattern?** Aggregate `Sum` and `P95` of `duration` for the parent and its child span names with `exact: true` and `compareTo: "1w"`. "Child X is 65 % of the operation's time, as it was last week" is a cause and a verdict at once.
+4. **What is over-represented:** break the alert's signal down by `host.name`, the version key and `http.route` with `compareTo` (step 4 of the first five minutes in `launchdarkly-investigate`).
+5. **What changed:** `get-changes` for the service from 1 to 2 hours before the onset.
 
 ## What goes in the diagnosis
 
-- **What triggered** — quote the `alertName`, threshold, and the `alertValue` (remember to convert nanoseconds to ms/s).
-- **Likely cause** — span or service attributed as root; cite the trace ID and the specific span that broke down.
-- **Scope** — how many traces hit the threshold, how many services/endpoints, over what fraction of traffic.
-- **Next steps** — concrete: "investigate <span_name> in <service>, commit <hash> introduced the regression", "consider increasing the timeout on the <X> client", "roll back flag <key> if the pattern persists".
+- **What triggered:** alert name and ID, group, function and threshold, the replayed value in ms or s, and the row count behind it.
+- **Verdict:** new, chronic or noise, with firings in 7 days and last week's value.
+- **Likely cause:** the span that owns the time or the failure, with a trace ID and its share of total time.
+- **Next steps:** the code or dependency to fix, or a concrete alert retune.
 
 ## Common mistakes
 
-- Reporting raw nanoseconds. Convert.
-- Citing a single slow trace as representative without confirming frequency.
-- Missing the downstream failure — error spans propagate upward; the true root is often a child span.
-- Querying a 24-hour window when the alert fired on a 10-minute spike. Stay inside the alert's window plus a small buffer.
+- Reporting raw nanoseconds.
+- Treating one slow trace as the pattern without an aggregate.
+- Blaming the longest child span when the parent's own time is larger.
+- Quoting a sampled P99 over a few dozen rows.

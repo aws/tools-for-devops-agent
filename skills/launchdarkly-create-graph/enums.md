@@ -1,19 +1,18 @@
 # Exact enum values for create-graph and preview-graph
 
-Load this file when you're about to call `create-graph` or `preview-graph`. The API is strict about casing — wrong case means the call is rejected.
+Load this file when you're about to call `create-graph` or `preview-graph`. Use the other values exactly as written; only `productType` accepts any casing.
 
-## `productType` (PascalCase, required)
+## `productType` (required)
 
-Use exactly one of:
+One of these; the graph tools accept any casing, and PascalCase is conventional:
 
 - `Logs`
 - `Traces`
 - `Errors`
 - `Sessions`
 - `Metrics`
-- `Events`
-
-**Do NOT** use `sessions`, `errors`, `logs`, `traces`, `metrics` (lowercase). The API rejects them.
+- `PAEvents` (product-analytics events: custom events with `type="track" key="<name>"`, page or screen views with `type="*_view" view_name="<path>"`)
+- `Events` (legacy session_events source, filtered with `event="<name>"`)
 
 ## `expressions` (required, list of objects)
 
@@ -66,17 +65,17 @@ Default: `Timestamp`. Usually fine to omit or leave as default. For non-time agg
 
 Different from `create-graph` — `get-keys` wants lowercase `productType` and full ISO timestamps:
 
-- `productType`: lowercase — `logs`, `traces`, `sessions`, `errors`, `metrics`, `events`
+- `productType`: lowercase — `logs`, `traces`, `sessions`, `errors`, `metrics`, `paevents`, `events`
 - `startDate` / `endDate`: full ISO with time component — `2026-03-04T00:00:00Z`, not date-only `2026-03-04`
 
-Yes, `create-graph` wants `Sessions` (PascalCase) and `get-keys` wants `sessions` (lowercase). It's inconsistent. Just remember: `get-keys` is lowercase, the graph tools are PascalCase.
+The graph tools take `productType` in any case; `get-keys` needs it lowercase.
 
 ## Quick sanity check
 
 Before calling `create-graph`, re-read your arguments:
 
 - `projectKey` present? ✓
-- `productType` PascalCase? ✓
+- `productType` one of the values above? ✓
 - `expressions` is a list of objects each with `aggregator` and `column`? ✓
 - `aggregator` is PascalCase (no underscore)? ✓
 - `column` present even for `Count`? ✓

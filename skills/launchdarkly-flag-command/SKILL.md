@@ -37,8 +37,7 @@ That's it. No analysis. No bullet points. No verdict. The removal question is an
 This skill requires the remotely hosted LaunchDarkly MCP server to be configured in your environment.
 
 **Required MCP tools:**
-- `list-flags` — search and disambiguate flag candidates
-- `get-flag` — fetch detailed configuration for a resolved flag
+- `get-flags` — without `flagKey`, search and disambiguate flag candidates; with `flagKey`, fetch detailed configuration for the resolved flag
 
 **Optional MCP tools:**
 - `get-flag-status-across-envs` — compare lifecycle status across environments
@@ -68,16 +67,16 @@ Use `production` as the default environment unless the user specifies another en
 
 ### Step 2: Resolve the Flag
 
-Use `list-flags` first unless the user clearly provided an exact key and project.
+Use `get-flags` first unless the user clearly provided an exact key and project.
 
-1. Search with `list-flags` using the query.
+1. Search with `get-flags` using the query.
 2. If one clear exact match exists, resolve to that flag.
 3. If multiple plausible matches exist, return a short disambiguation list (key + name + state) and ask the user to pick.
 4. If no matches exist, tell the user and suggest one broader query.
 
 ### Step 3: Return a Useful Summary
 
-For a resolved flag, call `get-flag` and return:
+For a resolved flag, call `get-flags` with `flagKey` and `env` and return:
 
 1. Flag key and name
 2. Environment state (`on`/`off`)

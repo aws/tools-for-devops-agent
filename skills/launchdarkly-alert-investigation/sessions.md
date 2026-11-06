@@ -2,20 +2,14 @@
 
 Load this file when investigating a session-based alert (session-error rate, user-facing failure, session-quality anomaly).
 
-## What the alert context carries
+## Before you look for a cause
 
-Session alerts carry:
-- `alertID`, `alertName`, `alertValue` — threshold and value
-- `group`, `groupValue` — e.g. `has_errors=true`, `country=US`
-- `query` — session filter
-- `thresholdWindow` — hold duration
-- `sessionsLink` — deep link
-- `timeRange` — alert window
+- **Replay the firing** with the `replay` arguments from `get-alert-firing-history`, then with `compareTo: "1w"`. Session counts follow traffic; a rise that matches last week's shape is not an incident.
 
 ## Investigation shape
 
-1. **Pull matching sessions** via `query-sessions` with the alert's query + window. Start small — 5–10 sessions sampled from the window.
-2. **For each session, walk the timeline** via `query-timeline-events`. Find the last successful interaction and the first failing one. The transition is the key moment.
+1. **Pull matching sessions** via `search-sessions` with the alert's query (from `get-alerts` with `alertId`) and the firing window. Start small — 5–10 sessions sampled from the window.
+2. **For each session, walk the timeline** via `search-timeline-events`. Find the last successful interaction and the first failing one. The transition is the key moment.
 3. **Cross-reference errors.** If sessions have `has_errors=true`, pull the error group for each. If sessions share an error group, that's the common root.
 4. **Correlate backend and frontend.** Session events often carry trace IDs — follow them to backend traces and logs for the full picture.
 5. **Check for a common trigger.** Is it a specific browser? Geography? Time of day? Shared identifier attribute?

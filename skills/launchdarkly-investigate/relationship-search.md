@@ -1,6 +1,6 @@
 # Relationship search: `span(...)`, `log(...)`, and `THEN`
 
-Load this file when a `query-sessions` question depends on how events relate to each other: "did A happen and then B?", "did A happen but never B?", "which sessions had both A and B?", "either A or B?".
+Load this file when a `search-sessions` question depends on how events relate to each other: "did A happen and then B?", "did A happen but never B?", "which sessions had both A and B?", "either A or B?".
 
 Plain filters such as `visited-url=*/pricing* visited-url=*/checkout*` only check that a session matched each filter, in any order and not necessarily on the same event. Relationship search wraps each event in its own block and joins the blocks with `AND`, `OR`, or `THEN`. Never tell the user that event order or absence cannot be checked; use this syntax instead.
 
@@ -13,7 +13,7 @@ Plain filters such as `visited-url=*/pricing* visited-url=*/checkout*` only chec
 | `log(A)` | at least one log matching `A`, recorded during the session |
 | `no_log(A)` | no log matches `A` during the session |
 
-Relationship search is available in `query-sessions` only. Don't use `span(...)` chains or `THEN` in `query-traces`.
+This file covers relationship search in `search-sessions`. `search-traces` takes a smaller form within one trace: `span(A) THEN span(B)`, `span(A) THEN no_span(B)`, and the top-level `any_span(...)`, `child_span(...)`, `parent_span(...)` and `root_span(...)`; see `traces.md`. The `log(...)` blocks are sessions only.
 
 In Session Replay search, every page view, click, network request, `track` call, and flag evaluation is stored as a span, so `span(...)` covers frontend events as well as backend spans. Log blocks only join logs recorded with the session's `secure_session_id`. Frontend console logs carry it. Backend logs carry it only when the SDK propagated the session to that request.
 

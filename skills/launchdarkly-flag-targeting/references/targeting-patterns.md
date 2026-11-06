@@ -241,11 +241,11 @@ Individual targets are the highest priority: they override all rules.
 
 ### Context-kind targets (non-user)
 
-For custom context kinds (device, organization, etc.):
+For custom context kinds (device, organization, etc.), pass `contextKind` on `addTargets` / `removeTargets`:
 
 ```json
 {
-  "kind": "addContextTargets",
+  "kind": "addTargets",
   "contextKind": "organization",
   "variationId": "<variation-id>",
   "values": ["org-123", "org-456"]
@@ -254,7 +254,7 @@ For custom context kinds (device, organization, etc.):
 
 ```json
 {
-  "kind": "removeContextTargets",
+  "kind": "removeTargets",
   "contextKind": "organization",
   "variationId": "<variation-id>",
   "values": ["org-123"]
@@ -288,32 +288,38 @@ This is a separate API call (not a semantic patch). Use the flag copy endpoint:
 Copy the full targeting config from staging after testing:
 
 ```
-source: "staging"
-target: "production"
+sourceEnv: "staging"
+targetEnv: "production"
 includedActions: ["updateOn", "updateRules", "updateFallthrough", "updateOffVariation", "updateTargets"]
+confirm: true
 ```
 
 **Note:** The target environment may have approval requirements. If so, the copy operation creates an approval request instead of applying immediately.
 
 ## Batching Instructions
 
-Multiple instructions can be batched. For example, turning on and setting a rollout in one call to `toggle-flag` and `update-rollout`, or sending multiple rule changes to `update-targeting-rules`:
+`update-targeting-rules` and `update-flag-targeting` take an `instructions` array, and every instruction in one call applies together or not at all. For example, add two rules in one `update-targeting-rules` call:
 
 ```json
 {
-  "environmentKey": "production",
+  "projectKey": "my-project",
+  "flagKey": "new-checkout",
+  "env": "production",
   "instructions": [
-    {"kind": "turnFlagOn"},
     {
-      "kind": "updateFallthroughVariationOrRollout",
-      "rolloutWeights": {
-        "<variation-id-0>": 10000,
-        "<variation-id-1>": 90000
-      }
+      "kind": "addRule",
+      "clauses": [{"contextKind": "user", "attribute": "email", "op": "endsWith", "values": ["@example.com"]}],
+      "variationId": "<variation-id-0>"
+    },
+    {
+      "kind": "addRule",
+      "clauses": [{"contextKind": "user", "attribute": "plan", "op": "in", "values": ["enterprise"]}],
+      "variationId": "<variation-id-0>"
     }
   ],
-  "comment": "Turning on with 10% rollout"
+  "comment": "Internal and enterprise users",
+  "confirm": true
 }
 ```
 
-This is preferred over multiple separate calls: it's atomic (all changes apply together or none do).
+Turning a flag on and setting its default rule are separate tools with separate calls. Call `toggle-flag` (`env`, `on: true`, `confirm: true`), then `update-rollout` (`env`, `rolloutType: "percentage"`, `weights`, `confirm: true`).

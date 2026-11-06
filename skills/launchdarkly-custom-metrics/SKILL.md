@@ -2,7 +2,7 @@
 name: launchdarkly-custom-metrics
 description: "Create, track, retrieve, update, and delete custom business metrics for configs. Covers full lifecycle: define metrics with the LaunchDarkly MCP server, emit events via SDK, and query results."
 license: Apache-2.0
-compatibility: Requires the remotely hosted LaunchDarkly MCP server to create and read metrics. Updating or deleting a metric is done in the LaunchDarkly UI. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
+compatibility: Requires the remotely hosted LaunchDarkly MCP server. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
 metadata:
   author: "nieblara"
   version: "1.0.0"
@@ -22,7 +22,7 @@ Full lifecycle management of custom business metrics: create metric definitions 
 
 ## API Access
 
-Use the LaunchDarkly MCP server tools: they authenticate with the connection the customer set up. Create metrics with `create-metric`, check that events are arriving with `list-metric-events`, and read definitions with `get-metric` and `list-metrics`. The MCP server can't update or delete metrics, so tell the user which change to make in the LaunchDarkly UI instead. Never ask the user for an API access token.
+Use the LaunchDarkly MCP server tools: they authenticate with the connection the customer set up. Create metrics with `create-metric`, check that events are arriving with `get-metric-events`, read definitions with `get-metrics`, and change or remove them with `update-metric` and `delete-metric`. Never ask the user for an API access token.
 
 ## Metrics Lifecycle Overview
 
@@ -30,9 +30,9 @@ Use the LaunchDarkly MCP server tools: they authenticate with the connection the
 |------|--------|---------|
 | 1. Create | MCP `create-metric` | Define metric in LaunchDarkly |
 | 2. Track | SDK | Send events to the metric |
-| 3. Get | MCP `get-metric`, `list-metrics`, `list-metric-events` | Retrieve metric definition/data |
-| 4. Update | LaunchDarkly UI | Modify metric properties |
-| 5. Delete | LaunchDarkly UI | Remove metric |
+| 3. Get | MCP `get-metrics` (with `metricKey` for one), `get-metric-events` | Retrieve metric definition/data |
+| 4. Update | MCP `update-metric` | Modify metric properties |
+| 5. Delete | MCP `delete-metric` | Remove metric |
 
 ## 1. Create Metric
 
@@ -53,7 +53,7 @@ Call `create-metric`. `eventKey` must match the key your code passes to `track()
 }
 ```
 
-`measureType` is `count` (how many times the event fired), `occurrence` (whether each user fired it at all), or `value` (a number sent with the event). Then confirm with `get-metric`.
+`measureType` is `count` (how many times the event fired), `occurrence` (whether each user fired it at all), or `value` (a number sent with the event). Then confirm with `get-metrics` and `metricKey`.
 
 **Metric Kinds:**
 - `custom` - Track any event (most common for agent metrics)
@@ -184,15 +184,15 @@ def track_revenue(ld_client, user_id: str, revenue: float, source: str):
 
 ## 3. Get Metrics
 
-Use `get-metric` for one metric and `list-metrics` for all of them. After you start tracking, `list-metric-events` shows which event keys have arrived and when, which is the fastest way to catch an `eventKey` that doesn't match `track()`.
+Use `get-metrics` with `metricKey` for one metric, or without it for all of them. After you start tracking, `get-metric-events` shows which event keys have arrived, which is the fastest way to catch an `eventKey` that doesn't match `track()`.
 
 ## 4. Update Metric
 
-The MCP server has no tool to update a metric. Tell the user to open the metric on the **Metrics** page in the LaunchDarkly UI and change it there, then confirm the result with `get-metric`.
+Call `update-metric` with the project key, the metric key and only the fields to change. Each field replaces the current value, so `tags` must list every tag the metric should keep. Tell the user what will change and wait for their confirmation before the call, then confirm the result with `get-metrics` and `metricKey`.
 
 ## 5. Delete Metric
 
-The MCP server has no tool to delete a metric either. Call `get-metric` first: it reports how many flags the metric is attached to. Tell the user what depends on it, then have them delete it on the **Metrics** page in the LaunchDarkly UI.
+Deleting a metric is permanent. Call `get-metrics` with `metricKey` first to see what uses it, tell the user, and call `delete-metric` only after they confirm. LaunchDarkly refuses to delete a metric that a flag, experiment, guarded rollout, metric group or release policy still uses.
 
 ## Session Metrics Tracker
 
@@ -286,7 +286,7 @@ class SessionMetricsTracker:
 Custom metrics appear in:
 - **Metrics** page in LaunchDarkly UI
 - **Monitoring tab** of your config
-- From the agent with the `get-metric`, `list-metrics`, and `list-metric-events` MCP tools
+- From the agent with the `get-metrics` and `get-metric-events` MCP tools
 
 ## Related Skills
 

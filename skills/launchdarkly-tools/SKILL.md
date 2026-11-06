@@ -21,12 +21,11 @@ This skill requires the remotely hosted LaunchDarkly MCP server to be configured
 
 **Required MCP tools:**
 - `create-ai-tool` -- create a new tool definition with a schema
-- `update-agentcontrol-config-variation` -- attach tools to a config variation
-- `get-agentcontrol-config` -- verify tools are attached to the variation
+- `update-agent-config` with `resource: "variation"` -- attach tools to a config variation
+- `get-agent-configs` with `configKey` -- verify tools are attached to the variation
 
 **Optional MCP tools:**
-- `list-ai-tools` -- browse existing tools in the project
-- `get-ai-tool` -- inspect a specific tool's schema
+- `get-ai-tools` -- browse existing tools in the project; with `toolKey`, inspect one tool's schema
 
 ## Core Principles
 
@@ -46,12 +45,12 @@ What should the agent be able to do?
 - Consider framework: LangGraph/LangChain auto-generate schemas; direct SDK needs manual schemas
 
 If the user asks to check existing tools first, or you have no codebase context about what tools exist, follow this exact order:
-1. `list-ai-tools` -- explore what exists
+1. `get-ai-tools` -- explore what exists
 2. `create-ai-tool` -- create the new tool (with a key different from existing ones)
-3. `update-agentcontrol-config-variation` -- attach it
-4. `get-agentcontrol-config` -- verify
+3. `update-agent-config` with `resource: "variation"` -- attach it
+4. `get-agent-configs` -- verify
 
-Call `list-ai-tools` as your **first** tool call before any creation. Never stop after listing alone -- always proceed through all four steps.
+Call `get-ai-tools` as your **first** tool call before any creation. Never stop after listing alone -- always proceed through all four steps.
 
 ### Step 2: Create Tools
 
@@ -73,25 +72,27 @@ Use `create-ai-tool` with:
 
 ### Step 3: Attach to Variation
 
-Use `update-agentcontrol-config-variation` to attach tools. **Pass only the `tools` field.** Do not bundle `instructions`, `messages`, `model`, or `parameters` into this PATCH unless the user has explicitly asked you to also update those fields. Those fields may have been edited in the LaunchDarkly UI since the variation was created, and including them in a tool-attachment PATCH will silently clobber the UI edits.
+Use `update-agent-config` with `resource: "variation"` to attach tools. **Pass only the `tools` field** (plus `projectKey`, `configKey`, `variationKey`, and `confirm`). Do not bundle `instructions`, `messages`, `model`, or `parameters` into this PATCH unless the user has explicitly asked you to also update those fields. Those fields may have been edited in the LaunchDarkly UI since the variation was created, and including them in a tool-attachment PATCH will silently clobber the UI edits.
 
 ```json
 {
   "projectKey": "my-project",
   "configKey": "support-chatbot",
+  "resource": "variation",
   "variationKey": "default",
   "tools": [
     {"key": "search-knowledge-base", "version": 1}
-  ]
+  ],
+  "confirm": true
 }
 ```
 
-If you observe a UI-clear bug where attaching tools wipes other fields, **do not work around it by re-sending those fields from the previous `get-agentcontrol-config` response** — that masks the bug and can resurrect stale values that the user has since edited. Report the bug instead.
+If you observe a UI-clear bug where attaching tools wipes other fields, **do not work around it by re-sending those fields from the previous `get-agent-configs` response** — that masks the bug and can resurrect stale values that the user has since edited. Report the bug instead.
 
 ### Step 4: Verify
 
-1. Use `get-ai-tool` to confirm the tool exists with a valid schema
-2. Use `get-agentcontrol-config` to confirm the tool is attached to the variation (check `tools` in the variation's output)
+1. Use `get-ai-tools` with the `toolKey` to confirm the tool exists with a valid schema
+2. Use `get-agent-configs` with the `configKey` to confirm the tool is attached to the variation (check `tools` in the variation's output)
 
 **Report results:**
 - Tool created with valid schema
@@ -100,7 +101,7 @@ If you observe a UI-clear bug where attaching tools wipes other fields, **do not
 
 ## Per-provider schema at the call site
 
-LaunchDarkly stores the tool schema once — the flat `{type, name, description, parameters}` shape you passed to `create-ai-tool`. Your application reads it back via `config.model.parameters.tools` (completion mode) or `agent_config.model.parameters.tools` (agent mode), then converts to the shape the provider SDK expects. LaunchDarkly never makes the provider call; your code does. The handlers that implement each tool also stay in application code — LaunchDarkly stores the schema, your application owns the behavior.
+LaunchDarkly stores the tool schema once — the JSON Schema you passed as `schema` to `create-ai-tool`, with the tool's `key` and `description`. Your application reads it back via `config.model.parameters.tools` (completion mode) or `agent_config.model.parameters.tools` (agent mode), then converts to the shape the provider SDK expects. LaunchDarkly never makes the provider call; your code does. The handlers that implement each tool also stay in application code — LaunchDarkly stores the schema, your application owns the behavior.
 
 | Provider / framework | Target shape | Where it goes on the call |
 |---|---|---|

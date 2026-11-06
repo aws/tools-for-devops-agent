@@ -12,7 +12,7 @@ Run through this checklist before applying any targeting changes, especially in 
 ### 2. Right Flag?
 
 - [ ] Confirmed the flag key matches what the user intends
-- [ ] If the flag key could be ambiguous, verify with `get-flag`
+- [ ] If the flag key could be ambiguous, verify with `get-flags`
 
 ### 3. Understand Current State
 
@@ -29,7 +29,7 @@ Some environments require approval for changes.
 - [ ] Offer to create an approval request with `create-approval-request` using the returned `instructions`
 - [ ] Include a clear description of the intended change in the approval request
 - [ ] Do NOT attempt to bypass approval or auto-approve
-- [ ] If checking on a previous request, use `list-approval-requests`
+- [ ] If checking on a previous request, use `get-approval-requests`
 - [ ] Only apply a request (`apply-approval-request`) if reviewStatus is "approved"
 
 See [Approval Workflows](approval-workflows.md) for the complete reference.
@@ -41,7 +41,7 @@ See [Approval Workflows](approval-workflows.md) for the complete reference.
 
 ## For Percentage Rollouts
 
-- [ ] Weights sum to exactly 100% (100000 in the API)
+- [ ] Weights sum to exactly 100 (`update-rollout` takes percentages; semantic-patch `rolloutWeights` use 100000)
 - [ ] The rollout is on the default rule (fallthrough) unless intentionally on a specific rule
 - [ ] Individual targets and higher-priority rules aren't silently overriding the rollout for some users
 - [ ] Consider starting small (1-5%) for high-risk features
@@ -78,6 +78,6 @@ For any change to a production environment:
 
 ## After the Change
 
-- [ ] Verified the new state with `get-flag`
+- [ ] Verified the new state with `get-flags`
 - [ ] Described the resulting targeting to the user in plain language
 - [ ] Confirmed the change achieves what the user asked for

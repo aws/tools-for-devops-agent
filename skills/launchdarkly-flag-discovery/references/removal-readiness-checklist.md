@@ -19,7 +19,7 @@ A systematic safety check to determine whether a feature flag can be safely remo
 
 ### 2. Configuration Consistency
 
-**Check:** Use `get-flag` for each critical environment and compare configurations.
+**Check:** Use `get-flags` with `flagKey` and `env` for each critical environment and compare configurations.
 
 **Pass criteria:**
 - All critical environments serve the same variation (same `fallthrough.variation` or same `offVariation`)
@@ -47,7 +47,7 @@ A systematic safety check to determine whether a feature flag can be safely remo
 
 ### 4. Code References
 
-**Check:** Use `check-removal-readiness`, which includes code reference statistics.
+**Check:** If available, use `get-removal-readiness` which includes code reference statistics. Otherwise, use `get-flag-code-references` to find repositories that reference this flag.
 
 **Pass criteria:**
 - No code references found, or references only exist in the current repository (about to be cleaned up)

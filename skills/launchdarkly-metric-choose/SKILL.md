@@ -22,11 +22,11 @@ This skill is advisory. It does not create metrics, attach them to experiments, 
 This skill requires the remotely hosted LaunchDarkly MCP server to be configured in your environment.
 
 **Required MCP tools:**
-- `list-metrics` — inventory available metrics with their types and event keys
-- `list-metric-events` — check which event keys have recent activity
+- `get-metrics` — inventory available metrics with their types and event keys
+- `get-metric-events` — check which event keys have recent activity
 
 **Optional MCP tools (enhance workflow):**
-- `list-release-policies` — fetch project-level policies that configure which metrics auto-attach to guarded rollouts. Use this for the guarded rollout and release policy paths.
+- `get-release-policies` — fetch project-level policies that configure which metrics auto-attach to guarded rollouts. Use this for the guarded rollout and release policy paths.
 
 ## Workflow
 
@@ -47,10 +47,10 @@ Ask two questions upfront:
 
 **For experiments — skip this step.** There is no pre-existing configuration to surface.
 
-**For guarded rollouts and release policy work**, call `list-release-policies` first:
+**For guarded rollouts and release policy work**, call `get-release-policies` first:
 
 ```
-list-release-policies(projectKey)
+get-release-policies(projectKey)
 ```
 
 Surface the results before making any recommendations:
@@ -74,14 +74,16 @@ If no policies exist or none have metrics configured, note that all metrics must
 
 ### Step 3: Inventory Available Metrics with Event Health
 
-Call `list-metrics` to see all metrics in the project, then cross-reference with `list-metric-events`.
+Call `get-metrics` to see all metrics in the project, then cross-reference with `get-metric-events`.
 
 Organize into two groups:
 
 | Group | Criteria | Note |
 |-------|----------|------|
-| **Healthy** | Event key appears in `list-metric-events` | Safe to recommend |
-| **At-risk** | Event key absent from `list-metric-events` | Warn: may not produce data |
+| **Healthy** | Event key appears in `get-metric-events` | Safe to recommend |
+| **At-risk** | Event key absent from `get-metric-events` | Warn: may not produce data |
+
+Pageview and click metrics have no custom event key, so `get-metric-events` cannot vouch for them. List them separately as "not checked" rather than at-risk.
 
 Show this inventory before recommending — it may reveal that a metric the user has in mind has no events flowing.
 
