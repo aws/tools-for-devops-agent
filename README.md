@@ -1,39 +1,91 @@
-# Local validation repo — datalake-access-analyzer
+# AWS DevOps Agent Tools
 
-This is a **local mirror** of the PR contents for `aws/tools-for-devops-agent`. It
-exists to validate the file layout, JSON, and skill structure locally **before** the
-real fork + push. It is not the upstream repo and nothing here is pushed anywhere.
+![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
+![AWS DevOps Agent](https://img.shields.io/badge/AWS-DevOps%20Agent-orange?logo=amazonaws)
 
-## What it mirrors
+Open-source skills, custom agents, MCP servers and infrastructure templates for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that extend its capabilities for incident response, root cause analysis, and operational troubleshooting.
 
-The PR adds one directory:
+## ⚠️ Important Notice
 
+These tools are provided as sample code. If you intend to deploy them in production, start with a non-production environment first, and before deploying to production:
+
+- Test thoroughly in a non-production environment first
+- Review IAM permissions and security configurations against your organization's policies
+- Validate that behavior meets your operational requirements
+
+See the [LICENSE](LICENSE) file for terms of use.
+
+---
+
+This repository contains:
+
+- **Skills** — Domain-specific knowledge, decision trees, and step-by-step runbooks that the agent follows during investigations. Use them as-is or as templates for writing your own. Browse the [Skills Catalog](https://aws.github.io/tools-for-devops-agent/skills/).
+- **Custom Agents** — Pre-built agent configurations with system prompts and tool assignments for recurring operational workflows like health reports and operational reviews. Browse the [Custom Agents Catalog](https://aws.github.io/tools-for-devops-agent/custom-agents/).
+- **MCP Servers** — MCP servers tailored to work with skills and custom agents in this repo, extending their capabilities to retrieve necessary information. Browse the [MCP Servers Catalog](https://aws.github.io/tools-for-devops-agent/mcp-servers/).
+- **CloudFormation Templates** — Infrastructure-as-code for provisioning IAM permissions that skills require and for [forwarding CloudWatch alarms to DevOps Agent investigations](cloudformation/devops-agent-alarm-investigations/).
+
+All tools are contributed and tested according to the [contribution guidelines](CONTRIBUTING.md).
+
+## What Are Skills, Custom Agents, and MCP Servers?
+
+**Skills** are structured instruction sets that teach the agent how to investigate specific operational scenarios. They follow the open [Agent Skills specification](https://agentskills.io/home) and can be uploaded to your Agent Space to extend the agent's knowledge beyond built-in capabilities. See the [DevOps Agent skills documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html) for more information.
+
+**Custom agents** are user-defined AI agents that automate operational tasks specific to your infrastructure. You define a system prompt, assign tools and skills, and run them on demand or on a schedule. See the [DevOps Agent custom agents documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-custom-agents-index.html) for more information.
+
+**MCP servers** implement the open [Model Context Protocol](https://modelcontextprotocol.io) to connect the agent to external systems and data sources. The servers in this repository are tailored to work alongside the skills and custom agents here, extending their capabilities to retrieve the information they need.
+
+## Getting Started
+
+See the [Getting Started guide](https://aws.github.io/tools-for-devops-agent/getting-started/) on the documentation site for step-by-step instructions on deploying skills and custom agents to your Agent Space.
+
+## Skill Permissions
+
+Each skill documents the IAM permissions it requires in its README under **Prerequisites**. The DevOps Agent role associated with your Agent Space must have these permissions for the skill to function fully.
+
+Most permissions are already covered by the AWS managed policy [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security-devops-agent-iam-permissions.html). For skills that need additional permissions, you can use the included CloudFormation template to automatically provision them:
+
+```bash
+aws cloudformation deploy \
+  --template-file cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml \
+  --stack-name devops-agent-skill-policies \
+  --parameter-overrides ExistingRoleName=<YOUR-DEVOPS-AGENT-ROLE-NAME> \
+  --capabilities CAPABILITY_NAMED_IAM
 ```
-skills/datalake-access-analyzer/
-├── SKILL.md                   # frontmatter + 7-step methodology
-├── README.md                  # overview, prerequisites, usage, limitations
-├── references/
-│   └── permission-chain.md    # per-layer API + condition detail (doc-cited)
-└── evals/
-    └── evals.json             # hand-written eval definitions (5 scenarios)
-```
 
-## Validation performed
+The template supports enabling/disabling policies per skill, optional region restrictions, and can either attach to an existing role or create a new one. See [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) for details.
 
-Run `./validate.sh` to re-check. It confirms:
+## Contributing
 
-1. All four shippable files are present in the correct layout.
-2. `evals/evals.json` is valid JSON and carries exactly 5 scenarios.
-3. `SKILL.md` is at or under the 500-line contribution limit.
-4. No internal pattern numbers / internal references leaked into shipped files.
+We welcome contributions of new skills and improvements to existing ones. See [CONTRIBUTING](CONTRIBUTING.md) for guidelines.
 
-## When you do the real PR
+## Support
 
-1. Fork `aws/tools-for-devops-agent`, branch `feature/datalake-access-analyzer`.
-2. Copy `skills/datalake-access-analyzer/` into your fork.
-3. Run the internal skill evaluation tool; commit the generated `evals/` result
-   subdirectories.
-4. `git push origin feature/datalake-access-analyzer` and open the PR using
-   `../PR-DRAFT.md` as the body.
+Need help, found a bug, or want to suggest a new tool? See [SUPPORT](SUPPORT.md) for how to get support and where to file issues.
 
-See `../PR-DRAFT.md` and `step3-testkit/TEST-EVIDENCE-2026-10-18.md` for full context.
+## References
+
+### AWS Documentation
+
+- [AWS DevOps Agent product page](https://aws.amazon.com/devops-agent/)
+- [AWS DevOps Agent User Guide](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent.html)
+- [AWS DevOps Agent API Reference](https://docs.aws.amazon.com/devopsagent/latest/APIReference/Welcome.html)
+- [AWS DevOps Agent Skills — Creating and uploading skills](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html)
+- [AWS DevOps Agent Custom Agents](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-custom-agents-index.html)
+
+### Blog Posts and Articles
+
+- [Extend AWS DevOps Agent with Custom Skills for Your Operational Workflows](https://builder.aws.com/content/3BDdQAFY2bSmtjecZC7vbOQGSEV/extend-aws-devops-agent-with-custom-skills-for-your-operational-workflows)
+- [Resolve Incidents Faster with Skills in AWS DevOps Agent](https://repost.aws/articles/ARMSvRG3qeSVK0qEAoJNsRgQ/resolve-incidents-faster-with-skills-in-aws-devops-agent)
+- [Building an End-to-End Agentic SRE Using AWS DevOps Agent](https://aws.amazon.com/blogs/devops/building-an-end-to-end-agentic-sre-using-aws-devops-agent/)
+- [Best Practices for Deploying AWS DevOps Agent in Production](https://aws.amazon.com/blogs/devops/best-practices-for-deploying-aws-devops-agent-in-production/)
+- [Leverage Agentic AI for Autonomous Incident Response with AWS DevOps Agent](https://aws.amazon.com/blogs/devops/leverage-agentic-ai-for-autonomous-incident-response-with-aws-devops-agent/)
+
+### Specifications and Tools
+
+- [Agent Skills specification](https://agentskills.io/home) — the open standard this project follows
+- [AGENTS.md specification](https://agents.md/) — the open standard for custom agent definitions
+- [Model Context Protocol (MCP)](https://modelcontextprotocol.io) - open-source standard for connecting AI applications to external systems
+
+## License
+
+This library is licensed under the Apache-2.0 License. See the LICENSE file.
