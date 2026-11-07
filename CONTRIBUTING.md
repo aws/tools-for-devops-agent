@@ -112,7 +112,7 @@ The check is exact only for the base commit it ran on. Two pull requests that ea
 
 If the check is wrong about a pull request, a maintainer can add the `skip-validate-skills` label: the check still runs and reports, but it no longer blocks the merge. If the check itself breaks and blocks every pull request, an admin removes `validate-skills` from the required status checks for `main` until the fix merges, then adds it back.
 
-Once branch protection requires it, changes under `.github/` and `tests/`, and to the root `.gitattributes`, need a code owner's approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)). A separate check, `build-docs`, runs `mkdocs build --strict` on every pull request; to run it locally, in the virtual environment below, `python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict`.
+Once branch protection requires it, changes under `.github/` and `tests/`, and to the root `.gitattributes`, need a code owner's approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)). A separate check, `build-docs`, runs `mkdocs build --strict` on every pull request; to run it locally, in the virtual environment below, `python3 -m pip install --require-hashes -r .github/scripts/docs/requirements.txt && mkdocs build --strict`.
 
 Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
 
