@@ -51,6 +51,13 @@ For the alert, open its **Response** step, set **Notify on** to **Alerts**, then
 
 More in the Coralogix docs: [AWS DevOps Agent](https://coralogix.com/docs/user-guides/mcp-server/aws-devops-agent/), [OAuth](https://coralogix.com/docs/user-guides/mcp-server/oauth/), [API keys](https://coralogix.com/docs/user-guides/account-management/api-keys/api-keys/), [Coralogix domain](https://coralogix.com/docs/user-guides/account-management/account-settings/coralogix-domain/), and [MCP server permissions](https://coralogix.com/docs/user-guides/mcp-server/permissions/).
 
-## Terms
+## Terms of Use and Data Protection
 
-Your use of Coralogix through this connector is subject to the [Coralogix Terms & Conditions](https://coralogix.com/terms-conditions/) and the [Coralogix Data Processing Agreement](https://coralogix.com/data-processing-agreement/). Those terms apply in addition to the AWS DevOps Agent terms, and any update Coralogix publishes to them applies to this connector automatically.
+Use of the Coralogix connector for AWS DevOps Agent is subject to the [Coralogix Master Subscription Terms](https://coralogix.com/terms-conditions/) and the [Coralogix Data Processing Agreement](https://coralogix.com/data-processing-agreement/), as updated from time to time.
+
+By using this connector, you acknowledge and agree that:
+
+- AWS may collect and use metadata and usage metrics from your use of this connector, in accordance with the AWS terms applicable to AWS DevOps Agent.
+- Coralogix may notify and cooperate with AWS regarding security vulnerabilities or incidents related to this connector or affecting data processed through it.
+
+For questions or security matters related to this connector, contact [aws-devops-agent@coralogix.com](mailto:aws-devops-agent@coralogix.com).
