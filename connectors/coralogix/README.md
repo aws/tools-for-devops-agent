@@ -50,3 +50,7 @@ Configure one Coralogix delivery path:
 For the alert, open its **Response** step, set **Notify on** to **Alerts**, then select the connector and preset, or the outbound webhook. Leave **Notify when resolved** off: this connector sends each notification as a new incident, so a recovery notification could open a second investigation. Use the request body unchanged so it follows the AWS DevOps Agent webhook format.
 
 More in the Coralogix docs: [AWS DevOps Agent](https://coralogix.com/docs/user-guides/mcp-server/aws-devops-agent/), [OAuth](https://coralogix.com/docs/user-guides/mcp-server/oauth/), [API keys](https://coralogix.com/docs/user-guides/account-management/api-keys/api-keys/), [Coralogix domain](https://coralogix.com/docs/user-guides/account-management/account-settings/coralogix-domain/), and [MCP server permissions](https://coralogix.com/docs/user-guides/mcp-server/permissions/).
+
+## Terms
+
+Your use of Coralogix through this connector is subject to the [Coralogix Terms & Conditions](https://coralogix.com/terms-conditions/) and the [Coralogix Data Processing Agreement](https://coralogix.com/data-processing-agreement/). Those terms apply in addition to the AWS DevOps Agent terms, and any update Coralogix publishes to them applies to this connector automatically.
