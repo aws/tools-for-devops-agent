@@ -1,0 +1,855 @@
+{
+  "description": "Conformance cases for the YAML in connectors/<name>/connector.yaml and connectors/releases.yaml. Other YAML parsers read some YAML differently from PyYAML, or refuse it, so these files may hold only YAML that every parser reads the same way. Each case is a whole file and gives its expect result: pass means the YAML is read without a problem, fail means it is refused, and error is a fragment of this repository's own message. Another tool that reads these files should give the same result on every case. The SKILL.md frontmatter follows the same rules and stricter ones (see conformance-cases.json), so a pass case here can fail as frontmatter, and a frontmatter never ends in a line break, since the closing --- line holds it. tests/test_skill_checks.py runs every case.",
+  "cases": [
+    {
+      "id": "plain strings",
+      "yaml": "name: cribl\nversion: 1.0.0\ntitle: yes please\nteam: on-call\nurl: https://example.com/a?b=c\n",
+      "expect": "pass"
+    },
+    {
+      "id": "quoted values that a parser would type if plain",
+      "yaml": "a: \"1.0\"\nb: 'yes'\nc: \"2026-11-08\"\nd: \"~\"\ne: \"<<\"\nf: \"0x1F\"\n",
+      "expect": "pass"
+    },
+    {
+      "id": "canonical ints",
+      "yaml": "a: 0\nb: 3\nc: -3\nd: 9007199254740991\ne: -9007199254740991\n",
+      "expect": "pass"
+    },
+    {
+      "id": "decimals that round-trip",
+      "yaml": "a: 1.5\nb: -0.25\nc: 0.0001\n",
+      "expect": "pass"
+    },
+    {
+      "id": "true, false and null",
+      "yaml": "a: true\nb: false\nc: null\nd: ~\ne:\n",
+      "expect": "pass"
+    },
+    {
+      "id": "quoted keys",
+      "yaml": "'true': a\n\"1\": b\n'null': c\n\"1.0\": d\n'~': e\n",
+      "expect": "pass"
+    },
+    {
+      "id": "flow collections",
+      "yaml": "a: [x, 1, {b: true}]\n",
+      "expect": "pass"
+    },
+    {
+      "id": "block scalars",
+      "yaml": "a: |\n  yes\nb: >\n  1.0\n",
+      "expect": "pass"
+    },
+    {
+      "id": "CRLF line ends",
+      "yaml": "a: 1\r\nb: x\r\n",
+      "expect": "pass"
+    },
+    {
+      "id": "a document start marker",
+      "yaml": "---\na: 1\n",
+      "expect": "pass"
+    },
+    {
+      "id": "tag !!str on a value",
+      "yaml": "a: !!str 1\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag !!map on a collection",
+      "yaml": "a: !!map {b: 1}\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag on a key",
+      "yaml": "!!str k: v\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag on an explicit key",
+      "yaml": "? !!str k\n: v\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag on a key in a flow map",
+      "yaml": "{!!str k: v}\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "non-specific tag !",
+      "yaml": "a: ! x\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "custom tag",
+      "yaml": "a: !custom x\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag on an empty node",
+      "yaml": "a: !!null\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag on the root collection",
+      "yaml": "!!map\nk: v\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag on a sequence item",
+      "yaml": "- !!str x\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag on a block scalar",
+      "yaml": "a: !!str |\n  x\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "tag in a flow sequence",
+      "yaml": "a: [!!str x]\n",
+      "expect": "fail",
+      "error": "uses tags"
+    },
+    {
+      "id": "merge key with an alias",
+      "yaml": "base: &b {x: 1}\nchild:\n  <<: *b\n",
+      "expect": "fail",
+      "error": "uses anchors"
+    },
+    {
+      "id": "merge key without an alias",
+      "yaml": "child:\n  <<: {x: 1}\n",
+      "expect": "fail",
+      "error": "<< key"
+    },
+    {
+      "id": "single-quoted merge key",
+      "yaml": "'<<': {x: 1}\n",
+      "expect": "fail",
+      "error": "<< key"
+    },
+    {
+      "id": "double-quoted merge key",
+      "yaml": "\"<<\": {x: 1}\n",
+      "expect": "fail",
+      "error": "<< key"
+    },
+    {
+      "id": "merge key in a flow map",
+      "yaml": "{<<: {x: 1}}\n",
+      "expect": "fail",
+      "error": "<< key"
+    },
+    {
+      "id": "explicit merge key",
+      "yaml": "? <<\n: {x: 1}\n",
+      "expect": "fail",
+      "error": "<< key"
+    },
+    {
+      "id": "byte order mark at the start",
+      "yaml": "\ufeffa: 1\n",
+      "expect": "fail",
+      "error": "byte order mark"
+    },
+    {
+      "id": "byte order mark in a plain value",
+      "yaml": "a: x\ufeffy\n",
+      "expect": "fail",
+      "error": "byte order mark"
+    },
+    {
+      "id": "byte order mark in a quoted value",
+      "yaml": "a: \"x\ufeff\"\n",
+      "expect": "fail",
+      "error": "byte order mark"
+    },
+    {
+      "id": "byte order mark in a comment",
+      "yaml": "# c\ufeff\na: 1\n",
+      "expect": "fail",
+      "error": "byte order mark"
+    },
+    {
+      "id": "plain value yes",
+      "yaml": "a: yes\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value No",
+      "yaml": "a: No\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value ON",
+      "yaml": "a: ON\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value True",
+      "yaml": "a: True\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value NULL",
+      "yaml": "a: NULL\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value y",
+      "yaml": "a: y\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value =",
+      "yaml": "a: =\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value <<",
+      "yaml": "a: <<\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 1.0",
+      "yaml": "a: 1.0\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 1.10",
+      "yaml": "a: 1.10\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 010",
+      "yaml": "a: 010\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 0x1F",
+      "yaml": "a: 0x1F\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 0o7",
+      "yaml": "a: 0o7\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value -0o7",
+      "yaml": "a: -0o7\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 0b1",
+      "yaml": "a: 0b1\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 1_000",
+      "yaml": "a: 1_000\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value +1",
+      "yaml": "a: +1\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value -0",
+      "yaml": "a: -0\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 1e3",
+      "yaml": "a: 1e3\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value .5",
+      "yaml": "a: .5\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value .inf",
+      "yaml": "a: .inf\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value -.inf",
+      "yaml": "a: -.inf\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value .nan",
+      "yaml": "a: .nan\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 2026-11-08",
+      "yaml": "a: 2026-11-08\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 2026-11-08T10:00:00Z",
+      "yaml": "a: 2026-11-08T10:00:00Z\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 2026-11-08 10:00:00",
+      "yaml": "a: 2026-11-08 10:00:00\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 1:30",
+      "yaml": "a: 1:30\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 0.00001",
+      "yaml": "a: 0.00001\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value 9007199254740993",
+      "yaml": "a: 9007199254740993\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain value yes in a flow sequence",
+      "yaml": "a: [x, yes]\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain timestamp folded over two lines",
+      "yaml": "a: 2026-11-08\n  10:00:00\n",
+      "expect": "fail",
+      "error": "don't all read as the same type"
+    },
+    {
+      "id": "plain key true",
+      "yaml": "true: a\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "plain key null",
+      "yaml": "null: a\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "plain key ~",
+      "yaml": "~: a\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "plain key 1",
+      "yaml": "1: a\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "plain key 1.5",
+      "yaml": "1.5: a\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "plain key yes",
+      "yaml": "yes: a\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "plain key 1e3",
+      "yaml": "1e3: a\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "plain key =",
+      "yaml": "=: a\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "empty plain key",
+      "yaml": ": a\n",
+      "expect": "fail",
+      "error": "not valid YAML"
+    },
+    {
+      "id": "duplicate keys",
+      "yaml": "a: 1\na: 2\n",
+      "expect": "fail",
+      "error": "duplicate key"
+    },
+    {
+      "id": "duplicate keys, one quoted",
+      "yaml": "a: 1\n'a': 2\n",
+      "expect": "fail",
+      "error": "duplicate key"
+    },
+    {
+      "id": "anchor",
+      "yaml": "a: &x 1\n",
+      "expect": "fail",
+      "error": "uses anchors"
+    },
+    {
+      "id": "anchor and alias",
+      "yaml": "a: &x 1\nb: *x\n",
+      "expect": "fail",
+      "error": "uses anchors"
+    },
+    {
+      "id": "%YAML directive",
+      "yaml": "%YAML 1.1\n---\na: 1\n",
+      "expect": "fail",
+      "error": "uses directives"
+    },
+    {
+      "id": "%TAG directive",
+      "yaml": "%TAG !e! tag:example.com,2000:\n---\na: 1\n",
+      "expect": "fail",
+      "error": "uses directives"
+    },
+    {
+      "id": "multiple documents",
+      "yaml": "a: 1\n---\nb: 2\n",
+      "expect": "fail",
+      "error": "not valid YAML"
+    },
+    {
+      "id": "document end marker",
+      "yaml": "a: 1\n...\n",
+      "expect": "fail",
+      "error": "uses document end markers"
+    },
+    {
+      "id": "document end marker with a comment",
+      "yaml": "a: 1\n... # comment\n",
+      "expect": "fail",
+      "error": "uses document end markers"
+    },
+    {
+      "id": "sequence as a key",
+      "yaml": "? [k]\n: v\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "map as a key",
+      "yaml": "? {k: 1}\n: v\n",
+      "expect": "fail",
+      "error": "keys must be plain text"
+    },
+    {
+      "id": "tab after a colon",
+      "yaml": "a:\tb\n",
+      "expect": "fail",
+      "error": "not valid YAML"
+    },
+    {
+      "id": "tab as indentation",
+      "yaml": "a:\n\tb: 1\n",
+      "expect": "fail",
+      "error": "not valid YAML"
+    },
+    {
+      "id": "carriage return without a line feed",
+      "yaml": "a: 1\rb: 2\n",
+      "expect": "fail",
+      "error": "carriage return without a line feed"
+    },
+    {
+      "id": "U+2028 in a comment",
+      "yaml": "# c\u2028b: 2\na: 1\n",
+      "expect": "fail",
+      "error": "U+2028"
+    },
+    {
+      "id": "nesting 65 levels deep",
+      "yaml": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[x]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]\n",
+      "expect": "fail",
+      "error": "nested too deeply"
+    },
+    {
+      "id": "literal block scalar with no line break after it",
+      "yaml": "name: x\ndescription: |\n  Does a thing.",
+      "expect": "fail",
+      "error": "no line break after it"
+    },
+    {
+      "id": "folded block scalar with no line break after it",
+      "yaml": "name: x\ndescription: >\n  Does a thing.",
+      "expect": "fail",
+      "error": "no line break after it"
+    },
+    {
+      "id": "keep block scalar with no line break after it",
+      "yaml": "name: x\ndescription: |+\n  Does a thing.",
+      "expect": "fail",
+      "error": "no line break after it"
+    },
+    {
+      "id": "block scalar indentation indicator before a longer blank line",
+      "yaml": "a: |1\n  x\n  \n",
+      "expect": "fail",
+      "error": "indentation indicator"
+    },
+    {
+      "id": "folded block scalar indentation indicator",
+      "yaml": "a: >1\n  x\n  \n",
+      "expect": "fail",
+      "error": "indentation indicator"
+    },
+    {
+      "id": "flow map key that starts with ?",
+      "yaml": "{?a: b}\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "flow sequence item that starts with ?",
+      "yaml": "[?b]\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "flow map key that is only ?",
+      "yaml": "{?: v}\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "flow sequence item that holds ?",
+      "yaml": "k: [a?b]\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "flow map value that starts with ?",
+      "yaml": "{a: ?b}\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "flow map value that ends with ?",
+      "yaml": "k: {a: b?}\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "flow sequence item that starts with :",
+      "yaml": "k: [:b]\n",
+      "expect": "fail",
+      "error": "not valid YAML"
+    },
+    {
+      "id": "flow map key that starts with :",
+      "yaml": "{:a}\n",
+      "expect": "fail",
+      "error": "not valid YAML"
+    },
+    {
+      "id": "flow plain scalar folded onto a ?",
+      "yaml": "k: [a\n  ?b]\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "escaped surrogate value",
+      "yaml": "a: \"\\uD800\"\n",
+      "expect": "fail",
+      "error": "UTF-16 surrogate"
+    },
+    {
+      "id": "escaped surrogate key",
+      "yaml": "\"\\uDC00x\": v\n",
+      "expect": "fail",
+      "error": "UTF-16 surrogate"
+    },
+    {
+      "id": "escaped surrogate pair",
+      "yaml": "a: \"\\uD83D\\uDE00\"\n",
+      "expect": "fail",
+      "error": "UTF-16 surrogate"
+    },
+    {
+      "id": "escaped surrogate in a \\U escape",
+      "yaml": "a: \"\\U0000D800\"\n",
+      "expect": "fail",
+      "error": "UTF-16 surrogate"
+    },
+    {
+      "id": "escaped surrogate after an escaped backslash",
+      "yaml": "a: \"\\\\\\uD800\"\n",
+      "expect": "fail",
+      "error": "UTF-16 surrogate"
+    },
+    {
+      "id": "escaped line break before a blank line",
+      "yaml": "a: \"x\\\n\n  y\"\n",
+      "expect": "fail",
+      "error": "escaped line break before a blank line"
+    },
+    {
+      "id": "quoted flow map key over two lines",
+      "yaml": "k: {\"a\n  b\": v}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "plain flow map key over two lines",
+      "yaml": "k: {a\n  b: v}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "multi-line flow: double-quoted key before a colon on the next line",
+      "yaml": "k: {\"a\"\n  : v}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "multi-line flow: plain key before a colon on the next line",
+      "yaml": "k: {a\n  : v}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "multi-line flow: single-quoted key before a colon on the next line",
+      "yaml": "k: {'a'\n  : v}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "multi-line flow: root map with the colon on the next line",
+      "yaml": "{\"a\"\n: v}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "multi-line flow: second entry with the colon on the next line",
+      "yaml": "k: {a: b,\n  c\n  : d}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "multi-line flow: comment before the colon",
+      "yaml": "k: {\"a\" # c\n  : v}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "multi-line flow: sequence",
+      "yaml": "k: [a,\n  b]\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "multi-line flow: map",
+      "yaml": "k: {a: 1,\n  b: 2}\n",
+      "expect": "fail",
+      "error": "over more than one line"
+    },
+    {
+      "id": "strip-chomped block scalars with no line break after them",
+      "yaml": "a: x\nb: |-\n  y\nc: >-\n  z\n  w",
+      "expect": "pass"
+    },
+    {
+      "id": "strip-chomped block scalar after trailing blank lines",
+      "yaml": "a: |-\n  y\n\n  ",
+      "expect": "pass"
+    },
+    {
+      "id": "escapes that every parser decodes the same way",
+      "yaml": "a: \"\\u00e9\\U0001F600\\x41\\t\\N\"\n",
+      "expect": "pass"
+    },
+    {
+      "id": "escaped backslash before u",
+      "yaml": "a: \"\\\\uD800\"\n",
+      "expect": "pass"
+    },
+    {
+      "id": "escaped line break inside a line",
+      "yaml": "a: \"x\\\n  y\"\n",
+      "expect": "pass"
+    },
+    {
+      "id": "block scalar followed by a line break",
+      "yaml": "a: |\n  x\nb: >-\n  y\n  z\n",
+      "expect": "pass"
+    },
+    {
+      "id": "empty block scalar at the end",
+      "yaml": "a: |",
+      "expect": "pass"
+    },
+    {
+      "id": "? and : in block plain scalars",
+      "yaml": "a: a?b\nb: ?b\nc: :b\n",
+      "expect": "pass"
+    },
+    {
+      "id": "quoted ? and plain : in flow collections",
+      "yaml": "k: [\"a?b\", a:b, -a]\n",
+      "expect": "pass"
+    },
+    {
+      "id": "block scalar whose first line is indented less than a blank line before it",
+      "yaml": "a: |\n   \n  # c\nb: 1\n",
+      "expect": "fail",
+      "error": "indented less than a blank line before it"
+    },
+    {
+      "id": "block scalar after a blank line no longer than its first line",
+      "yaml": "a: |\n  \n  # c\n",
+      "expect": "pass"
+    },
+    {
+      "id": "block scalar after a long blank line, then a key at the parent's indentation",
+      "yaml": "a:\n  b: |\n     \n  c: 1\n",
+      "expect": "pass"
+    },
+    {
+      "id": "quoted value whose next line is not indented past its key",
+      "yaml": "k:\n  j: \"a\n  b\"\n",
+      "expect": "fail",
+      "error": "isn't indented past its key or list item"
+    },
+    {
+      "id": "quoted value that closes at the start of a line",
+      "yaml": "k: '\n'\n",
+      "expect": "fail",
+      "error": "isn't indented past its key or list item"
+    },
+    {
+      "id": "quoted value whose next line is indented past its key",
+      "yaml": "k:\n  j: \"a\n   b\"\n",
+      "expect": "pass"
+    },
+    {
+      "id": "tab before the indentation of a quoted value's next line",
+      "yaml": "k: \"a\n\t b\"\n",
+      "expect": "fail",
+      "error": "isn't indented past its key or list item"
+    },
+    {
+      "id": "tab after the indentation of a quoted value's next line",
+      "yaml": "k: \"a\n \tb\"\n",
+      "expect": "pass"
+    },
+    {
+      "id": "block scalar that ends in a line of spaces with no line break",
+      "yaml": "a: |\n  ",
+      "expect": "fail",
+      "error": "no line break after it"
+    },
+    {
+      "id": "keep block scalar that ends in a line of spaces as indented as its content",
+      "yaml": "a: |+\n  x\n  ",
+      "expect": "fail",
+      "error": "no line break after it"
+    },
+    {
+      "id": "block scalar that ends in a line of spaces as indented as its content",
+      "yaml": "a: |\n  x\n  ",
+      "expect": "pass"
+    },
+    {
+      "id": "lone - key with no value in a flow map",
+      "yaml": "k: {-}\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "lone - value in a flow sequence",
+      "yaml": "k: [a, -]\n",
+      "expect": "fail",
+      "error": "unquoted entry in a flow collection"
+    },
+    {
+      "id": "lone - key before a colon in a flow map",
+      "yaml": "k: {-: v}\n",
+      "expect": "pass"
+    },
+    {
+      "id": "comment right after a double-quoted value",
+      "yaml": "k: \"a\"#c\n",
+      "expect": "fail",
+      "error": "right after a closing quote or bracket"
+    },
+    {
+      "id": "comment right after a single-quoted value",
+      "yaml": "k: 'a'#c\n",
+      "expect": "fail",
+      "error": "right after a closing quote or bracket"
+    },
+    {
+      "id": "comment right after a flow sequence",
+      "yaml": "k: [a]#c\n",
+      "expect": "fail",
+      "error": "right after a closing quote or bracket"
+    },
+    {
+      "id": "comment right after a flow map",
+      "yaml": "k: {a: b}#c\n",
+      "expect": "fail",
+      "error": "right after a closing quote or bracket"
+    },
+    {
+      "id": "comment after a space after a quoted value",
+      "yaml": "k: \"a\" #c\n",
+      "expect": "pass"
+    }
+  ]
+}
