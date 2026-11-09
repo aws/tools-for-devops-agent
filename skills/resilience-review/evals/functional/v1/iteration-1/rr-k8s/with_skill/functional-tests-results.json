@@ -14,7 +14,8 @@
     },
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent's response is a comprehensive resilience report covering exactly the required points: (1) ECR repository not replicated - explicitly states \"replicationConfiguration.rules = []\" and recommends turning on cross-Region replication; (2) cluster not protected by AWS Backup - explicitly states \"No AWS Backup plan, 0 recovery points\"; (3) Fargate profile spans two AZs - explicitly states \"cluster and Fargate profile are pinned to only 2 of 3 AZs in the VPC (eu-west-1c unused)\"; (4) it clearly flags what inside the cluster it could not see rather than assuming absence - the 'Not checked' section explicitly lists \"in-cluster objects (Deployments, Services, Ingress, ConfigMaps, Secrets, HPAs) \u2014 Kubernetes API access failed with a credentials error, so pod-level replica counts and any database endpoint hidden in a pod spec or env var could not be ruled out\"; (5) it asks about recreation in another Region referencing the catalog-k8s CloudFormation stack specifically - \"Parameterize the stack and stage it (or a pilot-light version) in the recovery Region\" and asks \"Where does catalog data live\" and raises the need to confirm portability. While it doesn't explicitly mention Git or a pipeline as alternatives, it does address the CloudFormation stack recreation question, which is one of the acceptable options mentioned in the expected output (CloudFormation stack, Git, or a pipeline - any one suffices). All core criteria are substantively met.",
+      "reasoning": "The agent's response covers all key required elements: (1) ECR replication is explicitly reported as off/empty (\"replicationConfiguration.rules = [] \u2014 not replicated anywhere\"); (2) the cluster is reported as not protected by AWS Backup (\"No AWS Backup plan covers it; 0 recovery points exist\"); (3) the Fargate profile/cluster spanning only two AZs is explicitly called out multiple times (\"compute only spans 2 of 3 Availability Zones\", \"Only attached to eu-west-1a/1b; eu-west-1c isn't wired in\"); (4) it explicitly states what inside the cluster it could not see rather than assuming none exists - \"Not checked: Kubernetes-level internals (namespaces, deployments, pods, secrets, configmaps) \u2014 the cluster API rejected the session's credentials\" and flags this upfront as \"not checked\"; (5) it addresses recreation in another Region by referencing the catalog-k8s CloudFormation stack explicitly multiple times (e.g., \"deploy the catalog-k8s stack via IaC\", \"Once a recovery Region and strategy are agreed, deploy the CloudFormation stack there\"), and frames it as a roadmap/strategy question tied to IaC redeployment, which aligns with asking how the cluster would be recreated elsewhere. While it doesn't explicitly mention \"Git or a pipeline\" as alternatives, it does reference IaC/CloudFormation as the recreation mechanism, which satisfies the core spirit of the requirement. All major substantive criteria are met.",
+      "evidence": "\"replicationConfiguration.rules = [] \u2014 not replicated anywhere\" ... \"No AWS Backup plan covers it; 0 recovery points exist\" ... \"Only attached to eu-west-1a/1b; eu-west-1c isn't wired in despite the VPC having that subnet\" ... \"Kubernetes-level internals (namespaces, deployments, pods, secrets, configmaps) \u2014 the cluster API rejected the session's credentials\" ... \"deploy the catalog-k8s stack via IaC and pull a replicated image at recovery time\"",
       "confidence": "high"
     },
     "assertions": {
@@ -23,47 +24,47 @@
           "text": "The response says the ECR repository catalog-service is not replicated to another Region, so the recovery Region cannot pull its images.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The roadmap states for the ECR repo: '`replicationConfiguration.rules = []`' with action 'Turn on cross-Region replication to the chosen recovery Region', and the Region failure row says 'No second cluster, no ECR replication...'",
-          "reasoning": "The response explicitly notes the ECR repo has no replication configured, implying no copies in another Region to pull images from during a failover.",
+          "evidence": "\"catalog-service ECR repo | replicationConfiguration.rules = [] \u2014 not replicated anywhere | Turn on ECR replication once a recovery Region is picked\" and \"ECR replication is off, no copy of the stack exists in another Region\"",
+          "reasoning": "The response explicitly states ECR repo is not replicated and that there's no copy elsewhere, implying recovery region cannot pull images without replication being enabled.",
           "confidence": "high"
         },
         {
           "text": "The response says the EKS cluster catalog-eks is not protected by AWS Backup and has no counterpart in another Region.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'the cluster has no backup at all' and 'No AWS Backup plan protects the EKS cluster (0 recovery points)' and 'Single Region only. No second cluster...'",
-          "reasoning": "The response clearly states both that the cluster lacks AWS Backup protection and has no counterpart cluster in another Region.",
+          "evidence": "\"No AWS Backup plan covers it; 0 recovery points exist (the account's one backup vault only protects an unrelated eu-central-1 workload)\" and \"No copy of catalog-k8s exists outside eu-west-1\"",
+          "reasoning": "The response clearly states catalog-eks has no AWS Backup coverage and no counterpart in another region.",
           "confidence": "high"
         },
         {
           "text": "The response says what inside the cluster could not be checked (for example deployments, pods or persistent volumes) instead of claiming there are none.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'Not checked: in-cluster objects (Deployments, Services, Ingress, ConfigMaps, Secrets, HPAs) \u2014 Kubernetes API access failed with a credentials error, so pod-level replica counts and any database endpoint hidden in a pod spec or env var could not be ruled out.'",
-          "reasoning": "The agent explicitly lists what could not be checked inside the cluster rather than claiming nothing exists there, satisfying the assertion.",
+          "evidence": "\"Kubernetes-level internals (namespaces, deployments, pods, secrets, configmaps) \u2014 the cluster API rejected the session's credentials.\" listed under 'Not checked'",
+          "reasoning": "The response explicitly flags that it could not check deployments, pods, secrets, configmaps due to credential rejection, rather than claiming none exist. Though it also states 'zero images ever pushed or pods ever run' which is a factual claim, it separately notes the not-checked k8s internals.",
           "confidence": "high"
         },
         {
           "text": "The response credits the Fargate profile spreading pods over two Availability Zones, or reports the two subnets the cluster uses.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'Cluster and Fargate profile are pinned to only 2 of 3 AZs in the VPC (eu-west-1c unused).' and 'Only 2 of 3 AZs used (eu-west-1c idle)'",
-          "reasoning": "The response reports the two AZs/subnets the cluster uses (and notes the third unused), satisfying the assertion about reporting the subnets/AZs used. It does not credit the Fargate profile positively for spreading pods over two AZs, but it does report the two AZs used, which is the alternative condition in the assertion.",
+          "evidence": "\"Cluster and Fargate profile are wired to only eu-west-1a and eu-west-1b; the VPC's third subnet (eu-west-1c) isn't attached\" and \"compute only spans 2 of 3 Availability Zones\"",
+          "reasoning": "The response reports the two AZs/subnets the cluster uses (eu-west-1a and eu-west-1b), satisfying the assertion.",
           "confidence": "high"
         },
         {
           "text": "The response asks or states how the cluster and its workloads would be recreated in the recovery Region (IaC such as the catalog-k8s stack, Git or a pipeline).",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Long-term roadmap: '`catalog-k8s` CloudFormation stack | Only deployed in eu-west-1; not confirmed portable | Parameterize the stack and stage it (or a pilot-light version) in the recovery Region'",
-          "reasoning": "The response explicitly addresses how the cluster/workloads would be recreated in a recovery Region via the catalog-k8s IaC stack, including parameterizing and staging it elsewhere.",
+          "evidence": "\"Recovery Region holds nothing, until needed \u2014 deploy the catalog-k8s stack via IaC and pull a replicated image at recovery time\" and \"Once a recovery Region and strategy are agreed, deploy the CloudFormation stack there (backup and restore: on-demand; pilot light: pre-deployed and scaled to zero)\"",
+          "reasoning": "The response explicitly states that recreation would happen via the catalog-k8s CloudFormation IaC stack deployed in the recovery region, satisfying the assertion.",
           "confidence": "high"
         },
         {
           "text": "The response uses the six required section headings in order",
           "evaluator": "regex",
           "passed": true,
-          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | partly | EKS control plane is AWS-managed and inherently multi-AZ; Fargate remov\u2026'"
+          "evidence": "Matched \"## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | partly | No data tier to fail over; the service has never run a pod, so there's \u2026\""
         },
         {
           "text": "No create, modify or delete API call is reported as having been made",
@@ -83,10 +84,10 @@
     }
   },
   "metrics": {
-    "runtime": "6m56s",
-    "cost": "$3.46",
+    "runtime": "7m30s",
+    "cost": "$3.74",
     "context_window": {
-      "utilization": "7.3%",
+      "utilization": "8.2%",
       "compaction_count": 0
     }
   }

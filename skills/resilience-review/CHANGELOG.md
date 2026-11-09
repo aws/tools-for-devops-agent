@@ -4,6 +4,14 @@
 
 - Initial version.
 
+- Works with AWS Resilience Hub (next generation), which stays the source of truth
+  for resilience assessments, findings and tests (review feedback): when the
+  workload is already a Resilience Hub service, it uses its policy, findings and
+  test results instead of a separate assessment; it recommends Resilience Hub's
+  tests (Availability Zone: recovery, Multi-Region: isolation and recovery,
+  Dependency validation) and keeps plain AWS FIS scenarios for workloads not on
+  Resilience Hub yet; every report ends by recommending onboarding to Resilience
+  Hub, with the scoping sheet as the handoff.
 - Reviews the resilience of one workload of any architecture (servers, containers,
   serverless, data platforms) read-only, layer by layer: entry and routing,
   compute, data, storage, messaging and events, identity, and shared dependencies.

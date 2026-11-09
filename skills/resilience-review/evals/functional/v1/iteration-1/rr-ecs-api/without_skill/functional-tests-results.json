@@ -10,8 +10,8 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The expected output is very specific: a resilience report structured in six ordered sections covering: (1) workload mapped by layer, (2) single task/single AZ flag, (3) container image location and whether ECR replication/pull-through cache would let the recovery Region pull it, (4) secret not replicated to another Region, (5) no load balancer/failover routing, (6) whether the CloudFormation stack (dr-demo-backend) could recreate the service in the recovery Region \u2014 plus a proposed restore/rebuild test and a named AWS FIS failure test, with targets not invented.\n\nThe agent's response does cover several overlapping points: it flags single task/single AZ, notes the service isn't publicly reachable (no load balancer), and discusses data tier gaps (RDS, DynamoDB) without inventing RTO/RPO targets. However, it is missing or inadequately addresses many required specifics:\n- It mentions ECR image as 'region-specific and would need to be recreated or replicated' but does not report on ECR replication or pull-through cache specifically, nor confirm whether the recovery Region can actually pull the image.\n- It mentions the Secrets Manager secret is region-specific but doesn't explicitly state it is 'not replicated to another Region' in the structured way expected, though it's close.\n- It does not mention the CloudFormation stack 'dr-demo-backend' at all \u2014 this is a specific named artifact expected to be referenced, and it's absent entirely.\n- It does not propose a named AWS FIS failure test \u2014 it only vaguely suggests next steps without mentioning AWS FIS at all.\n- It is not structured as six distinct ordered sections \u2014 it's formatted as a narrative/bullet discussion, not matching the expected report structure.\n\nGiven the absence of the CloutFormation stack reference and the AWS FIS named test proposal, plus lack of the six-section structure, this response does not meet the detailed expected output criteria, despite overlapping on several resilience findings.</reasoning>\n<parameter name=\"confidence\">high",
-      "evidence": "The agent's response does not mention 'dr-demo-backend' CloudFormation stack at all, nor does it propose a named AWS FIS failure test. It also lacks explicit ECR replication/pull-through cache assessment and is not structured in six ordered sections as required."
+      "reasoning": "The expected output requires a resilience report structured in six specific sections, in order, covering: (1) workload layer mapping, (2) single-AZ task placement flag, (3) ECR image location + cross-region pull capability (replication/pull-through cache), (4) secret not replicated to another region, (5) no load balancer/failover routing, (6) whether the dr-demo-backend CFN stack could recreate the service in the recovery region, plus a proposed restore/rebuild test and a named AWS FIS failure injection test.\n\nThe agent's response does cover several relevant points: it correctly flags no load balancer/public exposure, no Route 53 failover, discusses the CFN stack's portability (dr-demo-backend), mentions ECR pull-through-cache as region-pinned, and flags Secrets Manager secret as region-pinned (not replicated). It also gives a reasonable 'where to start' plan.\n\nHowever, the response does NOT:\n- Explicitly flag that the service runs one task in one Availability Zone (single-AZ placement) \u2014 this specific point is missing entirely.\n- Structure the answer as six distinct ordered sections matching the described report format \u2014 it's organized as a narrative/table + numbered action plan, not a formal six-section resilience report mapped by layer.\n- Propose a named AWS FIS failure test \u2014 there is no mention of AWS Fault Injection Simulator (FIS) at all, nor any named failure test.\n- Explicitly map the workload 'by layer' in a structured way (though it touches on layers informally via the portable/pinned table).\n\nThe omission of the single-AZ task flag and the complete absence of any AWS FIS test proposal (a specific, checkable requirement) are significant gaps against the expected output. The response also doesn't follow the six-section report structure explicitly. These are substantive misses, not just stylistic differences.",
+      "confidence": "high"
     },
     "assertions": {
       "assertion_results": [
@@ -19,48 +19,48 @@
           "text": "The Roadmap section groups the actions under Quick wins, Quick fixes and Long-term, and every action names a specific resource and change.",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The response has a 'Where to start:' numbered list (1-4) with no section titled 'Roadmap' and no grouping into 'Quick wins', 'Quick fixes', and 'Long-term' categories.",
-          "reasoning": "The output does not contain any section labeled Roadmap nor the three-tier grouping (Quick wins, Quick fixes, Long-term) requested by the assertion. It only has a flat numbered list of 'Where to start' items.",
+          "evidence": "The response has a 'Where to start' numbered list (1-5) and a table comparing 'Portable' vs 'Region-pinned' resources. There is no section explicitly grouping actions under headings 'Quick wins', 'Quick fixes', and 'Long-term'.",
+          "reasoning": "The assertion requires a Roadmap section with three specific named groupings (Quick wins, Quick fixes, Long-term) each containing actions naming specific resources and changes. The output has no such structure - it has a flat numbered 'Where to start' list instead.",
           "confidence": "high"
         },
         {
           "text": "Quick wins and quick fixes do not depend on RPO or RTO targets the business has not agreed; Region-level work whose size depends on the targets is under Long-term.",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "No Quick wins/Quick fixes/Long-term grouping exists at all; item 1 explicitly says 'Nail down RTO/RPO targets \u2014 that decides whether RDS needs a warm cross-region read replica...' which is listed as the first action, not deferred to a separate Long-term bucket.",
-          "reasoning": "Since there is no roadmap structure with the required categories, this assertion about dependency ordering between categories cannot be satisfied; the output doesn't separate RTO/RPO-independent quick actions from RTO/RPO-dependent long-term actions in the way described.",
+          "evidence": "Item 1 in 'Where to start' says 'Decide RTO/RPO ... This choice drives everything else.' and is listed first, before other items like parameterizing the CFN stack and building the public-facing layer.",
+          "reasoning": "Since there's no Quick wins/Quick fixes/Long-term grouping at all, this assertion about dependency structure relative to those groups cannot be satisfied. Also RTO/RPO decision is presented as a prerequisite that drives subsequent steps, not separated into independent quick wins vs RPO-dependent long-term work.",
           "confidence": "high"
         },
         {
           "text": "The response flags that the ECS service runs a single task in a single Availability Zone.",
           "evaluator": "llm",
-          "passed": true,
-          "evidence": "\"Single task, single AZ. Desired count is 1, running in one subnet/AZ \u2014 there's no redundancy even within eu-central-1 today, let alone across regions.\"",
-          "reasoning": "The response explicitly states the ECS service runs a single task in a single AZ, directly matching the assertion.",
+          "passed": false,
+          "evidence": "The response does not mention task count or single-AZ placement anywhere. It discusses networking (no ALB, no public subnets, no SG inbound rules) but not the number of running tasks or AZ distribution.",
+          "reasoning": "No mention of single task / single AZ risk for the ECS service is present in the output.",
           "confidence": "high"
         },
         {
           "text": "The response flags that the Secrets Manager secret used by the task is not replicated to another Region.",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "The response mentions 'Secrets Manager secret, ECR image, and VPC endpoints are all region-specific and would need to be recreated or replicated' but does not specifically state that the secret used by the task is not replicated to another region as a distinct flagged finding tied to the task.",
-          "reasoning": "While the response does mention Secrets Manager being region-specific, it is a generic statement grouped with ECR and VPC endpoints rather than a specific flag that THIS secret used by the ECS task is not replicated. It is borderline, but the substance is present in a general sense - however it doesn't explicitly confirm the secret is used by the task or specifically call out the lack of replication as a distinct risk the way the assertion implies. Given the generic phrasing 'are all region-specific and would need to be recreated or replicated' this does touch on the assertion's substance, so arguably it could pass. I'll lean towards passing with medium confidence since the substance is there even if terse ordered within a list of other items.",
-          "confidence": "medium"
+          "passed": true,
+          "evidence": "The response lists 'Secrets Manager secret ARN + value' under 'Region-pinned (needs rework)' and later states '5. Confirm Secrets Manager replication so the DR region doesn't need secrets recreated manually during failover.'",
+          "reasoning": "The output explicitly flags that the Secrets Manager secret is region-pinned and not yet replicated, satisfying the assertion.",
+          "confidence": "high"
         },
         {
           "text": "The First tests section contains both a restore or rebuild test and a failure test that names an AWS FIS scenario.",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "There is no 'First tests' section anywhere in the output, and no mention of AWS FIS (Fault Injection Simulator) or any named failure injection scenario.",
-          "reasoning": "The output ends with a 'Where to start' list and a question to the user; it does not contain a dedicated First tests section, nor any restore/rebuild test or AWS FIS-based failure test.",
+          "evidence": "There is no 'First tests' section in the output at all. No mention of AWS FIS or fault injection testing anywhere in the response.",
+          "reasoning": "The assertion requires a dedicated 'First tests' section with a restore/rebuild test and a failure test naming an AWS FIS scenario; neither exists in the output.",
           "confidence": "high"
         },
         {
           "text": "Resources that share only a tag with the ECS service, and are not in its CloudFormation stack dr-demo-backend, get no roadmap actions. Resources in the same stack (such as dr-demo-mysql, dr-demo-valkey, dr-demo-players, dr-demo-events) are connected by configuration and may be in scope.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The response discusses dr-demo-mysql, DynamoDB dr-demo-players, ElastiCache Valkey, and SQS/Lambda as part of the data tier scope, consistent with resources connected by configuration; it does not introduce unrelated tag-only resources into the roadmap actions.",
-          "reasoning": "The output's scope aligns with the CloudFormation-stack-connected resources (RDS, DynamoDB, ElastiCache, SQS/Lambda) and does not appear to include out-of-scope tag-only resources in its action items, satisfying the assertion as far as can be observed from the text alone.",
+          "evidence": "The response discusses only resources described as part of 'one CloudFormation stack (dr-demo-backend)': VPC/subnet/SG, ECS cluster/service/task def, Lambda consumer, SQS queue, IAM roles, ECR, Secrets Manager, KMS, RDS, DynamoDB, plus the Backup plan. It does not mention any resource identified only by a shared tag that sits outside dr-demo-backend, nor does it mention resources named dr-demo-mysql, dr-demo-valkey, dr-demo-players, dr-demo-events specifically, but it also doesn't incorrectly include any out-of-stack tag-only resource.",
+          "reasoning": "The assertion is a negative constraint (no actions for tag-only resources outside the stack) plus a note that in-stack resources may be in scope. Since the output restricts its roadmap/actions entirely to resources it describes as being in the dr-demo-backend stack, and does not introduce any extraneous tag-matched resources, it satisfies the negative constraint. However, it doesn't explicitly name the specific resources like dr-demo-mysql etc., so confidence is medium rather than high, but the core requirement (no scope creep to tag-only resources) is met by omission.",
           "confidence": "medium"
         },
         {
@@ -81,10 +81,10 @@
     }
   },
   "metrics": {
-    "runtime": "1m55s",
-    "cost": "$0.96",
+    "runtime": "1m57s",
+    "cost": "$0.97",
     "context_window": {
-      "utilization": "4.3%",
+      "utilization": "4.2%",
       "compaction_count": 0
     }
   }

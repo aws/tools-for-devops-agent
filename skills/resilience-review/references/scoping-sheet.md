@@ -98,11 +98,29 @@ targets: the business confirms or corrects them.
 
 **Columns I could not fill:** <headers, and why>
 **For the business to confirm:** <the target questions from Step 3, one line each>
+**Next:** once the business confirms this row, use it to onboard the workload to
+AWS Resilience Hub: its values become the service's resilience policy.
 ````
 
 Write the sheet as CSV rows in a code block, never as a column-and-value table: the team pastes it into their file. Write every empty cell as `""`, and put each value only in the column whose header asks for it. Before you send, count the fields: the data row must have exactly as many as the header row, because one extra comma shifts every value after it into the wrong column. One workload per answer means one row. If the user asks for several
 applications, fill the row for the one you assessed and list the others as
 candidates to assess next.
+
+## Handoff to AWS Resilience Hub
+
+The confirmed row is the input for the workload's resilience policy in the next
+generation of Resilience Hub. Map it like this:
+
+| Sheet value | Resilience Hub policy field |
+|---|---|
+| Target availability | availability SLO (a percentage) |
+| RTO and RPO for the loss of one AZ, and its approach | multi-AZ RTO and RPO (minutes) and disaster recovery approach |
+| RTO and RPO for the loss of a Region, and its approach | multi-Region RTO and RPO (minutes) and disaster recovery approach |
+| Backup frequency | data recovery: time between backups (minutes) |
+
+The policy's approaches match the five labels: backup and restore, pilot light,
+warm standby, hot standby, active-active. Only confirmed targets go into the
+policy, never the "today, to confirm" values.
 
 ## Reference values (checked 4 Nov 2026)
 
@@ -117,6 +135,7 @@ candidates to assess next.
 | S3 | storage classes other than One Zone store data in at least three AZs; One Zone-IA uses one AZ | https://aws.amazon.com/s3/storage-classes/ |
 | EFS | Regional file systems span several AZs; One Zone file systems use one AZ | https://docs.aws.amazon.com/efs/latest/ug/features.html |
 | Approach labels | four strategies; multi-site covers active/active and hot standby active/passive | https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html |
+| Resilience Hub policy fields (checked 9 Nov 2026) | availability SLO; multi-AZ and multi-Region RTO, RPO and approach (active-active, hot standby, warm standby, pilot light, backup and restore); time between backups | https://aws.amazon.com/blogs/architecture/scope-workloads-and-share-resilience-policies-with-aws-resilience-hub/ |
 
 Values change: re-check a value against its source before you rely on it for a
 decision.

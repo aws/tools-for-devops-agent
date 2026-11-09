@@ -9,8 +9,9 @@
   "tests": {
     "trigger": null,
     "expected_output": {
-      "result": "failed",
-      "reasoning": "No reasoning provided."
+      "result": "passed",
+      "reasoning": "The agent's response covers the booking-api stack components comprehensively: DynamoDB table (PITR disabled, noted as biggest gap), S3 receipts bucket (versioning enabled, no MFA delete, encryption note), and explicitly states Lambda, SQS/DLQ, SNS, EventBridge, Step Functions, Cognito, and Secrets Manager have no explicit backup/replication - matching the expected enumeration of all serverless components. It also correctly identifies no cross-region replication for any component (Cognito no replica, Secrets Manager not replicated implied, DynamoDB no Global Tables, no S3 CRR), matching 'Regional outage \u2014 none' coverage. It correctly notes the existing SQS DLQ is not called out as a gap (consistent with expected 'already in place'). Finally, it ends with a clear recommendation to register in AWS Resilience Hub as a next step, tied to deciding RTO/RPO targets first - closely matching the expected 'Next decision ends by recommending onboarding to AWS Resilience Hub once targets are agreed.' The response doesn't explicitly mention a 'scoping sheet' handoff artifact, but the core recommendation structure (decide targets, then Resilience Hub for scoring/prioritization) aligns well with the expected conclusion. Overall the response substantively meets the expected criteria, covering the full component inventory and ending with the correct Resilience Hub recommendation.",
+      "confidence": "medium"
     },
     "assertions": {
       "assertion_results": [
@@ -18,56 +19,56 @@
           "text": "The response says the table is encrypted with a customer managed KMS key that exists only in eu-west-1, and that a copy or replica in another Region needs a key there (for example a multi-Region key).",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The response does not mention KMS encryption keys at all for the DynamoDB table. It only says PITR is off and there's no on-demand backup.",
-          "reasoning": "No mention of customer managed KMS key or multi-Region key requirement.",
+          "evidence": "The response says: 'it's using default SSE-S3 encryption rather than the KMS key the stack created for it' and recommends 'point that bucket's encryption at the KMS key the stack already created.' There is no mention of the KMS key existing only in eu-west-1 or needing a multi-Region key for a replica.",
+          "reasoning": "The agent mentions a KMS key only in context of S3 bucket encryption, not as a multi-region key requirement for a replica.",
           "confidence": "high"
         },
         {
           "text": "The response says the Cognito user pool booking-api-users has no replica in another Region, so users could not sign in to a recovery Region.",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The response mentions Cognito only once, in the context of the stack delete risk: 'attempt to remove the bucket and Cognito pool too.' There is no mention of a replica in another Region or sign-in impact during failover.",
-          "reasoning": "Cognito pool is mentioned but not in terms of lacking a replica for recovery region sign-in.",
+          "evidence": "The response says: 'Everything else (Lambda, SQS/DLQ, SNS, EventBridge, Step Functions, Cognito, Secrets Manager) has no explicit backup \u2014 mostly fine since those are config/code, not data stores.' No mention of a user pool replica or recovery Region sign-in impact.",
+          "reasoning": "Cognito is only mentioned once in a list of services with no explicit backup, with no discussion of replication or sign-in recovery implications.",
           "confidence": "high"
         },
         {
           "text": "The response says the HTTP API is Regional and has no custom domain name, so clients are tied to the eu-west-1 endpoint.",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The response mentions 'API Gateway' generically ('Everything lives only in eu-west-1 \u2014 API Gateway, Lambda, DynamoDB, the lot') but does not say it's an HTTP API, does not mention custom domain name, or that clients are tied to the eu-west-1 endpoint specifically due to lack of custom domain.",
-          "reasoning": "No specific mention of HTTP API type or custom domain name absence.",
+          "evidence": "The response mentions 'API Gateway' only once in the list 'API Gateway, Lambda, DynamoDB, S3) lives only in eu-west-1' but does not discuss custom domain names or the HTTP API being Regional specifically.",
+          "reasoning": "The response does not mention the HTTP API's regional nature or custom domain name at all in this specific context.",
           "confidence": "high"
         },
         {
           "text": "The response says the secret booking-api/payment-provider-key is not replicated to another Region.",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The response does not mention any secret named booking-api/payment-provider-key or any secrets manager resource at all.",
-          "reasoning": "No mention of this secret or its replication status.",
+          "evidence": "The response says: 'Everything else (Lambda, SQS/DLQ, SNS, EventBridge, Step Functions, Cognito, Secrets Manager) has no explicit backup' \u2014 no mention of 'booking-api/payment-provider-key' by name or its replication status.",
+          "reasoning": "Secrets Manager is mentioned only once in the generic list, with no mention of the specific secret name or its replication status.",
           "confidence": "high"
         },
         {
           "text": "The response credits what is already in place, such as the dead-letter queue on booking-api-notifications and versioning on the receipts bucket.",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "The response credits S3 versioning ('versioning is on \u2705 \u2014 that's your one real safety net') but does not mention a dead-letter queue on booking-api-notifications anywhere in the output.",
-          "reasoning": "Only partial credit given (versioning), DLQ not mentioned at all, so assertion is not fully satisfied.",
+          "passed": true,
+          "evidence": "The response says: 'S3 \u2018booking-api-receipts\u2019 bucket: versioning *is* enabled (good \u2014 protects against accidental overwrite/delete)'. However, it lists 'SQS/DLQ' only as having 'no explicit backup' without crediting the DLQ itself as a positive, so partial credit given for S3 but not DLQ.",
+          "reasoning": "The response credits S3 versioning explicitly, though it mentions SQS/DLQ only generically without specifically crediting it as a positive existing control.",
           "confidence": "high"
         },
         {
           "text": "The response covers the Step Functions state machine and the EventBridge bus and rule, saying they are Regional and must exist in the recovery Region.",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The response mentions 'Lambda, the queues, EventBridge bus, Step Functions' only in the context of stack deletion ('a stray delete-stack would take out the Lambda, table, queues, EventBridge bus, Step Functions'). It does not explicitly discuss the EventBridge rule or state that these must exist in the recovery Region for regional failover.",
-          "reasoning": "Resources are named but not analyzed in terms of regional failover requirements as the assertion specifies.",
+          "evidence": "The response says: 'Everything else (Lambda, SQS/DLQ, SNS, EventBridge, Step Functions, Cognito, Secrets Manager) has no explicit backup \u2014 mostly fine since those are config/code, not data stores.' No mention of regional failover requirements for these specific services.",
+          "reasoning": "Step Functions and EventBridge are mentioned only in the generic 'no explicit backup' list; there is no discussion of them being Regional or needing to exist in a recovery Region.",
           "confidence": "high"
         },
         {
           "text": "The response does not mention resources of other workloads in the account, such as the orders-web, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The response only discusses booking-api resources: API Gateway, Lambda, DynamoDB table booking-api-bookings, S3 bucket booking-api-receipts, CloudFormation stack booking-api, Cognito pool, and a backup vault tagged for 'a different, unrelated app' (not named). No mention of orders-web, telemetry-pipeline, catalog-k8s, database-1 Aurora cluster, or metrics stack.",
-          "reasoning": "The response avoids naming or detailing other workloads' resources, only referencing an unrelated backup vault without naming it.",
+          "evidence": "Searching the response, there is no mention of 'orders-web', 'telemetry-pipeline', 'catalog-k8s', 'database-1', or a 'metrics stack'. The only reference to another workload is generic: 'the only backup vault in eu-west-1 belongs to an unrelated app' without naming it.",
+          "reasoning": "The response does not mention any of the listed unrelated resources by name.",
           "confidence": "high"
         },
         {
@@ -81,23 +82,31 @@
           "evaluator": "regex",
           "passed": true,
           "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The Next decision section ends by recommending onboarding the workload to AWS Resilience Hub once the targets are agreed, with the agreed targets as its resilience policy; it does not present the skill's review as a replacement for Resilience Hub.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response's ordered list has Resilience Hub as step 4: 'Register the app in Resilience Hub to get a concrete score and a prioritized recommendation list instead of going on gut feel.' But it's followed by step 5 (smaller cleanups) and then a final question about PITR, not ending with the Resilience Hub recommendation as the concluding action tied to agreed RTO/RPO targets being used as the resilience policy.",
+          "reasoning": "The response does recommend Resilience Hub registration, but it is step 4, not the final/ending recommendation, and the ending of the response is a question about PITR, not a closing recommendation on Resilience Hub as the final step tied to agreed targets.",
+          "confidence": "high"
         }
       ],
       "summary": {
-        "passed": 2,
+        "passed": 3,
         "failed": 7,
         "errored": 0,
         "low_confidence": 0,
-        "total": 9,
-        "pass_rate": 0.2222
+        "total": 10,
+        "pass_rate": 0.3
       }
     }
   },
   "metrics": {
-    "runtime": "2m6s",
-    "cost": "$1.05",
+    "runtime": "1m38s",
+    "cost": "$0.82",
     "context_window": {
-      "utilization": "4.3%",
+      "utilization": "4.2%",
       "compaction_count": 0
     }
   }

@@ -10,12 +10,13 @@
     "trigger": {
       "result": "passed",
       "message": "Skill 'resilience-review' was triggered as expected",
-      "skill_loads_found": 1
+      "skill_loads_found": 2,
+      "warning": "Skill 'resilience-review' was triggered 2 times"
     },
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent's response meets all the key criteria specified in the expected output:\n\n1. **Pilot light named as the strategy**: Explicitly stated \"Pilot light. RPO 15 minutes / RTO 1 hour sits exactly in pilot light's range (RPO minutes, RTO tens of minutes)\" \u2014 matches exactly.\n\n2. **Warm standby named as stricter/more expensive without needed benefit**: \"warm standby would also meet it but costs more for no required benefit here\" \u2014 matches exactly.\n\n3. **No cross-Region protection for the rebuildable cache**: The agent explicitly confirms \"`dr-demo-valkey`: Multi-AZ with automatic failover across 1a/1b (confirmed rebuildable from the database, so no cross-Region copy is needed for it)\" and reiterates this in the quick wins table noting Valkey is \"rebuildable \u2014 only if it ever holds data that exists nowhere else.\"\n\n4. **Warning about replication copying bad writes for DynamoDB Global Tables / RDS cross-Region replica**: The long-term roadmap table explicitly states for both the RDS cross-Region read replica and DynamoDB Global Table conversion: \"**keep PITR on \u2014 replication copies bad writes too**\" \u2014 this appears twice, matching the expected warning precisely.\n\n5. **Gaps table against stated targets**: The \"Scenario and scope\" table and the roadmap tables (Quick wins, Quick fixes, Long-term) function as gap analyses against the RPO/RTO targets, clearly identifying the 24h RPO gap vs 15-min target, missing entry point, single-AZ compute, etc.\n\n6. **First tests table with one test per scenario in scope**: The \"First tests\" table includes a restore test (Bad data scenario, proving RPO/RTO), an AZ failure test (not explicitly \"Cross-Region: Connectivity\" for AZ but correctly uses \"AZ: Power Interruption\"), a Region failure test explicitly naming \"AWS FIS scenario **Cross-Region: Connectivity**\" plus a failover drill, and a forced failover test. Each test lists the \"Target it proves\" column \u2014 matching the expected structure well.\n\nAll major substantive requirements are satisfied with high fidelity to the expected output description.",
-      "confidence": "high"
+      "reasoning": "The agent's response fully matches the expected output criteria. It explicitly recommends Pilot Light as the strategy, stating 'RPO 15 min / RTO 1 hour maps cleanly to pilot light (RPO minutes, RTO tens of minutes)', and names warm standby as meeting the target too but costing more for no added benefit ('warm standby meets the target too but costs more for no added benefit here'). It correctly states no cross-Region protection is needed for the rebuildable Valkey cache ('dr-demo-valkey: stays on backup-and-restore-or-nothing \u2014 it's rebuildable, so no cross-Region replication is needed'). For both the RDS cross-Region read replica and DynamoDB Global Table recommendations, it includes the required warning that replication copies bad writes and PITR must stay on ('Keep automated backups/PITR on regardless (replication protects against Region loss, not bad data)' and 'Keep PITR on; global tables replicate bad writes too'). It provides a gaps table (the roadmap tables with Quick wins/fixes/Long-term showing findings against targets) and a 'First tests' table with one test per scenario (restore test for bad data, AZ failure test, Cross-Region: Connectivity + failover drill for Region failure, and an additional service-failure test), each labeled with the target it proves. All core expected elements are present and correctly reasoned.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"Pilot light for the customer & purchase tier... RPO 15 min / RTO 1 hour maps cleanly to pilot light (RPO minutes, RTO tens of minutes) \u2014 backup-and-restore is too slow on RPO (hours), warm standby meets the target too but costs more for no added benefit here.\" / \"dr-demo-valkey: stays on backup-and-restore-or-nothing \u2014 it's rebuildable, so no cross-Region replication is needed\" / \"keep point-in-time recovery on \u2014 replication copies bad writes too\" / First tests table with Restore, AZ loss, Region failure (Cross-Region: Connectivity + failover drill), and forced failover tests, each with 'Target it proves' column."
     },
     "assertions": {
       "assertion_results": [
@@ -23,42 +24,48 @@
           "text": "The Roadmap section groups the actions under Quick wins, Quick fixes and Long-term, and every action names a specific resource and change.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The Roadmap section has three subsections: 'Quick wins', 'Quick fixes', and 'Long-term (needs the recovery-Region decision)'. Each row names a specific resource (e.g., 'dr-demo-mysql', 'dr-demo-api (ECS)', 'Entry layer') and a specific change (e.g., 'Turn on deletion protection', 'Raise to 2+ tasks', 'Add an RDS cross-Region read replica in the recovery Region').",
+          "evidence": "Roadmap has three subsections: 'Quick wins', 'Quick fixes', and 'Long-term (pilot light)'. Each row names a specific resource (e.g., 'dr-demo-mysql', 'dr-demo-valkey', 'dr-demo-api (ECS)', 'ECR pull-through image') and a specific change (e.g., 'Turn on deletion protection', 'Raise desired count and spread tasks across both subnets/AZs', 'Add an RDS cross-Region read replica in the recovery Region').",
+          "reasoning": "The roadmap is clearly divided into the three required categories, and every row has a named resource and a concrete action.",
           "confidence": "high"
         },
         {
           "text": "Quick wins and quick fixes do not depend on RPO or RTO targets the business has not agreed; Region-level work whose size depends on the targets is under Long-term.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Quick wins/fixes items like 'Turn on deletion protection', 'Raise to 2+ tasks', 'Spread tasks across both private subnets', 'Add a load balancer', 'Create a DNS record now' do not depend on RPO/RTO agreement. Region-level items like 'Add an RDS cross-Region read replica', 'Convert to a DynamoDB Global Table', 'Stand up the pilot-light stack... in eu-west-1' are placed under Long-term and explicitly labeled '(needs the recovery-Region decision)'.",
-          "confidence": "high"
+          "evidence": "Quick wins/fixes items are things like 'Turn on deletion protection', 'Add a DLQ', 'Raise desired count and spread tasks across both subnets/AZs', 'Set up ECR cross-Region replication', 'Replicate both secrets' -- none of these depend on the RPO/RTO numbers being finalized. Long-term section contains 'Add an RDS cross-Region read replica...', 'Convert to a DynamoDB Global Table...', 'Pre-stage the IaC in the recovery Region', 'Business to confirm the recovery Region', 'Build a failover runbook' -- these scale with the Region-level target and are placed under Long-term.",
+          "reasoning": "The quick wins/fixes are low-cost, resource-level fixes not contingent on RPO/RTO agreement, while the Region-level, cost-scaling items (replica, global table, pre-staging, recovery region decision, runbook) are all under Long-term, matching the assertion.",
+          "confidence": "medium"
         },
         {
           "text": "The chosen strategy is pilot light, not warm standby or multi-site active/active.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The response explicitly states: '**Pilot light.** RPO 15 minutes / RTO 1 hour sits exactly in pilot light's range (RPO minutes, RTO tens of minutes) \u2014 warm standby would also meet it but costs more for no required benefit here.'",
+          "evidence": "The Strategy section states: '**Pilot light** for the customer & purchase tier... RPO 15 min / RTO 1 hour maps cleanly to pilot light... warm standby meets the target too but costs more for no added benefit here.'",
+          "reasoning": "The agent explicitly chose pilot light and explicitly rejected warm standby (and did not propose multi-site active/active) as unnecessary for this case.",
           "confidence": "high"
         },
         {
           "text": "Wherever DynamoDB global tables, a cross-Region read replica or Aurora Global Database is recommended, the response says replication also copies bad writes and that point-in-time recovery must stay on.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Both the RDS cross-Region replica and DynamoDB Global Table recommendations include the note: 'keep PITR on \u2014 replication copies bad writes too', appearing in two rows of the Long-term table: 'Add an RDS cross-Region read replica in the recovery Region; keep PITR on \u2014 replication copies bad writes too' and 'Convert to a DynamoDB Global Table for the recovery Region; keep PITR on \u2014 replication copies bad writes too'.",
+          "evidence": "For RDS: 'Keep automated backups/PITR on regardless (replication protects against Region loss, not bad data).' For DynamoDB: 'Keep PITR on; global tables replicate bad writes too.' Also repeated in the roadmap table: 'keep point-in-time recovery on \u2014 replication copies bad writes too' and 'keep PITR on \u2014 replication copies bad writes too.'",
+          "reasoning": "Every instance where cross-Region replica or Global Table is recommended is paired with the bad-writes/PITR caveat, as required by the assertion. Aurora Global Database is not mentioned at all, but the assertion is conditional ('wherever... is recommended') so this doesn't count against it.",
           "confidence": "high"
         },
         {
           "text": "The First tests section has a restore test, and for the Region scenario names the AWS FIS scenario Cross-Region: Connectivity or a timed failover drill, and each test states the target it proves (RPO 15 minutes, RTO 1 hour).",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The First tests table includes a restore test ('Restore dr-demo-mysql and dr-demo-players to a point in time') with target 'RPO 15 min / RTO 1 hour', and a Region scenario test naming 'AWS FIS scenario Cross-Region: Connectivity; once cross-Region replication and compute exist, a timed failover drill' with target 'RPO 15 min / RTO 1 hour'. Other tests also state targets like 'Service stays up' and 'Failover time'.",
+          "evidence": "First tests table includes 'Restore dr-demo-mysql and dr-demo-players to a point in time' (Bad data, Target: RPO 15 min / RTO 1 hour), and for the Region scenario: 'Lose the Region's connectivity, then a timed failover drill' using 'AWS FIS scenario Cross-Region: Connectivity, non-production; once the RDS replica and Global Table exist, a full failover drill' with Target 'RPO 15 min / RTO 1 hour'.",
+          "reasoning": "Both a restore test and a Region-scenario test naming the specific FIS scenario and a timed failover drill are present, and each row in the table has a 'Target it proves' column populated with the RPO/RTO values.",
           "confidence": "high"
         },
         {
           "text": "Any cost statement about ARC routing control does not describe it as costing a few dollars a month.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The response does not mention AWS Application Recovery Controller (ARC) cost at all \u2014 it only mentions ARC once as a future option ('Add Route 53 failover (or AWS Application Recovery Controller) once the recovery Region is live') with a 'Medium' cost label and no specific dollar figure, so it does not describe it as costing a few dollars a month.",
+          "evidence": "The output does not mention AWS Resilience Hub routing control (ARC) cost at all in any dollar terms; it only mentions 'ARC Region switch plan' once in the roadmap without any cost figure like 'a few dollars a month'.",
+          "reasoning": "Since there is no cost statement about ARC routing control in the output, the assertion that any such statement does not describe it as costing a few dollars a month is trivially satisfied (vacuously true) as there is no contradicting statement.",
           "confidence": "high"
         },
         {
@@ -79,10 +86,10 @@
     }
   },
   "metrics": {
-    "runtime": "6m9s",
-    "cost": "$3.07",
+    "runtime": "6m44s",
+    "cost": "$3.36",
     "context_window": {
-      "utilization": "7.2%",
+      "utilization": "7.3%",
       "compaction_count": 0
     }
   }

@@ -10,12 +10,11 @@
     "trigger": {
       "result": "passed",
       "message": "Skill 'resilience-review' was triggered as expected",
-      "skill_loads_found": 2,
-      "warning": "Skill 'resilience-review' was triggered 2 times"
+      "skill_loads_found": 1
     },
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent's response delivers the full readiness report structure: an opening summary of where the workload stands today, followed by six numbered sections (1. Scenario and scope, 2. Targets, 3. Strategy, 4. Roadmap, 5. First tests, 6. Next decision), matching the expected structure.\n\nThe Scoping sheet CSV block contains the exact 16 headers word-for-word as specified in the prompt: \"Application (code),Observed names (tags),Accounts (resources),Resources,Availability tag (24/7 or business hours),Criticality proposed by AWS,Criticality retained by the customer,Code label,Parent business application,Target availability (%),RTO on the loss of one AZ (min),RPO on the loss of one AZ (min),Recovery approach...,Restore time from backup (min),EKS namespace (if on EKS),Customer comment\" \u2014 matches exactly.\n\nOne row is present for orders-web with:\n- Application, names (tags), accounts, resource count (15 resources) filled correctly\n- Criticality proposed by AWS = \"High (proposed)\" \u2014 filled\n- RTO on AZ loss = \"to measure (today, to confirm)\" \u2014 labelled appropriately, reflecting no automatic recovery (ASG single instance, Aurora single instance)\n- RPO on AZ loss = \"~5 (today, to confirm)\" \u2014 labelled as today's state\n- Recovery approach = \"none outside the Region (today, to confirm)\" \u2014 stated as today's label, not a target\n- Restore time from backup = \"to measure: restore test\" \u2014 matches expected \"measure with a restore test\"\n- Criticality retained by customer = empty\n- Code label = empty, and explicitly listed in \"Columns I could not fill\" section\n- Parent business application = empty\n- Target availability = empty\n- Customer comment = empty\n- EKS namespace = \"not applicable\" \u2014 matches expected\n\nNo value is presented as a confirmed business target \u2014 the agent explicitly states \"Values marked 'today, to confirm' describe the current setup. They are not targets: the business confirms or corrects them,\" which aligns with \"No value is presented as the business's target.\"\n\nThe EFS no-backup finding is captured in the roadmap section (\"orders-web-files (EFS): No backups at all\") rather than directly in the CSV cells, but the expected output describes this as context informing the RTO/RPO description, which is covered by the report narrative and the \"today, to confirm\" labeling.\n\nOverall, the response substantively matches all the listed criteria in the expected output.",
+      "reasoning": "The agent's response closely matches the expected output structure and content. It opens with a \"Where you stand today\" summary, then proceeds through the six sections (Scenario and scope, Targets, Strategy, Roadmap, First tests, Next decision), followed by a CSV scoping sheet block with all 16 headers verbatim. The row fills Application, Observed names (tags), Accounts, Resources (15), Criticality proposed (High), while leaving Criticality retained, Parent business application, Target availability, and Customer comment empty. Code label is empty and explicitly listed as a column that could not be filled, with reasoning given. EKS namespace is marked \"not applicable.\" The AZ-loss RTO/RPO cells are labeled \"today, to confirm\" and reflect the real findings: single EC2 instance in one subnet/AZ (ASG desired=1), Aurora single instance with no reader, and EFS lacking redundancy/backups (mentioned in the roadmap as having no backup plan and single-AZ mount target). The recovery approach is listed as \"backup and restore (today, to confirm)\" matching the current state. Restore time is listed as \"to measure: restore test (today, to confirm)\" matching the requirement. No value is presented as a business target \u2014 the response explicitly states these are current-state descriptions requiring confirmation, not targets. The response ends with a clear recommendation to onboard to AWS Resilience Hub using the confirmed row as the handoff for the resilience policy, matching the expected ending exactly.\n\nThe only minor discrepancy is that the EFS point about \"no backups\" is covered more indirectly in the roadmap (no AWS Backup plan, single AZ mount target) rather than being explicitly stated as a reason for the AZ-loss RTO being unmeasured, but the overall scoping sheet justification and CSV content substantively satisfy the expected output's criteria.",
       "confidence": "high"
     },
     "assertions": {
@@ -24,82 +23,90 @@
           "text": "The response contains a Scoping sheet block after the Next decision section, with a CSV whose header row uses the 16 column names from the prompt in the same order.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The response has a '## Scoping sheet' section after '## 6. Next decision', containing a CSV with header: 'Application (code),Observed names (tags),Accounts (resources),Resources,Availability tag (24/7 or business hours),Criticality proposed by AWS,Criticality retained by the customer,Code label,Parent business application,Target availability (%),RTO on the loss of one AZ (min),RPO on the loss of one AZ (min),Recovery approach (active-active / hot standby / warm standby / pilot light / backup and restore),Restore time from backup (min),EKS namespace (if on EKS),Customer comment' which matches the 16 prompt columns in order.",
-          "reasoning": "Header matches exactly and appears after Next decision section.",
+          "evidence": "The 'Scoping sheet' section appears after 'Next decision', with CSV header: 'Application (code),Observed names (tags),Accounts (resources),Resources,Availability tag (24/7 or business hours),Criticality proposed by AWS,Criticality retained by the customer,Code label,Parent business application,Target availability (%),RTO on the loss of one AZ (min),RPO on the loss of one AZ (min),Recovery approach (active-active / hot standby / warm standby / pilot light / backup and restore),Restore time from backup (min),EKS namespace (if on EKS),Customer comment' which matches the 16 prompt columns in order.",
+          "reasoning": "Header matches exactly in order and count (16 columns), placed after Next decision section.",
           "confidence": "high"
         },
         {
           "text": "The CSV has one data row, for orders-web, with the application, observed names, accounts and resource count filled from what the agent read.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Row: \"orders-web\",\"app=orders-web, team=platform (CloudFormation stack: orders-web)\",\"012345678901_1 (15 resources)\",\"15 (ALB, listener, target group, 4 security groups, ASG + 1 EC2 instance, launch template, Aurora cluster + 1 instance, DB subnet group, EFS + 1 mount target, S3 bucket)\"",
-          "reasoning": "Single data row present with application code, observed tags, account/resource count, and resource list filled from account read.",
+          "evidence": "Row: 'orders-web,\"app=orders-web; team=platform\",\"012345678901_1 (15 resources)\",15,...' fills application, observed names (tags), accounts, and resource count.",
+          "reasoning": "All four fields are populated with data apparently read from the account.",
           "confidence": "high"
         },
         {
           "text": "Every RTO, RPO and recovery approach value in the row is labelled as today's capability to confirm (for example 'today, to confirm'), and none is presented as the business's target.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "RTO value is '\"to measure (today, to confirm)\"', RPO is '\"~5 (today, to confirm)\"', Recovery approach is '\"none outside the Region (today, to confirm)\"' - all labelled as today's capability to confirm, not as business targets.",
-          "reasoning": "All three values explicitly carry the 'today, to confirm' qualifier distinguishing them from targets; Target availability (%) column itself is left blank.",
+          "evidence": "'to measure (today, to confirm)','0 min (today, to confirm)','backup and restore (today, to confirm)' and the note 'Values marked \"today, to confirm\" describe the current setup. They are not targets \u2014 the business confirms or corrects them.'",
+          "reasoning": "All three RTO/RPO/recovery approach values are labeled as today's capability to confirm, and the prose explicitly states they are not targets.",
           "confidence": "high"
         },
         {
           "text": "The AZ-loss values reflect the real setup: one instance in one subnet for the Auto Scaling group and a single-instance Aurora cluster mean no automatic recovery in another Availability Zone.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Report states 'ASG, the EC2 instance, the Aurora writer, and the EFS mount target are all pinned to eu-west-1a/b only \u2014 one AZ, no redundancy' and 'Single Aurora instance (no reader), single EC2 instance (ASG min=max=desired=1) \u2014 nothing to fail over to', with RTO listed as 'to measure (today, to confirm)' reflecting no automatic recovery.",
-          "reasoning": "The narrative and roadmap explicitly describe single-instance ASG and Aurora cluster lacking AZ redundancy, consistent with the RTO/RPO values being 'to measure' rather than a fast automatic failover number.",
+          "evidence": "'The compute tier runs a single EC2 instance in a single Availability Zone, and the Aurora database has only one instance with no reader' and 'ASG desired=1 (one EC2 instance, one ALB target); Aurora cluster has one writer, no reader \u2014 either one failing takes the site down'; RTO listed as 'to measure (today, to confirm)' reflecting no automatic recovery.",
+          "reasoning": "The report accurately describes the single-AZ, single-instance setup and reflects lack of automatic AZ failover in both narrative and RTO value.",
           "confidence": "high"
         },
         {
           "text": "Criticality retained by the customer, Parent business application, Target availability (%) and Customer comment are left empty.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "In the CSV row, the fields for Criticality retained by the customer, Parent business application, Target availability (%), and Customer comment are all empty strings (e.g., between 'High (proposed)' and the next field, and the trailing empty field before the closing quote).",
-          "reasoning": "Checking the CSV row positions: Criticality retained by customer = empty, Code label = empty, Parent business application = empty, Target availability = empty, Customer comment = empty (last field). The assertion's four named columns are indeed empty.",
+          "evidence": "In the CSV row these fields are empty: Criticality retained by the customer (\"\"), Parent business application (\"\"), Target availability (%) (\"\"), Customer comment (\"\").",
+          "reasoning": "All four specified columns are blank in the CSV row as required.",
           "confidence": "high"
         },
         {
           "text": "The Code label column is left empty and is listed as a column the agent could not fill.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Code label field in the CSV row is empty, and the text explicitly lists '...Code label, Parent business application... \u2014 all business-only' under 'Columns I could not fill'.",
-          "reasoning": "Code label is both empty in the data row and explicitly named in the list of columns the agent could not fill.",
+          "evidence": "CSV row has empty Code label field, and text states: '\"Code label\" \u2014 no tag or value in the account maps to this field; it looks like an internal business classification I can't guess.'",
+          "reasoning": "Code label is empty and explicitly listed among columns the agent could not fill.",
           "confidence": "high"
         },
         {
           "text": "Restore time from backup is not given as a number; it says to measure it with a restore test, unless a measured result exists.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Restore time from backup value is '\"to measure: restore test\"' rather than a numeric value.",
-          "reasoning": "No number given for restore time; instead it instructs to measure via a restore test, consistent with the assertion.",
+          "evidence": "Restore time from backup value: 'to measure: restore test (today, to confirm)' and in First tests table: 'Restore the Aurora cluster to a point in time ... Expected outcome: number to measure'.",
+          "reasoning": "No numeric value given; it explicitly recommends measuring via restore test.",
           "confidence": "high"
         },
         {
           "text": "The six report sections are present in order before the Scoping sheet block, and the report does not state RPO or RTO numbers as the user's targets.",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Sections appear in order: '## 1. Scenario and scope', '## 2. Targets', '## 3. Strategy', '## 4. Roadmap', '## 5. First tests', '## 6. Next decision', followed by '## Scoping sheet'. Section 2 states 'No RPO/RTO targets have been agreed yet.'",
-          "reasoning": "Six sections present in correct order before scoping sheet, and the report explicitly says no RPO/RTO targets have been agreed, avoiding presenting them as user's targets (values given are labeled 'today, to confirm' rather than targets).",
+          "evidence": "Sections '## 1. Scenario and scope', '## 2. Targets', '## 3. Strategy', '## 4. Roadmap', '## 5. First tests', '## 6. Next decision' appear in order before 'Scoping sheet'. Section 2 states 'No RTO, RPO, or target availability has been given yet \u2014 those are business decisions.'",
+          "reasoning": "All six sections present in correct order before the scoping sheet, and the report explicitly avoids stating RTO/RPO as user targets, instead framing them as current capability or open questions.",
+          "confidence": "high"
+        },
+        {
+          "text": "The answer recommends using the confirmed scoping sheet row to onboard the workload to AWS Resilience Hub (its values become the resilience policy), in Next decision or right after the sheet.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Once these targets are agreed, onboard orders-web to AWS Resilience Hub: the agreed RTO/RPO become its resilience policy, and the scoping sheet below is the handoff.' (end of Next decision) and after the sheet: '**Next:** once the business confirms this row, use it to onboard orders-web to AWS Resilience Hub \u2014 its values become the service's resilience policy.'",
+          "reasoning": "The recommendation to use the confirmed scoping sheet row for Resilience Hub onboarding appears both in Next decision and right after the sheet, satisfying the assertion.",
           "confidence": "high"
         }
       ],
       "summary": {
-        "passed": 8,
+        "passed": 9,
         "failed": 0,
         "errored": 0,
         "low_confidence": 0,
-        "total": 8,
+        "total": 9,
         "pass_rate": 1.0
       }
     }
   },
   "metrics": {
-    "runtime": "6m12s",
-    "cost": "$3.09",
+    "runtime": "6m28s",
+    "cost": "$3.22",
     "context_window": {
-      "utilization": "7.4%",
+      "utilization": "7.9%",
       "compaction_count": 0
     }
   }

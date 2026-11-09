@@ -10,8 +10,12 @@ meets them, and proposes the first tests that prove recovery works.
 ## Purpose
 
 Most teams that ask "how do we survive a Region failure?" have no RPO, no RTO and
-no strategy yet. AWS Backup, Resilience Hub, AWS FIS and ARC all help, but they
-assume you already know your targets. Without the skill, the agent is good at
+no strategy yet. AWS Resilience Hub is the AWS service for resilience
+assessments, findings and tests, and it needs those targets as a resilience
+policy. This skill starts that conversation and gets the team ready to onboard;
+it never competes with Resilience Hub. When the workload is already a Resilience
+Hub service, the skill uses its policy, findings and test results instead of a
+separate assessment. Without the skill, the agent is good at
 listing configuration gaps, but it tends to:
 
 - skip the choice of strategy, or pick one stricter (and more expensive) than the
@@ -23,6 +27,11 @@ This skill adds the planning and the proving.
 
 ## Key capabilities
 
+- Positions AWS Resilience Hub as the source of truth: when the workload is
+  already a Resilience Hub service, it uses its policy, findings and test results
+  instead of a separate assessment, and recommends its tests; otherwise it ends
+  by recommending onboarding to Resilience Hub, with the scoping sheet as the
+  handoff.
 - Separates four scenarios (service failure, AZ failure, Region failure, bad data)
   and states which protection covers which.
 - Treats disaster recovery as part of resilience: high availability covers the

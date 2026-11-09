@@ -54,7 +54,13 @@ Then four short lists:
   rows; at most one line on what they would need if confirmed.
 - **Not checked:** with the reason.
 
-**2. Targets.** The targets given, per tier, or the questions to agree them.
+**2. Targets.** The targets given, per tier, or the questions to agree them. For
+a workload on Resilience Hub, the RTO and RPO of its resilience policy, labelled
+"from the Resilience Hub policy".
+
+For a workload on Resilience Hub, sections 1 and 4 come from its achievability
+and open findings: name the finding behind each gap, and mark any extra row
+"not covered by Resilience Hub".
 
 **3. Strategy.** The name, why it fits, what runs in the recovery Region, and a
 cost level. If targets are unknown, show the two most likely strategies side by
@@ -94,13 +100,28 @@ the team can copy into its test log:
 | Lose one AZ | One Availability Zone fails | AWS FIS scenario **AZ: Power Interruption**, non-production, stop conditions set | ... | ... | ... | Measured time to recover, errors seen, pass or fail |
 | Lose the Region's connectivity | A whole Region fails | AWS FIS scenario **Cross-Region: Connectivity**, then a failover drill once copies exist | ... | ... | ... | Measured RTO and data-loss window, pass or fail |
 
+For a workload on Resilience Hub, the Approach column names its recommended
+tests instead of the plain FIS scenarios: **Availability Zone: recovery** for an
+AZ, **Multi-Region: isolation** and **Multi-Region: recovery** for a Region, with
+the last pass or fail result when it can be read. The restore test for bad data
+stays.
+
 Never fill in a planned date or a target the user did not give: write "ask the
 team" or "not agreed yet". Without targets, the expected outcome is the number to
 measure. Below the table, one line: record each result with the date, approach,
 failure mode and outcome, and re-run the test after any change that affects
 recovery.
 
-**6. Next decision.** One or two questions for the business owner.
+**6. Next decision.** One or two questions for the business owner, then the
+Resilience Hub step as the last line:
+
+- **Not on Resilience Hub yet:** onboard the workload to AWS Resilience Hub once
+  the targets are agreed: the targets become its resilience policy, and the
+  scoping sheet is the handoff. Resilience Hub then assesses the workload against
+  the policy and runs the recommended tests, with a pass or fail result against
+  the RTO.
+- **Already on Resilience Hub:** resolve its open findings and run its
+  recommended tests there; Resilience Hub stays the source of truth.
 
 **Scoping sheet (optional).** Only when the user gave a sheet, a table or its
 column headers, or asked for one. Follow references/scoping-sheet.md: the user's

@@ -12,6 +12,11 @@ that is denied or skipped and show it next to the finding.
 Look in the Regions the user named. If they named none, say which Regions you
 checked.
 
+- `ListServices` in the next generation of AWS Resilience Hub: a workload that is
+  already a Resilience Hub service. Follow "If the workload is already in
+  Resilience Hub" in SKILL.md for it. This check also runs when the user names a
+  workload.
+
 - `cloudformation:ListStacks` and `cloudformation:ListStackResources`: each
   application stack is a candidate. Stacks that only hold tooling (for example CDK
   bootstrap or SAM-managed buckets) are not workloads.

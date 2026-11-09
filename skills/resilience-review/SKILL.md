@@ -26,12 +26,15 @@ metadata:
 # Resilience Review
 
 Most teams that ask about resilience or disaster recovery have no RPO, no RTO and
-no strategy yet.
-The tools (AWS Backup, Resilience Hub, AWS FIS, ARC) all assume you already have
-them. This skill is the step before the tools: it checks every layer of the
-workload, whatever its architecture, says where it stands today, turns a business
-conversation into targets, picks the cheapest strategy that meets them, and names
-the first tests.
+no strategy yet. AWS Resilience Hub is the AWS service for resilience
+assessments, findings and tests, and it needs those targets as a resilience
+policy. This skill starts the conversation before it: it checks every layer of
+the workload, whatever its architecture, says where it stands today, turns a
+business conversation into targets, picks the cheapest strategy that meets them,
+names the first tests, and gets the team ready to onboard the workload to
+Resilience Hub. It never competes with Resilience Hub: when the workload is
+already a Resilience Hub service, its policy, findings and test results come
+first.
 
 Disaster recovery is one part of resilience. High availability keeps the workload
 running when a service or an Availability Zone fails; disaster recovery brings it
@@ -59,8 +62,9 @@ skip those two.
    the method.
 
 When a path ends with a question, write the full answer first, then make the
-question its last line, in plain text. Do not call the `ask_user` tool for it: that
-tool ends the turn without a final answer, so the user never sees the findings.
+question its last line, in plain text. Never call the `ask_user` tool, not even
+to offer the candidates as options: it ends the turn without a final answer, so
+the user never sees the findings.
 
 ## Rules for every answer
 
@@ -79,6 +83,8 @@ tool ends the turn without a final answer, so the user never sees the findings.
   must take.
 - **Plain words.** Business owners read this answer. Short sentences. Explain each
   acronym once (RPO = how much data you can lose, RTO = how long you can be down).
+- **Questions are plain text.** Any question to the user is the last line of a
+  complete answer, never an `ask_user` tool call.
 - **Say what you did not check.** A denied or skipped call is "not checked", next
   to the finding. An empty result is "not checked", not "no gap".
 
@@ -87,6 +93,36 @@ tool ends the turn without a final answer, so the user never sees the findings.
 All checks are read-only AWS API calls. If the AWS API tool is not available in
 this session, load a skill that provides it, then keep following this skill's
 method and output. Do not switch to another skill's method.
+
+## If the workload is already in Resilience Hub
+
+In Step 0, check whether the workload is already a service in the next
+generation of AWS Resilience Hub: `ListServices` in each Region you check (match
+by name, stack or resources), then `GetService`. If the call is denied or the API
+is not available, list "Resilience Hub: not checked" under Not checked and run the
+full method.
+
+If it is a Resilience Hub service, Resilience Hub is the source of truth. Do not
+run a separate assessment, and never contradict its findings:
+
+- **Components:** map them from the service's resources (`ListResources`).
+- **Targets:** the RTO and RPO of its resilience policy (`GetPolicy`) are the
+  agreed targets. Label them "from the Resilience Hub policy". If no policy is
+  attached, say so and give the questions of Step 3.
+- **Where it stands:** take each scenario's status from the policy's
+  achievability and the open failure mode findings (`ListFailureModeFindings`,
+  `GetFailureModeFinding`). Name the finding behind each gap and say when the
+  last assessment ran. Skip the separate checks of Step 5.
+- **Strategy:** compare the policy's disaster recovery approach with what the
+  findings show is in place.
+- **Roadmap:** the open findings, grouped as quick wins, quick fixes and
+  long-term, each naming its finding. Add a row only for what Resilience Hub
+  does not cover (for example a backup restore that has never been tested),
+  marked "not covered by Resilience Hub".
+- **Tests:** its recommended resilience tests, with the last pass or fail result
+  when you can read it (Step 6).
+
+Keep the report format of Step 7.
 
 ## If you delegate data gathering
 
@@ -118,7 +154,8 @@ Each step uses the answers of the steps before it.
 
 ### Step 0: Map the workload by layer
 
-Read [references/checks-by-layer.md](references/checks-by-layer.md) first: how
+First check whether the workload is already a Resilience Hub service (see "If
+the workload is already in Resilience Hub"). Read [references/checks-by-layer.md](references/checks-by-layer.md) first: how
 to find the workload, the calls per layer, their traps, and the questions for a
 service with no section of its own. Keep it for Step 5.
 
@@ -173,7 +210,9 @@ AMIs, container images and IaC that exist there.
 
 ### Step 3: Record the targets, or the questions to agree them
 
-- If the user gives RPO and RTO, use them, per tier.
+- If the user gives RPO and RTO, use them, per tier. If the workload is a
+  Resilience Hub service with a policy, the policy's RTO and RPO are the targets,
+  labelled "from the Resilience Hub policy".
 - If not, **do not invent them**, and do not offer "typical" or "likely" targets.
   Give the questions the business must answer (maximum data loss and downtime per
   tier, and the targets of what the workload depends on) and show what each
@@ -241,22 +280,31 @@ skill; for S3 bucket posture, to `storage-s3-resiliency-expertise`.
 ### Step 6: Choose the tests that prove it
 
 Read [references/testing.md](references/testing.md) first. Propose **one test
-for each scenario in scope in Step 1**, even when targets are unknown:
+for each scenario in scope in Step 1**, even when targets are unknown. Resilience
+Hub's recommended tests run AWS FIS underneath and return pass or fail against
+the policy's RTO: use them for a workload on Resilience Hub. Use the plain FIS
+scenarios only for a workload that is not on Resilience Hub yet, and say in one
+line that they become Resilience Hub tests once it is onboarded.
 
 - **Bad data:** a **restore test** that measures how long recovery takes (AWS
-  Backup restore testing, or a timed point-in-time restore).
-- **One AZ fails:** the AWS FIS scenario-library scenario **AZ: Power
-  Interruption**, in non-production.
-- **A whole Region fails:** the FIS scenario **Cross-Region: Connectivity**, in
-  non-production, plus a timed **failover drill** once copies or replicas exist in
-  the recovery Region.
+  Backup restore testing, or a timed point-in-time restore). Resilience Hub has
+  no test for this.
+- **One AZ fails:** on Resilience Hub, **Availability Zone: recovery**; otherwise
+  the AWS FIS scenario-library scenario **AZ: Power Interruption**, in
+  non-production.
+- **A whole Region fails:** on Resilience Hub, **Multi-Region: isolation**, then
+  **Multi-Region: recovery** once copies or replicas exist in the recovery
+  Region; otherwise the FIS scenario **Cross-Region: Connectivity**, in
+  non-production, plus a timed **failover drill** once copies or replicas exist.
 - **One service fails:** the failover of that service, for example a forced
-  database failover, or the FIS AZ scenario when it covers the same components.
+  database failover (on Resilience Hub, **Dependency validation** for a
+  dependency in the same Region), or the AZ test when it covers the same
+  components.
 
-Set stop conditions first. A manual test can be added, but not instead of the FIS
-scenario. Give each test the record fields in the report format: scenario,
-approach, the target it proves, planned date, expected outcome and the result to
-record. Without targets, the expected outcome is the number to measure.
+Set stop conditions first. A manual test can be added, but not instead of the
+Resilience Hub test or FIS scenario. Give each test the record fields in the
+report format: scenario, approach, the target it proves, planned date, expected
+outcome and the result to record. Without targets, the expected outcome is the number to measure.
 
 ### Step 7: Write the answer in the report format
 
@@ -274,6 +322,10 @@ scenario table and the roadmap tables. In short:
   [references/scoping-sheet.md](references/scoping-sheet.md) first, then add its
   **Scoping sheet** block after Next decision, with the user's headers word for
   word.
+- **Next decision ends with the Resilience Hub step.** Not on Resilience Hub yet:
+  recommend onboarding the workload to AWS Resilience Hub, with the agreed targets
+  as its resilience policy and the scoping sheet as the handoff. Already on it:
+  resolve its open findings and run its recommended tests there.
 - Your final message is always the complete answer.
 - **When the user adds or changes targets later in the conversation** (or confirms
   that a store is rebuildable), re-run Steps 3 to 8 and send the complete report
@@ -292,12 +344,15 @@ Re-read your draft against this list. Fix any item that fails, then check again.
 
 1. It starts with "Where you stand today", and the scenario table has all four
    rows, each marked in scope or not and covered today or not.
-2. No RPO or RTO appears as the user's target unless the user gave it.
+2. No RPO or RTO appears as the user's target unless the user gave it or it
+   comes from the workload's Resilience Hub policy.
 3. Every action that adds replication says, in the same cell, that it copies bad
    writes too and that point-in-time recovery must stay on.
 4. "First tests" has one test for each scenario in scope, with its record fields:
-   a restore test for bad data, **AZ: Power Interruption** for an AZ, and
-   **Cross-Region: Connectivity** for a Region.
+   a restore test for bad data; for an AZ and a Region, the Resilience Hub tests
+   (**Availability Zone: recovery**, **Multi-Region: isolation** or **recovery**)
+   when the workload is on Resilience Hub, otherwise **AZ: Power Interruption**
+   and **Cross-Region: Connectivity**.
 5. Every finding comes from a read-only call that succeeded, or is marked not
    checked. Backups and copies are judged by the recovery points that exist now,
    and copy rules by what AWS Backup supports for that resource type.
@@ -322,6 +377,10 @@ Re-read your draft against this list. Fix any item that fails, then check again.
     in its own column, labelled "today, to confirm" and traced to a read-only call
     or the reference values; business columns empty; columns you could not fill
     listed.
+13. Next decision ends with the Resilience Hub step (onboarding, with the
+    scoping sheet as the handoff; or, when the workload is already on it, its
+    findings and tests), and nothing in the answer contradicts a Resilience Hub
+    finding.
 
 ## Cost guardrails
 
@@ -339,6 +398,8 @@ Reference values for sanity checks only (checked 1 Nov 2026; prices change):
 
 ## Known quirks
 
+- If the Resilience Hub calls are denied or the API is not available, list
+  "Resilience Hub: not checked" and run the full method.
 - If `dynamodb:DescribeTable` is blocked, use `DescribeContinuousBackups` for
   point-in-time recovery and `ListBackups` for on-demand backups, and say that
   replica information could not be read.
@@ -355,7 +416,7 @@ Reference values for sanity checks only (checked 1 Nov 2026; prices change):
 - [references/dr-strategies.md](references/dr-strategies.md) — load at Step 4:
   mapping targets to a strategy, tiers, rebuildable data, the recovery Region.
 - [references/testing.md](references/testing.md) — load at Step 6: restore tests,
-  failure tests, drills, monitoring.
+  Resilience Hub tests, FIS scenarios, drills, monitoring.
 - [assets/report-format.md](assets/report-format.md) — load at Step 7: the report
   skeleton and what goes in each section.
 - [references/scoping-sheet.md](references/scoping-sheet.md) — load at Step 7 only
