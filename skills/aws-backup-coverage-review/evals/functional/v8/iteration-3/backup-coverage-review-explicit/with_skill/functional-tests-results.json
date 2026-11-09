@@ -1,0 +1,109 @@
+{
+  "version": "v8",
+  "iteration": 3,
+  "eval_id": "backup-coverage-review-explicit",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-backup-coverage-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The report contains all the required structural sections: Scope table (with inventory strategy disclosed as direct-enumeration due to Config recorder being off), Coverage Rating (Low), Executive Summary, Coverage Matrix, Findings & Recommendations, Check Coverage Matrix (which does appear to cover 23 checks numbered 1.1-5.5), Next Steps, and References.\n\nHowever, the critical requirement of internal consistency fails badly. The Scope table states \"Eligible resources found: 29 across 9 resource types,\" but the by-type table then computes a total of 29, which the agent itself flags as wrong, and then produces a \"Restated, reconciled total\" of 30 eligible resources with coverage 3% instead of 10%. The report explicitly acknowledges its own arithmetic was wrong and updates numbers mid-document, leaving contradicting figures throughout (Scope says 29, Coverage Rating says ~10% based on 3/29, then a correction says 3% based on 1/30). This is exactly the kind of internal inconsistency the expected output explicitly disallows (\"Resource counts are internally consistent: the coverage states in the Coverage Matrix sum to the total eligible resource count reported in Scope\"). The report is transparent about the discrepancy but does not resolve it \u2014 final numbers used in Coverage Rating (10%) and Check Coverage Matrix (3%, 30 total) do not match Scope (29) or each other. This directly violates the internal consistency requirement of the expected output.",
+      "evidence": "\"Coverage: **~10%** (`3`/`29` resources protected...)\" vs later \"**Restated, reconciled total (single source of truth):** Eligible = ... = **30**. ... Coverage = round(100\u00d71/30) = **3%**. *(This corrects the earlier ~10% estimate above...)*\" and Scope table states \"Eligible resources found | `29` across `9` resource types\" while Check Coverage Matrix row 2.2 states \"Observed | 3%\" against 30 total \u2014 three different totals/percentages appear across the same report.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response is the full report itself, not a summary of one or an offer to produce one.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains a full detailed report with Scope, Coverage Rating, Executive Summary, Coverage Matrix, Findings & Recommendations, Check Coverage Matrix, and Next Steps sections, not a summary or an offer to produce a report.",
+          "confidence": "high"
+        },
+        {
+          "text": "The Coverage Rating is stated as exactly one of High, Medium, Low or Indeterminate.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The Coverage Rating section states '**Low** \u274c' which is exactly one of the four allowed values.",
+          "confidence": "high"
+        },
+        {
+          "text": "The Scope table discloses the inventory strategy used \u2014 either the AWS Config fast path or direct per-service enumeration.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Scope table states 'Inventory strategy | `direct-enumeration` (AWS Config recorder `default` exists but `recording: false` \u2014 fast path unavailable)', explicitly disclosing the enumeration strategy used and why the fast path (Config) was unavailable.",
+          "confidence": "high"
+        },
+        {
+          "text": "The resource counts are internally consistent: the per-state counts in the Coverage Matrix sum to the total eligible resource count given in the Scope table.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Scope table states 'Eligible resources found | `29`', but the by-type table's per-state counts (Protected 1, SelectedNotProtected 1, Unprotected 5, plus S3 21 and CFN 21) do not sum consistently to 29. The report itself flags this inconsistency and 'corrects' it later to 30 eligible / 3% coverage, explicitly contradicting the Scope table's stated 29. The report acknowledges: 'This corrects the earlier ~10% estimate above once S3 is folded into the true denominator \u2014 3% is the number that governs the Coverage Rating' \u2014 showing the Scope table figure (29) is not consistent with the Coverage Matrix breakdown (30, with 1 protected, 1 selectedNotProtected, 28 unprotected).",
+          "confidence": "high"
+        },
+        {
+          "text": "A resource type whose enumeration call returned AccessDenied or was cancelled by the agent's guardrail is reported with that status and excluded from the coverage denominator, never described as having been queried and returned zero resources. Only calls that actually succeeded are reported as zero.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "For Storage Gateway and DSQL, the report correctly excludes them from the denominator ('excluded from the denominator rather than assumed zero') after noting the calls were cancelled by the guardrail. However, for backup:GetSupportedResourceTypes, which was denied AccessDenied, the report states it fell back to 'this skill's static table' as the denominator source rather than explicitly reporting that resource-type list as excluded/flagged from the denominator - it's used as-is with a caveat. More critically, EKS: the by-type table lists EKS with Eligible=1, Unprotected=1, 0% coverage \u2014 but the check 1.1 note says EKS is 'opted out (`...EKS = false`)' \u2014 this is treated as a live enumerated resource, not a case of AccessDenied/cancelled. The Timestream case is handled correctly (AccessDeniedException reported as no eligible resources with explicit caveat, not silently zero). Overall, most cases are handled with appropriate caveats, but the internal inconsistency in the denominator undermines full compliance; borderline pass/fail \u2014 grading as fail due to the GetSupportedResourceTypes handling being folded into the denominator without exclusion and the overall reconciliation confusion contaminating trust in denominator handling.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every resource in the Coverage Matrix is assigned exactly one coverage state, with no resource appearing under two states.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The dangling EC2 instance i-064a9400d6f0e32e1 is listed in the Coverage Matrix with State '\u274c SelectedNotProtected', which is one state. This is consistent. However, the summary line 'Restated, reconciled total' recomputes 'SelectedNotProtected = EC2 dangling entry (1)' and 'Unprotected = 28' but the individual Coverage Matrix rows for S3 (21) and CloudFormation (21) are not each listed with an explicit single state per resource - they're bulk-counted without listing per-resource states, and CloudFormation is separately said to be excluded from the eligible denominator while S3 is included, creating ambiguity about whether individual resources are assigned to exactly one state unambiguously. Given the reconciliation confusion and lack of explicit per-resource state assignment for the 21+21 bulk items, this cannot be confirmed as clean single-state assignment throughout.",
+          "confidence": "high"
+        },
+        {
+          "text": "The protected count and the coverage percentage are identical everywhere they appear \u2014 Coverage Rating, Executive Summary, and the by-resource-type table.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The Coverage Rating section states 'Coverage: ~10% (3/29 resources protected with a current recovery point...)' but later in the by-type table the total row shows 'Total: 29... Protected 1... ~10%' and then the 'Restated, reconciled total' section explicitly recalculates to 'Protected = EFS (1) = 1... Coverage = round(100\u00d71/30) = 3%' and states 'This corrects the earlier ~10% estimate above... 3% is the number that governs the Coverage Rating.' Additionally, the Check Coverage Matrix under 2.2 states 'Coverage percentage \u274c | 3%'. Thus the protected count (3 vs 1) and coverage percentage (~10% vs 3%) are NOT identical everywhere they appear \u2014 they explicitly conflict between the Coverage Rating section (3/29, ~10%) and the reconciled figures used elsewhere (1/30, 3%).",
+          "confidence": "high"
+        },
+        {
+          "text": "The report contains all seven required section headings",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## Scope\\n\\n| Field | Value |\\n|---|---|\\n| Account | `388414481111` (partition `aws`) |\\n| Regions reviewed | `us-east-1` (1 of several enabled \u2014 **user-directed limit**: this review was explicitly scoped\u2026'"
+        },
+        {
+          "text": "The Check Coverage Matrix contains at least the 23 numbered check rows",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Found 40 match(es), required at least 23, first: '| 5.2 |'"
+        },
+        {
+          "text": "No write, backup-start, or restore-start API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 10,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m29s",
+    "cost": "$2.24",
+    "context_window": {
+      "utilization": "14.6%",
+      "compaction_count": 0
+    }
+  }
+}

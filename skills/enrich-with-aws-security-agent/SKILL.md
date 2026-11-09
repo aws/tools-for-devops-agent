@@ -3,8 +3,8 @@ name: enrich-with-aws-security-agent
 description: Automatically load this skill when investigating application outages, service degradation, or errors that could have security-related root causes — including unexplained downtime, authentication or authorization failures, injection attacks, data exposure, or suspicious application behavior. Query AWS Security Agent CloudWatch logs to retrieve detailed code review findings with actionable, low-level details (file, line number, vulnerability type) that customers can directly fix.
 metadata:
   author: yakiratz-aws
-  version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Incident RCA"
+  version: "1.0.1"
+  aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "Amazon CloudWatch, AWS Security Agent"
   aws-devops-agent-skills.technical-domains: "Security"
 ---

@@ -15,9 +15,25 @@ that don't have a docs page yet, so new entries appear on the site
 automatically.
 """
 
+import html
 import json
 import re
 from pathlib import Path
+
+# metadata.aws-devops-agent-skills.agent-types carries the API values, because it
+# sets which agents load the skill. The catalog shows them in readable form; a
+# value with no entry here is displayed as-is.
+AGENT_TYPE_LABELS = {
+    "GENERIC": "All agents",
+    "CHAT": "Chat tasks",
+    "INCIDENT_TRIAGE": "Incident triage",
+    "INCIDENT_RCA": "Incident RCA",
+    "INCIDENT_MITIGATION": "Incident mitigation",
+    "INCIDENT_UI": "Incident UI",
+    "PREVENTION": "Improvement",
+    "RELEASE_READINESS_REVIEW": "Release readiness review",
+    "RELEASE_TESTING": "Release testing",
+}
 
 
 def _parse_frontmatter(path: Path) -> dict:
@@ -128,7 +144,10 @@ def _build_catalog(config_dir: str) -> list:
         for key, value in metadata.items():
             if key.startswith("aws-devops-agent-skills."):
                 dim_name = key.replace("aws-devops-agent-skills.", "")
-                dimensions[dim_name] = [v.strip() for v in value.split(",")]
+                values = [v.strip() for v in value.split(",") if v.strip()]
+                if dim_name == "agent-types":
+                    values = [AGENT_TYPE_LABELS.get(v, v) for v in values]
+                dimensions[dim_name] = values
 
         catalog.append({
             "id": skill_path.name,
@@ -146,7 +165,7 @@ def _format_name(skill_id: str) -> str:
     """Convert skill-id to display name: aws-health-events -> AWS Health Events."""
     words = skill_id.split("-")
     # Capitalize known acronyms
-    acronyms = {"aws", "eks", "rds", "rca", "mcp", "crm"}
+    acronyms = {"aws", "eks", "rds", "rca", "mcp", "crm", "eos"}
     return " ".join(
         w.upper() if w.lower() in acronyms else w.capitalize()
         for w in words
@@ -210,19 +229,24 @@ def _generate_skill_stub(doc_path: Path, skill: dict, config_dir: str):
     doc_path.write_text(content, encoding="utf-8")
 
 
+def _author_link(author: str) -> str:
+    """A user links to their profile; a team (org/team) to its organization, since team pages need sign-in."""
+    profile = author.split("/", 1)[0]
+    return (
+        f'<a href="https://github.com/{html.escape(profile)}" target="_blank" rel="noopener">'
+        f'<strong>{html.escape(author)}</strong></a>'
+    )
+
+
 def _build_skill_meta_block(skill: dict) -> str:
     """Build an HTML block showing author and dimension tags for a skill page."""
     parts = []
 
-    # Author line (linked to GitHub profile)
-    author = skill.get("author", "")
-    if author:
-        parts.append(
-            f'<div class="skill-meta">'
-            f'<span class="skill-author">by <a href="https://github.com/{author}" '
-            f'target="_blank" rel="noopener"><strong>{author}</strong></a></span>'
-            f'</div>'
-        )
+    # Author line, one GitHub link per comma-separated author
+    authors = [a.strip() for a in skill.get("author", "").split(",") if a.strip()]
+    if authors:
+        links = ", ".join(_author_link(a) for a in authors)
+        parts.append(f'<div class="skill-meta"><span class="skill-author">by {links}</span></div>')
 
     # Dimension tags
     dimensions = skill.get("dimensions", {})

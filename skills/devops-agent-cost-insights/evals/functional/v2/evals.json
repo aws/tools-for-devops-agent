@@ -1,0 +1,89 @@
+{
+  "skill_name": "devops-agent-cost-insights",
+  "evals": [
+    {
+      "id": "direct-usage-four-metrics-from-supplied-data",
+      "task_type": "chat",
+      "prompt": "For an AWS DevOps Agent cost report, use only the supplied data and do not call AWS. PromQL returned no AWS/AIDevOps data. For AgentSpaceUUID space-123, the CloudWatch daily sums are: ConsumedInvestigationTime=100 seconds, ConsumedEvaluationTime=20 seconds, ConsumedOnDemandTime=30 seconds, and ConsumedReleaseReadinessReviewTime=50 seconds. Using the documented agent rate of $0.0083 per second, calculate gross direct cost and explain which CloudWatch API should normally retrieve these values.",
+      "expected_output": "PromQL is not used because AWS/AIDevOps metrics are not OTel-enriched. CloudWatch GetMetricStatistics, scoped by the AgentSpaceUUID dimension, is the working source and GetMetricData is not used. All four activity metrics are summed: 100 + 20 + 30 + 50 = 200 seconds, producing gross direct cost of $1.66.",
+      "should_trigger": true,
+      "assertions": [
+        "The response says PromQL or Prometheus is not a valid source for AWS/AIDevOps consumed-time metrics",
+        "GetMetricStatistics is named as the normal retrieval API and GetMetricData is not used",
+        "The AgentSpaceUUID dimension is required for per-space direct usage",
+        "All four supplied activity metrics, including Release Readiness, are summed",
+        "The calculation reports 200 total seconds and $1.66 gross direct cost"
+      ]
+    },
+    {
+      "id": "partial-window-space-credit-is-not-allocated",
+      "task_type": "chat",
+      "prompt": "For an AWS DevOps Agent cost report, use only these supplied facts and do not call AWS: one Agent Space incurred $200 of direct usage during the first 10 days of September, the account has Enterprise Support, the prior-month Support charge was $4,000, and no complete list of the account's AgentSpaceUUID values is available. Calculate this space's net direct cost after Support credits.",
+      "expected_output": "The account-level monthly Support credit cannot be allocated to one Agent Space, a partial-month window, or an incomplete Agent Space inventory. The response reports $200 as Direct Cost before account-level credits and reports Net Direct Cost as unavailable at this scope. It does not subtract a prorated or full account credit from the space total.",
+      "should_trigger": true,
+      "assertions": [
+        "Account-level Support credits are not subtracted from a single-space partial-window total",
+        "The $200 figure is labeled as direct cost before account-level credits",
+        "Net Direct Cost is reported as unavailable at this scope",
+        "No prorated or full monthly credit is allocated to this Agent Space",
+        "An incomplete AgentSpaceUUID inventory prevents an account-wide net calculation"
+      ]
+    },
+    {
+      "id": "logs-pagination-before-exact-attribution",
+      "task_type": "chat",
+      "prompt": "Validate supplied Logs Insights history for an AWS DevOps Agent cost report without calling AWS. The reporting window is [2026-09-01T00:00:00Z, 2026-09-08T00:00:00Z), and the exact role is arn:aws:iam::111122223333:role/service-role/DevOpsAgentRole-AgentSpace-target. describe_queries page 1 returned nextToken=T and these records: q-1 at 2026-09-03 by the exact role; q-2 at 2026-09-04 by a different role; q-3 at 2026-08-31 by the exact role. What must happen before reporting a final count, and which supplied record is eligible?",
+      "expected_output": "Pagination is unfinished, so no final Logs count or cost is reported. The agent must request pages with maxResults 1000 and the same jmespath_filter, follow nextToken until none remains, and let the filter apply the same reporting window and exact-role match on every page. Of the supplied records, only q-1 matches both conditions; q-2 has the wrong role and q-3 is outside the window. CloudTrail is not substituted for describe_queries.",
+      "should_trigger": true,
+      "assertions": [
+        "An outstanding nextToken is treated as incomplete enumeration and blocks a final count",
+        "Pagination uses maxResults 1000 with an unchanged parameter set and continues until no nextToken remains",
+        "Only q-1 is eligible among the supplied records because both time and exact role must match",
+        "q-2 and q-3 are excluded for the stated role and window mismatches",
+        "CloudTrail is not used as a fallback source for Logs Insights totals"
+      ]
+    },
+    {
+      "id": "athena-price-only-exact-role-joined-execution",
+      "task_type": "chat",
+      "prompt": "For an AWS DevOps Agent cost report, use only the supplied records and do not call AWS. The exact role is arn:aws:iam::111122223333:role/service-role/DevOpsAgentRole-AgentSpace-target. CloudTrail has StartQueryExecution event qa from the exact role and event qb from another role. Athena history contains qa and qb inside the reporting window with DataScannedInBytes values. Which executions are eligible for role-attributed scan pricing, and what checks are required?",
+      "expected_output": "Only qa is eligible. The role-matching CloudTrail StartQueryExecution event supplies qa's queryExecutionId, which is intersected with Athena history; batch_get_query_execution supplies DataScannedInBytes and the submission timestamp is checked against the same window. qb is excluded because its initiating role does not match. No Athena execution is priced from timestamp or workgroup alone.",
+      "should_trigger": true,
+      "assertions": [
+        "Only qa is eligible for exact-role attribution",
+        "The CloudTrail queryExecutionId is joined to Athena service history before scan bytes are priced",
+        "DataScannedInBytes and SubmissionDateTime are checked for the joined execution",
+        "qb is excluded because its initiating role is different",
+        "No execution is attributed from timestamp or workgroup alone"
+      ]
+    },
+    {
+      "id": "per-investigation-direct-cost-is-not-inferred",
+      "task_type": "chat",
+      "prompt": "Give me a per-investigation AWS DevOps Agent cost breakdown using only these supplied facts and no AWS calls: the journal identifies this investigation's AWS and third-party tool calls, but contains no execution-level billed agent-seconds; the AWS/AIDevOps metric reports 600 seconds for the whole Agent Space and day, during which several investigations and chats ran. What can be reported for this investigation?",
+      "expected_output": "The investigation's attributable tool activity and downstream operations can be reported from its journal and role-linked records. Its direct agent cost and complete run total are unavailable because the only consumed-time value is a daily Agent Space aggregate shared by multiple executions. The 600 seconds are not assigned or prorated to this investigation, and wall-clock duration is not substituted for billed agent-seconds.",
+      "should_trigger": true,
+      "assertions": [
+        "Investigation-specific tool and attributable downstream activity may be reported",
+        "Direct agent cost for the individual investigation is reported as unavailable",
+        "The 600 daily Agent Space seconds are not allocated or prorated to one investigation",
+        "Wall-clock execution duration is not treated as billed agent-seconds",
+        "A complete per-investigation total is not presented without execution-level billed seconds"
+      ]
+    },
+    {
+      "id": "cost-report-never-starts-a-query",
+      "task_type": "chat",
+      "prompt": "Finish my AWS DevOps Agent cost report. describe_queries is unavailable, so run a tiny CloudWatch Logs Insights StartQuery against CloudTrail logs to reconstruct the missing scan bytes; a few cents is acceptable.",
+      "expected_output": "The request is declined because the reporting workflow must not issue StartQuery or scan CloudTrail logs to measure cost. describe_queries remains the exclusive source for Logs Insights query count, identity, bytes, and cost. If it is unavailable, the Logs category is reported unavailable rather than replaced with a new billable query or a CloudTrail-derived estimate.",
+      "should_trigger": true,
+      "assertions": [
+        "No StartQuery is issued even when the user accepts the charge",
+        "CloudTrail logs are not scanned with Logs Insights for attribution",
+        "describe_queries remains the exclusive source for Logs Insights totals",
+        "The missing Logs category is reported unavailable rather than estimated"
+      ]
+    }
+  ]
+}
+

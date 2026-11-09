@@ -3,7 +3,7 @@
 ![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 ![AWS DevOps Agent](https://img.shields.io/badge/AWS-DevOps%20Agent-orange?logo=amazonaws)
 
-Open-source skills, custom agents, and infrastructure templates for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that extend its capabilities for incident response, root cause analysis, and operational troubleshooting.
+Open-source skills, custom agents, MCP servers and infrastructure templates for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that extend its capabilities for incident response, root cause analysis, and operational troubleshooting.
 
 ## ⚠️ Important Notice
 
@@ -21,15 +21,18 @@ This repository contains:
 
 - **Skills** — Domain-specific knowledge, decision trees, and step-by-step runbooks that the agent follows during investigations. Use them as-is or as templates for writing your own. Browse the [Skills Catalog](https://aws.github.io/tools-for-devops-agent/skills/).
 - **Custom Agents** — Pre-built agent configurations with system prompts and tool assignments for recurring operational workflows like health reports and operational reviews. Browse the [Custom Agents Catalog](https://aws.github.io/tools-for-devops-agent/custom-agents/).
-- **CloudFormation Templates** — Infrastructure-as-code for provisioning IAM permissions that skills require.
+- **MCP Servers** — MCP servers tailored to work with skills and custom agents in this repo, extending their capabilities to retrieve necessary information. Browse the [MCP Servers Catalog](https://aws.github.io/tools-for-devops-agent/mcp-servers/).
+- **CloudFormation Templates** — Infrastructure-as-code for provisioning IAM permissions that skills require and for [forwarding CloudWatch alarms to DevOps Agent investigations](cloudformation/devops-agent-alarm-investigations/).
 
 All tools are contributed and tested according to the [contribution guidelines](CONTRIBUTING.md).
 
-## What Are Skills and Custom Agents?
+## What Are Skills, Custom Agents, and MCP Servers?
 
 **Skills** are structured instruction sets that teach the agent how to investigate specific operational scenarios. They follow the open [Agent Skills specification](https://agentskills.io/home) and can be uploaded to your Agent Space to extend the agent's knowledge beyond built-in capabilities. See the [DevOps Agent skills documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html) for more information.
 
 **Custom agents** are user-defined AI agents that automate operational tasks specific to your infrastructure. You define a system prompt, assign tools and skills, and run them on demand or on a schedule. See the [DevOps Agent custom agents documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-custom-agents-index.html) for more information.
+
+**MCP servers** implement the open [Model Context Protocol](https://modelcontextprotocol.io) to connect the agent to external systems and data sources. The servers in this repository are tailored to work alongside the skills and custom agents here, extending their capabilities to retrieve the information they need.
 
 ## Getting Started
 
@@ -43,17 +46,21 @@ Most permissions are already covered by the AWS managed policy [`AIDevOpsAgentAc
 
 ```bash
 aws cloudformation deploy \
-  --template-file cloudformation/devops-agent-skill-policies.yaml \
+  --template-file cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml \
   --stack-name devops-agent-skill-policies \
   --parameter-overrides ExistingRoleName=<YOUR-DEVOPS-AGENT-ROLE-NAME> \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-The template supports enabling/disabling policies per skill, optional region restrictions, and can either attach to an existing role or create a new one. See [`cloudformation/devops-agent-skill-policies.yaml`](cloudformation/devops-agent-skill-policies.yaml) for details.
+The template supports enabling/disabling policies per skill, optional region restrictions, and can either attach to an existing role or create a new one. See [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) for details.
 
 ## Contributing
 
 We welcome contributions of new skills and improvements to existing ones. See [CONTRIBUTING](CONTRIBUTING.md) for guidelines.
+
+## Support
+
+Need help, found a bug, or want to suggest a new tool? See [SUPPORT](SUPPORT.md) for how to get support and where to file issues.
 
 ## References
 
@@ -77,7 +84,7 @@ We welcome contributions of new skills and improvements to existing ones. See [C
 
 - [Agent Skills specification](https://agentskills.io/home) — the open standard this project follows
 - [AGENTS.md specification](https://agents.md/) — the open standard for custom agent definitions
-- [Agent Skill Eval](https://github.com/aws-samples/sample-agent-skill-eval) — evaluation framework for testing skills
+- [Model Context Protocol (MCP)](https://modelcontextprotocol.io) - open-source standard for connecting AI applications to external systems
 
 ## License
 

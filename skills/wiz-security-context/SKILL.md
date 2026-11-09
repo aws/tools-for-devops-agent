@@ -3,8 +3,8 @@ name: wiz-security-context
 description: Automatically load this skill when investigating an operational anomaly on a cloud resource - CPU or memory spikes, latency, elevated error rates, unexpected network traffic, crashes, or cost spikes - to determine whether it is a purely operational issue or a security incident, using the affected resource's security context (vulnerabilities, misconfigurations, exposed secrets, data findings, active threats, malware, detections, and toxic combinations).
 metadata:
   author: henperez
-  version: "1.1.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Incident RCA"
+  version: "1.1.1"
+  aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "Amazon EC2, Amazon ECS, Amazon EKS, Amazon CloudWatch"
   aws-devops-agent-skills.technical-domains: "Security"
 ---

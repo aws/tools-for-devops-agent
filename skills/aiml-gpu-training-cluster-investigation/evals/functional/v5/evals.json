@@ -1,0 +1,157 @@
+{
+  "skill_name": "aiml-gpu-training-cluster-investigation",
+  "evals": [
+    {
+      "id": "hyperpod-application-xid-verdict",
+      "task_type": "chat",
+      "prompt": "On SageMaker HyperPod cluster skilltest-hp-slurm in us-west-2, the health monitoring agent logged an NVIDIA Xid error on one of the GPU nodes in the last few days. Should we replace that node?",
+      "expected_output": "Identifies the Xid 31 detection on instance i-0e33004a2943acd24 from the SagemakerHealthMonitoringAgent log stream, classifies Xid 31 as an application-class error (a GPU memory page fault caused by the workload, not failing hardware), and answers that the node should be left in service rather than replaced. Reports the node as Running and notes that HyperPod itself took no recovery action. Any hardware concern is stated as unproven rather than asserted.",
+      "should_trigger": true,
+      "assertions": [
+        "The node is given an explicit one-word disposition from a fixed set (replace, reboot, leave alone, monitor, or not observable), rather than only prose advice",
+        "The response states the evidence bar behind the disposition, naming what would have had to be true for a replace verdict",
+        "The response reports whether HyperPod itself took any recovery action on the node, distinguishing what the service did from what the operator should do",
+        "The response names the log group and log stream the Xid evidence came from, so the finding can be re-run",
+        "Any cause is explicitly labelled as proven or as a hypothesis to validate, rather than stated without a confidence label",
+        {
+          "text": "A verdict keyword from the skill's fixed set is used",
+          "evaluator": "regex",
+          "pattern": "(?i)\\b(REPLACE|REBOOT|LEAVE ALONE|MONITOR|NOT OBSERVABLE)\\b"
+        },
+        {
+          "text": "The affected instance ID is named",
+          "evaluator": "regex",
+          "pattern": "i-0e33004a2943acd24"
+        },
+        {
+          "text": "The Xid code is quoted",
+          "evaluator": "regex",
+          "pattern": "(?i)xid\\s*(?:error\\s*)?:?\\s*31\\b"
+        },
+        {
+          "text": "The HyperPod health-agent log stream is named",
+          "evaluator": "regex",
+          "pattern": "SagemakerHealthMonitoringAgent"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "pattern": "\\b\\d{12}\\b",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "gpu-log-coverage-audit",
+      "task_type": "chat",
+      "prompt": "We run GPU training on an AWS ParallelCluster called distributed-training-triage-b200 in us-west-2. Were there any NVIDIA Xid or GPU errors on the compute nodes over the last seven days? I need to be sure before we blame the application.",
+      "expected_output": "Before answering, establishes whether kernel-level GPU logging was actually arriving from each compute node over the window. Discovers the relevant log groups, including the customer's own kernel log group whose name does not begin with /aws/parallelcluster, identifies which stream carries kernel messages per node, and reports per node whether that stream was live across the window. Distinguishes 'no Xid errors found in a proven-live log' from 'not observable because no kernel lines were arriving', and does not report an absence of Xids from a silent or missing stream as a healthy GPU.",
+      "should_trigger": true,
+      "assertions": [
+        "The response establishes whether kernel logging was actually arriving from the nodes before drawing any conclusion about Xid errors",
+        "The response distinguishes no errors found from evidence not being observable, rather than treating an empty query result as proof of health",
+        "Coverage or liveness is reported per node, not as a single blanket statement about the cluster",
+        "Coverage is established across the whole window rather than from the first and last event timestamps alone",
+        "The response reports which log groups it searched, including any whose name does not begin with /aws/parallelcluster",
+        {
+          "text": "A full log group path is quoted",
+          "evaluator": "regex",
+          "pattern": "/aws/[a-zA-Z0-9._/-]+"
+        },
+        {
+          "text": "An exact log stream name is quoted",
+          "evaluator": "regex",
+          "pattern": "(?i)[a-z0-9.-]*i-[0-9a-f]{17}[a-z0-9./-]*\\.(system-messages|messages|syslog)|ip-[0-9-]+[a-z0-9.-]*-i-[0-9a-f]{17}"
+        },
+        {
+          "text": "At least two compute node instance IDs are examined",
+          "evaluator": "regex",
+          "pattern": "\\bi-[0-9a-f]{17}\\b",
+          "min_count": 2
+        }
+      ]
+    },
+    {
+      "id": "fsx-training-slowdown-cause",
+      "task_type": "investigation",
+      "prompt": "Training throughput on our GPU cluster in us-west-2 dropped noticeably over the last few days. The job reads its dataset from FSx for Lustre file system fs-077c776983688ad76. Work out whether storage, the network, or the GPUs are responsible.",
+      "expected_root_cause": "A cause supported by a measured saturation signal, or an explicit statement that no cause is proven. The FSx file system is SCRATCH_2 and its throughput and metadata counters are pulled with the correct dimensions. If no FSx saturation metric rose ahead of the slowdown, storage is reported as a hypothesis to validate rather than as the root cause, and the specific measurement needed to confirm or reject it is named.",
+      "should_trigger": true,
+      "assertions": [
+        "Each candidate cause carries an explicit proven or hypothesis label, rather than being asserted or hedged in prose",
+        "Nothing is called the root cause unless a measured signal on the affected resource is quoted for it. A saturation metric, a capacity or lifecycle event, or a control-plane event all count as measured; an inferred or merely correlated cause does not",
+        "The response names the specific single measurement that would confirm or reject the leading hypothesis",
+        "Signals that could not be read are reported as not observable together with what to collect, never as zero or healthy",
+        "Percentage figures from FSx or GPU metrics are quoted as the metric reported them, without being rescaled",
+        {
+          "text": "A proven or hypothesis label is used verbatim",
+          "evaluator": "regex",
+          "pattern": "(?i)\\b(proven|hypothesis)\\b"
+        },
+        {
+          "text": "The FSx file system is identified",
+          "evaluator": "regex",
+          "pattern": "fs-077c776983688ad76"
+        }
+      ]
+    },
+    {
+      "id": "preflight-long-run-readiness",
+      "task_type": "chat",
+      "prompt": "We want to start a four-day training run on SageMaker HyperPod cluster skilltest-hp-slurm in us-west-2 tomorrow. Is the cluster ready, and what should we fix first?",
+      "expected_output": "A readiness verdict with the blocking items listed, covering reserved capacity versus the four-day run length, whether spare capacity exists to replace a failed node, the cluster's NodeRecovery setting, whether deep health checks are enabled, and whether GPU error logging is arriving so a failure during the run would be visible. Each check reports pass, risk, or could-not-verify with the evidence behind it, and items that could not be verified are named rather than assumed to pass.",
+      "should_trigger": true,
+      "assertions": [
+        "The run length is compared against reserved capacity, or the response states explicitly that no capacity reservation was found",
+        "Whether GPU error logging is arriving is treated as a readiness item, so a failure during the run would be visible",
+        "Checks are reported individually with a pass, risk, or could-not-verify result each, rather than as undifferentiated prose",
+        "Checks that could not be verified are reported as unverified rather than silently treated as passing",
+        "The cluster's automatic node recovery configuration is reported as a named setting",
+        "Whether deep health checks are enabled on the cluster is reported",
+        {
+          "text": "A per-check result keyword is used",
+          "evaluator": "regex",
+          "pattern": "(?i)\\b(PASS|FAIL|RISK|UNVERIFIED|Needs input)\\b"
+        },
+        {
+          "text": "The cluster under review is named",
+          "evaluator": "regex",
+          "pattern": "skilltest-hp-slurm"
+        }
+      ]
+    },
+    {
+      "id": "negative-bedrock-throttling",
+      "task_type": "chat",
+      "prompt": "Our Bedrock InvokeModel calls are returning ThrottlingException for Claude. How do we raise the limit?",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-load-balancer-choice",
+      "task_type": "chat",
+      "prompt": "What is the difference between an Application Load Balancer and a Network Load Balancer?",
+      "should_trigger": false
+    },
+    {
+      "id": "control-plane-log-dead",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On AWS ParallelCluster distributed-training-triage-b200 in us-west-2, two compute nodes launched and then vanished within minutes. The head-node logs are not telling me anything. Why did they disappear?",
+      "expected_output": "Establishes whether the head-node and compute log streams were actually live before relying on them, uses CloudTrail by event name rather than by the vanished instance IDs, and labels the cause a hypothesis rather than asserting one when the deciding log is missing. Naming the log group and stream it checked, and the instance IDs, is required."
+    },
+    {
+      "id": "capacity-block-expiry",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "On AWS ParallelCluster distributed-training-triage-b200 in us-west-2, our p6-b200.48xlarge compute nodes were all terminated at the same time around 11:00 UTC. Nobody touched the cluster. What happened?",
+      "expected_output": "Reads ec2.DescribeCapacityReservations, compares the termination time against the reservation EndDate and the documented pre-expiry termination lead time (30 minutes for instance types, 60 for UltraServer), and reports Capacity Block expiry as expected lifecycle behaviour with a planning recommendation, not as a hardware fault. Names the reservation ID and the instance IDs."
+    },
+    {
+      "id": "xid-48-reboot-first",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A GPU node on SageMaker HyperPod cluster skilltest-hp-slurm in us-west-2 logged 'NVRM: Xid (PCI:0000:53:00): 48' once, a double-bit ECC error, and nothing since. Should we replace the node?",
+      "expected_output": "Does not jump to REPLACE. States that Xid 48 is a double-bit ECC error whose verdict depends on whether the fault was in DRAM or SRAM, names the evidence that decides it (Xid 171 or 172, or the SRAM Threshold Exceeded field), gives REBOOT for the framebuffer or DRAM path, and escalates to REPLACE only on Xid 64, a remap failure, an SRAM threshold breach, or a recurrence. If the split cannot be determined it says so rather than defaulting to REBOOT."
+    }
+  ]
+}

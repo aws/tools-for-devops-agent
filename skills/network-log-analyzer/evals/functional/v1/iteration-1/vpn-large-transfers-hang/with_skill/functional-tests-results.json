@@ -1,0 +1,86 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "vpn-large-transfers-hang",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'network-log-analyzer' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's primary hypothesis closely matches the expected root cause: a Path MTU black hole caused by the Site-to-Site VPN's MTU/MSS limits (1446 bytes MTU, ~1406 MSS or less depending on encryption/NAT-T), combined with the VPN not supporting Path MTU Discovery, explaining why large segments with DF set are dropped and no ICMP arrives. The agent correctly notes this explains why large downloads stall while small API calls succeed, and leads with MSS clamping on the customer gateway as the fix rather than relying on ICMP. It also appropriately labels this as an inferred hypothesis (not fully confirmed due to data access gaps) and names measurements that would confirm it (e.g., checking if DF pings over 1446 bytes get through, or if MSS clamped to 1406 resolves the hang). This aligns well with the expected root cause's requirement that the cause be labeled as inferred and that the response identify confirming measurements and lead with MSS clamping.",
+      "evidence": "\"Site-to-Site VPN carries at most 1446-byte packets (1406 bytes of TCP data)... If the customer gateway doesn't clamp TCP MSS, or clamps it too little, every full-size segment is dropped and resent until the transfer stalls... Site-to-Site VPN doesn't support Path MTU Discovery, so missing ICMP is expected.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Each candidate cause carries an evidence label such as Observed, Inferred, or Heuristic rather than being asserted as fact",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'### Hypothesis: Path MTU black hole: VPN router (customer gateway) not clamping TCP MSS' and 'Not confirmed; inferred from the user's capture.'",
+          "reasoning": "The hypothesis section explicitly labels the cause as 'Not confirmed; inferred from the user's capture' and frames it as a 'Hypothesis'. This is a clear evidence label distinguishing it from asserted fact.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response separates what the capture observed from what is inferred from documented AWS behavior",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'This was reported by the user and not checked against AWS telemetry.' combined with 'Site-to-Site VPN doesn't support Path MTU Discovery, so missing ICMP is expected.' shows separation of observed capture data vs. inferred documented behavior.",
+          "reasoning": "The output clearly distinguishes what the user's capture showed (observed: segments >1500 bytes retransmitted, no ICMP) from AWS documented behavior (inferred: 'Site-to-Site VPN carries at most 1446-byte packets... Site-to-Site VPN doesn't support Path MTU Discovery, so missing ICMP is expected').",
+          "confidence": "high"
+        },
+        {
+          "text": "The fix is described as a recommendation, such as MSS clamping, allowing ICMP fragmentation-needed, or lowering the MTU for that path, and is not applied",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'If the customer gateway doesn't clamp TCP MSS, or clamps it too little, every full-size segment is dropped and resent' - phrased as diagnostic reasoning/recommendation, not as an applied fix. Also 'It would be ruled out if... transfers still hang with MSS at 1406 or lower' shows this is a recommendation to test, not an implemented change.",
+          "reasoning": "The output describes MSS clamping as something to check/recommend ('If the customer gateway doesn't clamp TCP MSS, or clamps it too little...') and lists verification steps and gaps rather than stating any fix was applied. No action was taken on the actual environment (confirmed by the gaps section about inaccessible resources).",
+          "confidence": "high"
+        },
+        {
+          "text": "The VPN-specific MTU/MSS limit or MSS clamping is cited",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '1446'"
+        },
+        {
+          "text": "Path MTU discovery is named",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'Path MTU'"
+        },
+        {
+          "text": "The response does not rely on Path MTU Discovery or ICMP fragmentation-needed as the primary fix for the VPN path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Site-to-Site VPN doesn't support Path MTU Discovery, so missing ICMP is expected.' The fix discussed is MSS clamping on the customer gateway, not reliance on ICMP fragmentation-needed or PMTUD.",
+          "reasoning": "The response explicitly states that Site-to-Site VPN doesn't support PMTUD and that missing ICMP is expected, framing MSS clamping (not ICMP/PMTUD) as the relevant fix path.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m17s",
+    "cost": "$1.64",
+    "context_window": {
+      "utilization": "5.9%",
+      "compaction_count": 0
+    }
+  }
+}
