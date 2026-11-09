@@ -5,44 +5,81 @@
             "id": "acm-acme-discovery-gap",
             "task_type": "chat",
             "prompt": "List all ACM certificates in this account, including any issued via ACME and any using ECDSA keys. For each, show the domain, key algorithm, and certificate origin.",
-            "expected_output": "A certificate listing that explicitly includes ACME-origin certificates and ECDSA (EC_prime256v1) certificates by opening up both the CertificateKeyPairOrigins filter (to include ACME) and the Includes.keyTypes filter (to include EC key types), and shows domain, key algorithm, and origin for each certificate.",
             "should_trigger": true,
+            "expected_output": "A listing of all 11 ACM certificates across us-east-1 (9) and eu-west-1 (2), including the ACME-origin ECDSA certificate tej007.uk, with domain, key algorithm, and certificate origin for each.",
             "assertions": [
-                "The agent explicitly expanded the CertificateKeyPairOrigins filter to include ACME-origin certificates, or explicitly states it searched for ACME-origin certificates (even if none were found)",
-                "The agent explicitly expanded the Includes.keyTypes filter to include EC key types such as EC_prime256v1, or explicitly states it searched for ECDSA certificates (even if none were found)",
-                "Each certificate shows its key algorithm and origin"
+                "The response lists tej007.uk and identifies its certificate origin as ACME",
+                "The response identifies the key algorithm of tej007.uk as an ECDSA type (EC_prime256v1 or equivalent)",
+                "The response includes the eu-west-1 certificates test-eu-expiring.example.com and eval-eu-200d.example.com"
             ]
         },
         {
             "id": "acm-risk-classification",
             "task_type": "chat",
             "prompt": "Run an ACM certificate operations review for this account. For every certificate found, assign a RED, AMBER, or GREEN risk level and explain the basis for each rating, then call out which certificate needs attention first.",
-            "expected_output": "An ACM certificate review that assigns an explicit RED / AMBER / GREEN risk level to every certificate using the skill's threshold criteria, orders findings by urgency with the single highest-risk certificate identified first, and includes the ACME-origin certificate (tej007.uk) in the assessment rather than only the default RSA certificates.",
             "should_trigger": true,
+            "expected_output": "A review of all 11 ACM certificates in us-east-1 and eu-west-1 plus the IAM server certificate. Each finding has exactly one risk level with a stated basis, and the highest-priority item is called out first. tej007.uk is flagged as an expired ACME certificate and test-weakkey.example.com for its RSA_1024 key. The executive summary counts match the findings listed.",
             "assertions": [
-                "Every certificate is assigned one of the three explicit labels RED, AMBER, or GREEN",
-                "The single highest-priority certificate is called out first with a stated reason",
-                "The ACME-origin certificate tej007.uk is included in the risk assessment",
-                {
-                    "text": "All three risk-level labels use the skill's RED/AMBER/GREEN scheme",
-                    "evaluator": "regex",
-                    "pattern": "RED|AMBER|GREEN"
-                }
+                "The ACME-origin certificate tej007.uk is included and flagged because it has expired",
+                "The review includes the eu-west-1 certificates test-eu-expiring.example.com and eval-eu-200d.example.com",
+                "The risk-level counts stated in the summary match the number of findings listed at each level"
+            ]
+        },
+        {
+            "id": "acm-cab-readiness",
+            "task_type": "chat",
+            "prompt": "How ready are the certificates in this account for the CA/Browser Forum reduction of TLS certificate validity to 47 days?",
+            "should_trigger": true,
+            "expected_output": "A CA/B readiness assessment that counts only publicly trusted certificates. tej007.uk is the only counted certificate and is RED because the ACME certificate expired. The FAILED and timed-out requests are listed separately as not issued, and the self-signed imported certificates are listed separately as out of CA/B scope; neither group is counted.",
+            "assertions": [
+                "tej007.uk is counted and rated RED because the ACME-issued certificate has expired",
+                "never-validated.example.com, pending-validation.example.com, and pending.tej007.uk are listed as not issued and excluded from the GREEN/AMBER/RED counts",
+                "The self-signed imported certificates are listed as out of CA/B scope (or self-signed) and excluded from the GREEN/AMBER/RED counts",
+                "The response recommends repairing or restarting the ACME client for tej007.uk"
+            ]
+        },
+        {
+            "id": "acm-private-ca-review",
+            "task_type": "chat",
+            "prompt": "Review the ACM Private CAs in this account and tell me if anything needs attention.",
+            "should_trigger": true,
+            "expected_output": "The response finds the root CA acm-eval-root-ca in DELETED status, states it is restorable until November 26, 2026, does not treat it as an active risk, and does not claim the CA has no dependent certificates.",
+            "assertions": [
+                "The response does not state that the CA has no dependent certificates, or it explains that certificates issued directly through the Private CA API are not visible"
+            ]
+        },
+        {
+            "id": "acm-stuck-and-legacy",
+            "task_type": "chat",
+            "prompt": "Are there any certificates in this account that are stuck, failed, or will never renew automatically?",
+            "should_trigger": true,
+            "expected_output": "The response flags pending.tej007.uk as VALIDATION_TIMED_OUT needing a new request with the DNS CNAME published, flags never-validated.example.com and pending-validation.example.com as FAILED, lists the imported certificates as not auto-renewable, and flags the IAM server certificate acm-eval-legacy as never auto-renewing with a recommendation to migrate it to ACM.",
+            "assertions": [
+                "The response flags pending.tej007.uk as timed out on validation and says it needs a new request with its DNS validation (CNAME) record published",
+                "The response states that imported certificates are not renewed automatically by ACM",
+                "The response flags the IAM server certificate acm-eval-legacy as never renewing automatically and recommends migrating it to ACM, or states that migration applies where ACM is supported in the Region that uses it"
+            ]
+        },
+        {
+            "id": "acm-acme-renewal-pipeline",
+            "task_type": "chat",
+            "prompt": "Is my ACM ACME renewal pipeline healthy? Check the endpoint, the account and the external account binding, and tell me what is wrong.",
+            "should_trigger": true,
+            "expected_output": "The response reports that the ACME certificate tej007.uk has expired (the client stopped renewing), that the ACME endpoint is ACTIVE, that the ACME account is VALID, and that the external account binding was revoked on 2026-07-29, which blocks new registrations but not renewals on existing accounts.",
+            "assertions": [
+                "The response identifies tej007.uk as an expired ACME certificate and suggests the ACME client stopped renewing",
+                "The response reports that the external account binding is revoked and explains it blocks new registrations but not renewals on an existing account"
             ]
         },
         {
             "id": "acm-email-validation-deprecation",
             "task_type": "chat",
             "prompt": "I have an ACM certificate for example.com that was issued using email validation. Is there anything I should be concerned about, and what should I do?",
-            "expected_output": "The agent flags the certificate as AMBER risk, identifies that ACM will stop issuing email-validated certificates on March 31 2027 and stop renewing them on September 30 2027 due to the CA/B Forum deprecation of email-based domain validation. It recommends switching to DNS validation now using UpdateCertificateOptions, explains that the certificate ARN remains unchanged so no disruption to load balancers or CI/CD, notes the customer has 72 hours to add the CNAME records, and mentions ListCertificateDomainValidations for monitoring. It also correctly notes that ACME-origin and imported/private certificates are out of scope for this migration.",
             "should_trigger": true,
+            "expected_output": "The agent flags the certificate as AMBER risk, identifies that ACM will stop issuing email-validated certificates on March 31 2027 and stop renewing them on September 30 2027 due to the CA/B Forum deprecation of email-based domain validation. It recommends switching to DNS validation now using UpdateCertificateOptions, explains that the certificate ARN remains unchanged so no disruption to load balancers or CI/CD, notes the customer has 72 hours to add the CNAME records, and mentions ListCertificateDomainValidations for monitoring. It also correctly notes that ACME-origin and imported/private certificates are out of scope for this migration.",
             "assertions": [
-                "The response flags the email-validated certificate as a risk or concern requiring action",
-                "The response mentions the March 31 2027 deadline for new issuance",
-                "The response mentions the September 30 2027 deadline for renewals",
                 "The response recommends UpdateCertificateOptions as the remediation",
-                "The response states the certificate ARN remains unchanged after switching",
-                "The response explains that switching to DNS validation does not require reissuing the certificate or changing the ARN"
+                "The response names ListCertificateDomainValidations as the way to monitor the switch to DNS validation"
             ]
         },
         {

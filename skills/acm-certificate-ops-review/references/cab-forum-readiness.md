@@ -33,7 +33,12 @@ ALWAYS confirm current figures against CA/Browser Forum ballot records and ACM d
 
 ## Step 1: Impact classification
 
-For each in-use certificate from the Phase 1 inventory, classify automation readiness:
+Use the same scope, classes, and rules as the SKILL.md Step 5 snapshot, so both
+give the same counts. Only publicly trusted certificates are in CA/B scope:
+ACM-issued public certificates, and imported or IAM certificates whose issuer
+differs from their subject. List "not issued", "self-signed", and "private"
+certificates separately with their counts; none of them is counted. Classify
+automation readiness:
 
 | Class | Meaning |
 | --- | --- |

@@ -20,7 +20,15 @@ windows.
   `PENDING_VALIDATION` and DNS/email validation failures, imported in-use
   certificates that cannot auto-renew, weak/legacy key algorithms, unused
   certificates, and missing CloudWatch `DaysToExpiry` monitoring.
-- Flags ACM Private CA problems (disabled, expired, or nearing expiry).
+- Flags ACM Private CA problems: expired CAs and disabled CAs with ACM certificates
+  still depending on them, CAs stuck in creation or pending certificate, failed
+  CAs, no revocation configured, and CAs that are billed but not issuing.
+- Detects legacy IAM server certificates, duplicate certificates, and Regions
+  close to the certificate quota.
+- Reviews the ACME PrivateLink setup (VPC endpoint state, private DNS, endpoint
+  policy, security group) in Regions where ACME certificates are in use.
+- Derives DV, OV, and EV for imported certificates to choose the migration path.
+- Runs its API calls in parallel batches across Regions to keep review time down.
 - Classifies findings by risk (RED / AMBER / GREEN) and produces a prioritized
   findings report with an executive summary and remediation list.
 - Optionally assesses CA/Browser Forum validity-reduction readiness, DV vs
@@ -30,11 +38,19 @@ windows.
 
 The skill is read-only. The DevOps Agent role for your Agent Space needs:
 
-- `acm:ListCertificates`
+- `acm:SearchCertificates`
 - `acm:DescribeCertificate`
+- `acm:DescribeAcmeEndpoint`, `acm:ListAcmeAccounts`, and
+  `acm:ListAcmeExternalAccountBindings` (only when ACME-origin certificates
+  exist)
 - `acm-pca:ListCertificateAuthorities`
 - `acm-pca:DescribeCertificateAuthority`
 - `cloudwatch:DescribeAlarmsForMetric`
+- `iam:ListServerCertificates`
+- `iam:GetServerCertificate`
+- `ec2:DescribeRegions` (to sweep every enabled Region)
+- `ec2:DescribeVpcEndpoints` and `ec2:DescribeSecurityGroups` (only in Regions
+  with ACME certificates)
 - `organizations:ListAccounts` (only for org-wide scans, from the management or
   delegated administrator account)
 
@@ -43,6 +59,9 @@ policy attached to the DevOps Agent role; add any that are missing.
 
 ## Limitations
 
+- Private CA: no API lists the certificates a CA issued, so the skill sees only
+  ACM-registered certificates. AWS's audit report lists everything a CA issued,
+  but it writes to S3, so the operator generates it; the skill never does.
 - Read-only: the skill inventories and assesses certificates but never creates,
   imports, deletes, or renews them.
 - Public trust and validity-reduction dates change over time; the skill directs
@@ -107,7 +126,7 @@ acm-certificate-ops-review/
 │   └── evals.json                  # Functional evaluation scenarios
 └── references/
     ├── acm-thresholds.md           # Risk thresholds and RED/AMBER/GREEN criteria
-    ├── acm-detection-details.md    # ListCertificates dual-filter values, ACME sub-checks
+    ├── acm-detection-details.md    # SearchCertificates notes, ACME sub-checks, Private CA
     ├── cab-forum-readiness.md      # CA/Browser Forum validity-reduction guidance
     └── report-format.md            # Findings report layout
 ```

@@ -37,6 +37,9 @@ still list them as cleanup candidates.
 
 ## Key algorithm
 
+APIs can spell key algorithms differently (`RSA_2048` or `RSA-2048`). Treat the
+underscore and hyphen forms as the same value.
+
 | `KeyAlgorithm` | Risk |
 |---|---|
 | `RSA_1024` | RED (deprecated) |
@@ -56,9 +59,54 @@ namespace, dimension `CertificateArn`.
 
 | Condition | Risk |
 |---|---|
-| CA `EXPIRED` or `DISABLED` with issued certs still in use | RED |
+| CA `EXPIRED` with ACM certificates it issued still in use | RED |
+| CA `DISABLED` with ACM certificates it issued still in use | AMBER (RED if one has a failed renewal with reason `PCA_INVALID_STATE`) |
 | CA expiring within 90 days | AMBER |
 | CA healthy | GREEN |
+
+## Certificate status
+
+| Condition | Risk |
+|---|---|
+| `FAILED` or `VALIDATION_TIMED_OUT` | RED |
+| `PENDING_VALIDATION` for more than 24 hours | AMBER (RED if in use) |
+
+## Legacy IAM server certificates
+
+| Condition | Risk | Recommendation |
+|---|---|---|
+| Expired | RED | Replace; confirm what still references it. |
+| Expires within 90 days | AMBER | Migrate to ACM before expiry. |
+| Any IAM server certificate | AMBER | IAM certificates never auto-renew. Migrate to ACM. |
+
+## Hygiene
+
+| Condition | Risk |
+|---|---|
+| Duplicate certificates for the same domain where one is failed, expired, pending, or unused | AMBER |
+| Region at 80 percent or more of the default quota of pending and issued certificates (imported and non-imported counted separately; actual quota not read) | AMBER |
+
+## Private CA additions
+
+| Condition | Risk |
+|---|---|
+| CA status `FAILED` | INFO (cleanup, not billed, cannot be recovered) |
+| CA `DISABLED` with no ACM certificate from it visible | INFO (billed, may be mid-retirement; certificates issued directly through the Private CA API are not visible) |
+| CA `PENDING_CERTIFICATE` or `CREATING` | INFO (billed, not issuing; report age, no fixed threshold) |
+| General-purpose CA with no CRL or OCSP revocation configured | AMBER (short-lived-certificate CAs are exempt) |
+
+## ACME network path (PrivateLink)
+
+Applies only in Regions that have ACME-issued certificates.
+
+| Condition | Risk |
+|---|---|
+| No `acm-acme-enroll` interface endpoint | INFO (advisory, public path works) |
+| Endpoint present but not available | AMBER |
+| Endpoint present with private DNS disabled | AMBER |
+| Custom endpoint policy missing the certificate resource statement | AMBER |
+| No security group rule allows inbound 443 | AMBER |
+| Endpoint in a single subnet or Availability Zone | INFO |
 
 ## Overall posture rollup
 
