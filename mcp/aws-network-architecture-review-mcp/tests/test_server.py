@@ -476,3 +476,33 @@ def test_architecture_score_withholds_redundancy_points_for_a_single_device():
     assert finding["severity"] == "HIGH" and "LOC1" in finding["finding"]
     assert not [f for f in _checks(result, "DX Connection Redundancy") if f["severity"] == "OK"]
 
+
+def _vif(vid, vtype, mtu, dxgw=None, vgw=None):
+    v = {"virtualInterfaceId": vid, "virtualInterfaceType": vtype, "virtualInterfaceState": "available",
+         "bgpPeers": [{"bgpStatus": "up"}]}
+    if mtu is not None:
+        v["mtu"] = mtu
+    if dxgw:
+        v["directConnectGatewayId"] = dxgw
+    if vgw:
+        v["virtualGatewayId"] = vgw
+    return v
+
+
+def test_max_mtu_per_vif_type_is_not_flagged_as_mixed():
+    vifs = [_vif("dxvif-1", "private", 9001, vgw="vgw-1"), _vif("dxvif-2", "transit", 8500, dxgw="dxgw-1"),
+            _vif("dxvif-3", "public", 1500)]
+    assert server._mtu_mismatches(vifs) == []
+    assert not _checks(server._assess_resiliency([_conn("dxcon-1", "LOC1", "d", "p")], vifs, []), "MTU Consistency")
+
+
+def test_mixed_mtu_within_one_type_and_gateway_is_flagged():
+    vifs = [_vif("dxvif-1", "transit", 8500, dxgw="dxgw-1"), _vif("dxvif-2", "transit", 1500, dxgw="dxgw-1"),
+            _vif("dxvif-3", "private", 1500, vgw="vgw-2"), _vif("dxvif-4", "private", 9001, vgw="vgw-3")]
+    assert server._mtu_mismatches(vifs) == [{"type": "transit", "gateway": "dxgw-1", "mtus": [1500, 8500]}]
+
+
+def test_missing_or_deleted_vif_mtu_is_skipped_not_defaulted():
+    deleted = dict(_vif("dxvif-3", "transit", 1500, dxgw="dxgw-1"), virtualInterfaceState="deleted")
+    vifs = [_vif("dxvif-1", "transit", 8500, dxgw="dxgw-1"), _vif("dxvif-2", "transit", None, dxgw="dxgw-1"), deleted]
+    assert server._mtu_mismatches(vifs) == []

@@ -190,9 +190,9 @@ def check_dx_resiliency(region: str = "us-east-1") -> str:
     """
     Scored Direct Connect resiliency assessment (AWS Maximum/High Resiliency model):
     location diversity, connections and distinct AWS devices per location, BGP
-    health, MTU consistency, and MACsec, with severity-classified findings. Use for
-    any "is our Direct Connect resilient" question rather than judging from raw API
-    output.
+    health, MTU consistency per VIF type, and MACsec, with severity-classified
+    findings. Use for any "is our Direct Connect resilient" question rather than
+    judging from raw API output.
 
     Args:
         region: AWS region (default us-east-1)
@@ -1141,6 +1141,29 @@ def _dx_location_redundancy(connections):
             for loc, conns in by_location.items()}
 
 
+_INACTIVE_VIF_STATES = {"deleting", "deleted", "rejected"}
+
+
+def _mtu_mismatches(vifs):
+    """Groups of same-type VIFs on the same gateway whose MTUs differ.
+
+    Private (up to 9001), transit (up to 8500), and public (1500) VIFs have
+    different maximum MTUs, so values are only compared within one VIF type on
+    one gateway. VIFs that report no MTU, and deleted or rejected VIFs, are skipped.
+    """
+    groups = defaultdict(set)
+    for v in vifs:
+        mtu = v.get("mtu")
+        if mtu is None or v.get("virtualInterfaceState") in _INACTIVE_VIF_STATES:
+            continue
+        vif_type = v.get("virtualInterfaceType") or "unknown"
+        gateway = v.get("directConnectGatewayId") or v.get("virtualGatewayId") or (
+            "public" if vif_type == "public" else "none")
+        groups[(vif_type, gateway)].add(mtu)
+    return [{"type": t, "gateway": g, "mtus": sorted(m)}
+            for (t, g), m in sorted(groups.items()) if len(m) > 1]
+
+
 def _assess_resiliency(connections, vifs, gateways):
     findings = []
     score = 100
@@ -1176,10 +1199,11 @@ def _assess_resiliency(connections, vifs, gateways):
         findings.append({"severity": "HIGH", "check": "BGP Health", "finding": f"{bgp['peers_down']}/{bgp['total_peers']} BGP peers DOWN"})
         score -= 10 * bgp["peers_down"]
 
-    # MTU consistency
-    mtus = set(v.get("mtu", 1500) for v in vifs)
-    if len(mtus) > 1:
-        findings.append({"severity": "MEDIUM", "check": "MTU Consistency", "finding": f"Mixed MTU values: {sorted(mtus)}"})
+    # MTU consistency, within VIFs of the same type on the same gateway
+    mismatches = _mtu_mismatches(vifs)
+    for m in mismatches:
+        findings.append({"severity": "MEDIUM", "check": "MTU Consistency", "finding": f"Mixed MTU values on {m['type']} VIFs to {m['gateway']}: {m['mtus']}"})
+    if mismatches:
         score -= 5
 
     # MACsec

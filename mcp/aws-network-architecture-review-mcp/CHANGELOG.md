@@ -31,6 +31,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   they get a HIGH "Device Redundancy" finding (−15 in `check_dx_resiliency`, and
   no connection-redundancy points in the architecture score). Connection output
   now includes `aws_device` and `aws_logical_device_id`.
+- **MTU consistency.** MTUs are compared only among VIFs of the same type on
+  the same gateway, so a correct mix of private (9001), transit (8500), and
+  public (1500) VIFs is no longer flagged. A missing MTU is skipped instead of
+  being treated as 1500, and deleted or rejected VIFs are ignored.
 
 ### Known limitations (tracked follow-ups)
 
