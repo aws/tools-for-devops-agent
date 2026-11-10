@@ -26,7 +26,7 @@ Once the fields have been completed, save the Agent Space in Halo before submitt
 
 ## Choose the tools
 
-By default, the toolset includes functions to search knowledge base articles, search assets and add an internal note to a ticket. To change the available functions, select **Edit MCP Toolset** on the Agent Space.
+By default, the toolset includes functions to search knowledge base articles, search assets and add an internal note to a ticket. Adding a note is a write, so DevOps Agent runs it only in a chat, after you approve it, and only when **Agent Actions** is turned on for your Agent Space. An investigation that a ticket opens can't add notes. To change the available functions, select **Edit MCP Toolset** on the Agent Space.
 
 ## Let Halo tickets open investigations
 
