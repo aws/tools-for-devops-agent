@@ -19,21 +19,38 @@ metadata:
 
 You are enriching a database incident investigation with **business context**
 — the information that turns "CPU is at 95% on example-cluster-writer" into
-"checkout is degraded for 18,000 shoppers and we breach our SLA in 4 minutes."
+"checkout is degraded for about 18,000 users, and the SLA threshold is 4
+minutes away."
 DevOps Agent's built-in tools (CloudWatch, Performance Insights, RDS/Aurora
 logs) tell you *what* is happening technically. This skill tells you *why it
 matters* and *who needs to know*.
 
-Work through these four evidence categories. For each one, look for real
-evidence in the account before answering. Never fabricate a number, an owner,
-or a compliance deadline — if the evidence isn't there, say so.
+### Required behavior
 
-Always answer first. Return the Business Impact section with whatever evidence
-you found and a clear gap statement for each missing category. Write any
-questions for the operator as plain text at the end of that response, not
-as a separate ask-the-user step, so the Business Impact section is your final
-answer for this turn. If you can't identify the exact resource, still give the
-section with the inputs you have and list the resource as an open question.
+These apply to every response that uses this skill.
+
+1. **Return the Business Impact section with all four lines**: Dependent
+   services, Estimated cost, Compliance exposure, Recent changes. This applies
+   even when the resource isn't found, no evidence is found, or the
+   investigation is still in progress. A line without evidence uses its
+   "none found" wording from the Output template instead of being left out.
+2. **If the incident can't be confirmed, include the section and mark it
+   provisional.** Treat the incident as confirmed when there is an alarm, a
+   metric anomaly, log evidence, or the operator states that it is
+   happening. Otherwise, for example when the operator describes only a
+   suspected problem, title the section `Business Impact (provisional:
+   incident not confirmed)` and add a `Status` line that says what evidence
+   would confirm it. The four lines follow the same evidence rules as usual.
+3. **Report only what the evidence supports.** Don't estimate a number, an
+   owner, or a compliance deadline that isn't backed by a tag, an API result,
+   or the operator's input. Where evidence is missing, say so.
+4. **Answer first, then ask.** The Business Impact section is your final
+   answer for this turn. Write any questions for the operator as plain text
+   at the end of that response, not as a separate ask-the-user step. If you
+   can't identify the exact resource, list it as an open question there.
+
+Work through these four evidence categories. For each one, look for real
+evidence in the account before answering.
 
 If the operator already gave you the inputs (for example downtime, revenue
 per minute, and an SLA threshold), use them directly. You don't need to find
@@ -45,7 +62,7 @@ when deciding how much weight to give a weak signal such as network evidence.
 
 ### 1. Dependent services and criticality
 
-**Goal:** who breaks if this resource is unavailable or degraded.
+**Goal:** which services are affected if this resource is unavailable or degraded.
 
 Evidence sources, in order of preference:
 - Resource tags on the cluster/instance, e.g. `DependentServices`,
@@ -82,7 +99,14 @@ Formula once you have real inputs:
 ```
 estimated_loss_usd = revenue_per_minute_usd * downtime_minutes
 sla_breach = downtime_minutes >= sla_threshold_minutes
+sla_minutes_remaining = sla_threshold_minutes - downtime_minutes   # when not yet breached
+sla_penalty_usd = SLAPenaltyUsd tag value, applied only if sla_breach is true
 ```
+
+Report the SLA result on the Estimated cost line: breached, not breached
+with the minutes remaining, or "no SLA threshold found" when there is no
+`SLAThresholdMinutes` tag or operator-stated threshold. Include the penalty
+only when an `SLAPenaltyUsd` tag or operator input provides it.
 
 ### 3. Compliance and reporting exposure
 
@@ -133,20 +157,37 @@ section in the investigation summary itself, not only in intermediate notes:
 ```
 Business Impact
 ----------------
-Dependent services : <found, with criticality — or "none found, needs tagging">
-Estimated cost      : <$X, using inputs Y — or "not calculable, no cost inputs found">
+Dependent services  : <found, with criticality — or "none found, needs tagging">
+Estimated cost      : <$X, using inputs Y; SLA: breached (penalty $Z if known) or not breached, N min remaining — or "not calculable, no cost inputs found; no SLA threshold found">
 Compliance exposure : <framework + reporting deadline — or "no classification tag found">
 Recent changes      : <ranked list of correlated changes — or "none found in lookback window">
 ```
 
-Before you return the report, check each of the four lines:
-1. Does every value trace to a tag, an API result, or something the operator
+If the incident can't be confirmed (rule 2 under Required behavior), use this
+form instead:
+
+```
+Business Impact (provisional: incident not confirmed)
+-----------------------------------------------------
+Status              : <why it's unconfirmed, and what evidence would confirm it>
+Dependent services  : ...
+Estimated cost      : ...
+Compliance exposure : ...
+Recent changes      : ...
+```
+
+Before you return the report, run these checks:
+1. Is the Business Impact section present with all four lines? If not, add
+   it, using the "none found" wording for any line without evidence.
+2. If you couldn't confirm the incident, is the section marked provisional
+   with a `Status` line?
+3. Does every value trace to a tag, an API result, or something the operator
    said in this conversation? If not, replace it with the "none found" wording.
-2. Does every "none found" line say what tag or input would fill the gap?
-3. Did you apply a compliance framework only because the resource is tagged
+4. Does every "none found" line say what tag or input would fill the gap?
+5. Did you apply a compliance framework only because the resource is tagged
    with it or the operator said it applies?
 
-If any check fails, fix the line and run the checks again.
+If any check fails, fix the section and run the checks again.
 
 Be explicit about which parts are grounded in evidence versus which are
 gaps in the customer's tagging/configuration. A partially-answered business
