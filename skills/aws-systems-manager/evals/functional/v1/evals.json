@@ -1,0 +1,221 @@
+{
+  "skill_name": "aws-systems-manager",
+  "evals": [
+    {
+      "id": "auto-find-ssh-unreachable",
+      "task_type": "chat",
+      "prompt": "I can't SSH into one of our Linux EC2 instances in us-east-1 any more; the connection times out. Is there an AWS Automation runbook that can diagnose or fix this?",
+      "expected_output": "Recommends AWSSupport-TroubleshootSSH (and optionally AWSSupport-ExecuteEC2Rescue or AWSSupport-TroubleshootEC2InstanceConnect), confirms it with describe-document in us-east-1, reports its tier as mutating-reversible because it runs commands on the instance through EC2Rescue, lists InstanceId as the required parameter, and says a person must approve before it runs. It does not start an execution.",
+      "should_trigger": true,
+      "assertions": [
+        "States that the runbook was confirmed with describe-document in us-east-1, with the version the call returned",
+        "Gives the runbook's risk tier as one of read-only, mutating-reversible or destructive, with the calls that set it",
+        "Says the runbook needs a person's approval before it runs, and does not start an execution",
+        {
+          "text": "A risk tier from the skill's vocabulary is used",
+          "evaluator": "regex",
+          "pattern": "(?i)\\b(read-only|mutating-reversible|destructive)\\b"
+        },
+        {
+          "text": "describe-document is used to confirm the runbook",
+          "evaluator": "regex",
+          "pattern": "(?i)describe[-_ ]?document"
+        }
+      ]
+    },
+    {
+      "id": "auto-find-public-bucket",
+      "task_type": "chat",
+      "prompt": "Security Hub flagged an S3 bucket in us-west-2 as publicly readable. Which Automation runbook should we use to block public access?",
+      "expected_output": "Recommends AWS-DisableS3BucketPublicReadWrite or AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock, confirms availability in us-west-2, reports it as mutating-reversible (it calls s3:PutPublicAccessBlock), lists the bucket name parameter, and requires approval.",
+      "should_trigger": true,
+      "assertions": [
+        "Confirms the runbook in us-west-2 rather than assuming it exists there",
+        "Reports the tier as mutating-reversible and names the API call that sets it",
+        "Reports the document version returned by the live call",
+        {
+          "text": "The mutating-reversible tier is named",
+          "evaluator": "regex",
+          "pattern": "(?i)mutating-reversible"
+        },
+        {
+          "text": "The API that sets the tier is named",
+          "evaluator": "regex",
+          "pattern": "PutPublicAccessBlock"
+        }
+      ]
+    },
+    {
+      "id": "auto-find-account-fallback",
+      "task_type": "chat",
+      "prompt": "Is there a runbook to rotate the TLS certificate on our internal web servers in us-east-1? We may have written one ourselves.",
+      "expected_output": "Finds no AWS-owned runbook for rotating a TLS certificate on an instance, says so, then searches the account's own Automation runbooks with list-documents filtered by DocumentType=Automation and Owner=Self and SearchKeyword values such as cert or tls, and reports what it found or that it found none.",
+      "should_trigger": true,
+      "assertions": [
+        "Says no AWS-owned runbook in the catalog fits before searching further",
+        "Searches with list-documents using DocumentType=Automation and Owner=Self",
+        "Tries more than one keyword",
+        "Does not search or recommend runbooks owned by other accounts",
+        {
+          "text": "The account-owned search filter is used",
+          "evaluator": "regex",
+          "pattern": "Owner.{0,12}Self"
+        }
+      ]
+    },
+    {
+      "id": "auto-run-rate-control",
+      "task_type": "chat",
+      "prompt": "Prepare the command to restart every EC2 instance tagged ssm-skill-test=true in us-east-1 with AWS-RestartEC2Instance. It must stop if the ssm-skill-test-cpu alarm fires.",
+      "expected_output": "Confirms the runbook with describe-document, resolves the tag to the instance IDs, checks that the ssm-skill-test-cpu alarm is not in ALARM, and gives a start-automation-execution command with --target-parameter-name InstanceId, --targets Key=tag:ssm-skill-test,Values=true, --max-concurrency 1 or at most 10%, --max-errors 0, --alarm-configuration naming the alarm with IgnorePollAlarmFailure=false, and a pinned --document-version. Says a person must run it and does not start it.",
+      "should_trigger": true,
+      "assertions": [
+        "The command sets --max-errors 0 and explains that the run stops after the first failed target",
+        "The command pins --document-version to the version describe-document returned",
+        "The alarm configuration sets IgnorePollAlarmFailure=false",
+        "Says a person must run the command, and gives the approval information (runbook, version, targets, tier, alarm) alongside it",
+        {
+          "text": "MaxErrors is zero",
+          "evaluator": "regex",
+          "pattern": "--max-errors[ =]\"?0\\b"
+        },
+        {
+          "text": "The document version is pinned",
+          "evaluator": "regex",
+          "pattern": "--document-version"
+        },
+        {
+          "text": "IgnorePollAlarmFailure is false",
+          "evaluator": "regex",
+          "pattern": "IgnorePollAlarmFailure=false"
+        }
+      ]
+    },
+    {
+      "id": "auto-run-diagnose-failure",
+      "task_type": "chat",
+      "prompt": "An AWS-RestartEC2Instance automation failed in us-east-1 on 2026-11-10. Find it and tell me why it failed.",
+      "expected_output": "Finds the failed execution with describe-automation-executions filtered by ExecutionStatus=Failed and the document name, reads its steps with describe-automation-step-executions, names the stopInstances step, the StopInstances API and the error code from FailureDetails, explains that the instance ID was not valid, and notes that the following step stayed Pending.",
+      "should_trigger": true,
+      "assertions": [
+        "Reads the step details with describe-automation-step-executions",
+        "Reports the FailureStage or FailureType from the step's FailureDetails",
+        "Notes that the steps after the failed step stayed Pending",
+        {
+          "text": "Step-level API is used",
+          "evaluator": "regex",
+          "pattern": "(?i)describe[-_ ]?automation[-_ ]?step[-_ ]?executions"
+        },
+        {
+          "text": "The error code is quoted",
+          "evaluator": "regex",
+          "pattern": "InvalidInstanceID\\.Malformed"
+        }
+      ]
+    },
+    {
+      "id": "auto-run-alarm-cancel",
+      "task_type": "chat",
+      "prompt": "A rate-controlled automation of ssm-skill-test-Wait in us-east-1 was cancelled on 2026-11-10 and nobody stopped it by hand. What happened?",
+      "expected_output": "Finds the Cancelled parent execution, reports FailureMessage 'Cancelled due to Alarm(s)' and the alarm named in TriggeredAlarms, lists which child executions ran and which targets never started, and explains that the alarm configuration stopped the run.",
+      "should_trigger": true,
+      "assertions": [
+        "Quotes the FailureMessage 'Cancelled due to Alarm(s)'",
+        "Explains that the alarm configuration cancelled the run, rather than a person",
+        "Reads the child executions with the ParentExecutionId filter",
+        {
+          "text": "The failure message is quoted",
+          "evaluator": "regex",
+          "pattern": "Cancelled due to Alarm"
+        },
+        {
+          "text": "Child executions are listed by parent",
+          "evaluator": "regex",
+          "pattern": "(?i)parent[-_ ]?(automation[-_ ]?)?execution[-_ ]?id"
+        }
+      ]
+    },
+    {
+      "id": "auto-run-waiting-approval",
+      "task_type": "chat",
+      "prompt": "An automation execution of ssm-skill-test-Approve in us-east-1 is in Waiting. What does it need, and who can unblock it?",
+      "expected_output": "Finds the execution in Waiting with describe-automation-executions, reads its steps with describe-automation-step-executions, explains that the Approve step (aws:approve) is waiting for a signal, names the approver from the step's Approvers input, and gives send-automation-signal commands to approve or reject with that execution's ID, noting that a rejection ends the execution Failed. Does not send the signal itself.",
+      "should_trigger": true,
+      "assertions": [
+        "Explains that the execution is waiting at an aws:approve step",
+        "Gives the send-automation-signal command for Approve and for Reject",
+        "Says a rejection ends the execution as Failed",
+        "Does not send the signal itself",
+        {
+          "text": "The signal command is given",
+          "evaluator": "regex",
+          "pattern": "send-automation-signal"
+        }
+      ]
+    },
+    {
+      "id": "auto-harden-vulnerable",
+      "task_type": "chat",
+      "prompt": "Review this Automation runbook for security problems before I share it with other teams, and give me a hardened version:\n\n```yaml\nschemaVersion: '0.3'\ndescription: Restarts the app service and rotates its log directory.\nassumeRole: arn:aws:iam::123456789012:role/AppOpsRole\nparameters:\n  InstanceId:\n    type: String\n  LogPath:\n    type: String\n    allowedPattern: '.*'\n  DbPassword:\n    type: SecureString\nmainSteps:\n  - name: RotateLogs\n    action: aws:runCommand\n    onFailure: Continue\n    inputs:\n      DocumentName: AWS-RunShellScript\n      InstanceIds: ['{{InstanceId}}']\n      Parameters:\n        commands:\n          - tar czf /var/tmp/logs.tgz {{LogPath}} && rm -rf {{LogPath}}/*\n          - echo \"restarting with password {{DbPassword}}\"\n          - curl -k https://internal-api.example.com/notify\n  - name: CheckHealth\n    action: aws:executeScript\n    timeoutSeconds: 1200\n    onCancel: step:Wait\n    inputs:\n      Runtime: python3.11\n      Handler: handler\n      Script: |-\n        import boto3\n        def handler(events, context):\n            return boto3.client('ec2').describe_instance_status()\n  - name: Wait\n    action: aws:sleep\n    inputs: {Duration: PT10S}\n```",
+      "expected_output": "Reports: command injection through LogPath in the runCommand commands with a weak '.*' pattern (critical); DbPassword declared as SecureString, which isn't a valid document parameter type, and echoed in a command (critical, without repeating any value); missing allowedPattern on InstanceId; curl -k disabling TLS verification; a hard-coded assumeRole ARN instead of {{AutomationAssumeRole}}; timeoutSeconds 1200 above the 600-second aws:executeScript maximum; onCancel routed to an aws:sleep step, which isn't a valid cancel target; and lists onFailure: Continue on RotateLogs as information. Returns a hardened YAML document with an anchored LogPath pattern, the instance ID pattern, a Parameter Store name parameter read at run time, the -k flag removed, assumeRole parameterised, the timeout lowered to 600 and onCancel fixed, each change cited.",
+      "should_trigger": true,
+      "assertions": [
+        "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
+        "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
+        "Flags the echo of DbPassword as exposing a secret",
+        "Flags curl -k as disabling TLS verification",
+        "Flags the hard-coded assumeRole ARN",
+        "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
+        "Flags onCancel routing to an aws:sleep step as invalid",
+        "Returns a complete hardened document in YAML",
+        "Cites a documentation page for findings",
+        {
+          "text": "The instance ID pattern is applied",
+          "evaluator": "regex",
+          "pattern": "i-\\(\\?:\\[a-f0-9\\]\\{8\\}"
+        },
+        {
+          "text": "The executeScript timeout is lowered to 600",
+          "evaluator": "regex",
+          "pattern": "timeoutSeconds: 600"
+        },
+        {
+          "text": "No raw 12-digit account ID other than the documentation example is exposed",
+          "evaluator": "regex",
+          "pattern": "\\b(?!123456789012\\b)\\d{12}\\b",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "auto-harden-clean",
+      "task_type": "chat",
+      "prompt": "Check this runbook before release:\n\n```yaml\nschemaVersion: '0.3'\ndescription: Stops an EC2 instance.\nassumeRole: '{{AutomationAssumeRole}}'\nparameters:\n  AutomationAssumeRole:\n    type: AWS::IAM::Role::Arn\n  InstanceId:\n    type: String\n    allowedPattern: '^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$'\n  KeyName:\n    type: String\n    allowedPattern: '^[A-Za-z0-9._-]{1,255}$'\nmainSteps:\n  - name: StopInstance\n    action: aws:changeInstanceState\n    inputs:\n      InstanceIds: ['{{InstanceId}}']\n      DesiredState: stopped\n```",
+      "expected_output": "Reports no critical or high findings. Does not treat KeyName as a secret parameter, does not ask for a timeoutSeconds on aws:changeInstanceState, and returns the document unchanged or with only optional low-severity notes.",
+      "should_trigger": true,
+      "assertions": [
+        "Reports no critical or high findings",
+        "Does not flag KeyName as a secret",
+        "Does not require timeoutSeconds on the aws:changeInstanceState step"
+      ]
+    },
+    {
+      "id": "neg-lambda-timeout",
+      "task_type": "chat",
+      "prompt": "Why is my Lambda function timing out after 3 seconds, and how do I raise the limit?",
+      "should_trigger": false
+    },
+    {
+      "id": "neg-s3-lifecycle",
+      "task_type": "chat",
+      "prompt": "How do I add a lifecycle rule that moves S3 objects to Glacier after 90 days?",
+      "should_trigger": false
+    },
+    {
+      "id": "neg-bedrock-throttling",
+      "task_type": "chat",
+      "prompt": "Our Bedrock InvokeModel calls return ThrottlingException. How do we raise the quota?",
+      "should_trigger": false
+    }
+  ]
+}

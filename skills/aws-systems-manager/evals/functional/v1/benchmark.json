@@ -1,0 +1,2808 @@
+{
+  "summary": "This run covered 12 evals (63 iterations, no run failures). Three of the twelve evals (neg-lambda-timeout, neg-s3-lifecycle, neg-bedrock-throttling) are \"should_trigger: false\" negative tests \u2014 all metrics for them are marked skipped, and both variants correctly did not trigger behavior, so no differentiating data exists there. The remaining 9 evals are the basis for comparison.\n\n**Trigger firing:** The behavior-under-test fired reliably in nearly all cases (100% in 7 of 9 evals; 2/3 in auto-run-rate-control and auto-run-diagnose-failure, measured once since trigger_fired is a shared/single measurement, not per-variant).\n\n**Expected output / assertions \u2014 the clearest pattern:** Across most of the 9 active evals, with_skill met the expected-output criterion at an equal or higher rate than without_skill, often by a wide margin (e.g., auto-find-ssh-unreachable 3/3 vs 0/3, auto-harden-vulnerable 3/3 vs 0/3, auto-harden-clean 3/3 vs 0/3, auto-run-waiting-approval 3/3 vs 1/3, auto-find-account-fallback 3/3 vs 1/3). In two evals the two variants tied (auto-find-public-bucket 3/3 vs 3/3 on expected-output, though assertions differed sharply there \u2014 see below; auto-run-alarm-cancel 2/3 vs 2/3). Assertion-level pass rates mirror this: with_skill matched or exceeded without_skill in every eval, sometimes dramatically (auto-find-public-bucket 13/15 vs 0/15; auto-harden-vulnerable 35/36 vs 21/36). Confidence on these expected-output judgments is mostly high, though a few are medium, so the measurement itself is reasonably but not uniformly solid.\n\nImportantly, several individual assertions failed for both variants regardless of this pattern (e.g., \"describe-document is used to confirm the runbook,\" \"FailureStage/FailureType reported,\" \"steps after failure stayed Pending,\" \"step-level API used,\" \"account-owned search filter used\") \u2014 these look like gaps in the underlying behavior or possibly in the assertion/test design itself, not a variant-specific weakness. Other assertions passed for both variants equally (e.g., \"risk tier from skill's vocabulary,\" \"does not search runbooks owned by other accounts,\" \"a person must approve,\" \"command-injection risk flagged,\" \"no raw account ID exposed\"), meaning these do not differentiate the variants. Some assertions were flaky (passing 1-2 of 3 runs) for one or both variants, indicating run-to-run variability in whether specific behaviors appear.\n\n**Runtime and cost:** without_skill was consistently faster and cheaper than with_skill across almost every eval (e.g., auto-harden-vulnerable: 18s/$0.15 vs 59s/$0.49; auto-run-alarm-cancel: 13s/$0.11 vs 40s/$0.33; auto-find-ssh-unreachable: 9s/$0.08 vs 21s/$0.18). One exception (auto-run-diagnose-failure) had without_skill slower (20s vs 12s). One eval (auto-harden-clean) shows without_skill at 0s/$0.00, which looks anomalous and may reflect a data or logging issue rather than a real zero-cost run.\n\n**Quality comparisons (pairwise LLM judgments):** Where evaluated, with_skill was favored more often than without_skill (e.g., auto-find-public-bucket: 7 vs 1 criterion-favored, with completeness closer at 1-1-1; auto-run-alarm-cancel: 3-0). A couple of evals were closer or mixed (auto-run-diagnose-failure 2-2; auto-run-waiting-approval 1-1-1). However, many pairs were skipped (0-2 of 3 pairs evaluated in most evals), so these quality comparisons rest on a small number of samples and medium confidence \u2014 a genuinely low-confidence signal in several cases.\n\n**Output consistency:** Both variants were generally \"mostly_consistent\" to \"consistent\" across repeated runs in most evals, with similar scores between variants. Two evals showed \"inconsistent\" results for one or both variants (auto-run-alarm-cancel: both inconsistent, without_skill slightly worse; auto-run-diagnose-failure: without_skill inconsistent, with_skill not measured due to null data), suggesting run-to-run variability is a real but isolated issue rather than a systemic one.\n\n**Overall picture:** Where differences appear, with_skill tends to meet expected outputs and pass assertions more often and is favored in quality comparisons more often than without_skill, but it also runs notably longer and costs more in nearly every eval \u2014 a consistent speed/cost-vs-completeness-and-accuracy tradeoff rather than a one-sided result. Several assertions and the negative-trigger evals show no difference at all (both pass, or both fail), and some findings (quality pairs, a few confidence ratings) rest on small samples or medium/low confidence, so these specific points should be read as weaker signals rather than strong conclusions.",
+  "timestamp": "2026-11-11T18:28:05Z",
+  "version": "v1",
+  "model": "us.anthropic.claude-sonnet-5",
+  "iterations": 3,
+  "total_evals": 12,
+  "total_iterations_run": 63,
+  "total_failed": 0,
+  "cleanup_skipped": false,
+  "understanding_agent_space_skill": {
+    "enabled": false,
+    "found": 0,
+    "timed_out": 0,
+    "errored": 0,
+    "not_waited": 63
+  },
+  "evals": {
+    "auto-find-ssh-unreachable": {
+      "summary": "This evaluation (a chat task about confirming/running an AWS Systems Manager runbook) was run 3 times for each variant. The triggering behavior under test fired 100% of the time (this is a shared fact, not a per-variant difference).\n\nExpected output: with_skill met the expected output in all 3 runs (100%, high confidence), while without_skill met it in 0 of 3 runs (0%, medium confidence). This is a clear, consistent gap, though without_skill's confidence rating being only \"medium\" suggests the judgment behind its failures is somewhat less certain than with_skill's \"high\"-confidence passes.\n\nPer-assertion results (15 assertion-checks total, 5 distinct assertions x 3 runs) show a mixed picture rather than a uniform gap:\n- One assertion (\"describe-document used to confirm the runbook\") failed for both variants in all runs \u2014 this indicates a behavior neither variant performed, pointing to a gap in the task/behavior itself rather than a difference between variants.\n- One assertion (\"A risk tier from the skill's vocabulary is used\") passed for both variants in all runs \u2014 this assertion does not discriminate between the variants.\n- One assertion about confirming the runbook version via describe-document in us-east-1 failed for both variants in all runs (same \"always_fails\" pattern as above, llm-evaluated).\n- One assertion about stating the runbook's risk tier with supporting calls was flaky for with_skill (1/3 passes) and always failed for without_skill (0/3) \u2014 a difference, but based on a low pass count for with_skill.\n- One assertion \u2014 requiring the agent to say the runbook needs approval and not start execution \u2014 passed consistently for with_skill (3/3, high confidence) and failed consistently for without_skill (0/3) \u2014 this is the clearest and most confidently-measured differentiator between the two.\n\nOverall assertion pass rate was 47% (7/15) for with_skill versus 20% (3/15) for without_skill, driven mainly by the approval-gating assertion and partially by the risk-tier-justification assertion.\n\nMetrics: without_skill ran notably faster (~9s vs ~21s) and cheaper (~$0.08 vs ~$0.18) than with_skill, with slightly lower context utilization (4.9% vs 6.1%); neither showed any context compaction. This is a real tradeoff \u2014 without_skill is cheaper/faster but scored lower on expected-output match and several assertions.\n\nQuality comparison: no quality pairs could be evaluated (0 evaluated, 3 skipped), so there is no data on relative output quality beyond the assertion/expected-output checks.\n\nOutput consistency: both variants were rated \"mostly_consistent\" across runs with identical scores (2.0) and high confidence \u2014 no meaningful difference in run-to-run stability between them.\n\nIn sum: with_skill met the defined expected output and the approval-gating behavior consistently where without_skill did not, and showed a (less certain, flaky) edge on the risk-tier-justification assertion; both variants failed identically on two assertions tied to confirming the runbook via describe-document, indicating a shared gap unrelated to the variant difference. Variant_a was consistently faster and cheaper. No direct quality-comparison data exists to weigh against these cost/speed differences, and consistency across runs was equivalent for both variants.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/3",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "States that the runbook was confirmed with describe-document in us-east-1, with the version the call returned",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 1,
+            "text": "Gives the runbook's risk tier as one of read-only, mutating-reversible or destructive, with the calls that set it",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/3",
+              "percentage": 33,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 2,
+            "text": "Says the runbook needs a person's approval before it runs, and does not start an execution",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 3,
+            "text": "A risk tier from the skill's vocabulary is used",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "describe-document is used to confirm the runbook",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "always_fails"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "7/15",
+          "percentage": 47
+        },
+        "without_skill": {
+          "pass_rate": "3/15",
+          "percentage": 20
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "21s",
+          "cost_avg": "$0.18",
+          "context_window_avg": {
+            "utilization": "6.1%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "9s",
+          "cost_avg": "$0.08",
+          "context_window_avg": {
+            "utilization": "4.9%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 3,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "equivalent",
+          "with_skill_wins": 0,
+          "without_skill_wins": 0,
+          "equivalent": 3,
+          "summary": "Neither side is more consistent (with_skill won 0 dimension(s), without_skill 0, 3 equivalent of 3)."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.0,
+          "dimension_counts": {
+            "mostly_consistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs answer 'yes' and identify AWSSupport-TroubleshootSSH as the key runbook, explain its CheckAll/FixAll modes, mention the Systems Manager managed-node prerequisite, discuss network causes (timeout vs refused), mention AWSSupport-ConnectivityTroubleshooter as read-only network diagnostic, and mention AWSSupport-ExecuteEC2Rescue as a fallback with offline stop/AMI risk. However, iteration 1 explicitly lists ExecuteEC2Rescue as a separate numbered runbook alongside ConnectivityTroubleshooter (3 runbooks total), while iteration 2 also lists it as a second numbered item plus discusses ConnectivityTroubleshooter separately, and iteration 3 frames it only as a 'warning' sub-point rather than a standalone recommended runbook. Also version numbers for TroubleshootSSH differ slightly in framing but match (version 5) across all. Minor differences: iteration 3 includes an explicit CLI command example not present in others. These are additions/omissions rather than contradictions, fitting mostly_consistent.",
+              "diverging_iterations": [
+                3
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend: do not auto-start anything, request instance ID to do read-only checks (SG, NACL, route table, SSM-managed status), then prepare the runbook command for approval, starting with TroubleshootSSH in CheckAll mode and/or ConnectivityTroubleshooter before considering FixAll or ExecuteEC2Rescue. The core recommended sequence is the same. Differences: iteration 3 provides a concrete CLI command for the suggested diagnostic run, which the others don't include; iteration 1 explicitly recommends running the connectivity check first then TroubleshootSSH CheckAll, while iteration 2 says run them 'alongside, or before'; iteration 3 doesn't explicitly order which to run first but implies check network hypothesis then confirms SSM. These are differences in additional specificity rather than conflicting advice."
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three use a mix of bolded headers/bullet lists describing runbooks with similar sub-fields (What it does, Risk tier, Required input, etc.), followed by prose on network causes and a closing offer to do read-only checks. Iteration 3 differs by using markdown '##' section headers, including an embedded CLI code block example, and structuring content as 'Recommended' vs 'Warning' vs 'Check the network first' rather than numbered runbook list format used in iterations 1 and 2. This is a presentation difference but the overall shape (sections per runbook/topic, bullets, closing offer) remains recognizably similar.",
+              "diverging_iterations": [
+                3
+              ]
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.0,
+          "dimension_counts": {
+            "mostly_consistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs agree that AWSSupport-TroubleshootSSH is the relevant runbook, explain what it does, note it's read-only by default, explain CheckAll/FixAll, AllowOffline stop/AMI behavior, and all note that a timeout likely points to network issues (security group, NACL, route table, public IP) rather than OS-level sshd issues. However, iteration 3 adds two additional runbooks (AWSSupport-ConnectivityTroubleshooter and AWSSupport-ResetAccess) and mentions EC2 Serial Console, which are materially additional facts not present in iterations 1 and 2. Iteration 2 mentions AWSSupport-TroubleshootEC2InstanceConnect as an additional runbook option not mentioned in 1 or 3. These are material additions/omissions on top of a shared core answer.",
+              "diverging_iterations": [
+                2,
+                3
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend running AWSSupport-TroubleshootSSH with CheckAll first (safe, diagnostic only), then considering FixAll/AllowOffline only after accepting downtime, and all recommend checking network-level things (security group, NACL, route table, public IP) and offer to inspect the instance if given an instance ID with no unilateral changes. Iteration 3 additionally recommends a specific second runbook (ConnectivityTroubleshooter) for network checks and mentions ResetAccess for key issues, plus Serial Console/Session Manager for manual inspection \u2014 more specific/additional steps than 1 and 2. Iteration 2 recommends EC2 Instance Connect and a different support runbook as alternatives. These differences are additional but not conflicting, constituting mostly_consistent per the rubric (same primary recommendation, differing additional steps).",
+              "diverging_iterations": [
+                2,
+                3
+              ]
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three use a prose-with-headers/bullet-list structure, with bolded section headers (e.g., 'What it does', 'Suggested approach'/'Key parameters', and a closing offer to check the instance if given an ID). The overall shape is similar: intro sentence, then runbook details, parameters, suggested steps, network caveat section, and closing offer. However, iteration 3 has additional subsections for other runbooks (Primary runbook, Network checks, Other options) giving it a more elaborate multi-runbook structure compared to the single-runbook focus of iterations 1 and 2, which is a different section layout.",
+              "diverging_iterations": [
+                3
+              ]
+            }
+          }
+        }
+      }
+    },
+    "auto-find-public-bucket": {
+      "summary": "Both variants fired the trigger behavior in all 3 runs, and both met the overall \"expected output\" criterion in 3/3 cases \u2014 though for without_skill that judgment carried only medium confidence, while with_skill's was high confidence, so without_skill's \"met expected output\" result is on somewhat weaker footing even though the raw rate matches.\n\nThe per-assertion breakdown tells a different and more informative story than the top-line expected-output match: across the 15 individual assertions (5 assertion types x 3 runs), with_skill passed 13/15 (87%) while without_skill passed 0/15 (0%). Every one of the five assertion types followed a \"with_skill passes, without_skill fails\" pattern, including two that were flaky for with_skill (confirming/naming the tier-setting API, and naming the mutating-reversible tier's API, each at 2/3) but still categorically failed for without_skill (0/3) in every case. This is a substantial and consistent gap at the assertion level that the pass/fail \"expected output\" metric does not surface, since both variants were scored as meeting that higher-level criterion despite without_skill failing every detailed assertion.\n\nQuality comparison (3 pairs evaluated, none skipped, medium average confidence) favored with_skill in 7 of 9 criterion-level judgments, with without_skill favored once and one comparable; by criterion, with_skill was favored on all accuracy and actionability comparisons, while completeness was split (1 favoring each, 1 comparable). This aligns directionally with the assertion-level gap.\n\nOn cost and runtime, without_skill was notably cheaper and faster (8s avg, $0.07) than with_skill (20s avg, $0.17), with both well under the 30s runtime threshold and no runs exceeding it. Context window utilization was low and similar for both (4.6% vs 5.9%), with no compaction events for either.\n\nOutput consistency was essentially identical between variants: both rated \"mostly_consistent\" overall with the same score (2.67) and the same dimension-count breakdown (2 consistent, 1 mostly consistent), both at high confidence \u2014 so run-to-run stability is not a distinguishing factor here.\n\nOverall, the dimensions point in a consistent direction on quality and task-assertion correctness (with_skill stronger, including on two flaky-but-still-majority-passing assertions), while without_skill is faster and cheaper to run. The expected-output pass rate alone (3/3 for both) would mask the large assertion-level and quality gaps, so that top-line number should be read cautiously, especially given the lower confidence behind without_skill's expected-output judgment.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Confirms the runbook in us-west-2 rather than assuming it exists there",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "Reports the tier as mutating-reversible and names the API call that sets it",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 2,
+            "text": "Reports the document version returned by the live call",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 3,
+            "text": "The mutating-reversible tier is named",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 4,
+            "text": "The API that sets the tier is named",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "flaky"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "13/15",
+          "percentage": 87
+        },
+        "without_skill": {
+          "pass_rate": "0/15",
+          "percentage": 0
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "20s",
+          "cost_avg": "$0.17",
+          "context_window_avg": {
+            "utilization": "5.9%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "8s",
+          "cost_avg": "$0.07",
+          "context_window_avg": {
+            "utilization": "4.6%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 3,
+          "pairs_skipped": 0,
+          "skip_reasons": [],
+          "overall": {
+            "with_skill_wins": 7,
+            "without_skill_wins": 1,
+            "equivalent": 1,
+            "winner": "with_skill",
+            "avg_confidence": "medium",
+            "summary": "with_skill wins overall (7 vs 1 criterion wins out of 9 judgments, avg confidence: medium)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 3,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 3,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 1,
+              "equivalent": 1
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A explicitly verified the runbook using describe-document, confirming it is Active, owned by Amazon, at version 8 in us-west-2 - giving concrete evidence of accuracy. Output A's details about the runbook's parameters, defaults, and behavior align with the actual AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock document. Output B introduces 'AWSConfigRemediation-ConfigureS3PublicAccessBlock' as an account-level variant and 'AWSSupport-TroubleshootS3PublicRead' as a diagnostic runbook; these document names are less commonly verified/known to exist as stated, and no verification step is shown, making their accuracy less certain. Output A also correctly notes that Block Public Access doesn't touch the bucket policy or ACLs directly but overrides their effect, which is consistent with AWS documentation. Output B claims Block Public Access 'doesn't remove the underlying public ACL or policy statement' which is accurate, but the unverified alternative runbook names reduce overall confidence in B's accuracy.",
+                  "evidence": "Output A: 'I confirmed it with describe-document in us-west-2, where it is Active, owned by Amazon, at version 8.' Output B: 'AWSConfigRemediation-ConfigureS3PublicAccessBlock applies the settings at the account level' and 'AWSSupport-TroubleshootS3PublicRead is diagnostic' - these are presented without verification evidence."
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "high",
+                  "reasoning": "Output A provides a concrete, ready-to-approve CLI command with the exact document version, parameters, and placeholders for bucket name and role ARN. It also specifies rollback steps (reapply recorded settings) and verification steps (get-public-access-block, check Security Hub finding). This gives the user a near-complete actionable path requiring only two pieces of information. Output B describes the same runbook and parameters but does not provide the actual command to run, and explicitly states it cannot run the automation itself, deferring action to a teammate without giving them the exact command needed. This makes Output A more immediately actionable for execution.",
+                  "evidence": "Output A: 'Proposed command (not run; it needs your approval and the details above): aws ssm start-automation-execution --region us-west-2 --document-name AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock --document-version 8 --parameters BucketName=<bucket>,AutomationAssumeRole=<role-arn>' with explicit Rollback and Verify steps. Output B: 'I can't run this myself, because changes to S3 public-access settings are outside what I'm allowed to do. A teammate with the right permissions needs to start the automation.' without providing the exact command."
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "equivalent",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs cover the core recommendation (ConfigureS3BucketPublicAccessBlock), required/optional parameters, IAM role requirements, alternative runbooks, risks of blocking legitimate public access (website/CloudFront), and pre-run checks. Output A additionally covers a destructive runbook to avoid (RemovePrincipalStarFromS3BucketPolicy) and includes rollback/verify guidance, as well as checking account-level BPA settings. Output B additionally mentions the account-level remediation runbook and a diagnostic runbook for root-causing why the bucket is public, plus explicitly notes that BPA doesn't remove the underlying ACL/policy (which Security Hub may still flag). Each output has some complementary information not in the other, making them roughly equivalent in overall completeness despite differing areas of emphasis.",
+                  "evidence": "Output A: 'Runbook to avoid for now: AWSConfigRemediation-RemovePrincipalStarFromS3BucketPolicy is destructive...' and 'Check the account-level Block Public Access setting as well.' Output B: 'AWSSupport-TroubleshootS3PublicRead is diagnostic. Run it if you want to know why the bucket is readable' and 'It doesn't remove the underlying public ACL or policy statement. Clean those up afterward, or Security Hub may keep flagging the bucket.'"
+                }
+              ]
+            },
+            {
+              "iteration": 2,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_b",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs correctly recommend AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock as the primary runbook, and both correctly note the four Block Public Access settings and that they default to true. However, Output B provides more verifiable specificity: it states it confirmed the document is Active in us-west-2 via describe-document, provides a specific document version (8), and gives precise CLI parameter names (s3:PutPublicAccessBlock, s3:GetBucketPublicAccessBlock) rather than Output A's slightly different permission list (s3:GetBucketPublicAccessBlock and s3:PutBucketPublicAccessBlock -- note Output A uses 'PutBucketPublicAccessBlock' which is not the actual IAM action name; the correct action is 's3:PutPublicAccessBlock' as Output B correctly states). This is a meaningful accuracy difference in IAM permission naming. Output B's description of AWS-DisableS3BucketPublicReadWrite (only sets RestrictPublicBuckets and IgnorePublicAcls) is more specific and technically grounded than Output A's vaguer description. Output A also mentions a runbook 'AWSConfigRemediation-ConfigureS3PublicAccessBlock' for account-level settings, which is a plausible-sounding but not clearly verified alternative; its existence/name accuracy is uncertain, whereas Output B avoids introducing an unverified runbook name and instead names a real alternative it decided against (RemovePrincipalStarFromS3BucketPolicy) with correct rationale.",
+                  "evidence": "Output A: 'The assume role needs s3:GetBucketPublicAccessBlock and s3:PutBucketPublicAccessBlock' (incorrect IAM action name). Output B: 'a role Automation can assume with s3:PutPublicAccessBlock and s3:GetBucketPublicAccessBlock on that bucket' (correct IAM action name). Output A also introduces 'AWSConfigRemediation-ConfigureS3PublicAccessBlock' as an account-level alternative, whose existence is unverified in the response."
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "high",
+                  "reasoning": "Output B provides concrete, executable CLI commands for both capturing current state (for rollback) and starting the automation execution, plus explicit verification steps (checking execution status and re-querying get-public-access-block) and a rollback procedure. Output A gives good contextual advice (check CloudTrail, check if bucket is meant to be public) but does not provide any concrete commands to run the runbook, record state, verify success, or roll back. This makes Output B substantially more actionable for a practitioner who wants to execute the remediation.",
+                  "evidence": "Output B: 'aws ssm start-automation-execution --document-name AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock --document-version 8 --parameters BucketName=<bucket>,AutomationAssumeRole=<role-arn> --region us-west-2' and verification/rollback steps. Output A: 'Run the Automation in us-west-2 and in the account that owns the bucket' with no concrete command."
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs cover the primary recommendation, an alternative runbook, and caveats about blocking legitimate public access and about Block Public Access not removing underlying policies/ACLs. Output A additionally mentions checking CloudTrail/S3 access logs for anonymous reads, which Output B does not explicitly mention (though it implies similar investigation offer at the end). Output B additionally covers the runbook's tier/mutation reversibility, version info, stabilization period parameter, explicitly addresses and dismisses a third runbook (RemovePrincipalStarFromS3BucketPolicy) with rationale, and provides a full execution/verification/rollback plan. Overall, Output B covers a broader set of practically relevant details (version, tier, additional alternative considered and rejected, rollback/verify steps) making it slightly more complete, though Output A's CloudTrail/access-log check is a relevant omission in B.",
+                  "evidence": "Output A: 'Check CloudTrail or S3 access logs for anonymous reads.' Output B: 'I didn't pick AWSConfigRemediation-RemovePrincipalStarFromS3BucketPolicy. It's destructive...' and full rollback/verify plan with StabilizationPeriod parameter detail."
+                }
+              ]
+            },
+            {
+              "iteration": 3,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_b",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs correctly identify AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock as the primary runbook. Output A claims this runbook sets all four Block Public Access settings (BlockPublicAcls, BlockPublicPolicy, IgnorePublicAcls, RestrictPublicBuckets) for AWS-DisableS3BucketPublicReadWrite as applying 'Block Public Access to disable public read and write' without detail, while Output B more precisely analyzes AWS-DisableS3BucketPublicReadWrite's actual behavior, noting it only sets RestrictPublicBuckets and IgnorePublicAcls and reasons through the implications of PutPublicAccessBlock replacing the whole configuration. Output B also includes concrete verification details (document version 8, Active status, StabilizationPeriod default) that suggest it queried actual API data, lending more confidence to its claims. However, some of Output B's specifics (e.g., 'version 8', trust policy requiring ssm.amazonaws.com) are unverifiable claims that could be fabricated, slightly reducing certainty. Output A's permission list for AutomationAssumeRole also includes ssm:StartAutomationExecution and ssm:GetAutomationExecution, which are more about the caller's permissions than the role's trust policy, a minor inaccuracy. Overall both are largely accurate, but Output B demonstrates deeper technical reasoning and apparent verification of runbook details.",
+                  "evidence": "Output A: '`AWS-DisableS3BucketPublicReadWrite`: takes only `S3BucketName` and applies Block Public Access to disable public read and write.' Output B: 'Its single step only sets `RestrictPublicBuckets` and `IgnorePublicAcls`. I infer that `PutPublicAccessBlock` replaces the whole configuration, so the two omitted settings (`BlockPublicAcls`, `BlockPublicPolicy`) would end up off.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "high",
+                  "reasoning": "Output B provides a much more concrete, step-by-step action plan including exact CLI commands for recording current state (for rollback), running the automation, verifying success, and rolling back if needed. This is highly actionable and could be directly executed by an operator. Output A provides guidance and parameter names but lacks the specific commands, verification steps, and rollback procedure that Output B includes.",
+                  "evidence": "Output B: 'aws s3api get-public-access-block --bucket <bucket> --region us-west-2' ... 'aws ssm start-automation-execution --document-name AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock --document-version 8 --parameters BucketName=<bucket>,AutomationAssumeRole=<role-arn> --region us-west-2' ... '5. Rollback: Restore the settings you recorded in step 1 with put-public-access-block.' Output A only states general guidance without specific commands: 'You'd need to start the automation from Systems Manager.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A covers a broader set of alternative runbooks (AWS-DisableS3BucketPublicReadWrite, AWSConfigRemediation-ConfigureS3PublicAccessBlock for account-level, and AWSConfigRemediation-RemovePrincipalStarFromS3BucketPolicy for policy-based exposure), giving the user more options depending on the root cause of exposure. It also mentions automating remediation via EventBridge/Security Hub custom actions, which Output B omits. However, Output B compensates with more actionable depth (rollback, verification, exact parameters) on the single recommended runbook, but doesn't address the account-level or policy-based remediation alternatives that Output A covers, making Output A more complete in addressing the full scope of possible remediation paths relevant to the Security Hub finding.",
+                  "evidence": "Output A: '`AWSConfigRemediation-ConfigureS3PublicAccessBlock`: applies the same settings at the account level...' and '`AWSConfigRemediation-RemovePrincipalStarFromS3BucketPolicy`: use this if the exposure comes from a bucket policy with `Principal: *`.' Also: 'To make this automatic, you can attach the runbook to the Security Hub finding as a custom action or EventBridge rule.' Output B only discusses the primary runbook and one alternative (AWS-DisableS3BucketPublicReadWrite), without mentioning account-level remediation or policy-based remediation options."
+                }
+              ]
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 3,
+          "pairs_skipped": 0,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 18.822,
+              "without_skill_seconds": 8.453,
+              "delta_seconds": 10.4,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 2,
+              "with_skill_seconds": 18.881,
+              "without_skill_seconds": 8.307,
+              "delta_seconds": 10.6,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 3,
+              "with_skill_seconds": 23.28,
+              "without_skill_seconds": 8.369,
+              "delta_seconds": 14.9,
+              "threshold_exceeded": false
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "equivalent",
+          "with_skill_wins": 1,
+          "without_skill_wins": 1,
+          "equivalent": 1,
+          "summary": "Neither side is more consistent (with_skill won 1 dimension(s), without_skill 1, 1 equivalent of 3)."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same primary runbook (AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock), confirm it is Active, AWS-owned, version 8, in us-west-2, explain the same mechanism (sets all four Block Public Access settings), note the same tier classification (mutating-reversible), mention the same alternative (AWS-DisableS3BucketPublicReadWrite) and the same avoided destructive runbook (AWSConfigRemediation-RemovePrincipalStarFromS3BucketPolicy). Key facts about parameters (BucketName, AutomationAssumeRole) and caveats (breaking legitimate public access, policy/ACL not removed) are consistent across all three."
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend the same next steps: do not run anything without bucket name and role ARN, record current Block Public Access state first (get-public-access-block), run the same ssm start-automation-execution command with the same document name/version, verify with get-public-access-block and check Security Hub finding clearance, and rollback via put-public-access-block. All ask the user for bucket name and role ARN before proceeding."
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three use a similar structure: headers, bullet lists, code blocks for commands, and a final request for more info. However, iteration 1 uses a markdown table for parameters/tier details, while iterations 2 and 3 present this information as bullet lists instead of tables. This is a presentation-choice difference.",
+              "diverging_iterations": [
+                1
+              ]
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same primary runbook, AWSConfigRemediation-ConfigureS3BucketPublicAccessBlock, as the answer, with the same key facts: it sets the four Block Public Access settings, defaults to true, requires BucketName and AutomationAssumeRole, needs specific IAM permissions, applies to a single bucket, and should run in us-west-2. All mention the same two alternatives (AWS-DisableS3BucketPublicReadWrite and AWSConfigRemediation-ConfigureS3PublicAccessBlock) with consistent descriptions of their trade-offs. Iteration 3 adds one extra alternative (AWSConfigRemediation-RemovePrincipalStarFromS3BucketPolicy) not mentioned in the others, which is a minor additional fact but doesn't change the core answer.",
+              "diverging_iterations": [
+                3
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend running the same primary runbook with the same required parameters and permissions, checking for legitimate public-use dependencies before running, and cleaning up the underlying ACL/policy afterward. All three also state the agent cannot execute the change itself and offer to inspect the bucket's current configuration. Iteration 2 adds a recommendation to check CloudTrail/S3 access logs for anonymous reads as part of its 'before you run it' section, which iteration 3 also mentions but iteration 1 omits. Iteration 3 additionally suggests automating remediation via Security Hub custom actions/EventBridge, which is a materially additional step not present in iterations 1 or 2. These additions make the responses mostly rather than fully consistent.",
+              "diverging_iterations": [
+                2,
+                3
+              ]
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses use the same overall structure: a bolded primary runbook recommendation, bullet points explaining parameters/settings, an 'Alternatives' section with bulleted sub-options, a 'Before you run it' bulleted section, and a closing paragraph noting the agent cannot execute the action itself and offering to inspect bucket details. The presentation choice (bolded headers + bullet lists + closing prose) is consistent across all three."
+            }
+          }
+        }
+      }
+    },
+    "auto-find-account-fallback": {
+      "summary": "This evaluation covers a single chat task (searching for an AWS-owned Systems Manager runbook) run 3 times per variant.\n\nTrigger: The behavior under test fired in all 3 runs (100%), so there's data to evaluate for both variants.\n\nExpected output: with_skill met the expected output in all 3 runs (3/3, 100%, high confidence), while without_skill met it in only 1 of 3 runs (33%, also high confidence, so this gap is not a measurement-confidence artifact). This is the clearest signal in the data and favors with_skill.\n\nAssertions (15 total checks across 5 assertion types x 3 runs): with_skill passed 9/15 (60%) vs without_skill 5/15 (33%). Breaking this down by individual assertion shows a more nuanced picture than the aggregate suggests:\n- One assertion (\"does not search/recommend runbooks owned by other accounts\") passed 100% for both variants \u2014 it doesn't differentiate them.\n- One assertion (\"account-owned search filter is used\", regex-based) failed for both variants 100% of the time \u2014 this suggests either the assertion itself or this specific behavior is broken/unmet regardless of variant, not a variant-specific weakness.\n- Two assertions (\"searches with list-documents using correct parameters\" and \"tries more than one keyword\") passed 100% for with_skill and 0% for without_skill \u2014 a consistent, notable gap favoring with_skill.\n- One assertion (\"says no AWS-owned runbook fits before searching further\") showed the reverse pattern: without_skill passed 2/3 (67%, high confidence) while with_skill passed 0/3 (0%, only medium confidence) and was flagged as \"flaky.\" This is the one place without_skill did better, but the lower confidence on with_skill's score here makes this particular finding less solid.\n\nQuality comparison: Only 1 of 3 pairs could actually be evaluated for quality (2 were skipped), so this is a very thin sample. Within that single evaluated pair, overall quality favored with_skill on accuracy and completeness, while without_skill was favored on actionability (medium confidence). Given only one pair was assessed, this should be treated as a weak signal rather than a robust finding.\n\nMetrics: with_skill took longer on average (31s vs 17s) and cost more (~$0.26 vs ~$0.14) than without_skill. Context window utilization was low and similar for both (7.2% vs 6.0%), with no compaction events for either. The one runtime pair evaluated did not exceed the 30s threshold.\n\nOutput consistency: Both variants were rated \"mostly_consistent\" with identical scores (2.67) and the same consistent/mostly-consistent dimension split, at high confidence \u2014 no difference in run-to-run stability between them.\n\nOverall picture: with_skill met the defined expected output and most differentiating assertions more often than without_skill, but took almost twice as long and cost nearly twice as much per run. Quality signals are mixed but based on a very small evaluated sample (1 pair) and should be weighted lightly. One assertion failed for both variants (indicating a possibly broken check or unmet requirement independent of variant) and one passed for both (non-differentiating). Consistency across repeated runs was equivalent for both variants.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "1/3",
+          "percentage": 33,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Says no AWS-owned runbook in the catalog fits before searching further",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 1,
+            "text": "Searches with list-documents using DocumentType=Automation and Owner=Self",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "Tries more than one keyword",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 3,
+            "text": "Does not search or recommend runbooks owned by other accounts",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "The account-owned search filter is used",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "always_fails"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "9/15",
+          "percentage": 60
+        },
+        "without_skill": {
+          "pass_rate": "5/15",
+          "percentage": 33
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "31s",
+          "cost_avg": "$0.26",
+          "context_window_avg": {
+            "utilization": "7.2%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "17s",
+          "cost_avg": "$0.14",
+          "context_window_avg": {
+            "utilization": "6.0%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 2,
+            "without_skill_wins": 1,
+            "equivalent": 0,
+            "winner": "with_skill",
+            "avg_confidence": "medium",
+            "summary": "with_skill wins overall (2 vs 1 criterion wins out of 3 judgments, avg confidence: medium). Gotchas: with_skill is weaker on 'actionability' (without_skill won 1/1 iterations for this criterion)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "low",
+                  "reasoning": "Both outputs report similar findings (no runbook found) and are internally consistent. Output A provides specific document names and categorizes them with context (AWSQuickSetup-* for patching, etc.), while Output B lists document names that appear to be test documents (Test4, TestDoc2, etc.) which seem less verified/curated - this could indicate either a different/more thorough search or less careful filtering. Output A also checked AWS-owned runbooks by symptom/resource type and gives specific examples of near-miss documents, which adds a layer of verification not present in Output B. However, without ground truth, it's hard to be fully confident either is more accurate; Output A's additional AWS-owned catalog check adds a verifiable extra layer of accuracy.",
+                  "evidence": "Output A: 'I checked the catalog of AWS-owned Systems Manager runbooks by symptom and by resource type. It has none for rotating or installing a TLS certificate on EC2 or on a web server.' Output B: 'Its self-owned documents are Quick Setup remediations, CloudWatch agent install, a HelloWorld document and some test documents (Test4, TestDoc2, TestDoc3, TestDocLdp1, TestDocument).'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B offers a more concrete, proactive next step: examining current ACM certificates, expiry dates, and which load balancers/instances use them to inform a new runbook, and explicitly offers to draft the runbook and save it as a skill for future use. Output A also offers to draft a runbook but requires the user to first provide several pieces of information (cert issuance method, web server software, load balancer setup, reload process) before it can act, making it a bit more passive by comparison. Output B's offer to proactively investigate the current setup is a more actionable immediate next step.",
+                  "evidence": "Output B: 'I can look at the current setup, such as ACM certificates, expiry dates and which load balancers or instances use them... I can also draft a runbook from it and save it as a skill.' Output A: 'If your team has a runbook somewhere else, point me to it... For the second option, I'd need to know how the certs are issued and where they live on the servers... I'd also need to know which web server software you run...'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A covers more ground: it explicitly checked AWS-owned runbooks by symptom and resource type (not just self-owned documents), and explicitly lists near-miss AWS runbooks (RestrictBucketSSLRequestsOnly, EnableCloudFrontViewerPolicyHTTPS, RotateSecret) to show thoroughness in ruling out alternatives. Output B does not mention checking AWS-owned/public runbooks at all, only self-owned documents, agent space skills, and associations. This makes Output A more complete in covering the full search space (both self-authored and AWS-provided runbooks), which is central to the user's question.",
+                  "evidence": "Output A: 'I checked the catalog of AWS-owned Systems Manager runbooks by symptom and by resource type... AWSConfigRemediation-RestrictBucketSSLRequestsOnly is about S3... AWSConfigRemediation-RotateSecret is about Secrets Manager secrets.' Output B does not mention any check of AWS-owned/public runbook catalogs beyond the account's own SSM documents."
+                }
+              ]
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "with_skill_seconds": 32.944,
+              "without_skill_seconds": 21.97,
+              "delta_seconds": 11.0,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "equivalent",
+          "with_skill_wins": 1,
+          "without_skill_wins": 1,
+          "equivalent": 1,
+          "summary": "Neither side is more consistent (with_skill won 1 dimension(s), without_skill 1, 1 equivalent of 3)."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs reach the same conclusion: no runbook for TLS certificate rotation was found, either team-written or AWS-owned, in SSM Automation documents or the agent space skills for us-east-1. All three describe similar search methodology (searching for cert/tls/ssl/rotat keywords) and list similar unrelated documents found (Quick Setup, CloudWatch agent, etc.), and all note the limitation that the search only covered this account/region and other locations (wiki, Git repo, other accounts/regions) weren't checked.",
+              "evidence": "Iteration 1: 'I didn't find a runbook for rotating TLS certificates, either one you wrote or one AWS provides.' Iteration 2: 'I didn't find a certificate rotation runbook for your internal web servers in us-east-1, either from AWS or one your team wrote.' Iteration 3: 'I didn't find a runbook for rotating the TLS certificate on your internal web servers in us-east-1, either AWS-provided or written by your team.'"
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend asking the user for details on how certificates are managed (ACM, internal CA, Let's Encrypt, manual) and offer to draft a new runbook/procedure once that information is provided. All also suggest checking other locations (wiki, repo, other account/region) if the user knows where a runbook might exist. Iteration 1 and 2 explicitly offer to turn it into an agent space skill, while iteration 3 only offers to draft a new Automation runbook for review/approval without mentioning the skill option, making it slightly less specific in that regard.",
+              "evidence": "Iteration 1: 'I can also write it up as a skill in your agent space so it's available in future investigations.' Iteration 2: 'I could turn it into an agent space skill or draft a Systems Manager Automation runbook for it.' Iteration 3: 'I can also draft a new Automation runbook for you to review and approve before anything is created or run.' (no mention of agent space skill)",
+              "diverging_iterations": [
+                3
+              ]
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three use the same overall structure: an opening summary sentence stating no runbook was found, followed by bolded subsections covering 'Your own runbooks', 'AWS-owned/provided runbooks', limits/where-it-might-be, and a closing paragraph with next-step questions and offers. The presentation style (bolded headers + bullet lists + closing prose) is consistent across all three.",
+              "evidence": "All three use headers like '**Your own runbooks...**' and '**AWS-owned/provided runbooks**' followed by bullet points, and end with a prose paragraph asking for more info and offering to help further."
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs reach the same core answer: no runbook for TLS certificate rotation was found, the only skill present (sample-skip-scheduled-maintenance) is unrelated, and no external documentation sources (wiki, Git repo) are connected. However, iteration 2 adds a material fact not present in the others: it explicitly checked SSM documents in us-east-1 and lists specific document names found (Quick Setup remediations, CloudWatch agent install, HelloWorld, Test4, TestDoc2, etc.), concluding none relate to certificates. Iterations 1 and 3 explicitly state they have NOT yet searched SSM documents and offer to do so as a next step, whereas iteration 2 already performed and reported on that search. This is a material difference in what was actually checked and reported.",
+              "diverging_iterations": [
+                2
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs recommend the same set of next steps: search SSM documents/other sources for an existing runbook, investigate how certificates are currently managed (ACM, load balancers, etc.), offer to convert a pasted runbook into a skill, and offer to draft a new runbook if needed, while asking clarifying questions about certificate management approach (ACM vs private CA vs imported)."
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses follow the same structure: an opening statement that no runbook was found, a bulleted list summarizing what was checked (Skills, Memories/Instructions, Associations, and in iteration 2 also SSM documents), followed by prose paragraphs discussing possible locations, offered next steps, and clarifying questions. The shape and presentation style (short bullets + prose) is consistent across all three."
+            }
+          }
+        }
+      }
+    },
+    "auto-run-rate-control": {
+      "summary": "This evaluation covers a single chat task about running an SSM command with specific safety settings (max-errors, document version pinning, alarm configuration) that requires human approval before execution. The behavior under test (\"trigger_fired\") only fired in 2 of 3 runs, so one of the three repetitions could not be fully evaluated for either variant \u2014 this limits how much weight the results can bear.\n\nExpected output: with_skill met the expected output in 2/3 runs (high confidence in that judgment), while without_skill met it in 0/3 runs (medium confidence). This is a sizeable, consistent gap in favor of with_skill on the top-line outcome measure.\n\nAssertion-level detail (7 assertions \u00d7 3 runs = 21 checks each) tells a similar story but with important nuance:\n- One assertion (\"says a person must run the command... alongside approval info\") passed 100% of the time for both variants \u2014 this assertion does not discriminate between them and both handle this aspect well.\n- Three assertions (max-errors=0 explanation, document version pinning explanation, and their regex-based counterparts) show with_skill passing 2/3 while without_skill passes 0/3 \u2014 a clear, repeated gap.\n- One regex assertion (IgnorePollAlarmFailure is false) shows with_skill at 2/3 vs without_skill at 1/3 \u2014 a smaller gap.\n- One LLM-judged assertion on alarm configuration (IgnorePollAlarmFailure=false) shows both variants tied at 2/3 \u2014 another case where the two are not distinguished.\nOverall assertion pass rate is 15/21 (71%) for with_skill versus 6/21 (29%) for without_skill \u2014 a substantial difference, but it is driven mainly by a few repeated failure patterns rather than uniform underperformance across all checks, and all assertions are marked \"flaky\" or \"always_passes\" rather than stable discriminators, suggesting some run-to-run variability underlies these numbers.\n\nQuality comparison: no quality pairs could be evaluated (0 evaluated, 3 skipped), so there is no data on relative output quality beyond the pass/fail assertions above.\n\nRuntime and cost: with_skill averaged ~15s and $0.13 per run; without_skill averaged ~10s and $0.09 per run. Variant_b is faster and cheaper by a modest margin, with negligible difference in context window utilization (~4.5-4.8%) and no compaction events for either.\n\nOutput consistency: this was only measured for without_skill, which showed \"mostly consistent\" behavior across runs (score 2.33, high confidence). No consistency data is available for with_skill, so no comparison can be made on this dimension.\n\nOverall picture: with_skill met the expected output and most assertions more often than without_skill, particularly on the specific technical requirements (max-errors, document version pinning), while the two were tied on an alarm-configuration assertion and on the human-approval-messaging assertion. Variant_b ran somewhat faster and cheaper. No quality-comparison data or with_skill consistency data exists to weigh against the assertion gap, and the trigger not firing in all runs means the sample size behind these findings is small (effectively 2-3 runs per variant).",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "2/3",
+          "percentage": 67
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "2/3",
+          "percentage": 67,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/3",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The command sets --max-errors 0 and explains that the run stops after the first failed target",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 1,
+            "text": "The command pins --document-version to the version describe-document returned",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 2,
+            "text": "The alarm configuration sets IgnorePollAlarmFailure=false",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 3,
+            "text": "Says a person must run the command, and gives the approval information (runbook, version, targets, tier, alarm) alongside it",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "MaxErrors is zero",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 5,
+            "text": "The document version is pinned",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 6,
+            "text": "IgnorePollAlarmFailure is false",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67
+            },
+            "without_skill": {
+              "pass_rate": "1/3",
+              "percentage": 33
+            },
+            "classification": "flaky"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "15/21",
+          "percentage": 71
+        },
+        "without_skill": {
+          "pass_rate": "6/21",
+          "percentage": 29
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "15s",
+          "cost_avg": "$0.13",
+          "context_window_avg": {
+            "utilization": "4.8%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "10s",
+          "cost_avg": "$0.09",
+          "context_window_avg": {
+            "utilization": "4.5%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 3,
+          "skip_reasons": [
+            "with_skill trigger test failed",
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "with_skill trigger test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 2 usable output(s); consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 2 usable output(s); consistency needs at least 3.",
+          "excluded": [
+            {
+              "iteration": 2,
+              "reason": "trigger test failed"
+            }
+          ]
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.33,
+          "dimension_counts": {
+            "consistent": 1,
+            "mostly_consistent": 2
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same three target instances, the same alarm (ssm-skill-test-cpu, OK state), and construct an equivalent AWS SSM start-automation-execution command using AWS-RestartEC2Instance with an alarm-configuration tied to the alarm, max-concurrency=1, max-errors=1, and a 'do not ignore alarm failure' setting. The core answer is the same across all three. However, there are minor differences: the exact parameter name used differs (IgnorePollAlarmFailure in iter1/iter3 vs IgnoreUnavailableAlarms in iter2), and iteration 2 omits the AutomationAssumeRole parameter from the command (mentioning it only as an optional addition) while iterations 1 and 3 include/reference it differently. These are material technical details (correct API field name) that differ, making it mostly_consistent rather than fully consistent.",
+              "diverging_iterations": [
+                2
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses recommend the same next steps: present the command without running it, ask for confirmation/approval before executing, note the need for an automation role or caller permissions, and offer to run it on behalf of the user after approval. All mention the alarm-based stop mechanism as the core behavior and ask the user to confirm role/concurrency preferences."
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs follow a similar shape: intro statement that the command hasn't been run, a list of targeted instances, the alarm status, a CLI code block, explanatory bullet points about how the alarm-stop works, and a closing offer to run it after approval. However, iterations 2 and 3 include an additional 'equivalent API/boto3 parameters' JSON block that iteration 1 does not have, which is a presentation difference between outputs.",
+              "diverging_iterations": [
+                1
+              ]
+            }
+          }
+        }
+      }
+    },
+    "auto-run-diagnose-failure": {
+      "summary": "This evaluation covers a single chat-task scenario run three times per variant, examining whether an SSM Automation step-failure investigation behavior fired, met expectations, and passed a set of assertions.\n\nTrigger: The behavior under test fired in 2 of 3 runs (67%) overall \u2014 this is a shared measurement across variants, not a per-variant score, and indicates the test setup itself didn't reliably trigger the behavior in every run, which limits how much weight can be placed on the rest of the results.\n\nExpected output: with_skill met the expected output in 2/3 runs (67%, medium confidence), while without_skill met it in 1/3 runs (33%, high confidence). without_skill's lower rate is backed by higher-confidence judgments, so this gap is reasonably reliable, though the sample is only 3 runs.\n\nAssertions: Both variants passed assertions at low overall rates \u2014 with_skill at 3/15 (20%) and without_skill at 1/15 (7%). Breaking this down by individual assertion is informative:\n- Two assertions (\"Reports the FailureStage/FailureType\" and \"Notes that later steps stayed Pending\") failed for both variants in all runs \u2014 these represent behaviors neither variant demonstrated, suggesting a gap in the behavior itself (or the assertion's strictness) rather than a difference between variants.\n- One assertion (\"Step-level API is used\") also failed for both variants in all runs (0/3 each).\n- Two assertions were flaky rather than consistently failing: \"Reads the step details with describe-automation-step-executions\" passed 1/3 for with_skill vs 0/3 for without_skill, and \"The error code is quoted\" passed 2/3 for with_skill vs 1/3 for without_skill. On both of these, with_skill passed more often, but neither variant passed reliably.\n\nQuality comparison: Only 1 of 3 pairs could be evaluated for quality (2 were skipped), so this dimension rests on very limited data. Within that single comparable pair, favorability was split evenly across criteria (accuracy and completeness each had one win apiece for without_skill and with_skill; actionability was rated comparable), with medium average confidence. No clear quality direction emerges from this small sample.\n\nRuntime and cost: with_skill averaged ~12s and $0.11 per run; without_skill averaged ~20s and $0.17 per run \u2014 without_skill ran about 8 seconds longer and cost about 6 cents more on average. Neither exceeded the 30s runtime threshold. Context window utilization was similarly low for both (~4-5%) with no compaction events.\n\nOutput consistency: without_skill's outputs were rated \"inconsistent\" across all 3 runs (score 1.0, high confidence), meaning its responses varied meaningfully run-to-run. No consistency score was available for with_skill (marked null), so no direct comparison can be made on this dimension \u2014 it's an absent data point for with_skill rather than a sign of good consistency.\n\nOverall, this is a small-sample evaluation (3 runs, 1 scenario) with a trigger that didn't fire reliably and very limited quality-comparison data. with_skill showed higher expected-output and assertion pass rates and lower runtime/cost than without_skill, while without_skill showed documented run-to-run inconsistency (unmeasured for with_skill). Several assertions failed for both variants entirely, pointing to shared gaps in the behavior being tested rather than a difference between the two variants. Given the small sample sizes and multiple skipped/missing data points, these findings should be treated as directional rather than conclusive.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "2/3",
+          "percentage": 67
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "2/3",
+          "percentage": 67,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        },
+        "without_skill": {
+          "pass_rate": "1/3",
+          "percentage": 33,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Reads the step details with describe-automation-step-executions",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/3",
+              "percentage": 33,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 1,
+            "text": "Reports the FailureStage or FailureType from the step's FailureDetails",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 2,
+            "text": "Notes that the steps after the failed step stayed Pending",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 3,
+            "text": "Step-level API is used",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 4,
+            "text": "The error code is quoted",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67
+            },
+            "without_skill": {
+              "pass_rate": "1/3",
+              "percentage": 33
+            },
+            "classification": "flaky"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "3/15",
+          "percentage": 20
+        },
+        "without_skill": {
+          "pass_rate": "1/15",
+          "percentage": 7
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "12s",
+          "cost_avg": "$0.11",
+          "context_window_avg": {
+            "utilization": "4.7%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "20s",
+          "cost_avg": "$0.17",
+          "context_window_avg": {
+            "utilization": "4.3%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "skip_reasons": [
+            "with_skill trigger test failed",
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 2,
+            "without_skill_wins": 2,
+            "equivalent": 1,
+            "winner": "equivalent",
+            "avg_confidence": "medium",
+            "summary": "Equivalent overall (2 vs 2 criterion wins out of 5 judgments, avg confidence: medium)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 0,
+              "equivalent": 1
+            },
+            "completeness": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "equivalent",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A correctly identifies the parent-child relationship between executions (5dce3b7f and ee671768 as parents, with 5b8a81a9, 5d9dc0d7, and ae52d1c4 as their respective children), which explains why the parent runs failed without their own error message. Output B lists the same executions but treats them somewhat inconsistently - it lists 5d9dc0d7 and 5b8a81a9 in the main failure table (implying direct malformed ID failure) but then separately discusses 5dce3b7f and ee671768 as 'multi-target runs with no failure message' without explicitly connecting that these are the parents of the children already listed in the table. This creates a slightly confusing/less accurate picture of the relationships. Output A's narrative is more coherent: it explicitly states the parent-child structure and that parents failed only because children failed, confirmed from step records. Output A also provides additional target instance details for the multi-target runs that Output B provides (i-1234567890abcdef0_8, i-1234567890abcdef0_6) which is useful. Both acknowledge the same IAM permission gap (ssm:GetAutomationExecution) preventing full confirmation. Output A's count of 'several' failures (6 executions listed) differs from Output B's claim of 'five' failures in the main malformed ID table plus 2 multi-target - there's a slight inconsistency in Output B's framing between 'five executions' and only 4 rows shown in the table, which is a minor internal inconsistency not present in Output A.",
+                  "evidence": "Output A: 'Parent runs: 5dce3b7f and ee671768 showed no failure message of their own. They failed only because their child runs failed. I confirmed this from their step records.' Output B: 'Five AWS-RestartEC2Instance executions failed... with the same error' but then shows only 4 rows in the table and separately discusses 2 'multi-target runs' bringing the total to 6, creating a mismatch between the stated '5' and the actual breakdown."
+                },
+                {
+                  "criterion": "accuracy",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B provides more detailed and specific information about the actual instance IDs targeted by the multi-target runs, including real-looking instance IDs (i-1234567890abcdef0_8, i-1234567890abcdef0_6) that were mixed in with the placeholder IDs. This is more complete and accurate detail about what was actually targeted, which is valuable context that Output A omits (Output A only mentions the placeholder IDs for these runs, missing the mixed real/fake ID scenario, which actually reveals additional nuance - these runs had partially valid and partially invalid targets).",
+                  "evidence": "Output B: '5dce3b7f-29e0-4098-8224-efa704425df8 (20:04:16\u201320:04:48) targeted i-1234567890abcdef0_1, i-1234567890abcdef0_7 and i-1234567890abcdef0_8.' This reveals that the multi-target run had a mix of valid-looking and placeholder IDs, which is a more nuanced and accurate detail missing from Output A."
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "equivalent",
+                  "confidence": "high",
+                  "reasoning": "Both outputs provide similar actionable next steps: identify the source of the malformed instance IDs, rerun with correct instance IDs, and request additional IAM permissions (ssm:GetAutomationExecution) for deeper investigation. Output A also offers to compare input parameters of failed vs successful runs if given permissions, while Output B suggests using tag-based targeting as an alternative (based on the successful tag-targeted run), which is a good practical alternative. Both are roughly equally actionable, each with a slightly different but complementary suggestion.",
+                  "evidence": "Output A: 'Check what supplied the InstanceId parameter for the failed runs... Re-run the runbook with the real instance IDs... I can also compare the input parameters of the failed and successful runs if you grant ssm:GetAutomationExecution.' Output B: 'Fix: Rerun with real instance IDs, or target by tag as the successful run did... I can then confirm the cause [with added permissions].'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A provides a more complete picture by explicitly identifying and explaining the parent-child execution relationships, which is crucial context for understanding why the parent executions (5dce3b7f, ee671768) show no direct failure message. It organizes all 6 failed executions in a single coherent table with clear labeling of execution type (single, parent, child), making the full scope of the incident clear. Output B splits the information into two separate sections (malformed ID failures table + multi-target failures) without explicitly tying the child executions in the first table to the parent executions in the second section, leaving the relationship implicit and the full execution dependency structure less clear to the reader.",
+                  "evidence": "Output A's table includes a 'Type' column explicitly stating 'Parent run with a child per instance' and 'Child of 5dce3b7f'/'Child of ee671768', providing complete relational context in one place. Output B's two-part breakdown requires the reader to infer the relationship between the executions listed in the first table and the parent runs discussed in the second section."
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "low",
+                  "reasoning": "Output B additionally identifies a successful tag-targeted run (439b955b) and notes its tag key/value, which adds a useful data point for the alternative targeting strategy suggestion. Output A does not mention this specific successful run or the tag-based targeting approach, making Output B slightly more complete in terms of surfacing all relevant run data on that day.",
+                  "evidence": "Output B: 'Other runs on that date succeeded, including 6096b44b, 71b31382, d3d9647d, 31360302 and the tag-targeted run 439b955b (tag:ssm-skill-test=true).'"
+                }
+              ]
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "with_skill trigger test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 24.299,
+              "without_skill_seconds": 18.149,
+              "delta_seconds": 6.1,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "with_skill trigger test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 2 usable output(s); consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 2 usable output(s); consistency needs at least 3.",
+          "excluded": [
+            {
+              "iteration": 2,
+              "reason": "trigger test failed"
+            }
+          ]
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "inconsistent",
+          "overall_score": 1.0,
+          "dimension_counts": {
+            "inconsistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "inconsistent",
+              "confidence": "high",
+              "reasoning": "Iteration 1 provides a detailed, substantive answer identifying multiple failed executions, specific error messages (InvalidInstanceID.Malformed), execution IDs, timestamps, and root cause analysis. Iterations 2 and 3 provide no answer at all\u2014they merely state that a search has been started and that results will be reported later, without any actual findings, execution IDs, or failure reasons.",
+              "diverging_iterations": [
+                1,
+                2,
+                3
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "inconsistent",
+              "confidence": "high",
+              "reasoning": "Iteration 1 gives concrete recommendations: rerun with real instance IDs or target by tag, and suggests adding ssm:GetAutomationExecution permission to confirm the root cause for two ambiguous runs. Iterations 2 and 3 give no recommendations whatsoever\u2014they only promise to report back later, with no actionable next steps provided to the user.",
+              "diverging_iterations": [
+                1,
+                2,
+                3
+              ]
+            },
+            "format_consistency": {
+              "verdict": "inconsistent",
+              "confidence": "high",
+              "reasoning": "Iteration 1 is a structured, detailed response with headers, a markdown table, bulleted lists, and bolded callouts. Iterations 2 and 3 are single short prose sentences with no structure, tables, or sections at all. The shapes are completely different.",
+              "diverging_iterations": [
+                1,
+                2,
+                3
+              ]
+            }
+          }
+        }
+      }
+    },
+    "auto-run-alarm-cancel": {
+      "summary": "This evaluation covers a single chat task, run 3 times each, so all findings are based on a small sample and should be read with caution.\n\nTrigger & expected output: The behavior under test fired in all 3 runs (3/3), confirming the scenario was properly exercised. Both without_skill and with_skill met the \"expected output\" bar at the same rate, 2/3 (67%). For with_skill this judgment was made with \"high\" confidence; for without_skill it was \"medium\" confidence, so without_skill's matching result rests on a somewhat weaker measurement even though the raw rate is identical.\n\nAssertions: Aggregate pass rates were identical for both variants (8/15, 53%), but this hides differences underneath. Of the 5 distinct assertions:\n- Two (quoting the failure message, in both LLM and regex form) passed equally for both variants (2/3 each) \u2014 these assertions aren't distinguishing the variants.\n- One (\"explains alarm vs. person cancelled the run\") also passed equally (2/3 each).\n- One (\"reads child executions with ParentExecutionId filter\") favored with_skill (2/3) over without_skill (1/3).\n- One (\"child executions listed by parent,\" regex-based) favored without_skill (1/3) over with_skill (0/3), where neither did well.\nAll five assertions are flagged as \"flaky\" patterns, meaning results varied across the repeated runs rather than being stable \u2014 so these per-assertion differences should be treated as noisy rather than firm.\n\nQuality comparison: Only 1 of 3 pairs could actually be evaluated for quality (2 were skipped), and in that single pair with_skill was favored across all three criteria (accuracy, actionability, completeness), at \"medium\" confidence. This is a very thin basis \u2014 just one comparable instance \u2014 so it indicates a mild signal in favor of with_skill's output quality rather than a robust conclusion.\n\nRuntime and cost: without_skill was substantially faster (13s avg vs 40s) and cheaper ($0.11 vs $0.33) than with_skill, with neither exceeding the 30s runtime threshold in the one pair evaluated for that comparison. Context window utilization was low and similar for both (4.5% vs 5.5%), with no compaction events for either.\n\nOutput consistency: Both variants were rated \"inconsistent\" overall across repeated runs, meaning outputs varied run-to-run for both. without_skill scored somewhat better on the consistency metric (1.33, with one dimension \"mostly_consistent\" and two \"inconsistent\") compared to with_skill (1.0, all three dimensions \"inconsistent\"), both at \"high\" confidence in the rating itself \u2014 but both show meaningful run-to-run variability.\n\nOverall picture: The two variants matched the expected output at the same rate and had identical aggregate assertion pass rates, with the per-assertion differences roughly offsetting (one favors each) and several assertions not distinguishing them at all. with_skill showed a mild quality edge in the single comparable pair, while without_skill was notably faster, cheaper, and somewhat more consistent across runs. Given the very small sample size (3 runs, only 1 quality pair, flaky assertion patterns, and mixed confidence levels), these results represent a tradeoff between cost/speed/consistency and a thin quality signal rather than a clear overall difference.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "2/3",
+          "percentage": 67,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "2/3",
+          "percentage": 67,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Quotes the FailureMessage 'Cancelled due to Alarm(s)'",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 1,
+            "text": "Explains that the alarm configuration cancelled the run, rather than a person",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 2,
+            "text": "Reads the child executions with the ParentExecutionId filter",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "1/3",
+              "percentage": 33,
+              "avg_confidence": "medium"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 3,
+            "text": "The failure message is quoted",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67
+            },
+            "without_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 4,
+            "text": "Child executions are listed by parent",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "without_skill": {
+              "pass_rate": "1/3",
+              "percentage": 33
+            },
+            "classification": "flaky"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "8/15",
+          "percentage": 53
+        },
+        "without_skill": {
+          "pass_rate": "8/15",
+          "percentage": 53
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "40s",
+          "cost_avg": "$0.33",
+          "context_window_avg": {
+            "utilization": "5.5%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "13s",
+          "cost_avg": "$0.11",
+          "context_window_avg": {
+            "utilization": "4.5%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "skip_reasons": [
+            "with_skill expected_output test failed",
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 3,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "with_skill",
+            "avg_confidence": "medium",
+            "summary": "with_skill wins overall (3 vs 0 criterion wins out of 3 judgments, avg confidence: medium)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "with_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_b",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs agree on the core finding: the CloudWatch alarm ssm-skill-test-cpu caused the automation to be cancelled via Systems Manager's rate control mechanism, with the same timestamps for alarm state changes and the parent execution's cancellation message. However, there are discrepancies: Output A claims the alarm 're-evaluated at 20:16:49' with CPU at ~0.25%, which seems to be an inferred detail not clearly substantiated as directly observed data, and presents this with confidence as fact ('CPU was about 0.25%'). Output B is more careful to separate 'Evidence from API responses' from 'Inferred (not directly shown)', explicitly labeling speculative claims (e.g., alarm threshold, which instance it watches, mismatch with target) as inferred rather than confirmed. This separation improves accuracy by reducing the risk of presenting speculation as fact. Output A's claim that the alarm reasons are 'custom text' indicating manual intervention via set-alarm-state is a reasonable inference but stated with more certainty than Output B's similar caution. Output A also notes the alarm config was updated on 2026-11-11, which Output B does not mention in its 'Inferred' section but similarly notes the instance mismatch. Both outputs have minor info density differences but no clear factual errors visible from the context. Given output B's more rigorous evidence/inference separation, it's slightly more accurate in representing certainty levels.",
+                  "evidence": "Output A: 'When the alarm re-evaluated at 20:16:49, CPU was about 0.25%, far below the 99% threshold.' presented as fact without hedging on the data source.\nOutput B: separates 'Evidence from the API responses' vs 'Inferred (not directly shown)' sections, explicitly flagging alarm threshold and instance mismatch as inferred, e.g. 'The alarm is a CPU alarm: CPUUtilization above 99, one 60-second period.' under Inferred header."
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs offer to check CloudTrail for manual actions, which is a clear next step. Output B goes further by providing concrete remediation suggestions: raising evaluation periods or period length to tolerate brief spikes, and explicitly warning against removing the alarm or loosening rate-control settings (a safety-conscious recommendation). It also flags a specific misconfiguration concern (alarm watching wrong instance) as an actionable insight for the user to verify. Output A mentions the alarm now watches a different instance but doesn't explicitly recommend action on this mismatch or suggest how to prevent future flapping-related cancellations.",
+                  "evidence": "Output B: 'If you want the run to survive brief spikes, you could raise the alarm's evaluation periods or period length. Don't remove the alarm or loosen the rate-control settings to get past it.'\nOutput A: 'If you want to confirm who forced the alarm state, I can search CloudTrail for the SetAlarmState calls around 20:15\u201320:16 UTC.' (less actionable guidance beyond CloudTrail check)"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs cover the alarm cancellation, timeline, instance mismatch, and other executions of the runbook. Output B additionally examines the child execution step-level detail (Sleep step cancelled, WaitForImpossibleState pending), provides a plausible explanation for the stop lag (~37 seconds consistent with SSM's up-to-a-minute stop lag), explains alarm sensitivity due to a short evaluation period, and separately addresses the two 20:00 executions with specific call-outs (one cancelled without alarm info, one timed out). Output A mentions two earlier executions at 20:00:40 but groups them together without distinguishing between a cancellation and a timeout in as much detail, and does not drill into child execution step status beyond noting the time of cancellation. Overall output B provides a more thorough examination of the automation's internals and surrounding context.",
+                  "evidence": "Output B: 'The Sleep step was cancelled mid-run, and WaitForImpossibleState never started (Pending).' and distinguishes the two 20:00 executions with separate IDs and statuses (Cancelled vs TimedOut).\nOutput A: 'The same runbook had two earlier executions at 20:00:40. One timed out in its Poll action status for completion step and the other was cancelled.' (less detailed, no step-level breakdown)."
+                }
+              ]
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "with_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "with_skill_seconds": 24.632,
+              "without_skill_seconds": 23.317,
+              "delta_seconds": 1.3,
+              "threshold_exceeded": false
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "without_skill",
+          "with_skill_wins": 0,
+          "without_skill_wins": 1,
+          "equivalent": 2,
+          "summary": "without_skill is more consistent: it won 1 dimension(s), with_skill 0, 2 equivalent of 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "inconsistent",
+          "overall_score": 1.0,
+          "dimension_counts": {
+            "inconsistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "inconsistent",
+              "confidence": "high",
+              "reasoning": "Iterations 1 and 3 both give a detailed, substantive answer: the CloudWatch alarm ssm-skill-test-cpu went into ALARM during the run, causing Systems Manager to cancel the execution, supported by execution IDs, timeline, and alarm history. Iteration 2 gives essentially no answer at all, merely stating that the cause has been 'pinned down' without revealing what it is, and says it is waiting on an audit-trail lookup. This is a failure to answer the question, making the set inconsistent.",
+              "evidence": "Iteration 1: 'The CloudWatch alarm ssm-skill-test-cpu went into ALARM during the run, and Systems Manager cancelled the execution automatically.' Iteration 3: 'The alarm cancelled it... that alarm went into ALARM while the run was in progress.' Iteration 2: 'I've pinned down the cause from the execution and alarm data. I'm waiting on an audit-trail lookup to confirm who triggered the alarm.'",
+              "diverging_iterations": [
+                2
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "inconsistent",
+              "confidence": "high",
+              "reasoning": "Iterations 1 and 3 both offer to check CloudTrail to find who triggered the alarm state change, and iteration 3 additionally recommends tuning the alarm's evaluation periods/period length and not loosening rate-control settings. Iteration 2 gives no recommendation beyond vaguely mentioning it is waiting on an audit-trail lookup, with no analysis or explicit next-step offer comparable to the others.",
+              "evidence": "Iteration 1: 'I can check CloudTrail to see who set the alarm state, or look into the 20:00 cancellation, if you want either.' Iteration 3: 'If you want the run to survive brief spikes, you could raise the alarm's evaluation periods or period length... I can also check CloudTrail to rule out a manual stop on the 20:00 run.' Iteration 2: 'I'm waiting on an audit-trail lookup to confirm who triggered the alarm.' (no concrete recommendation)",
+              "diverging_iterations": [
+                2
+              ]
+            },
+            "format_consistency": {
+              "verdict": "inconsistent",
+              "confidence": "high",
+              "reasoning": "Iterations 1 and 3 share a similar structured format with headers (bold section titles), bullet lists for execution details, timeline, and additional analysis sections. Iteration 2 is a single short sentence with no sections, headers, or structure at all, making it structurally very different from the other two.",
+              "evidence": "Iteration 1 uses headers like '**The execution**', '**Timeline (UTC, 2026-11-10)**', '**Why the alarm fired (inferred)**'. Iteration 3 uses similar headers like '**Evidence from the API responses**', '**Inferred (not directly shown)**', '**Other executions of this runbook**'. Iteration 2 is just two short prose sentences with no structure.",
+              "diverging_iterations": [
+                2
+              ]
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "inconsistent",
+          "overall_score": 1.33,
+          "dimension_counts": {
+            "mostly_consistent": 1,
+            "inconsistent": 2
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "inconsistent",
+              "confidence": "high",
+              "reasoning": "Iteration 1 fails to answer the question at all, stating a tool outage prevented investigation and only listing generic possible causes. Iterations 2 and 3 both give a concrete, specific answer: the automation was cancelled because the CloudWatch alarm 'ssm-skill-test-cpu' (manually forced into ALARM state as part of a test) triggered SSM's alarm-based cancellation, with matching execution IDs, timestamps, and instance IDs. Since one output fails to answer while two converge on the same specific root cause, this is inconsistent per the definition.",
+              "diverging_iterations": [
+                1
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "Iteration 1 recommends retrying the query or providing the execution ID so it can investigate root cause, since it couldn't access data. Iterations 2 and 3 both recommend checking CloudTrail for SetAlarmState calls on ssm-skill-test-cpu to confirm who forced the alarm state - essentially the same next step. Iteration 1's recommendation is materially different in nature (asking for retry/more info) versus the specific CloudTrail follow-up in 2 and 3, but all are oriented toward further investigation using similar tools (CloudTrail), making this mostly consistent rather than fully inconsistent.",
+              "diverging_iterations": [
+                1
+              ]
+            },
+            "format_consistency": {
+              "verdict": "inconsistent",
+              "confidence": "high",
+              "reasoning": "Iteration 1 is pure prose with bullet points describing generic causes, no table, no specific timeline. Iteration 2 uses bolded timestamp bullet list with section headers but no table. Iteration 3 uses a markdown table for the timeline alongside bulleted sections. The structural presentation differs significantly: prose-only vs bullet-timeline vs table-based timeline, representing materially different presentation choices.",
+              "diverging_iterations": [
+                1,
+                3
+              ]
+            }
+          }
+        }
+      }
+    },
+    "auto-run-waiting-approval": {
+      "summary": "This evaluation covered a single chat task (an AWS Systems Manager automation approval scenario), run 3 times per variant. The trigger behavior under test fired reliably in all 3 runs (100%), confirming the test scenario itself worked as intended.\n\nExpected-output match: with_skill met the expected output in all 3 runs (100%, high confidence), while without_skill met it in only 1 of 3 runs (33%, medium confidence). This is a fairly large and consistent gap, though without_skill's confidence rating was only medium, so that particular measurement carries somewhat less certainty.\n\nAssertion-level detail (15 assertions total, 5 unique checks x 3 runs each) shows a mixed picture that the aggregate pass rates alone would hide:\n- Two checks passed for both variants every time (\"explains execution is waiting at an approve step\" and \"does not send the signal itself\") \u2014 these are not differentiating and both variants handle them fine.\n- Two checks consistently favored with_skill and consistently failed for without_skill: giving the correct send-automation-signal command for Approve/Reject (with_skill 3/3 vs without_skill 0/3), and a regex-based check that the signal command is actually given (with_skill 3/3 vs without_skill 0/3). These are the clearest and most concrete differentiators, since one is a deterministic regex match, not just an LLM judgment.\n- One check (\"rejection ends execution as Failed\") was flaky for without_skill (2/3) while with_skill passed all 3 \u2014 a small run-to-run inconsistency on this specific point for without_skill.\n\nOverall assertion pass rate was 100% (15/15) for with_skill versus 53% (8/15) for without_skill, driven almost entirely by the two command-related checks above plus the one flaky item.\n\nQuality comparison data is sparse: only 1 of 3 pairs could actually be evaluated (2 were skipped), so this dimension has very limited coverage. Within that single evaluated pair, results were mixed across criteria \u2014 without_skill was favored on accuracy, with_skill was favored on actionability, and completeness was comparable \u2014 with only medium confidence overall. This should be treated as a weak, inconclusive signal rather than a meaningful difference, given the small sample.\n\nRuntime and cost were close: with_skill averaged 16s and $0.14, without_skill averaged 14s and $0.12 \u2014 a small difference (~2s, ~$0.02) that is unlikely to be practically significant, and neither exceeded the runtime threshold in the one pair evaluated. Context window utilization was low and similar for both (5.3% vs 4.6%), with no compactions for either.\n\nOutput consistency was rated \"consistent\" for both variants across all three runs, with high confidence \u2014 so neither variant showed erratic run-to-run output in the consistency scoring itself, even though without_skill's actual assertion outcomes did vary across runs for the specific command-related checks.\n\nIn sum: the strongest and most concrete finding is that without_skill reliably failed to produce the correct send-automation-signal command (both by LLM judgment and by exact regex match) while with_skill reliably did, and this drove the overall expected-output and assertion-rate gap. Quality comparisons add little due to limited sample size and mixed/low-confidence results, and runtime/cost/context differences between the two were minor.\"",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "1/3",
+          "percentage": 33,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Explains that the execution is waiting at an aws:approve step",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "Gives the send-automation-signal command for Approve and for Reject",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "Says a rejection ends the execution as Failed",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 3,
+            "text": "Does not send the signal itself",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "The signal command is given",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "15/15",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "8/15",
+          "percentage": 53
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "16s",
+          "cost_avg": "$0.14",
+          "context_window_avg": {
+            "utilization": "5.3%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "14s",
+          "cost_avg": "$0.12",
+          "context_window_avg": {
+            "utilization": "4.6%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 1,
+            "without_skill_wins": 1,
+            "equivalent": 1,
+            "winner": "equivalent",
+            "avg_confidence": "medium",
+            "summary": "Equivalent overall (1 vs 1 criterion wins out of 3 judgments, avg confidence: medium). Gotchas: without_skill is stronger on 'accuracy' (1/1 iterations); with_skill is stronger on 'actionability' (1/1 iterations)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 0,
+              "equivalent": 1
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "equivalent",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "without_skill",
+                  "confidence": "low",
+                  "reasoning": "Both outputs present largely consistent facts (execution ID, approval requirement, approver role, timing, 72-hour timeout, same start time, same role). Output A claims its own access is 'read-only' as the reason it can't approve, while Output B gives a more specific and plausible technical reason: it says its role is denied 'ssm:GetAutomationExecution' and lacks signal permissions, but then contradicts itself by saying it got step details 'through a different call that worked' - this is a minor internal inconsistency. Output A's claim of being 'read-only' is simpler and less likely to contain a self-contradiction. However, Output B provides additional accurate detail about an earlier execution being rejected with a specific comment, which adds verifiable context. Overall, Output A's self-description is more internally consistent, while Output B has a minor logical inconsistency about permissions."
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output A provides explicit, copy-pasteable CLI commands for both Approve and Reject signals, including the exact automation execution ID and signal-type syntax with a payload comment placeholder. This is highly actionable for the 'Admin' role holder to execute immediately. Output B mentions the need to call 'ssm:SendAutomationSignal' with 'SignalType=Approve' and references the console as an alternative, but does not provide the actual CLI command syntax, making it less immediately actionable despite covering the same conceptual steps."
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "equivalent",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs cover the same core elements: execution ID, approval requirement, approver identity, timeout timing, who can unblock it, and inability of the agent itself to approve. Output A additionally notes pagination limitations and lists other historical executions (success/failed/cancelled), providing extra context about the broader execution history. Output B uniquely notes that self-approval is not forbidden by the runbook and references a specific prior rejected execution with a comment, adding behavioral nuance about the approval process. Each has a unique additional detail not present in the other, making them roughly equivalent in overall completeness, though covering slightly different extra ground."
+                }
+              ]
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 2,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 17.059,
+              "without_skill_seconds": 13.369,
+              "delta_seconds": 3.7,
+              "threshold_exceeded": false
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "equivalent",
+          "with_skill_wins": 0,
+          "without_skill_wins": 0,
+          "equivalent": 3,
+          "summary": "Neither side is more consistent (with_skill won 0 dimension(s), without_skill 0, 3 equivalent of 3)."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "consistent",
+          "overall_score": 3.0,
+          "dimension_counts": {
+            "consistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same execution ID, runbook name, the Approve step needing 1 approval from the Admin role ([redacted ARN]), the AfterApproval sleep step, the 72-hour timeout, and the same prior runs (success, rejected, cancelled). The key facts match across all iterations.",
+              "evidence": "All mention 'f8d5c7d0-6be8-456d-a3c8-438e0062d6a8', '[redacted ARN]', 'MinRequiredApprovals is 1', 'AfterApproval' sleep step, and 72-hour/259200 second timeout."
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs recommend the Admin role run send-automation-signal with Approve or Reject signal type, provide identical CLI commands, and suggest verifying with describe-automation-executions afterward. Iteration 2 adds an optional stop-automation-execution command but this is a minor addition not a conflicting recommendation.",
+              "evidence": "All three include: 'aws ssm send-automation-signal --region us-east-1 --automation-execution-id f8d5c7d0... --signal-type Approve' and note the need for ssm:SendAutomationSignal permission.",
+              "diverging_iterations": [
+                2
+              ]
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses use the same structure: an opening summary sentence, an Execution details section, a 'What it needs' bulleted section, a 'Who can unblock it' bulleted section, code blocks with CLI commands, and a closing section about other/earlier runs with pagination caveat.",
+              "evidence": "All have headers like '**What it needs**', '**Who can unblock it**', and bash code blocks with 'send-automation-signal' commands, plus a note about paginated results for earlier runs."
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "consistent",
+          "overall_score": 3.0,
+          "dimension_counts": {
+            "consistent": 3
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same execution ID, document, approval requirement (1 approval), approver role ([redacted ARN]), the Approve step message, the AfterApproval sleep step, the 72-hour timeout, abort-on-failure behavior, and the fact that the starter (Admin/example-session) is the same role that can approve. All mention they lack GetAutomationExecution permission and couldn't send the signal themselves.",
+              "evidence": "'only the Admin IAM role in account 012345678901_1 can give it' (iter1); 'the Admin role in account 012345678901_1 is the only approver who can give it' (iter2); 'the only approver is the IAM role Admin' (iter3)"
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend that a principal using/assuming the Admin role send an Approve signal (ssm:SendAutomationSignal) on the execution; iteration 1 adds the console option but this is a minor additional detail, not a conflicting recommendation. All state the agent cannot perform the action itself.",
+              "evidence": "'call ssm:SendAutomationSignal with SignalType=Approve on that execution ID' (iter1); 'needs ssm:SendAutomationSignal permission on the execution' (iter2); 'The approval is sent as an Approve signal on that execution ID' (iter3)"
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses use the same structure: an opening summary sentence, an Execution/details line, a 'What it needs' bulleted section, a 'Who can unblock it' bulleted section, a timing/timeout note, and a closing caveat about permission limitations. Minor heading differences ('Timing' vs 'If it's ignored') don't change the overall shape.",
+              "evidence": "Iter1 headers: 'Execution', 'What it needs', 'Who can unblock it', 'Timing'; Iter2: 'Execution', 'What it needs', 'Who can unblock it', 'If it's ignored'; Iter3: inline intro, 'What it needs', 'Who can unblock it'"
+            }
+          }
+        }
+      }
+    },
+    "auto-harden-vulnerable": {
+      "summary": "This single chat-task eval tested an agent's ability to review and harden an AWS Systems Manager automation document, with 3 repeated runs per variant.\n\nTrigger: the behavior under test fired in all 3 runs (3/3), so the eval is meaningful and not a case of absent data.\n\nExpected output: with_skill met the expected output in all 3 runs (100%, high confidence), while without_skill met it in 0 of 3 runs (0%, medium confidence). This is a sizeable, consistent gap, though the medium confidence on without_skill's judgment means that specific measurement carries somewhat less certainty than with_skill's.\n\nAssertions: with_skill passed 35/36 (97%), without_skill passed 21/36 (58%). Breaking this down by individual assertion:\n- Several assertions passed for both variants every time (always_passes): flagging the command-injection risk, the secret echo, disabled TLS verification, the hard-coded assumeRole ARN, invalid onCancel routing, returning a complete hardened YAML document, and avoiding exposure of raw account IDs. These are not differentiating \u2014 both variants handle them reliably.\n- One assertion (\"cites a documentation page for findings\") was flaky for with_skill (2/3) and failed outright for without_skill (0/3), with medium/high confidence respectively \u2014 suggesting this specific behavior needs further work regardless of variant.\n- Four assertions showed a clear split, passing reliably for with_skill but failing entirely for without_skill: flagging SecureString as an invalid parameter type, flagging the 600-second timeout violation, applying the instance ID pattern, and lowering the executeScript timeout to 600. These are concrete, repeatable gaps specific to without_skill's output on this task.\n\nMetrics: without_skill was notably faster (18s vs 59s avg) and cheaper ($0.15 vs $0.49 avg) than with_skill. Context window utilization was low and similar for both (4.3% vs 5.6%), with no compaction events for either. So without_skill's lower cost/runtime comes paired with a substantially lower rate of meeting the expected output and failing several concrete assertions \u2014 a tradeoff between speed/cost and task success on this eval, not just two neutral metrics pulling in different directions.\n\nQuality comparison: no quality pairs could actually be evaluated (0 evaluated, 3 skipped), so no direct quality-preference signal is available from that dimension.\n\nOutput consistency: both variants were rated \"mostly_consistent\" overall, with high confidence. without_skill scored slightly higher on the consistency scale (2.67 vs 2.33) and had more dimensions rated fully \"consistent\" (2 vs 1), meaning without_skill's outputs varied slightly less run-to-run than with_skill's, even though without_skill's outputs failed to meet the expected criteria.\n\nOverall state: trigger and several core assertions pass reliably for both variants, but on this eval with_skill met the expected output and a cluster of specific assertions (SecureString typing, timeout correction, instance ID pattern) much more reliably than without_skill, while without_skill ran faster, cost less, and was marginally more internally consistent across repeated runs. The documentation-citation assertion is weak for both and the quality-comparison dimension yielded no usable data.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/3",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "Flags the echo of DbPassword as exposing a secret",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "Flags curl -k as disabling TLS verification",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "Flags the hard-coded assumeRole ARN",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 5,
+            "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 6,
+            "text": "Flags onCancel routing to an aws:sleep step as invalid",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 7,
+            "text": "Returns a complete hardened document in YAML",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 8,
+            "text": "Cites a documentation page for findings",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "2/3",
+              "percentage": 67,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "flaky"
+          },
+          {
+            "index": 9,
+            "text": "The instance ID pattern is applied",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 10,
+            "text": "The executeScript timeout is lowered to 600",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 11,
+            "text": "No raw 12-digit account ID other than the documentation example is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "35/36",
+          "percentage": 97
+        },
+        "without_skill": {
+          "pass_rate": "21/36",
+          "percentage": 58
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "59s",
+          "cost_avg": "$0.49",
+          "context_window_avg": {
+            "utilization": "5.6%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "18s",
+          "cost_avg": "$0.15",
+          "context_window_avg": {
+            "utilization": "4.3%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 3,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "without_skill",
+          "with_skill_wins": 1,
+          "without_skill_wins": 2,
+          "equivalent": 0,
+          "summary": "without_skill is more consistent: it won 2 dimension(s), with_skill 1, 0 equivalent of 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.33,
+          "dimension_counts": {
+            "consistent": 1,
+            "mostly_consistent": 2
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same core set of security findings: command injection via unquoted/unrestricted LogPath, dangerous rm -rf, SecureString misuse for DbPassword with plaintext echoing, hard-coded assumeRole ARN, TLS verification disabled via curl -k, invalid onCancel target pointing to aws:sleep, missing InstanceId validation, and timeoutSeconds exceeding the 600s limit for aws:executeScript. They also agree on informational notes (onFailure: Continue, description mismatch, CheckHealth ignoring InstanceId). However, there are material differences: iteration 1 classifies DbPassword fix as 'Proposed' (not Applied) and keeps 'onCancel' removed entirely (no replacement) rather than setting it to 'Abort' as in iterations 2 and 3. Iteration 1's severity table shows Low:0 Applied/1 Proposed, while iterations 2 and 3 show Low:1 Applied/0 Proposed - a classification discrepancy. Also the LogPath allowed pattern differs materially in strictness/approach across all three (different regex patterns with different design choices), which is a key technical fact of the answer.",
+              "evidence": "Iteration 1: 'I removed `onCancel`, so a cancellation now aborts (the default)' and lists DbPassword fix under 'Proposed fixes' section 2. Iterations 2 and 3 set 'onCancel: Abort' explicitly and list DbPassword type change under 'Applied fixes'.",
+              "diverging_iterations": [
+                1
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend the same primary set of fixes: parameterize assumeRole, validate InstanceId and LogPath with stricter patterns, quote LogPath in shell commands, remove password from command text and replace with a Parameter Store reference, remove curl -k, fix invalid onCancel target, and reduce timeoutSeconds. All suggest testing on non-production before sharing. Minor differences exist in exact regex patterns proposed, in whether DbPassword removal is applied or proposed, and in the exact onCancel replacement value (removed vs set to Abort), but these are additional/stylistic variations rather than conflicting recommendations.",
+              "evidence": "Iteration 1: 'AFTER: `echo \"restarting\"`' with DbPassword parameter entirely removed; Iterations 2,3: 'DbPasswordParameterName' parameter retained with instructions for future use. Iteration 1: 'I removed `onCancel`'; Iterations 2,3: 'onCancel: Abort'."
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs use an identical overall structure: a title, a summary line with Format/Schema/Steps/Parameters, a disclaimer about static review, a severity summary table (Critical/High/Medium/Low x Found/Applied/Proposed/Flagged), an 'Applied fixes' section, a 'Proposed fixes' section with Issue/Before/After/Source for each fix, a 'Flagged for redesign' section, an 'FYI' note, a 'Checks with no findings' section, a 'Not covered by this review' section, and a final 'Hardened document' YAML block followed by closing guidance. This structural template is essentially identical across all three.",
+              "evidence": "All three have headers like '### Applied fixes', '### Proposed fixes', '### Flagged for redesign', '### Checks with no findings', '### Not covered by this review', '### Hardened document', and a severity table with identical columns."
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs identify the same core critical security issues: command injection/path traversal via LogPath's permissive allowedPattern, the dangerous rm -rf, the DbPassword being echoed and leaked plus SecureString being an invalid Automation parameter type, curl -k disabling TLS, hardcoded assumeRole, onFailure: Continue on destructive step, unvalidated InstanceId, the /var/tmp predictable/world-writable archive location, the over-broad unfiltered describe_instance_status call, the meaningless onCancel: step:Wait, and the mismatch between description (restart) and actual steps plus wrong Wait ordering. All three provide a hardened YAML with parameterized AutomationAssumeRole, strict allowedPatterns, safer deletion logic (find -type f -delete instead of rm -rf), removal of DbPassword with guidance to use Secrets Manager/Parameter Store, restored TLS verification with --proto/--tlsv1.2, added RestartService step, reordered Wait before health check, and scoped health check to the specific instance with failure on unhealthy status. The substance of the answer is essentially identical across all three, just with minor stylistic differences in step naming (e.g., iteration 3 uses aws:waitForAwsResourceProperty for CheckHealth and adds a separate Notify step, iteration 1 and 2 keep curl as part of RestartService) and exact regex details, but the key facts and problems identified are the same."
+            },
+            "recommendation_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses recommend the same primary next steps: parameterize the assume role for least privilege, validate LogPath/InstanceId with strict patterns and runtime checks (realpath), remove DbPassword and fetch secrets via Secrets Manager/Parameter Store from the instance, enable TLS verification instead of -k, change onFailure to Abort on destructive steps, fix step ordering, scope IAM permissions tightly (ssm:SendCommand scoped by tag, ec2:DescribeInstanceStatus with no resource scoping, iam:PassRole restricted), share the document only with specific accounts and use versioning, encrypt output logs, and test in a non-production/sandbox account before sharing. All three explicitly recommend testing in a sandbox/non-prod account first. These recommendations are consistent across all iterations."
+            },
+            "format_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three follow the same overall shape: an intro caveat about not testing, a Findings section organized by severity level, a Hardened YAML code block, a 'what changed' or assumptions section, and a final 'before sharing' / 'surrounding controls' section. However, iteration 2 presents the Findings section as a table with columns (#, Severity, Issue, Why it matters), while iterations 1 and 3 present findings as a nested bulleted list grouped by severity headers (Critical/High/Medium). This is a distinct presentation choice difference between outputs, meeting the 'mostly_consistent' threshold (same overall structure/sections, but differs in presentation style for one section).",
+              "diverging_iterations": [
+                2
+              ]
+            }
+          }
+        }
+      }
+    },
+    "auto-harden-clean": {
+      "summary": "This eval (a chat-task scenario about reviewing an AWS Systems Manager document for security findings) ran 3 trials per variant. The behavior under test (trigger) fired in all 3 trials, so the comparison is based on real data.\n\nExpected output: with_skill met the expected output in all 3 trials (100%, high confidence), while without_skill met it in 0 of 3 trials (0%, high confidence). This is a large and clear gap, and confidence in the judgment is high on both sides, so it's not an artifact of weak measurement.\n\nAssertions (9 total per variant, 3 distinct assertion types x 3 runs): with_skill passed all 9 (100%), without_skill passed 6 of 9 (67%). Breaking this down by individual assertion:\n- \"Reports no critical or high findings\" \u2014 both variants passed all runs. This assertion doesn't differentiate the two.\n- \"Does not flag KeyName as a secret\" \u2014 both variants passed all runs. Also non-differentiating.\n- \"Does not require timeoutSeconds on the aws:changeInstanceState step\" \u2014 with_skill passed all 3 runs, without_skill failed all 3 runs. This single assertion accounts for the entire gap between the two variants and aligns with the expected-output failure pattern for without_skill.\n\nSo the overall difference in both expected-output and assertion pass rates traces back to one specific behavior (handling of the timeoutSeconds requirement), rather than broad-based differences.\n\nMetrics: with_skill averaged 17s runtime and $0.15 cost per run; without_skill showed 0s and $0.00, which likely reflects that without_skill exited quickly/trivially (consistent with it not performing the expected work) rather than being a meaningfully \"faster\" comparable run. Context window utilization was low for both (5.5% vs 4.2%), with no compaction events for either.\n\nQuality comparison: no pairs could be evaluated (0 evaluated, 3 skipped), so there is no data on relative output quality beyond the pass/fail assertions above.\n\nOutput consistency: both variants were rated \"mostly_consistent\" across repeated runs, with similar scores (with_skill 2.67, without_skill 2.33, both high confidence) \u2014 a small difference that doesn't materially distinguish them.\n\nOverall: the data consistently points to a specific, narrow gap \u2014 without_skill did not satisfy the \"does not require timeoutSeconds\" requirement in any run, which drove both its 0% expected-output rate and its lower assertion pass rate, while other assertions and consistency metrics showed no meaningful difference between the variants. Runtime/cost differences are hard to interpret as a tradeoff given without_skill's 0s/$0 figures likely reflect incomplete or trivial execution rather than efficiency, and quality-pair comparisons were unavailable.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/3",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "Reports no critical or high findings",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "Does not flag KeyName as a secret",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 2,
+            "text": "Does not require timeoutSeconds on the aws:changeInstanceState step",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "3/3",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/3",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "9/9",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "6/9",
+          "percentage": 67
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "17s",
+          "cost_avg": "$0.15",
+          "context_window_avg": {
+            "utilization": "5.5%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "0s",
+          "cost_avg": "$0.00",
+          "context_window_avg": {
+            "utilization": "4.2%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 3,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 2,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            },
+            {
+              "iteration": 3,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "more_consistent": "with_skill",
+          "with_skill_wins": 1,
+          "without_skill_wins": 0,
+          "equivalent": 2,
+          "summary": "with_skill is more consistent: it won 1 dimension(s), without_skill 0, 2 equivalent of 3."
+        },
+        "with_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.67,
+          "dimension_counts": {
+            "consistent": 2,
+            "mostly_consistent": 1
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs conclude that the runbook passes all 10 hardening checks with no issues found, no fixes applied/proposed/flagged, and the same key observations: KeyName is unused and should be reconsidered, and the assume role's IAM policy / runtime behavior is outside scope. All three present identical severity tables (all zeros) and identical check-by-check reasoning for parameter validation, role handling, timeouts, failure routing, approvals, cross-account assumption, TLS, and document structure.",
+              "evidence": "All three state 'I found no issues... so I made no changes' and all three severity tables show 0 for every severity level. All three flag KeyName as unused and recommend reviewing the IAM policy of the assume role."
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "medium",
+              "reasoning": "All three recommend: review the IAM policy of the assume role, decide what to do with the unused KeyName parameter, and consider adding parameter descriptions. However, iteration 2 uniquely suggests adding an approval gate (aws:approve step) before StopInstance, which is a materially different additional recommendation not present in iterations 1 or 3. Also iteration 1 explicitly recommends testing on non-production instance first, which the others don't mention as explicitly.",
+              "evidence": "Iteration 2: 'you could add an `aws:approve` step before `StopInstance`... Note that `aws:approve` isn't supported in multi-account or multi-Region runs.' This specific recommendation is absent from iterations 1 and 3.",
+              "diverging_iterations": [
+                2
+              ]
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs use identical structure: header line with format/schema/steps/parameters, intro paragraph, severity table, Applied/Proposed/Flagged fixes sections (all 'None'), Checks with no findings (numbered 1-10), Observations section, Not covered by this review section, and Hardened document section with the YAML reproduced. The presentation choices (table for severity, bullet/numbered lists for checks) are the same across all three.",
+              "evidence": "All three share headers like '## Runbook hardening report: Stops an EC2 instance', the same severity table format, and the same section ordering: Applied fixes, Proposed fixes, Flagged for redesign, Checks with no findings, Observations, Not covered by this review, Hardened document."
+            }
+          }
+        },
+        "without_skill": {
+          "outputs_compared": 3,
+          "iterations_included": [
+            1,
+            2,
+            3
+          ],
+          "overall": "mostly_consistent",
+          "overall_score": 2.33,
+          "dimension_counts": {
+            "consistent": 1,
+            "mostly_consistent": 2
+          },
+          "avg_confidence": "high",
+          "per_dimension": {
+            "answer_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three outputs agree the runbook is overall valid/functional, flag the unused KeyName parameter as the main issue to fix, and raise similar secondary concerns (missing descriptions, missing timeout/failure handling, missing Force option, lack of guardrails for production, instance-store/ASG implications, IAM permissions needed). However, iteration 3 adds a unique fact (idempotency/safety of calling on an already-stopped instance, suggestion to use AWS::EC2::Instance::Id type) not mentioned in 1 or 2, and iteration 2 explicitly recommends Force:true with risk framing while others frame it differently. These are additive facts rather than contradictions, consistent with mostly_consistent.",
+              "diverging_iterations": [
+                3
+              ]
+            },
+            "recommendation_consistency": {
+              "verdict": "mostly_consistent",
+              "confidence": "high",
+              "reasoning": "All three recommend removing/fixing KeyName as the primary action, and all suggest adding timeoutSeconds, onFailure: Abort, parameter descriptions, Force option, and guardrails (tag check/approval step) as secondary recommendations. Iteration 3 additionally recommends switching InstanceId type to AWS::EC2::Instance::Id and suspending ASG processes, which the others do not mention, making it somewhat more detailed/different in specifics. The core recommendation set is shared but specificity and some additional items vary across iterations.",
+              "diverging_iterations": [
+                3
+              ]
+            },
+            "format_consistency": {
+              "verdict": "consistent",
+              "confidence": "high",
+              "reasoning": "All three responses follow the same overall structure: an opening caveat about static review, a 'what's fine' or correctness section, a 'fix before release' section highlighting KeyName, additional improvement suggestions in bullet form, operational/IAM notes, and a final suggested YAML snippet, followed by an offer to do further review. The presentation style (markdown headers, bullet lists, code blocks) is consistent across all three."
+            }
+          }
+        }
+      }
+    },
+    "neg-lambda-timeout": {
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "assertions": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "comparison": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "output_consistency": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      }
+    },
+    "neg-s3-lifecycle": {
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "assertions": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "comparison": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "output_consistency": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      }
+    },
+    "neg-bedrock-throttling": {
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "3/3",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "assertions": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "comparison": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "output_consistency": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      }
+    }
+  }
+}

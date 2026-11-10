@@ -1,0 +1,131 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "auto-harden-vulnerable",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-systems-manager' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all required findings: command injection via LogPath with weak '.*' pattern (Critical), DbPassword as invalid SecureString parameter type echoed in a command (Critical, without repeating the literal secret value), missing allowedPattern on InstanceId (added), curl -k disabling TLS verification (fixed), hard-coded assumeRole ARN replaced with {{AutomationAssumeRole}} parameter, timeoutSeconds 1200 lowered to 600 (above the executeScript max), onCancel pointing to an invalid aws:sleep target fixed to Abort, and onFailure: Continue on RotateLogs called out as informational (not a finding). It also produces a hardened YAML document reflecting an anchored LogPath pattern, instance ID pattern, a Parameter Store name parameter (DbPasswordParameterName) read at runtime via get-parameter, removal of -k, parameterized assumeRole, timeout set to 600, and onCancel set to Abort. Each change is cited with sources (Parameters, Schemas, Data protection, Actions reference, etc.). This matches the expected output comprehensively.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "PROPOSED FIX 1: Constrain and quote `LogPath` (check 1, Critical)... the Automation substitutes the value before the shell sees it, so any `;`, `$()`, backtick, or `..` in the value runs on the instance. Also 'Applied fixes' notes allowedPattern: '.*' accepts anything, including an empty string, making rm -rf run as rm -rf /*.",
+          "reasoning": "The agent explicitly flags LogPath's unrestricted pattern and shell interpolation as a command injection/destructive risk.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "`DbPassword`, check 10 (Low): `SecureString` isn't a valid document parameter type. I changed it to a `String` that holds a Parameter Store parameter name",
+          "reasoning": "Directly matches the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags the echo of DbPassword as exposing a secret",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "PROPOSED FIX 2: Remove the password from command text (check 2, Critical) - ISSUE: `echo \"restarting with password {{DbPassword}}\"` writes the plaintext password into the command document...",
+          "reasoning": "Clearly flags secret exposure via echo.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags curl -k as disabling TLS verification",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "PROPOSED FIX 4: Stop skipping TLS verification (check 9, High) - ISSUE: `curl -k` accepts any certificate, so the notify call can be intercepted or spoofed.",
+          "reasoning": "Directly matches assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags the hard-coded assumeRole ARN",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "PROPOSED FIX 3: Remove the hard-coded role (check 4, High) - ISSUE: `assumeRole` is fixed to `[redacted ARN]`.",
+          "reasoning": "Directly matches assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "`CheckHealth`, check 5 (Medium): `timeoutSeconds: 1200` is above the 600-second maximum for `aws:executeScript`. I lowered it to 600.",
+          "reasoning": "Directly matches assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags onCancel routing to an aws:sleep step as invalid",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "PROPOSED FIX 5: Fix the `onCancel` target (check 6, Medium) - ISSUE: `onCancel: step:Wait` points at an `aws:sleep` step. `aws:sleep` can't be an `onCancel` target, so the runbook is invalid or misbehaves when cancelled.",
+          "reasoning": "Directly matches assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Returns a complete hardened document in YAML",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The 'Hardened document' section contains a full YAML block with schemaVersion, description, assumeRole, parameters, and mainSteps fully specified.",
+          "reasoning": "A complete, valid-looking YAML document is provided at the end of the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites a documentation page for findings",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Each fix has a 'SOURCE:' line, e.g. 'SOURCE: Schemas (\"Parameter security best practices\"), Parameters.' and 'SOURCE: Data protection, Security best practices, Parameter Store in Run Command.'",
+          "reasoning": "The agent cites documentation page names/topics for each finding, though without URLs or precise titles, which still satisfies the assertion of citing a documentation page.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The instance ID pattern is applied",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'i-(?:[a-f0-9]{8}'"
+        },
+        {
+          "text": "The executeScript timeout is lowered to 600",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'timeoutSeconds: 600'"
+        },
+        {
+          "text": "No raw 12-digit account ID other than the documentation example is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 12,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 12,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m0s",
+    "cost": "$0.50",
+    "context_window": {
+      "utilization": "5.6%",
+      "compaction_count": 0
+    }
+  }
+}
