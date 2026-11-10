@@ -1,0 +1,60 @@
+{
+    "skill_name": "rds-upgrade-advisor",
+    "evals": [
+        {
+            "id": "account-upgrade-readiness-audit",
+            "task_type": "chat",
+            "prompt": "Run a read-only RDS/Aurora upgrade-readiness audit for this account in us-east-1 across all engines. For every database report its engine version and support status, group the results by engine, flag the ones that are deprecated or approaching end of support with a recommended upgrade target, and produce the full upgrade-readiness audit report.",
+            "expected_output": "A structured upgrade-readiness audit that groups databases by engine, classifies each database's support status as DEPRECATED / EXTENDED_SUPPORT / UPCOMING_EOL / SUPPORTED, flags every non-supported database with a recommended target version, counts each Aurora cluster as a single database, and (for an account-wide audit) produces a titled report beginning with an H1 line 'RDS/Aurora Upgrade-Readiness Audit'. It stays read-only.",
+            "should_trigger": true,
+            "assertions": [
+                "The response uses the explicit support-status vocabulary DEPRECATED / EXTENDED_SUPPORT / UPCOMING_EOL / SUPPORTED to label databases, rather than only describing versions in prose",
+                "The databases are organized into per-engine sections or groupings (for example a MySQL group and a PostgreSQL group), not a single flat list",
+                "The audit report begins with a titled heading containing 'RDS/Aurora Upgrade-Readiness Audit'",
+                "Each non-supported database is paired with a specific recommended target version and the end-of-standard-support date (or days remaining) it is judged against",
+                {
+                    "text": "Support status vocabulary is present",
+                    "evaluator": "regex",
+                    "pattern": "DEPRECATED|EXTENDED_SUPPORT|UPCOMING_EOL|SUPPORTED"
+                }
+            ]
+        },
+        {
+            "id": "mariadb-extended-support-nuance",
+            "task_type": "chat",
+            "prompt": "In us-east-1, which of my RDS databases are past end of standard support, and for each one tell me whether paid RDS Extended Support can buy me more time or whether I am forced to upgrade?",
+            "expected_output": "A response that identifies the end-of-life databases (PostgreSQL 11 and MariaDB 10.5) and correctly distinguishes RDS Extended Support availability by engine: PostgreSQL is eligible for paid RDS Extended Support, while MariaDB has NO RDS Extended Support tier so its end of standard support is a hard forced-upgrade deadline. Each is given a supported target major version.",
+            "should_trigger": true,
+            "assertions": [
+                "The response states that MariaDB has no RDS Extended Support tier, so reaching end of standard support forces an upgrade",
+                "The response states that the PostgreSQL database is eligible for paid RDS Extended Support (a different treatment from MariaDB)",
+                "The engine-specific Extended Support distinction is the crux of the answer, not just a generic 'these are old, upgrade them' statement",
+                "For each end-of-life database the response names a specific supported target major version to upgrade to (for example MariaDB 10.5 to 10.11 or 11.4, and PostgreSQL 11 to a supported major)"
+            ]
+        },
+        {
+            "id": "failed-upgrade-precheck-analysis",
+            "task_type": "chat",
+            "prompt": "A major-version upgrade of the RDS MySQL database example-mysql-db in us-east-1 did not succeed. Read whatever upgrade precheck or failure evidence the engine produced for it, explain exactly which findings blocked the upgrade, classify each finding by severity, and give me ordered remediation to apply before retrying. Do not start the upgrade.",
+            "expected_output": "An analysis that reads the PrePatchCompatibility.log for example-mysql-db, reports the precheck error count, identifies the specific blocking ERROR findings (including a stored routine using removed replication / non-inclusive MASTER/SLAVE syntax), classifies findings as ERROR versus WARNING/NOTICE, and gives ordered remediation (ERROR findings first) to apply before re-attempting. It does not initiate the upgrade.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reports the precheck ERROR count (and WARNING/NOTICE counts) from the engine's own PrePatchCompatibility.log footer, not just a prose description",
+                "The findings are presented ordered by severity, ERROR findings first, then WARNING, then NOTICE",
+                "The response surfaces the removed replication / non-inclusive-language stored-routine finding (SHOW MASTER STATUS or MASTER/SLAVE syntax) and classifies it as a blocking ERROR",
+                "For each ERROR finding the response gives a specific remediation action to apply before the upgrade is retried, not a generic 'fix the errors' statement",
+                {
+                    "text": "The analysis is tied to the named failing database",
+                    "evaluator": "regex",
+                    "pattern": "example-mysql-db"
+                }
+            ]
+        },
+        {
+            "id": "unrelated-question",
+            "task_type": "chat",
+            "prompt": "What is the difference between Amazon RDS Multi-AZ instance deployments and Multi-AZ DB cluster deployments?",
+            "should_trigger": false
+        }
+    ]
+}
