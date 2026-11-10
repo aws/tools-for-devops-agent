@@ -1,6 +1,6 @@
 # Set up Coralogix
 
-Before you connect, choose your Coralogix region and either OAuth sign-in or a personal API key. If you want Coralogix alerts to open investigations, also do step 3 after you connect.
+Before you connect, choose your Coralogix region and either OAuth sign-in or a personal or team API key. If you want Coralogix alerts to open investigations, also do step 3 after you connect.
 
 ## 1. Find your region
 
@@ -25,18 +25,18 @@ Select **OAuth** in the DevOps Agent connection form, then sign in to Coralogix 
 
 The Coralogix user who signs in needs access to the applications and subsystems the agent should investigate. Use a least-privilege, read-only role such as **DataQuerying**. Do not use a shared administrator account.
 
-### Personal API key
+### Personal or team API key
 
 1. In Coralogix, go to **Settings** > **API Keys**.
-2. Select **+ Add Key**, choose **Personal Key**, and name it, for example `aws-devops-agent`.
+2. Select **+ Add Key**, choose **Personal Key** or **Team Key**, and name it, for example `aws-devops-agent`.
 3. In **Role Presets**, select the presets required by the tools you want to use. **DataQuerying** gives read-only query access to logs, metrics, spans, and datasets.
 4. Select **Create** and copy the key.
 
-When you connect, paste the key by itself into **Personal API key**. DevOps Agent adds the `Bearer ` prefix.
+When you connect, paste the key by itself into **Personal or team API key**. DevOps Agent adds the `Bearer ` prefix.
 
-Use a personal key, not a Send-Your-Data (ingestion) key. The key works within the permissions and data scopes of the user who creates it, so create it as a user who can query the applications and subsystems you want investigated.
+Use a personal or team key, not a Send-Your-Data (ingestion) key. A personal key works within the permissions and data scopes of the user who creates it; a team key uses the permissions configured for that key. Grant only the permissions and data access needed for the applications and subsystems you want investigated.
 
-Ensure the personal API key has the permissions required by the tools you want to use. For example, to use the Alerts tools, select **Alerts** in **Role Presets**.
+Ensure the API key has the permissions required by the tools you want to use. For example, to use the Alerts tools, select **Alerts** in **Role Presets**.
 
 ## 3. Trigger investigations from alerts
 
