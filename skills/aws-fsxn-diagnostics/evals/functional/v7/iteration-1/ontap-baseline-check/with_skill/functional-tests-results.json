@@ -1,0 +1,94 @@
+{
+  "version": "v7",
+  "iteration": 1,
+  "eval_id": "ontap-baseline-check",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-fsxn-diagnostics' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response fully satisfies the expected criteria. It identified the file system (fs-00000000000000001) presumably via discovery rather than asking the user for an ID (no indication the user provided an ID in the prompt). It states the deployment type in both forms: \"Multi-AZ 2 (MULTI_AZ_2)\", throughput capacity (384 MBps) and SSD capacity (1,024 GiB provisioned / ~862 GiB usable). It covers:\n- Capacity and performance (SSD capacity, IOPS, throughput, burst balances)\n- Backup retention (AutomaticBackupRetentionDays=1) and the overlap between backup and maintenance windows (explicit arithmetic showing 60-minute overlap on Sundays)\n- Volume snapshot policies (mentions 'default' snapshot policy, notes autosize/snapshot reserve not visible via API - correctly listed as data gap)\n- CloudWatch alarms on AWS/FSx (explicitly checked via DescribeAlarms, found none, listed as a finding)\n- Active Directory state for SMB (detailed AD join failure analysis tied to SMB endpoint absence)\n\nEach finding has a severity (MEDIUM, LOW, INFO) and cites the specific API call or metric (e.g., DescribeStorageVirtualMachines, GetMetricData, DescribeAlarms, CloudTrail events). Data gaps are explicitly listed in a \"Data gaps\" section (client behavior, volume autosize/snapshot reserve not visible in API) rather than claiming them healthy. Fixes are given as CLI commands explicitly labeled \"operator-run \u2014 this changes configuration\" and the agent explicitly states \"This review was control-plane, read-only and recommend-only. I changed nothing,\" confirming it does not offer to make changes itself.\n\nAll elements of the expected output are present and substantively correct.</reasoning>\n<parameter name=\"evidence\">\"Multi-AZ 2 (MULTI_AZ_2) in us-east-1 with 1 HA pair, 384 MBps throughput and 1,024 GiB SSD\" ... \"This review was control-plane, read-only and recommend-only. I changed nothing.\" ... \"Fix (operator-run \u2014 this changes configuration)\" ... \"Data gaps\" section listing volume autosize and snapshot reserve as not visible in API ... \"DescribeAlarms returned no AWS/FSx alarms.\"</parameter>\n<parameter name=\"confidence\">high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response identifies the deployment type of the file system using both the readable name and the API value (for example Single-AZ 1 and SINGLE_AZ_1)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states: 'fsx-diag-ontap-maz2 is Multi-AZ 2 (MULTI_AZ_2) in us-east-1' which is the Multi-AZ 2 deployment type, not Single-AZ 1. The assertion's example (Single-AZ 1 / SINGLE_AZ_1) doesn't match, but the general pattern (readable name + API value) is satisfied: 'Multi-AZ 2 (MULTI_AZ_2)' includes both the readable name and the API value.",
+          "reasoning": "The assertion asks whether the response identifies the deployment type using both readable name and API value, using Single-AZ 1 as an example format. The actual file system is Multi-AZ 2, and the response does give both 'Multi-AZ 2' and '(MULTI_AZ_2)' together, satisfying the substance of the assertion even though the specific example type differs.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every finding carries an explicit severity level",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Findings are labeled 'MEDIUM', 'MEDIUM (latent)', 'MEDIUM', 'LOW', 'LOW', 'INFO', 'INFO' explicitly for each of the 7 numbered findings.",
+          "reasoning": "Every finding in the 'What to fix first' section has an explicit severity level prefix (MEDIUM, LOW, INFO), satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Each finding cites the evidence it is based on, such as an API field or a CloudWatch metric",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding 1 cites CloudTrail events ('Two join attempts on 2026-11-02 (19:37 and 22:45 UTC) both failed with the same error: Unable to connect to LDAP...'), Finding 2 cites metrics ('7-day peaks were CPU 20%, network 1.2%, file-server disk throughput 2.1%...'), Finding 3 cites API fields ('WeeklyMaintenanceStartTime is 7:06:00... DailyAutomaticBackupStartTime is 05:00'), etc.",
+          "reasoning": "Each numbered finding includes explicit evidence citations to API fields, CloudTrail events, or CloudWatch metrics, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags the short automatic backup retention or a volume with no snapshot policy as a data-protection risk",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding 4 states: 'LOW \u2014 backup retention is 1 day (AutomaticBackupRetentionDays=1), and there are no alarms... With 1-day retention your automatic restore point is at most about 24 hours old. For a batch that rewrites data, you'd want a known-good point from just before it starts.'",
+          "reasoning": "The response explicitly flags the 1-day automatic backup retention as a data-protection risk, labeled LOW severity with rationale and a recommended fix (create manual backups, increase retention to 7 days).",
+          "confidence": "high"
+        },
+        {
+          "text": "Checks that could not be performed are reported as data gaps rather than described as healthy",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The 'Data gaps' section explicitly states: 'Client behavior: this is a 7-day-old file system with zero data operations, so I can't forecast batch performance... Volume autosize and snapshot reserve: these are not visible in the AWS API.' Also Finding 5 states 'Whether autosize is on is not exposed by the AWS API.'",
+          "reasoning": "The response has a dedicated 'Data gaps' section that explicitly calls out unavailable checks (client behavior forecasting, volume autosize, snapshot reserve) as gaps rather than describing them as healthy, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The agent does not offer to perform, schedule, or request approval for any change itself; remediation written as steps or commands for the operator to run is acceptable",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response explicitly states: 'This review was control-plane, read-only and recommend-only. I changed nothing.' and labels each remediation as '(Operator-run \u2014 this changes configuration)' with commands given as examples, e.g., 'aws fsx update-storage-virtual-machine...' under heading 'Fix (operator-run \u2014 this changes configuration)'.",
+          "reasoning": "The agent consistently frames all remediation steps as operator-run commands and explicitly states it changed nothing, never offering to execute or schedule changes itself or request approval to do so.",
+          "confidence": "high"
+        },
+        {
+          "text": "The deployment type API value is quoted",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MULTI_AZ_2'"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.8571
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m18s",
+    "cost": "$1.65",
+    "context_window": {
+      "utilization": "12.3%",
+      "compaction_count": 0
+    }
+  }
+}
