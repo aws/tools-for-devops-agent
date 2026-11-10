@@ -189,9 +189,10 @@ def analyze_dx_topology(region: str = "us-east-1") -> str:
 def check_dx_resiliency(region: str = "us-east-1") -> str:
     """
     Scored Direct Connect resiliency assessment (AWS Maximum/High Resiliency model):
-    location diversity, connections per location, BGP health, MTU consistency, and
-    MACsec, with severity-classified findings. Use for any "is our Direct Connect
-    resilient" question rather than judging from raw API output.
+    location diversity, connections and distinct AWS devices per location, BGP
+    health, MTU consistency, and MACsec, with severity-classified findings. Use for
+    any "is our Direct Connect resilient" question rather than judging from raw API
+    output.
 
     Args:
         region: AWS region (default us-east-1)
@@ -1061,6 +1062,8 @@ def _format_connection(c):
         "region": c.get("region", ""),
         "partner": _clean_label(c.get("partnerName", "")),
         "lag_id": c.get("lagId"),
+        "aws_device": c.get("awsDeviceV2") or c.get("awsDevice"),
+        "aws_logical_device_id": c.get("awsLogicalDeviceId"),
         "macsec_capable": c.get("macSecCapable", False),
     }
 
@@ -1112,6 +1115,32 @@ def _analyze_bgp(vifs):
     }
 
 
+def _distinct_devices(conns):
+    """Number of distinct AWS devices the connections terminate on, or None if not reported.
+
+    Both the logical device (awsLogicalDeviceId) and the physical device
+    (awsDeviceV2, or the older awsDevice) are checked, and the smaller count is
+    used: two connections only count as device-redundant if they share neither.
+    A field is used only when every connection reports it.
+    """
+    counts = []
+    for fields in (("awsLogicalDeviceId",), ("awsDeviceV2", "awsDevice")):
+        values = [next((c.get(f) for f in fields if c.get(f)), None) for c in conns]
+        if values and all(values):
+            counts.append(len(set(values)))
+    return min(counts) if counts else None
+
+
+def _dx_location_redundancy(connections):
+    """Per DX location: available connection count and distinct AWS devices (None = not reported)."""
+    by_location = defaultdict(list)
+    for c in connections:
+        if c.get("connectionState") == "available":
+            by_location[c.get("location") or "unknown"].append(c)
+    return {loc: {"connections": len(conns), "devices": _distinct_devices(conns)}
+            for loc, conns in by_location.items()}
+
+
 def _assess_resiliency(connections, vifs, gateways):
     findings = []
     score = 100
@@ -1129,14 +1158,16 @@ def _assess_resiliency(connections, vifs, gateways):
     else:
         findings.append({"severity": "OK", "check": "Location Diversity", "finding": f"Connections span {len(unique_locations)} locations"})
 
-    # Redundancy per location
-    location_counts = defaultdict(int)
-    for c in connections:
-        if c.get("connectionState") == "available":
-            location_counts[c.get("location", "unknown")] += 1
-    for loc, count in location_counts.items():
-        if count < 2:
-            findings.append({"severity": "HIGH", "check": "Connection Redundancy", "finding": f"Location {loc} has only {count} connection(s)"})
+    # Redundancy per location: 2+ connections, on 2+ distinct AWS devices
+    redundancy = _dx_location_redundancy(connections)
+    for loc, info in redundancy.items():
+        if info["connections"] < 2:
+            findings.append({"severity": "HIGH", "check": "Connection Redundancy", "finding": f"Location {loc} has only {info['connections']} connection(s)"})
+            score -= 15
+        elif info["devices"] is None:
+            findings.append({"severity": "INFO", "check": "Device Redundancy", "finding": f"Location {loc}: AWS device not reported for every connection; device diversity not verified"})
+        elif info["devices"] < 2:
+            findings.append({"severity": "HIGH", "check": "Device Redundancy", "finding": f"Location {loc}: all {info['connections']} connections terminate on the same AWS device"})
             score -= 15
 
     # BGP health
@@ -1158,8 +1189,10 @@ def _assess_resiliency(connections, vifs, gateways):
         findings.append({"severity": "MEDIUM", "check": "MACsec", "finding": f"{len(macsec_capable)} connection(s) MACsec-capable but not enabled"})
         score -= 5
 
-    # Determine level
-    if len(unique_locations) >= 2 and all(c >= 2 for c in location_counts.values()):
+    # Determine level. Maximum Resiliency needs separate connections on
+    # separate devices in more than one location.
+    device_redundant = all(i["connections"] >= 2 and (i["devices"] or 0) >= 2 for i in redundancy.values())
+    if len(unique_locations) >= 2 and device_redundant:
         level = "HIGH (Maximum Resiliency)"
     elif len(unique_locations) >= 2:
         level = "MEDIUM (High Resiliency)"
@@ -1188,17 +1221,21 @@ def _assess_architecture_resiliency(connections, vifs, gateways, tgws, tgw_attac
         else:
             findings.append({"severity": "CRITICAL", "check": "DX Location Diversity", "finding": f"All connections in single location: {list(unique_locations)}"})
 
-        # Connection redundancy (10 pts)
-        location_counts = defaultdict(int)
-        for c in connections:
-            if c.get("connectionState") == "available":
-                location_counts[c.get("location", "unknown")] += 1
-        if all(count >= 2 for count in location_counts.values()):
+        # Connection redundancy (10 pts): 2+ connections on 2+ distinct AWS devices per location
+        redundancy = _dx_location_redundancy(connections)
+        single_locs = [loc for loc, i in redundancy.items() if i["connections"] < 2]
+        single_device_locs = [loc for loc, i in redundancy.items()
+                              if i["connections"] >= 2 and i["devices"] is not None and i["devices"] < 2]
+        unverified_locs = [loc for loc, i in redundancy.items() if i["connections"] >= 2 and i["devices"] is None]
+        if not (single_locs or single_device_locs or unverified_locs):
             score += 10
-            findings.append({"severity": "OK", "check": "DX Connection Redundancy", "finding": "All locations have 2+ connections"})
-        else:
-            single_locs = [loc for loc, count in location_counts.items() if count < 2]
+            findings.append({"severity": "OK", "check": "DX Connection Redundancy", "finding": "All locations have 2+ connections on separate AWS devices"})
+        if single_locs:
             findings.append({"severity": "HIGH", "check": "DX Connection Redundancy", "finding": f"Single connection at: {single_locs}"})
+        if single_device_locs:
+            findings.append({"severity": "HIGH", "check": "DX Device Redundancy", "finding": f"Connections terminate on a single AWS device at: {single_device_locs}"})
+        if unverified_locs:
+            findings.append({"severity": "INFO", "check": "DX Device Redundancy", "finding": f"AWS device not reported for every connection; device diversity not verified at: {unverified_locs}"})
 
         # BGP health (10 pts)
         bgp = _analyze_bgp(vifs)

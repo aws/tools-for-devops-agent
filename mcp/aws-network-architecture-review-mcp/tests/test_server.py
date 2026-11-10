@@ -422,3 +422,57 @@ def test_unknown_vif_id_returns_the_aws_error_message(stubbed, monkeypatch):
     monkeypatch.setattr(server, "get_client", get)
     out = json.loads(server.get_dx_vif_details("us-east-1", vif_id="dxvif-doesnotexist"))
     assert out == {"error": "DirectConnectClientException: Virtual interface dxvif-doesnotexist does not exist"}
+
+
+# ─── DX scoring: device diversity and per-type MTU (PR #121 review) ─────────
+
+
+def _conn(cid, location, logical, physical):
+    return {"connectionId": cid, "connectionState": "available", "location": location,
+            "awsLogicalDeviceId": logical, "awsDeviceV2": physical}
+
+
+def _checks(assessment, check):
+    return [f for f in assessment["findings"] if f["check"] == check]
+
+
+def test_two_connections_on_one_device_are_not_maximum_resiliency():
+    conns = [_conn("dxcon-1", "LOC1", "LOC1-dev-a", "LOC1-phy-a"), _conn("dxcon-2", "LOC1", "LOC1-dev-a", "LOC1-phy-a"),
+             _conn("dxcon-3", "LOC2", "LOC2-dev-a", "LOC2-phy-a"), _conn("dxcon-4", "LOC2", "LOC2-dev-b", "LOC2-phy-b")]
+    result = server._assess_resiliency(conns, [], [])
+    assert result["resiliency_level"] == "MEDIUM (High Resiliency)"
+    (finding,) = _checks(result, "Device Redundancy")
+    assert finding["severity"] == "HIGH" and "LOC1" in finding["finding"]
+    assert result["score"] == 85
+
+
+def test_separate_devices_in_two_locations_are_maximum_resiliency():
+    conns = [_conn("dxcon-1", "LOC1", "LOC1-dev-a", "LOC1-phy-a"), _conn("dxcon-2", "LOC1", "LOC1-dev-b", "LOC1-phy-b"),
+             _conn("dxcon-3", "LOC2", "LOC2-dev-a", "LOC2-phy-a"), _conn("dxcon-4", "LOC2", "LOC2-dev-b", "LOC2-phy-b")]
+    result = server._assess_resiliency(conns, [], [])
+    assert result["resiliency_level"] == "HIGH (Maximum Resiliency)"
+    assert result["score"] == 100 and not _checks(result, "Device Redundancy")
+
+
+def test_different_logical_devices_on_one_physical_device_are_not_redundant():
+    conns = [_conn("dxcon-1", "LOC1", "LOC1-dev-a", "LOC1-phy-a"), _conn("dxcon-2", "LOC1", "LOC1-dev-b", "LOC1-phy-a")]
+    assert server._dx_location_redundancy(conns) == {"LOC1": {"connections": 2, "devices": 1}}
+
+
+def test_unreported_device_is_not_counted_as_maximum_resiliency():
+    conns = [{"connectionId": f"dxcon-{i}", "connectionState": "available", "location": loc}
+             for i, loc in enumerate(["LOC1", "LOC1", "LOC2", "LOC2"])]
+    result = server._assess_resiliency(conns, [], [])
+    assert result["resiliency_level"] == "MEDIUM (High Resiliency)"
+    assert {f["severity"] for f in _checks(result, "Device Redundancy")} == {"INFO"}
+    assert result["score"] == 100  # not verifiable is reported, not penalized
+
+
+def test_architecture_score_withholds_redundancy_points_for_a_single_device():
+    conns = [_conn("dxcon-1", "LOC1", "dev-a", "phy-a"), _conn("dxcon-2", "LOC1", "dev-a", "phy-a"),
+             _conn("dxcon-3", "LOC2", "dev-b", "phy-b"), _conn("dxcon-4", "LOC2", "dev-c", "phy-c")]
+    result = server._assess_architecture_resiliency(conns, [], [], [], [], [], [], {})
+    (finding,) = _checks(result, "DX Device Redundancy")
+    assert finding["severity"] == "HIGH" and "LOC1" in finding["finding"]
+    assert not [f for f in _checks(result, "DX Connection Redundancy") if f["severity"] == "OK"]
+

@@ -22,6 +22,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   73 Python packages the dependencies layer resolves to, with their licenses
   (BSC22).
 
+### Fixed
+
+- **DX device redundancy.** Connection redundancy and the Maximum Resiliency
+  level now also require connections at a location to terminate on separate AWS
+  devices (`awsLogicalDeviceId` and `awsDeviceV2` from `DescribeConnections`).
+  Two connections on the same device no longer score as Maximum Resiliency;
+  they get a HIGH "Device Redundancy" finding (−15 in `check_dx_resiliency`, and
+  no connection-redundancy points in the architecture score). Connection output
+  now includes `aws_device` and `aws_logical_device_id`.
+
 ### Known limitations (tracked follow-ups)
 
 - **Pagination (T-014 / M-016).** Most list and describe calls read the first

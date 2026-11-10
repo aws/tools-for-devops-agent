@@ -47,13 +47,21 @@ deployed in.
 | --- | --- | --- |
 | Location diversity (single location) | CRITICAL | −40 |
 | Connection redundancy (fewer than 2 connections at a location) | HIGH | −15 per location |
+| Device redundancy (2+ connections at a location, all on one AWS device) | HIGH | −15 per location |
 | BGP health (peers down) | HIGH | −10 per peer |
 | MTU consistency (mixed values) | MEDIUM | −5 |
 | MACsec (capable but not enabled) | MEDIUM | −5 |
 
+Device redundancy uses the `awsLogicalDeviceId` and `awsDeviceV2` fields
+that `DescribeConnections` returns. Connections count as being on separate
+devices only if they differ in both. If a connection reports neither, the
+result carries an INFO finding and no score change, and the location cannot
+reach Maximum Resiliency.
+
 The resiliency level is derived from topology alone: **HIGH (Maximum
-Resiliency)** with 2+ locations and 2+ connections at each, **MEDIUM (High
-Resiliency)** with 2+ locations, otherwise **LOW (Single Location)**.
+Resiliency)** with 2+ locations and, at each, 2+ connections on separate AWS
+devices; **MEDIUM (High Resiliency)** with 2+ locations; otherwise **LOW
+(Single Location)**.
 
 `network_architecture_summary` adds an architecture-wide score across the
 layers present: DX (40 points), TGW (25), VPN backup (15), and Cloud WAN (20),
