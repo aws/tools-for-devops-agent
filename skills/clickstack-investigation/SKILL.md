@@ -13,7 +13,7 @@ metadata:
 
 # ClickHouse Observability investigations
 
-The ClickHouse Observability connector reaches the customer's ClickHouse Observability service in ClickHouse Cloud through the ClickStack MCP server. ClickStack is the open-source observability stack; ClickHouse Observability is the managed service built on it. The connector acts as the person who connected it, so it sees only the data sources their role allows.
+The ClickHouse Observability connector reaches the customer's ClickHouse Observability service in ClickHouse Cloud through the hosted ClickStack MCP server. ClickStack is the open-source observability stack; ClickHouse Observability is the managed service built on it. The hosted server adds a few tools and arguments to the open-source one, such as required source filters. The connector acts as the person who connected it, so it sees only the data sources their role allows.
 
 ClickStack stores OpenTelemetry logs, traces and metrics in ClickHouse. Each kind of data is a **source**: a table plus the column mappings ClickStack needs to query it. Every query tool takes a `sourceId`.
 

@@ -1,6 +1,6 @@
 # ClickHouse Observability Investigation Skill
 
-This skill enables AWS DevOps Agent to investigate incidents and answer operational questions with logs, traces and metrics in ClickHouse Observability, the managed ClickStack service in ClickHouse Cloud. It uses the tools of the ClickStack MCP server, the open-source MCP server that ClickHouse Observability runs for you.
+This skill enables AWS DevOps Agent to investigate incidents and answer operational questions with logs, traces and metrics in ClickHouse Observability, the managed ClickStack service in ClickHouse Cloud. It uses the tools of the hosted ClickStack MCP server, which ClickHouse Observability runs for you on top of the open-source ClickStack MCP server.
 
 ## Purpose
 
@@ -23,7 +23,7 @@ During an investigation the agent has to find the right ClickStack source, scope
 ## Limitations
 
 - The agent acts as the user who connected ClickHouse Observability, so it sees only the sources that user's role allows.
-- The agent queries one service per connection: the default service set in your ClickHouse Cloud account settings.
+- The agent queries one service per connection: by default the first observability service provisioned and used by your account, which you can change in **User Preferences** in ClickStack.
 - Tools that save or delete dashboards, alerts, saved searches, sources and webhooks change ClickHouse Observability content. The skill uses them only when you ask and confirm. Leave them disabled or require approval to rule writes out.
 
 ## Agent Types

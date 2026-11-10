@@ -1,30 +1,27 @@
 # ClickHouse Observability
 
-Connect AWS DevOps Agent to ClickHouse Observability, the managed ClickStack service in ClickHouse Cloud, so the agent can query your logs, traces and metrics during investigations and chat. The agent reaches your data through the ClickStack MCP server, the open-source MCP server that ClickHouse Observability runs for you.
+Connect AWS DevOps Agent to ClickHouse Observability, so the agent can query your logs, traces and metrics during investigations and chat. The agent reaches your data through the hosted ClickStack MCP server, which ClickHouse Observability runs for you. It builds on the open-source ClickStack MCP server and adds a few tools and arguments for ClickHouse Cloud.
 
 ## Before you connect
 
 - You need a ClickHouse Cloud account, and a service with [observability enabled](https://clickhouse.com/docs/clickstack/observability/getting-started) that holds your telemetry.
 - Turn on MCP for that service: in the ClickHouse Cloud console, open the service, select **Connect**, then **Connect with MCP**, and turn it on.
-- Set a default service in your ClickHouse Cloud account settings. The connection always uses that service. Without one, the connection is rejected.
 - The agent acts as you. It sees the data sources your role in ClickHouse Observability can see, and nothing else.
 
 No API keys or OAuth clients need to be created in ClickHouse Cloud.
 
 ## Connect
 
-1. In the DevOps Agent console, go to **Add a capability** and choose **ClickHouse Observability**.
-2. Sign in with your ClickHouse Cloud account when prompted.
-3. On the consent screen, allow access to ClickHouse Observability.
-4. When the console offers the `clickstack-investigation` skill, install it.
+1. Sign in with your ClickHouse Cloud account when prompted.
+2. On the consent screen, allow access to ClickHouse Observability.
 
-To investigate a different service, change the default service in your ClickHouse Cloud account settings.
+## Which service the agent queries
 
-To stop the agent's access, remove the ClickHouse Observability capability from your Agent Space.
+By default, the agent queries the first observability service provisioned and used by your account. To use a different service, change the default service in **User Preferences** in ClickStack. Requests can also target a specific service with the `x-service-id` header, which overrides the default.
 
 ## What the agent can do
 
-The connector exposes the ClickStack MCP server's tools. Reading is the default:
+The connector exposes the hosted ClickStack MCP server's tools. Reading is the default:
 
 | Tools                                                                                                                             | Access                                    |
 | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
