@@ -35,11 +35,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the same gateway, so a correct mix of private (9001), transit (8500), and
   public (1500) VIFs is no longer flagged. A missing MTU is skipped instead of
   being treated as 1500, and deleted or rejected VIFs are ignored.
+- **Pagination (T-014 / M-016).** Every list and describe call now follows
+  `NextToken` / `nextToken` and reads all pages (at most 50 per call), so scores
+  are computed from the whole estate. Truncation is now tracked per call, so a
+  later complete call of the same operation no longer clears an earlier
+  truncated one.
 
 ### Known limitations (tracked follow-ups)
 
-- **Pagination (T-014 / M-016).** Most list and describe calls read the first
-  page only. Truncated results are flagged (see Security) but not completed.
 - **Hash-locked dependencies (T-016 / M-019).** Direct dependencies are pinned;
   transitive dependencies are not yet locked with hashes.
 - **FastMCP 3.x.** The server pins `fastmcp==3.4.11`, the latest 3.x release
@@ -102,12 +105,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   The README now tells deployers to keep that condition on `lambda:InvokeFunction`
   for every principal and not to grant `lambda:Invoke*` on `*`; with it, IAM
   denies the direct invoke (BSC9 / T-004).
-- Tool results now carry `"truncated": true` and `truncated_sources` when an
-  AWS response says more data exists (`NextToken`, or `AdditionalRoutesAvailable`
-  from `SearchTransitGatewayRoutes`) and that data wasn't read. The server's
-  instructions tell the agent to report such results as incomplete rather than
-  treating missing items as absent (T-014). Tests cover a first-page-only call,
-  `AdditionalRoutesAvailable`, and a fully paginated call that is not flagged.
+- Tool results carry `"truncated": true` and `truncated_sources` when an AWS
+  call could not be read in full: the 50-page cap was reached, AWS repeated a
+  page token, `SearchTransitGatewayRoutes` still reports
+  `AdditionalRoutesAvailable`, or a single-call API says more data exists. The
+  server's instructions tell the agent to report such results as incomplete
+  rather than treating missing items as absent (T-014). Tests cover following
+  tokens (EC2 and Direct Connect), the page cap, a repeated token,
+  `AdditionalRoutesAvailable`, and per-call tracking.
 - The PR workflow now runs `pip-audit` (pinned 2.10.1) on
   `layers/dependencies/requirements.txt` and fails on any known vulnerability
   in the resolved dependency set (BSC37).

@@ -41,7 +41,17 @@ def _called_operations():
         ops.add(f"{SERVICE_PREFIX[var]}:{op}")
     for var, op in re.findall(r'\b(dx|ec2|cw|nm)\.get_paginator\("([a-z_]+)"\)', code):
         ops.add(f"{SERVICE_PREFIX[var]}:{op}")
+    for var, op in re.findall(r'_list_all\(\s*(dx|ec2|cw|nm),\s*"([a-z_]+)"', code):
+        ops.add(f"{SERVICE_PREFIX[var]}:{op}")
     return {f"{svc}:{''.join(w.title() for w in op.split('_'))}" for svc, op in (o.split(":") for o in ops)}
+
+
+def test_operation_scan_sees_paginated_calls():
+    # Guards the IAM coverage test below: calls made through _list_all must be found.
+    ops = _called_operations()
+    assert {"directconnect:DescribeConnections", "ec2:SearchTransitGatewayRoutes",
+            "cloudwatch:DescribeAlarms", "networkmanager:ListPeerings"} <= ops
+    assert len(ops) >= 20
 
 
 def test_registers_exactly_13_tools():
@@ -121,8 +131,8 @@ def clients(monkeypatch):
         getattr(ec2, method).return_value = {key: []}
     nm.describe_global_networks.return_value = {"GlobalNetworks": []}
     cw.get_metric_data.return_value = {"MetricDataResults": []}
-    cw.get_paginator.return_value.paginate.return_value = [{"MetricAlarms": []}]
-    ec2.get_paginator.return_value.paginate.return_value = [{"VpcEndpoints": []}]
+    cw.describe_alarms.return_value = {"MetricAlarms": []}
+    ec2.describe_vpc_endpoints.return_value = {"VpcEndpoints": []}
     by_service = {"directconnect": dx, "ec2": ec2, "cloudwatch": cw, "networkmanager": nm}
     monkeypatch.setattr(server, "get_client", lambda svc, region="us-east-1": by_service[svc])
     return by_service
@@ -138,8 +148,8 @@ def test_summary_success_has_no_data_errors(clients):
 
 def test_summary_reports_unreadable_sources_instead_of_false_findings(clients):
     clients["cloudwatch"].get_metric_data.side_effect = _denied("GetMetricData")
-    clients["cloudwatch"].get_paginator.return_value.paginate.side_effect = _denied("DescribeAlarms")
-    clients["ec2"].get_paginator.return_value.paginate.side_effect = _denied("DescribeVpcEndpoints")
+    clients["cloudwatch"].describe_alarms.side_effect = _denied("DescribeAlarms")
+    clients["ec2"].describe_vpc_endpoints.side_effect = _denied("DescribeVpcEndpoints")
     clients["networkmanager"].describe_global_networks.side_effect = _denied("DescribeGlobalNetworks")
 
     result = json.loads(server.network_architecture_summary("us-east-1"))
@@ -332,14 +342,76 @@ def _run(stubs, monkeypatch, tool, calls, **kwargs):
     return out
 
 
-def test_first_page_only_result_is_flagged_truncated(stubbed, monkeypatch):
+def test_next_token_is_followed_and_all_pages_are_returned(stubbed, monkeypatch):
+    orig = server.get_client
+
+    def get(svc, region="us-east-1"):
+        client = orig(svc, region)
+        s = stubbed[svc]
+        s.add_response("describe_transit_gateways",
+                       {"TransitGateways": [{"TransitGatewayId": "tgw-1"}], "NextToken": "p2"}, {})
+        s.add_response("describe_transit_gateways",
+                       {"TransitGateways": [{"TransitGatewayId": "tgw-2"}]}, {"NextToken": "p2"})
+        s.add_response("describe_transit_gateway_attachments", {"TransitGatewayAttachments": []})
+        s.add_response("describe_transit_gateway_route_tables", {"TransitGatewayRouteTables": []})
+        return client
+
+    monkeypatch.setattr(server, "get_client", get)
+    out = json.loads(server.analyze_tgw_topology("us-east-1"))
+    stubbed["ec2"].assert_no_pending_responses()
+    assert [t["id"] for t in out["transit_gateways"]] == ["tgw-1", "tgw-2"]
+    assert "truncated" not in out
+
+
+def test_directconnect_lowercase_next_token_is_followed(stubbed, monkeypatch):
+    conn = {"connectionState": "available", "location": "LOC1"}
+    out = _run(stubbed, monkeypatch, "analyze_dx_topology", [
+        ("describe_connections", {"connections": [dict(conn, connectionId="dxcon-1")], "nextToken": "p2"}),
+        ("describe_connections", {"connections": [dict(conn, connectionId="dxcon-2")]}),
+        ("describe_virtual_interfaces", {"virtualInterfaces": []}),
+        ("describe_direct_connect_gateways", {"directConnectGateways": []}),
+    ])
+    assert out["summary"]["total_connections"] == 2
+    assert "truncated" not in out
+
+
+def test_page_cap_is_flagged_truncated(stubbed, monkeypatch):
+    monkeypatch.setattr(server, "_MAX_PAGES", 2)
     out = _run(stubbed, monkeypatch, "analyze_tgw_topology", [
-        ("describe_transit_gateways", {"TransitGateways": [{"TransitGatewayId": "tgw-1"}], "NextToken": "more"}),
+        ("describe_transit_gateways", {"TransitGateways": [{"TransitGatewayId": "tgw-1"}], "NextToken": "p2"}),
+        ("describe_transit_gateways", {"TransitGateways": [{"TransitGatewayId": "tgw-2"}], "NextToken": "p3"}),
         ("describe_transit_gateway_attachments", {"TransitGatewayAttachments": []}),
         ("describe_transit_gateway_route_tables", {"TransitGatewayRouteTables": []}),
     ])
+    assert out["summary"]["total_tgws"] == 2
     assert out["truncated"] is True
     assert out["truncated_sources"] == ["ec2:DescribeTransitGateways"]
+
+
+def test_repeated_token_stops_and_is_flagged_truncated(stubbed, monkeypatch):
+    out = _run(stubbed, monkeypatch, "analyze_tgw_topology", [
+        ("describe_transit_gateways", {"TransitGateways": [{"TransitGatewayId": "tgw-1"}], "NextToken": "same"}),
+        ("describe_transit_gateways", {"TransitGateways": [], "NextToken": "same"}),
+        ("describe_transit_gateway_attachments", {"TransitGatewayAttachments": []}),
+        ("describe_transit_gateway_route_tables", {"TransitGatewayRouteTables": []}),
+    ])
+    assert out["truncated_sources"] == ["ec2:DescribeTransitGateways"]
+
+
+def test_truncation_is_tracked_per_call_not_per_operation(stubbed, monkeypatch):
+    # The first route table's routes are cut off and the second's are complete:
+    # the result must stay flagged (this was a known gap before M-016).
+    rts = [{"TransitGatewayRouteTableId": f"tgw-rtb-{i}", "TransitGatewayId": "tgw-1"} for i in (1, 2)]
+    per_rt = [
+        ("get_transit_gateway_route_table_associations", {"Associations": []}),
+        ("get_transit_gateway_route_table_propagations", {"TransitGatewayRouteTablePropagations": []}),
+    ]
+    out = _run(stubbed, monkeypatch, "get_tgw_route_table_details", [
+        ("describe_transit_gateway_route_tables", {"TransitGatewayRouteTables": rts}),
+        *per_rt, ("search_transit_gateway_routes", {"Routes": [], "AdditionalRoutesAvailable": True}),
+        *per_rt, ("search_transit_gateway_routes", {"Routes": []}),
+    ], tgw_id="tgw-1")
+    assert out["truncated_sources"] == ["ec2:SearchTransitGatewayRoutes"]
 
 
 def test_additional_routes_available_is_flagged_truncated(stubbed, monkeypatch):

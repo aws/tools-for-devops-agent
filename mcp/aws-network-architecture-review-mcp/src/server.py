@@ -75,42 +75,71 @@ mcp = FastMCP(
 def get_client(service: str, region: str = "us-east-1"):
     """Get a boto3 client for the specified service and region."""
     client = boto3.client(service, region_name=region, config=BOTO_CONFIG)
-    client.meta.events.register("before-parameter-build", _note_continuation)
     client.meta.events.register("after-call", _note_truncation)
     return client
 
 
-# ─── Truncation reporting (T-014) ───────────────────────────────────────────
+# ─── Pagination and truncation reporting (T-014 / M-016) ────────────────────
 #
-# Most list/describe calls read only the first page. Until they are paginated
-# (tracked follow-up, threat model M-016), a response that says more data
-# exists is recorded here and the tool result is flagged "truncated": true, so
-# the agent reports a partial result as partial instead of as complete.
+# List and describe calls go through _list_all, which follows NextToken /
+# nextToken until AWS reports no more pages, so scores are computed from the
+# whole estate rather than the first page. Each call reads at most _MAX_PAGES
+# pages, which bounds the work one request can cause. A call stopped at that
+# cap (or on a repeated token), a SearchTransitGatewayRoutes result that still
+# reports AdditionalRoutesAvailable, and a single-call response that says more
+# data exists (for example GetMetricData) are recorded per call, and the tool
+# result is flagged "truncated": true so the agent reports it as partial.
 
 _TRUNCATED = contextvars.ContextVar("narmcp_truncated", default=None)
+_PAGING = contextvars.ContextVar("narmcp_paging", default=False)
 _MORE_TOKENS = ("NextToken", "nextToken")
+_MAX_PAGES = 50
 
 
-def _note_continuation(params, context, **kwargs):
-    """Mark requests that continue a previous page (paginator follow-up calls)."""
-    context["narmcp_continuation"] = any(params.get(k) for k in _MORE_TOKENS)
-
-
-def _note_truncation(parsed, model, context, **kwargs):
-    """Record an operation whose response says more data was not read."""
+def _mark_truncated(source):
     seen = _TRUNCATED.get()
-    if seen is None or not isinstance(parsed, dict):
-        return
-    source = f"{model.service_model.service_name}:{model.name}"
-    if any(parsed.get(k) for k in _MORE_TOKENS) or parsed.get("AdditionalRoutesAvailable") is True:
+    if seen is not None:
         seen.add(source)
-    elif context.get("narmcp_continuation"):
-        # A paginator reached the last page. This is tracked per operation, so if
-        # a tool calls the same operation more than once (for example once per
-        # route table) and a later paginated call completes, an earlier
-        # truncated call of that operation is no longer reported. Known limit,
-        # tracked with full pagination (M-016).
-        seen.discard(source)
+
+
+def _note_truncation(parsed, model, **kwargs):
+    """Record a single-call response that says more data was not read."""
+    if _PAGING.get() or not isinstance(parsed, dict):
+        return  # _list_all follows the token and decides itself
+    if any(parsed.get(k) for k in _MORE_TOKENS) or parsed.get("AdditionalRoutesAvailable") is True:
+        _mark_truncated(f"{model.service_model.service_name}:{model.name}")
+
+
+def _list_all(client, operation, key, **kwargs):
+    """Call a list/describe operation and return the items under key from every page."""
+    call = getattr(client, operation)
+    items = []
+    token_name = token = None
+    pages = 0
+    flag = _PAGING.set(True)
+    try:
+        while True:
+            params = dict(kwargs)
+            if token:
+                params[token_name] = token
+            page = call(**params)
+            pages += 1
+            items.extend(page.get(key) or [])
+            token_name = next((k for k in _MORE_TOKENS if page.get(k)), None)
+            next_token = page.get(token_name) if token_name else None
+            if not next_token:
+                incomplete = page.get("AdditionalRoutesAvailable") is True
+                break
+            if next_token == token or pages >= _MAX_PAGES:
+                incomplete = True
+                break
+            token = next_token
+    finally:
+        _PAGING.reset(flag)
+    if incomplete:
+        api = client.meta.method_to_api_mapping.get(operation, operation)
+        _mark_truncated(f"{client.meta.service_model.service_name}:{api}")
+    return items
 
 
 def _report_truncation(fn):
@@ -165,9 +194,9 @@ def analyze_dx_topology(region: str = "us-east-1") -> str:
     """
     dx = get_client("directconnect", region)
 
-    connections = dx.describe_connections().get("connections", [])
-    vifs = dx.describe_virtual_interfaces().get("virtualInterfaces", [])
-    gateways = dx.describe_direct_connect_gateways().get("directConnectGateways", [])
+    connections = _list_all(dx, "describe_connections", "connections")
+    vifs = _list_all(dx, "describe_virtual_interfaces", "virtualInterfaces")
+    gateways = _list_all(dx, "describe_direct_connect_gateways", "directConnectGateways")
 
     result = {
         "region": region,
@@ -199,9 +228,9 @@ def check_dx_resiliency(region: str = "us-east-1") -> str:
     """
     dx = get_client("directconnect", region)
 
-    connections = dx.describe_connections().get("connections", [])
-    vifs = dx.describe_virtual_interfaces().get("virtualInterfaces", [])
-    gateways = dx.describe_direct_connect_gateways().get("directConnectGateways", [])
+    connections = _list_all(dx, "describe_connections", "connections")
+    vifs = _list_all(dx, "describe_virtual_interfaces", "virtualInterfaces")
+    gateways = _list_all(dx, "describe_direct_connect_gateways", "directConnectGateways")
 
     assessment = _assess_resiliency(connections, vifs, gateways)
     return json.dumps(assessment, indent=2, default=str)
@@ -217,7 +246,7 @@ def get_bgp_status(region: str = "us-east-1") -> str:
         region: AWS region (default us-east-1)
     """
     dx = get_client("directconnect", region)
-    vifs = dx.describe_virtual_interfaces().get("virtualInterfaces", [])
+    vifs = _list_all(dx, "describe_virtual_interfaces", "virtualInterfaces")
     bgp = _analyze_bgp(vifs)
     return json.dumps(bgp, indent=2, default=str)
 
@@ -235,9 +264,9 @@ def get_dx_vif_details(region: str = "us-east-1", vif_id: str = "") -> str:
     dx = get_client("directconnect", region)
 
     if vif_id:
-        vifs = dx.describe_virtual_interfaces(virtualInterfaceId=vif_id).get("virtualInterfaces", [])
+        vifs = _list_all(dx, "describe_virtual_interfaces", "virtualInterfaces", virtualInterfaceId=vif_id)
     else:
-        vifs = dx.describe_virtual_interfaces().get("virtualInterfaces", [])
+        vifs = _list_all(dx, "describe_virtual_interfaces", "virtualInterfaces")
 
     if not vifs:
         return json.dumps({"region": region, "message": "No VIFs found"}, indent=2)
@@ -291,9 +320,9 @@ def get_dx_gateway_details(region: str = "us-east-1", dx_gateway_id: str = "") -
     dx = get_client("directconnect", region)
 
     if dx_gateway_id:
-        gateways = dx.describe_direct_connect_gateways(directConnectGatewayId=dx_gateway_id).get("directConnectGateways", [])
+        gateways = _list_all(dx, "describe_direct_connect_gateways", "directConnectGateways", directConnectGatewayId=dx_gateway_id)
     else:
-        gateways = dx.describe_direct_connect_gateways().get("directConnectGateways", [])
+        gateways = _list_all(dx, "describe_direct_connect_gateways", "directConnectGateways")
 
     if not gateways:
         return json.dumps({"region": region, "message": "No DX Gateways found"}, indent=2)
@@ -302,13 +331,11 @@ def get_dx_gateway_details(region: str = "us-east-1", dx_gateway_id: str = "") -
     for gw in gateways:
         gw_id = gw.get("directConnectGatewayId")
 
-        associations = dx.describe_direct_connect_gateway_associations(
-            directConnectGatewayId=gw_id
-        ).get("directConnectGatewayAssociations", [])
+        associations = _list_all(dx, "describe_direct_connect_gateway_associations",
+                                 "directConnectGatewayAssociations", directConnectGatewayId=gw_id)
 
-        attachments = dx.describe_direct_connect_gateway_attachments(
-            directConnectGatewayId=gw_id
-        ).get("directConnectGatewayAttachments", [])
+        attachments = _list_all(dx, "describe_direct_connect_gateway_attachments",
+                                "directConnectGatewayAttachments", directConnectGatewayId=gw_id)
 
         gateways_detail.append({
             "dx_gateway_id": gw_id,
@@ -354,12 +381,12 @@ def analyze_tgw_topology(region: str = "us-east-1") -> str:
     """
     ec2 = get_client("ec2", region)
 
-    tgws = ec2.describe_transit_gateways().get("TransitGateways", [])
+    tgws = _list_all(ec2, "describe_transit_gateways", "TransitGateways")
     if not tgws:
         return json.dumps({"region": region, "transit_gateways": [], "summary": "No TGWs found"}, indent=2)
 
-    attachments = ec2.describe_transit_gateway_attachments().get("TransitGatewayAttachments", [])
-    route_tables = ec2.describe_transit_gateway_route_tables().get("TransitGatewayRouteTables", [])
+    attachments = _list_all(ec2, "describe_transit_gateway_attachments", "TransitGatewayAttachments")
+    route_tables = _list_all(ec2, "describe_transit_gateway_route_tables", "TransitGatewayRouteTables")
 
     result = {
         "region": region,
@@ -421,18 +448,16 @@ def get_tgw_route_table_details(region: str = "us-east-1", tgw_id: str = "") -> 
     ec2 = get_client("ec2", region)
 
     filters = [{"Name": "transit-gateway-id", "Values": [tgw_id]}] if tgw_id else []
-    rt_list = ec2.describe_transit_gateway_route_tables(
-        Filters=filters if filters else []
-    ).get("TransitGatewayRouteTables", [])
+    rt_list = _list_all(ec2, "describe_transit_gateway_route_tables", "TransitGatewayRouteTables",
+                        Filters=filters)
 
     if not rt_list:
         # Route tables of a Transit Gateway shared through AWS RAM are visible
         # only in the owning account. Say so explicitly, so "no route tables"
         # is not read as "no Transit Gateway".
         account_id = get_client("sts", region).get_caller_identity()["Account"]
-        tgws = ec2.describe_transit_gateways(
-            **({"TransitGatewayIds": [tgw_id]} if tgw_id else {})
-        ).get("TransitGateways", [])
+        tgws = _list_all(ec2, "describe_transit_gateways", "TransitGateways",
+                         **({"TransitGatewayIds": [tgw_id]} if tgw_id else {}))
         shared = [
             {"tgw_id": t.get("TransitGatewayId"), "owner_id": t.get("OwnerId"),
              "name": _get_name_tag(t.get("Tags", []))}
@@ -454,18 +479,15 @@ def get_tgw_route_table_details(region: str = "us-east-1", tgw_id: str = "") -> 
     for rt in rt_list:
         rt_id = rt.get("TransitGatewayRouteTableId")
 
-        associations = ec2.get_transit_gateway_route_table_associations(
-            TransitGatewayRouteTableId=rt_id
-        ).get("Associations", [])
+        associations = _list_all(ec2, "get_transit_gateway_route_table_associations", "Associations",
+                                 TransitGatewayRouteTableId=rt_id)
 
-        propagations = ec2.get_transit_gateway_route_table_propagations(
-            TransitGatewayRouteTableId=rt_id
-        ).get("TransitGatewayRouteTablePropagations", [])
+        propagations = _list_all(ec2, "get_transit_gateway_route_table_propagations",
+                                 "TransitGatewayRouteTablePropagations", TransitGatewayRouteTableId=rt_id)
 
-        routes = ec2.search_transit_gateway_routes(
-            TransitGatewayRouteTableId=rt_id,
-            Filters=[{"Name": "state", "Values": ["active", "blackhole"]}]
-        ).get("Routes", [])
+        routes = _list_all(ec2, "search_transit_gateway_routes", "Routes",
+                           TransitGatewayRouteTableId=rt_id,
+                           Filters=[{"Name": "state", "Values": ["active", "blackhole"]}])
 
         route_tables_detail.append({
             "route_table_id": rt_id,
@@ -543,13 +565,13 @@ def analyze_cloudwan_topology(region: str = "us-east-1") -> str:
     """
     nm = get_client("networkmanager", region)
 
-    global_networks = nm.describe_global_networks().get("GlobalNetworks", [])
+    global_networks = _list_all(nm, "describe_global_networks", "GlobalNetworks")
     if not global_networks:
         return json.dumps({"region": region, "message": "No Cloud WAN global networks found"}, indent=2)
 
-    core_networks = nm.list_core_networks().get("CoreNetworks", [])
-    attachments = nm.list_attachments().get("Attachments", [])
-    peerings = nm.list_peerings().get("Peerings", [])
+    core_networks = _list_all(nm, "list_core_networks", "CoreNetworks")
+    attachments = _list_all(nm, "list_attachments", "Attachments")
+    peerings = _list_all(nm, "list_peerings", "Peerings")
 
     result = {
         "region": region,
@@ -594,10 +616,7 @@ def get_vpc_endpoints(region: str = "us-east-1") -> str:
         region: AWS region (default us-east-1)
     """
     ec2 = get_client("ec2", region)
-    endpoints = []
-    paginator = ec2.get_paginator("describe_vpc_endpoints")
-    for page in paginator.paginate():
-        endpoints.extend(page.get("VpcEndpoints", []))
+    endpoints = _list_all(ec2, "describe_vpc_endpoints", "VpcEndpoints")
 
     if not endpoints:
         return json.dumps({"region": region, "message": "No VPC endpoints found"}, indent=2)
@@ -713,7 +732,7 @@ def get_dx_cloudwatch_metrics(region: str = "us-east-1", connection_id: str = ""
     if connection_id:
         conn_ids = [connection_id]
     else:
-        connections = dx.describe_connections().get("connections", [])
+        connections = _list_all(dx, "describe_connections", "connections")
         conn_ids = [c["connectionId"] for c in connections if c.get("connectionState") == "available"]
 
     if not conn_ids:
@@ -825,17 +844,16 @@ def network_architecture_summary(region: str = "us-east-1") -> str:
     nm = get_client("networkmanager", region)
 
     # ─── DX Layer ───
-    connections = dx.describe_connections().get("connections", [])
-    vifs = dx.describe_virtual_interfaces().get("virtualInterfaces", [])
-    gateways = dx.describe_direct_connect_gateways().get("directConnectGateways", [])
+    connections = _list_all(dx, "describe_connections", "connections")
+    vifs = _list_all(dx, "describe_virtual_interfaces", "virtualInterfaces")
+    gateways = _list_all(dx, "describe_direct_connect_gateways", "directConnectGateways")
 
     # DX Gateway associations
     gw_details = []
     for gw in gateways:
         gw_id = gw.get("directConnectGatewayId")
-        assocs = dx.describe_direct_connect_gateway_associations(
-            directConnectGatewayId=gw_id
-        ).get("directConnectGatewayAssociations", [])
+        assocs = _list_all(dx, "describe_direct_connect_gateway_associations",
+                           "directConnectGatewayAssociations", directConnectGatewayId=gw_id)
         gw_details.append({
             "id": gw_id,
             "name": _clean_label(gw.get("directConnectGatewayName")),
@@ -877,20 +895,18 @@ def network_architecture_summary(region: str = "us-east-1") -> str:
     # ─── CloudWatch Alarms for DX ───
     all_dx_alarms = []
     try:
-        paginator = cw.get_paginator("describe_alarms")
-        for page in paginator.paginate():
-            for alarm in page.get("MetricAlarms", []):
-                if alarm.get("Namespace") == "AWS/DX":
-                    all_dx_alarms.append({
-                        "name": _clean_label(alarm.get("AlarmName")),
-                        "state": alarm.get("StateValue"),
-                        "metric": _clean_label(alarm.get("MetricName")),
-                        "threshold": alarm.get("Threshold"),
-                        "comparison": alarm.get("ComparisonOperator"),
-                        "connection_id": _clean_label(next(
-                            (d["Value"] for d in alarm.get("Dimensions", []) if d["Name"] == "ConnectionId"), None
-                        )),
-                    })
+        for alarm in _list_all(cw, "describe_alarms", "MetricAlarms"):
+            if alarm.get("Namespace") == "AWS/DX":
+                all_dx_alarms.append({
+                    "name": _clean_label(alarm.get("AlarmName")),
+                    "state": alarm.get("StateValue"),
+                    "metric": _clean_label(alarm.get("MetricName")),
+                    "threshold": alarm.get("Threshold"),
+                    "comparison": alarm.get("ComparisonOperator"),
+                    "connection_id": _clean_label(next(
+                        (d["Value"] for d in alarm.get("Dimensions", []) if d["Name"] == "ConnectionId"), None
+                    )),
+                })
     except Exception as e:
         alarms_error = str(e)
         data_errors.append({"source": "cloudwatch:DescribeAlarms", "error": alarms_error})
@@ -898,8 +914,8 @@ def network_architecture_summary(region: str = "us-east-1") -> str:
         alarms_error = None
 
     # ─── TGW Layer ───
-    tgws = ec2.describe_transit_gateways().get("TransitGateways", [])
-    tgw_attachments = ec2.describe_transit_gateway_attachments().get("TransitGatewayAttachments", []) if tgws else []
+    tgws = _list_all(ec2, "describe_transit_gateways", "TransitGateways")
+    tgw_attachments = _list_all(ec2, "describe_transit_gateway_attachments", "TransitGatewayAttachments") if tgws else []
 
     tgw_details = []
     for t in tgws:
@@ -939,10 +955,10 @@ def network_architecture_summary(region: str = "us-east-1") -> str:
     # ─── Cloud WAN Layer ───
     cloudwan = {}
     try:
-        global_networks = nm.describe_global_networks().get("GlobalNetworks", [])
+        global_networks = _list_all(nm, "describe_global_networks", "GlobalNetworks")
         if global_networks:
-            core_networks = nm.list_core_networks().get("CoreNetworks", [])
-            cw_attachments = nm.list_attachments().get("Attachments", [])
+            core_networks = _list_all(nm, "list_core_networks", "CoreNetworks")
+            cw_attachments = _list_all(nm, "list_attachments", "Attachments")
             cloudwan = {
                 "global_networks": len(global_networks),
                 "core_networks": len(core_networks),
@@ -961,9 +977,7 @@ def network_architecture_summary(region: str = "us-east-1") -> str:
     # ─── VPC Endpoints ───
     endpoints = []
     try:
-        paginator = ec2.get_paginator("describe_vpc_endpoints")
-        for page in paginator.paginate():
-            endpoints.extend(page.get("VpcEndpoints", []))
+        endpoints = _list_all(ec2, "describe_vpc_endpoints", "VpcEndpoints")
     except Exception as e:
         endpoints_error = str(e)
         data_errors.append({"source": "ec2:DescribeVpcEndpoints", "error": endpoints_error})
@@ -978,7 +992,7 @@ def network_architecture_summary(region: str = "us-east-1") -> str:
         endpoint_summary = {"total": len(endpoints), "by_type": dict(by_type)}
 
     # ─── VPCs ───
-    vpcs = ec2.describe_vpcs().get("Vpcs", [])
+    vpcs = _list_all(ec2, "describe_vpcs", "Vpcs")
 
     # ─── Detect Pattern ───
     if tgws and connections and cloudwan:

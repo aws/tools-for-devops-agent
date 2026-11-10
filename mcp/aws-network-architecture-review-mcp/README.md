@@ -78,13 +78,13 @@ field. For CloudWatch alarms, `missing_recommended` is `null` in that case
 rather than reporting every recommended alarm as missing. The server's
 instructions tell the agent to report these as unavailable, not as findings.
 
-Most tools read only the first page of each AWS list or describe call. When AWS
-says more data exists (a `NextToken`, or `AdditionalRoutesAvailable` from
-`SearchTransitGatewayRoutes`), the result carries `"truncated": true` and
-`truncated_sources` naming the calls that were cut off, and the server's
-instructions tell the agent to report the result as incomplete. In a large
-estate, a truncated result may be missing gateways, attachments, or routes.
-Full pagination is a tracked follow-up (see CHANGELOG).
+List and describe calls follow `NextToken` / `nextToken` and read every page,
+up to 50 pages per call. The result carries `"truncated": true` and
+`truncated_sources` naming the calls that were cut off when a call reaches
+that cap, AWS returns the same token twice, `SearchTransitGatewayRoutes` still
+reports `AdditionalRoutesAvailable`, or a single-call API (`GetMetricData`)
+says more data exists. The server's instructions tell the agent to report such
+a result as incomplete.
 
 ---
 
@@ -435,10 +435,10 @@ events for the function (`AWS::Lambda::Function`).
   which CloudWatch encrypts at rest.
 - **Denial of service.**
   - Only SigV4-signed callers that IAM allows can invoke the function, and unsigned requests are rejected before it runs.
-  - Tools make read-only calls, and most read only the first page, which caps the work per request. The `hours` lookback is clamped to 1 hour–14 days.
+  - Tools make read-only calls. Each list or describe call reads at most 50 pages, which caps the work per request. The `hours` lookback is clamped to 1 hour–14 days.
   - boto3 uses standard retry mode, so throttling backs off instead of retrying harder.
   - The function times out at 120 seconds.
-  - When the first page isn't the whole result, the tool flags it `truncated` rather than reading more pages.
+  - A call stopped at the page cap is flagged `truncated` rather than presented as complete.
   - Set `ReservedConcurrency` (step 1) to cap concurrent executions, so a looping agent can't use up the account's Lambda concurrency or shared EC2 and Direct Connect API quotas.
   - No load test has been run; size `ReservedConcurrency` to the account's quotas.
 - **Structured parameters only.** Tools accept a Region and, where relevant, a
