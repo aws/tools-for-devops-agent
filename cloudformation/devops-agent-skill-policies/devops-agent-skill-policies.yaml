@@ -34,6 +34,7 @@ Metadata:
           - EnableSageMakerAIOpsReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
+          - EnableAwsSecurityFindingInvestigation
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -202,6 +203,17 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableAwsSecurityFindingInvestigation:
+    Type: String
+    Description: >
+      AWS Security Finding Investigation skill (read-only: adds the reads that
+      AIDevOpsAgentAccessPolicy does not grant: an IAM user's access keys and their last
+      use, groups and policies; group policies; the account summary; AWS Config
+      resource history and compliance details; and the bucket policy status and account-level
+      Block Public Access settings).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -219,6 +231,7 @@ Conditions:
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
+  SkillAwsSecurityFindingInvestigation: !Equals [!Ref EnableAwsSecurityFindingInvestigation, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -726,6 +739,57 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # aws-security-finding-investigation: read-only. Adds only the reads that
+  # AIDevOpsAgentAccessPolicy (v14, checked 2026-11-07) does not grant. Everything else the
+  # skill reads -- GuardDuty and Security Hub findings, CloudTrail management events and trail
+  # settings (LookupEvents, DescribeTrails, GetTrailStatus, GetEventSelectors), Logs Insights, EC2/VPC describes, S3 bucket
+  # policy/ACL/bucket Block Public Access, Config recorder status, IAM roles -- is covered by the
+  # managed policy. Without this policy the skill uses CloudTrail events for the same facts
+  # and reports what it could not read as Unknown.
+  PolicyAwsSecurityFindingInvestigation:
+    Type: AWS::IAM::Policy
+    Condition: SkillAwsSecurityFindingInvestigation
+    Properties:
+      PolicyName: DevOpsAgentSkill-AwsSecurityFindingInvestigation
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SecurityFindingIamUserReads
+            Effect: Allow
+            Action:
+              - iam:ListAccessKeys
+              - iam:GetAccessKeyLastUsed
+              - iam:ListAttachedUserPolicies
+              - iam:ListUserPolicies
+              - iam:ListGroupsForUser
+            Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:user/*'
+          - Sid: SecurityFindingIamGroupReads
+            Effect: Allow
+            Action:
+              - iam:ListAttachedGroupPolicies
+              - iam:ListGroupPolicies
+            Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:group/*'
+          - Sid: SecurityFindingIamAccountSummary
+            Effect: Allow
+            Action:
+              - iam:GetAccountSummary
+            Resource: '*'
+          - Sid: SecurityFindingConfigHistory
+            Effect: Allow
+            Action:
+              - config:GetResourceConfigHistory
+              - config:GetComplianceDetailsByResource
+              - config:GetComplianceDetailsByConfigRule
+            Resource: '*'
+          - Sid: SecurityFindingPublicAccessStatus
+            Effect: Allow
+            Action:
+              - s3:GetBucketPolicyStatus
+              - s3:GetAccountPublicAccessBlock
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -758,6 +822,7 @@ Outputs:
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
+        - aws-security-finding-investigation: ${EnableAwsSecurityFindingInvestigation} (iam:ListAccessKeys/GetAccessKeyLastUsed/ListAttachedUserPolicies/ListUserPolicies/ListGroupsForUser/ListAttachedGroupPolicies/ListGroupPolicies/GetAccountSummary, config:GetResourceConfigHistory/GetComplianceDetailsByResource/GetComplianceDetailsByConfigRule, s3:GetBucketPolicyStatus/GetAccountPublicAccessBlock)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
