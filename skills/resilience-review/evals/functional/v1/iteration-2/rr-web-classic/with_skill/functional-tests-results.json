@@ -1,0 +1,134 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "rr-web-classic",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's report covers all required elements: it opens with \"where you stand today\" summary, then presents six structured sections (Scenario and scope, Targets, Strategy, Roadmap, First tests, Next decision) matching the expected six-section format. It correctly identifies: the Auto Scaling group pinned to a single AZ (implying single instance/subnet), the Aurora cluster has no reader/Multi-AZ and only 1-day backup retention, EFS has no replication and no backup policy, the S3 uploads bucket has versioning off, and the load balancer is Regional (spans AZs within eu-west-1) with no DNS/CDN failover entry point in front of it. The report is scoped to orders-web specifically and treats the network as an existing dependency (implicitly, since it doesn't flag VPC/subnet issues as gaps but discusses AZ distribution). The full report is presented directly in the response, as required. All key findings from the expected output are substantively present, though exact resource names (orders-web-db) aren't mentioned, the content and findings align closely with the expected output description.\"",
+      "evidence": "\"Compute and the file system are each pinned to a single Availability Zone... Aurora database \u2014 its system of record \u2014 has no Multi-AZ or reader, deletion protection is off, and backups are kept for only 1 day... the S3 uploads bucket has no versioning and EFS has no backup policy at all... only the load balancer spans two of three AZs... no DNS/failover entry point exists either.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response starts with a short 'Where you stand today' summary, and the scenario table marks each of the four scenarios as covered today, partly or not.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Response begins with '**Where you stand today:** orders-web survives almost nothing today...' followed by a table with columns 'In scope?' and 'Covered today?' marked yes/partly/no for all four scenario rows (One service fails, One AZ fails, A whole Region fails, Bad data).",
+          "reasoning": "The summary and table structure match the assertion exactly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Auto Scaling group orders-web-asg runs a single instance in one subnet or Availability Zone, so one instance or one AZ failure takes the web tier down.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says 'Compute and the file system are each pinned to a single Availability Zone' and 'the Auto Scaling group... database instance, and the EFS mount target are each pinned to a single AZ' but never names the ASG as 'orders-web-asg' nor explicitly states it runs a single instance.",
+          "reasoning": "The response discusses single-AZ pinning of compute generically but does not name the specific ASG resource orders-web-asg or state it runs a single instance in one subnet.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says the Aurora cluster orders-web-db has only one instance (no replica in another Availability Zone), so there is no automatic failover inside the Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'Aurora database... has no Multi-AZ or reader' and 'Aurora has no reader or Multi-AZ failover target' but never names the cluster as 'orders-web-db'.",
+          "reasoning": "The substance (single instance, no automatic failover) is covered, but the specific resource name orders-web-db is never mentioned.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response reports the 1-day backup retention of orders-web-db and says it limits recovery from bad data.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'backups are kept for only 1 day' and 'Aurora gives ~38 hours of restore window but deletion protection is off' under the Bad data scenario row.",
+          "reasoning": "The response explicitly reports the 1-day retention and ties it to limited recovery from bad data (partly covered).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports that the EFS file system has no replication to another Region and that its automatic backups are off.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response only says 'the EFS mount target' is 'pinned to a single AZ' and that 'EFS has no backup policy at all' - it mentions EFS backups being off but does NOT mention EFS replication to another Region specifically; it's covered under the general Region-failure row ('No DB replica, snapshot copy, EFS replication, S3 replication, or standby infrastructure exists outside eu-west-1').",
+          "reasoning": "Actually EFS replication absence IS mentioned in the region row: 'no... EFS replication... exists outside eu-west-1'. And EFS backups off is mentioned: 'EFS has no backup policy at all'. Both parts are present.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response reports that the uploads S3 bucket has versioning off, so overwritten or deleted objects cannot be recovered.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'the S3 uploads bucket has no versioning' stated under the Bad data row.",
+          "reasoning": "Directly states S3 uploads bucket versioning is off in context of bad data recovery, matching the assertion's substance (cannot recover overwritten/deleted objects).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the recovery Region would need its own load balancer and a way to route traffic to it, since there is no DNS failover today.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'A whole Region fails... no DNS/failover entry point exists either' and roadmap long-term item 'a load balancer + DNS failover entry point'.",
+          "reasoning": "The response explicitly notes the need for a load balancer and DNS failover routing mechanism in the recovery region.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response checks whether the launch template's image and the orders-web stack could start the web tier in another Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of the launch template's image or whether the orders-web stack could start the web tier in another Region; only general statements about no standby infrastructure outside eu-west-1 and AMI copies not discussed.",
+          "reasoning": "There's no specific check of the launch template image portability or stack deployability to another region.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the booking-api, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response contains no references to booking-api, telemetry-pipeline, catalog-k8s, database-1, or any metrics stack; it only discusses orders-web resources generically.",
+          "reasoning": "No mention of other workloads' resources appears anywhere in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "The complete report is in the response itself (all six sections), not only a pointer to a file.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response includes all six numbered sections (Scenario and scope, Targets, Strategy, Roadmap, First tests, Next decision) fully written out in the response text itself, not just a pointer to a file (though it also says 'The report is saved and ready to share').",
+          "reasoning": "Despite the opening line mentioning the report is saved, the full content of all six sections is reproduced in the response itself.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | partly | Compute self-heals via the Auto Scaling group, but Aurora has no reader\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 8,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 12,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "10m6s",
+    "cost": "$5.03",
+    "context_window": {
+      "utilization": "9.9%",
+      "compaction_count": 0
+    }
+  }
+}

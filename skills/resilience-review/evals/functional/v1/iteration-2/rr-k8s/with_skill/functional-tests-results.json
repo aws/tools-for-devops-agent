@@ -1,0 +1,95 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "rr-k8s",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'resilience-review' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all required elements: (1) It explicitly states ECR repo 'catalog-service' has no cross-Region replication and recommends enabling it. (2) It states EKS is not opted into AWS Backup and recommends opting in. (3) It explicitly notes the Fargate profile only schedules into 2 of 3 AZs (eu-west-1a and eu-west-1b), i.e., spans two AZs. (4) It explicitly flags what it could not see inside the cluster rather than assuming absence: 'Kubernetes-level objects (Secrets, ConfigMaps, actual pod traffic)... this isn't proof one doesn't exist elsewhere,' and asks about a 'backing data store' it could not verify, and asks whether there's a hidden data store/persistent state. (5) It addresses recreation in another Region via the catalog-k8s CloudFormation stack explicitly, recommending to 'Parameterize the template and dry-run a deploy in the candidate recovery Region' and 'Stand up the cluster + Fargate profile in the recovery Region' using IaC - directly referencing the catalog-k8s stack as the recreation mechanism. While it doesn't explicitly mention Git or a pipeline, it does address the core question of how the stack would be recreated via IaC, which satisfies the substance of the expectation. All key substantive criteria are met.",
+      "evidence": "\"Turn on ECR cross-Region replication to the chosen recovery Region\" / \"EKS not opted into AWS Backup\" / \"Only scheduled into 2 of 3 AZs\" / \"Kubernetes-level objects (Secrets, ConfigMaps, actual pod traffic) \u2014 AWS APIs show no backing data store, but this isn't proof one doesn't exist elsewhere\" / \"catalog-k8s` stack | Only ever deployed in eu-west-1; redeployability elsewhere unverified | Parameterize the template and dry-run a deploy in the candidate recovery Region\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the ECR repository catalog-service is not replicated to another Region, so the recovery Region cannot pull its images.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Turn on ECR cross-Region replication for `catalog-service`\" and \"No ECR replication, no stack deployed elsewhere... nothing would come back in another Region\" and the quick-win row: \"No cross-Region replication configured\" -> \"Turn on ECR cross-Region replication to the chosen recovery Region\" under 'Region failure'. The response explicitly ties missing replication to recovery Region inability to pull images via the roadmap and scenario table ('A whole Region fails'... 'No ECR replication... nothing would come back in another Region').",
+          "reasoning": "The response clearly states ECR repo is not replicated and this prevents recovery in another Region.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the EKS cluster catalog-eks is not protected by AWS Backup and has no counterpart in another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"EKS isn't opted into AWS Backup\" and \"there's no... second-Region deployment\" and roadmap row: \"EKS not opted into AWS Backup\" -> action to opt in; also \"No presence in any recovery Region\" for catalog-k8s stack.",
+          "reasoning": "The response explicitly states the EKS cluster is not protected by AWS Backup and has no counterpart in another Region (no second-Region deployment).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says what inside the cluster could not be checked (for example deployments, pods or persistent volumes) instead of claiming there are none.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Not checked: Kubernetes-level objects (Secrets, ConfigMaps, actual pod traffic) \u2014 AWS APIs show no backing data store, but this isn't proof one doesn't exist elsewhere\"",
+          "reasoning": "The response explicitly flags that Kubernetes-level objects were not checked rather than claiming none exist, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits the Fargate profile spreading pods over two Availability Zones, or reports the two subnets the cluster uses.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Fargate profile only schedules into eu-west-1a and eu-west-1b, skipping the VPC's third AZ (eu-west-1c)\" and \"it only runs in 2 of the VPC's 3 AZs\"",
+          "reasoning": "The response reports the two AZs (and implicitly the subnets/AZs) the Fargate profile uses, satisfying this assertion about crediting/reporting AZ spread.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response asks or states how the cluster and its workloads would be recreated in the recovery Region (IaC such as the catalog-k8s stack, Git or a pipeline).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Parameterize the template and dry-run a deploy in the candidate recovery Region\" (catalog-k8s stack row) and \"Stand up the cluster + Fargate profile in the recovery Region... once images replicate there (pilot light)\" and first test: 'Redeploy the stack from IaC... Restore/redeploy catalog-k8s in a test Region and time it'",
+          "reasoning": "The response explicitly discusses recreating the cluster/workloads in the recovery Region via the catalog-k8s IaC stack, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | Yes | Partly | No single point of failure found (Fargate + AWS-managed multi-AZ contro\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m37s",
+    "cost": "$2.81",
+    "context_window": {
+      "utilization": "6.2%",
+      "compaction_count": 0
+    }
+  }
+}

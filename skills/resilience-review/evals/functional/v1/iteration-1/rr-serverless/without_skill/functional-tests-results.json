@@ -1,0 +1,113 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-serverless",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a comprehensive component-by-component inventory of the booking-api stack covering ALL serverless components explicitly: HTTP API (Regional, no custom domain), Lambda function, DynamoDB table (PITR off, single-region CMK), SQS queue with DLQ already in place, SNS topic, EventBridge bus and rule, Step Functions state machine, Cognito user pool, the Secret (not replicated), and receipts bucket (versioning on, no replication). It also requires the recommendation to end with onboarding to AWS Resilience Hub, using the agreed resilience targets as the Resilience Hub policy and the scoping sheet as a handoff artifact.\n\nThe agent's response covers many components (API Gateway, Lambda, DynamoDB, EventBridge, Step Functions, Cognito, S3, SQS/SNS, KMS) but treats SQS/SNS together without mentioning the DLQ already in place, and does not mention a Secrets Manager secret at all. More critically, the response never mentions AWS Resilience Hub at all \u2014 the final recommendation is to enable PITR, set up an AWS Backup plan, and decide on RTO/RPO, ending with a question about PITR/backup plan rather than recommending onboarding to AWS Resilience Hub with a resilience policy and scoping sheet as handoff. This is a significant and explicit mismatch with the expected output's required ending point.\n\nGiven the expected output explicitly calls for ending with a Resilience Hub onboarding recommendation (policy + scoping sheet handoff), and the agent's response instead ends with questions about enabling PITR/Backup plan without any mention of Resilience Hub, this is a clear failure against the expected criteria.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the table is encrypted with a customer managed KMS key that exists only in eu-west-1, and that a copy or replica in another Region needs a key there (for example a multi-Region key).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The KMS key is single-region, so even ad-hoc copies elsewhere couldn't be decrypted without recreating the key\"",
+          "reasoning": "The agent does mention the KMS key is single-region, implying need for a key in another region for replicas to work, though it doesn't explicitly mention 'multi-Region key' terminology.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says the Cognito user pool booking-api-users has no replica in another Region, so users could not sign in to a recovery Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Cognito user pool \u2014 no native backup mechanism exists at all; an accidental user deletion is unrecoverable.\"",
+          "reasoning": "The agent discusses Cognito only in the context of accidental deletion/backup, not in the context of regional failover/replica for sign-in during a recovery scenario. It does not explicitly state there's no replica in another region so users couldn't sign in to a recovery region.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the HTTP API is Regional and has no custom domain name, so clients are tied to the eu-west-1 endpoint.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"No Route 53 health-check/failover routing (it's using the default execute-api endpoint, not a custom domain)\"",
+          "reasoning": "The agent explicitly states the API uses the default execute-api endpoint rather than a custom domain, and this is listed under regional outage concerns, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the secret booking-api/payment-provider-key is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of any secret named 'booking-api/payment-provider-key' or any Secrets Manager secret in the output.",
+          "reasoning": "The response never references a payment-provider-key secret or its replication status.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits what is already in place, such as the dead-letter queue on booking-api-notifications and versioning on the receipts bucket.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Receipts S3 bucket \u2014 versioning is on, so object-level overwrites/deletes are partially recoverable, but there's no replication or lifecycle backup.\"",
+          "reasoning": "The response credits versioning on the receipts bucket, satisfying part of the assertion, but never mentions a dead-letter queue on booking-api-notifications at all, so the assertion as a whole (crediting both things) is not fully satisfied.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response covers the Step Functions state machine and the EventBridge bus and rule, saying they are Regional and must exist in the recovery Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response only lists Step Functions and EventBridge among resources that 'live only in eu-west-1' in a bullet list, without explicitly stating they are Regional services that must be recreated/exist in the recovery Region.",
+          "reasoning": "While Step Functions and EventBridge are mentioned as living in eu-west-1, the response does not elaborate on them specifically needing to exist in the recovery region beyond the generic statement; it's a weak/implicit treatment rather than an explicit discussion as asserted.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response only discusses booking-api resources (API Gateway, Lambda, DynamoDB, EventBridge, Step Functions, Cognito, S3, SQS/SNS) and mentions 'dr-demo-vault-dr' only to clarify it protects a different workload, not to discuss orders-web, telemetry-pipeline, catalog-k8s, database-1, or a metrics stack.",
+          "reasoning": "No mention of orders-web, telemetry-pipeline, catalog-k8s stacks, Aurora cluster database-1, or a metrics stack appears anywhere in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The Next decision section ends by recommending onboarding the workload to AWS Resilience Hub once the targets are agreed, with the agreed targets as its resilience policy; it does not present the skill's review as a replacement for Resilience Hub.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The final section ends with: \"Want me to start enabling PITR on the DynamoDB table, or look into standing up an AWS Backup plan for it?\" with no mention of AWS Resilience Hub anywhere in the response.",
+          "reasoning": "AWS Resilience Hub is never mentioned in the output at all, so the response does not recommend onboarding the workload to it as a next step.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 6,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 10,
+        "pass_rate": 0.4
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m44s",
+    "cost": "$0.87",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

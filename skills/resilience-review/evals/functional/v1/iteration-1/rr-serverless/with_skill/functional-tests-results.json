@@ -1,0 +1,118 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-serverless",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'resilience-review' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response addresses every required component of the booking-api stack: HTTP API (noted no custom domain, default execute-api endpoint), Lambda function, DynamoDB booking-api-bookings table with PITR disabled and encrypted by a single-region CMK (alias/booking-api-data), SQS queue with DLQ already in place (explicitly called out as 'already in place'), SNS topic, EventBridge bus/rule, Step Functions state machine, Cognito user pool with no replica in another region, the Secrets Manager secret noted as not replicated, and the S3 receipts bucket with versioning on and no replication. All of these are explicitly covered in sections 1 and 4 (Roadmap) with findings and actions. The report correctly scopes to only the booking-api stack (explicitly excluding inventory-api as a different stack). Finally, the 'Next decision' section explicitly ends with the recommendation to onboard booking-api to AWS Resilience Hub once RPO/RTO targets and recovery region are agreed, using those targets as its resilience policy, and explicitly states 'this scoping work becomes the handoff' \u2014 matching the expected conclusion precisely.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the table is encrypted with a customer managed KMS key that exists only in eu-west-1, and that a copy or replica in another Region needs a key there (for example a multi-Region key).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'`alias/booking-api-data` (KMS CMK) | Single-region key | If pilot light is chosen, create a multi-region key (can't convert the existing one)...' Also under scope not checked: 'KMS aliases in other regions'. The response does mention 'no second KMS key' in the Region fail scenario row.",
+          "reasoning": "The response explicitly discusses the KMS CMK being single-region and the need for a multi-region key for pilot light strategy.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the Cognito user pool booking-api-users has no replica in another Region, so users could not sign in to a recovery Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'`booking-api-users` (Cognito) | No replica pool anywhere | Decide: accept re-registration after a Region loss (cheap), or design multi-region identity (bigger lift)' and 'Cognito replica pools elsewhere' listed as not checked, also 'no second deployment of the stack' and Cognito deletion protection discussion.",
+          "reasoning": "The response explicitly states Cognito has no replica pool anywhere and discusses the implication for recovery.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the HTTP API is Regional and has no custom domain name, so clients are tied to the eu-west-1 endpoint.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'Entry/routing (API Gateway) | No custom domain, default `execute-api` endpoint only, no DNS failover | Add a custom domain + Route 53 (or ARC) failover routing' - mentions no custom domain but never states the API type is 'Regional' explicitly.",
+          "reasoning": "The response mentions no custom domain for API Gateway but does not explicitly state the API is Regional (as opposed to edge-optimized).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the secret booking-api/payment-provider-key is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'`booking-api/payment-provider-key` (Secrets Manager) | Not replicated anywhere | Enable Secrets Manager multi-region replication to the chosen recovery Region'",
+          "reasoning": "The response explicitly states the secret is not replicated anywhere.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits what is already in place, such as the dead-letter queue on booking-api-notifications and versioning on the receipts bucket.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Already in place: S3 receipts bucket versioning is enabled (undo for accidental overwrite/delete, in-region only); SQS has a dead-letter queue (maxReceiveCount=5)'",
+          "reasoning": "The response credits the DLQ and S3 versioning as already in place.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response covers the Step Functions state machine and the EventBridge bus and rule, saying they are Regional and must exist in the recovery Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'Whole stack | No deployment exists outside eu-west-1 | Redeploy the `booking-api` template via IaC pipeline into the recovery Region (API Gateway, Lambda, Step Functions, EventBridge, SNS, SQS all come along since they're template-defined)' - this covers redeployment but doesn't explicitly say they are Regional services requiring separate instances in the recovery region beyond general redeployment statement.",
+          "reasoning": "Step Functions and EventBridge are mentioned as in-scope components and as needing to be redeployed in the recovery region, but the response does not explicitly state they are 'Regional' services that must exist in the recovery region in the specific framing asserted.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, telemetry-pipeline and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'orders-web', 'telemetry-pipeline', 'catalog-k8s', 'database-1', or 'metrics stack' anywhere in the response; only booking-api resources and inventory-api (mentioned only to clarify it's a different stack not being assessed) are referenced.",
+          "reasoning": "The response does not mention any of the other workload stacks or resources like orders-web, telemetry-pipeline, catalog-k8s, database-1 Aurora cluster, or a metrics stack.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | yes | All components (API Gateway, Lambda, DynamoDB, SNS, SQS, EventBridge, Step\u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The Next decision section ends by recommending onboarding the workload to AWS Resilience Hub once the targets are agreed, with the agreed targets as its resilience policy; it does not present the skill's review as a replacement for Resilience Hub.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Once those are agreed, onboard `booking-api` to AWS Resilience Hub with those targets as its resilience policy \u2014 this scoping work becomes the handoff, and Resilience Hub will then track findings and run the recommended tests against your real RTO going forward.'",
+          "reasoning": "The Next decision section explicitly recommends onboarding to Resilience Hub once targets are agreed, using them as the resilience policy, and frames the current work as a handoff rather than a replacement.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 8,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 10,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m18s",
+    "cost": "$2.64",
+    "context_window": {
+      "utilization": "6.3%",
+      "compaction_count": 0
+    }
+  }
+}

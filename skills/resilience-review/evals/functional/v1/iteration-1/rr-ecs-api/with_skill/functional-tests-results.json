@@ -1,0 +1,97 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-ecs-api",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'resilience-review' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all six expected sections in order: (1) Scenario and scope - maps workload by layer (ECS, RDS, DynamoDB, ElastiCache, SQS, Lambda, VPC); (2) Targets - explicitly states no RPO/RTO agreed, does not invent targets, and asks business to define them per tier; (3) Strategy - proposes backup-and-restore and pilot light strategies; (4) Roadmap - detailed quick wins/fixes/long-term table; (5) First tests - proposes restore tests AND named AWS FIS scenarios ('AZ: Power Interruption', 'Cross-Region: Connectivity'); (6) Next decision - closing decision section.\n\nAll specific flagged items are present: single-AZ task placement is flagged prominently ('ECS service runs a single task in a single Availability Zone... only uses eu-central-1a subnet'); container image location is reported (ECR, ecr-public/nginx/nginx) and cross-Region pull capability is assessed ('Zero cross-Region replication rules... Configure registry replication to eu-west-1'); secret non-replication is flagged ('dr-demo/api-key... not replicated to any other Region'); no load balancer/failover routing is explicitly noted multiple times ('no load balancer or clear public entry point... Confirm how the API is actually exposed publicly today'); CloudFormation stack dr-demo-backend recreation capability in recovery region is addressed ('Template is backed up, but deploying it in eu-west-1 has never been tested... Run a trial deploy in eu-west-1'); and both restore/rebuild tests and named FIS tests are proposed. Targets are explicitly stated as not invented ('No RPO or RTO has been agreed yet, so none are assumed'). This is a comprehensive match to the expected output criteria.",
+      "evidence": "\"the ECS service runs a single task in a single Availability Zone (not spread across the two AZs...)\"; \"`ecr-public/nginx/nginx` (ECR) | Zero cross-Region replication rules | Configure registry replication to eu-west-1\"; \"`dr-demo/api-key` (Secrets Manager) | Secret not replicated to any other Region\"; \"No load balancer or API Gateway identified for this workload\"; \"Template is backed up, but deploying it in eu-west-1 has never been tested | Run a trial deploy in eu-west-1\"; \"AWS FIS scenario **AZ: Power Interruption**\"; \"No RPO or RTO has been agreed yet, so none are assumed.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The Roadmap section groups the actions under Quick wins, Quick fixes and Long-term, and every action names a specific resource and change.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Roadmap section has three subsections: 'Quick wins', 'Quick fixes', and 'Long-term', each a table with a 'Resource' column naming specific resources (e.g., 'dr-demo-mysql (RDS)', 'dr-demo-api (ECS service)', 'Entry/routing layer (none found)') and an 'Action' column with specific changes (e.g., 'Turn on deletion protection', 'Update network config to include both subnets and raise desired count to 2+ tasks').",
+          "reasoning": "All three required groupings exist and every row names a specific resource and a specific change, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Quick wins and quick fixes do not depend on RPO or RTO targets the business has not agreed; Region-level work whose size depends on the targets is under Long-term.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Quick wins items (deletion protection, secret replication, ElastiCache snapshot investigation, SQS DLQ) and Quick fixes items (subnet/AZ fix, ECR replication, backup restore testing, RDS read replica evaluation) are all low/medium cost fixed actions not gated on RPO/RTO. Long-term items explicitly reference targets: 'If targets require faster-than-backup-and-restore recovery, move to pilot light' and 'Run a trial deploy in eu-west-1' tied to Region-level work scaling with targets.",
+          "reasoning": "Quick wins/fixes are independent of RPO/RTO agreement, while the Long-term section explicitly conditions larger Region-level investments (pilot light move) on targets being agreed, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the ECS service runs a single task in a single Availability Zone.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'the ECS service runs a single task in a single Availability Zone (not spread across the two AZs your own network already has)' and in the Quick fixes table: 'Service only uses the eu-central-1a subnet, despite the VPC having a second AZ'.",
+          "reasoning": "Directly and explicitly flags single task in single AZ for the ECS service.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the Secrets Manager secret used by the task is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Quick wins table row: 'dr-demo/api-key (Secrets Manager) | Secret not replicated to any other Region | Replicate the secret to eu-west-1'.",
+          "reasoning": "Explicitly flags the Secrets Manager secret is not replicated to another Region.",
+          "confidence": "high"
+        },
+        {
+          "text": "The First tests section contains both a restore or rebuild test and a failure test that names an AWS FIS scenario.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "First tests table includes 'Restore RDS and DynamoDB from backups' (a restore test) and two FIS-named tests: 'AWS FIS scenario AZ: Power Interruption' and 'AWS FIS scenario Cross-Region: Connectivity'.",
+          "reasoning": "Both a restore test and failure tests naming specific AWS FIS scenarios are present, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Resources that share only a tag with the ECS service, and are not in its CloudFormation stack dr-demo-backend, get no roadmap actions. Resources in the same stack (such as dr-demo-mysql, dr-demo-valkey, dr-demo-players, dr-demo-events) are connected by configuration and may be in scope.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The roadmap actions all target resources explicitly listed as in the dr-demo-backend stack: dr-demo-mysql, dr-demo-valkey, dr-demo-events, dr-demo-api, dr-demo-vault, dr-demo-backend CloudFormation, plus Secrets Manager secret and entry/routing layer. The 'Possible members, please confirm' section explicitly excludes the CDK bootstrap ECR repo ('shared tooling infrastructure and excluded from this review') as not in scope. However, 'ecr-public/nginx/nginx (ECR)' appears in Quick fixes with action to configure registry replication - this is the image repo used by the ECS task, which is plausibly connected via configuration (image reference) rather than merely a tag, so it may still be in scope per the assertion's criteria about configuration-based connection.",
+          "reasoning": "All roadmap resources are either explicitly in the dr-demo-backend stack or (for ECR nginx image) connected via the task's container image reference, which counts as configuration-linked rather than tag-only. The CDK bootstrap ECR repo, which shares only tooling/tag-level relation, was correctly excluded from action items. No resource with only a shared tag and no CloudFormation stack membership was given an action.",
+          "confidence": "medium"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m57s",
+    "cost": "$3.46",
+    "context_window": {
+      "utilization": "7.3%",
+      "compaction_count": 0
+    }
+  }
+}
