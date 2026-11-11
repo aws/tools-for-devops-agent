@@ -403,7 +403,7 @@ class MetadataTests(CheckSkillTestCase):
         self.assertOneError(tree(skill_md(frontmatter_with(author=None))), '"metadata.author" is required')
         for bad in ('"-octocat"', '"octo cat"', '"octo--cat"', '"a,,b"', '""'):
             with self.subTest(bad=bad):
-                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames or teams")
+                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames, organizations or teams")
 
     def test_author_accepts_a_comma_separated_list(self):
         self.assertEqual(self.errors(tree(skill_md(frontmatter_with(author='"octocat, hubot"')))), [])
@@ -426,7 +426,7 @@ class MetadataTests(CheckSkillTestCase):
             f'"octo-org/{team_101}"',
         ):
             with self.subTest(bad=bad):
-                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames or teams")
+                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames, organizations or teams")
 
     def test_version_is_required(self):
         self.assertOneError(tree(skill_md(frontmatter_with(version=None))), '"metadata.version" is required')

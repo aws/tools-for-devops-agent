@@ -64,7 +64,7 @@ before this check existed" in CONTRIBUTING.md.
 
 ## Skills — complete if this PR adds or changes a skill
 
-<!-- The validate-skills check verifies the SKILL.md frontmatter, the files a skill publishes and its version history automatically; see "Skill Publishing Rules" in CONTRIBUTING.md. -->
+<!-- The validate-skills check verifies the SKILL.md frontmatter, the files a skill publishes and its version history automatically, and looks up each new metadata.author name on GitHub; see "Skill Publishing Rules" in CONTRIBUTING.md. -->
 
 <!--
 REVIEWERS: if this PR sets a skill's `metadata.tier` to `aws-support-managed`,
