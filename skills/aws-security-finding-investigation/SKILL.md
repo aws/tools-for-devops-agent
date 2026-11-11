@@ -133,8 +133,12 @@ confirms.
 
 ## Step 4: Recommend containment
 
-Load [references/response-actions.md](references/response-actions.md). Recommend in this order,
-and stop where the evidence stops:
+Load [references/response-actions.md](references/response-actions.md). Use the commands in that
+file. If the incident needs an action the file does not list, explicitly state that, describe the
+action, and label any command you write for it "not from this skill's command list: check it
+against the AWS CLI reference before you run it".
+
+Recommend in this order, and stop where the evidence stops:
 
 1. **Preserve evidence** before anything changes: snapshots, the current configuration, tags,
    copies of the relevant logs.

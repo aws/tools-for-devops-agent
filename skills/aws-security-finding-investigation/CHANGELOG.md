@@ -39,6 +39,8 @@
 
 ### Changed before submission
 
+- Response commands come from `references/response-actions.md`. A command for an action the file
+  does not list is labelled as not from the skill's command list, to check before running it.
 - `ConsoleLogin` Regions follow the sign-in endpoint: root in us-east-1, us-east-2 or us-west-2; IAM user
   through the global endpoint in us-east-1, or in us-east-2, eu-north-1 or ap-southeast-2 with an
   account alias cookie; Regional endpoint in its own Region. Query a multi-Region trail once, or each
