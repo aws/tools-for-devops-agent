@@ -1253,9 +1253,9 @@ def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report
                 hint = (
                     f'use "{rules.aliases[part]}"'
                     if part in rules.aliases
-                    else f"approved values are listed in {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}"
+                    else f"use a value from {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}, or add this one to it for review"
                 )
-                report.warning(f'"{part}" is not an approved {dimension} value; {hint}', line=line)
+                report.error(f'"{part}" is not an approved {dimension} value; {hint}', line=line)
 
 
 # --- Package: the files that are published and installed -----------------------
