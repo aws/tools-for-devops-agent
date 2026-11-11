@@ -542,14 +542,32 @@ class DimensionTests(CheckSkillTestCase):
         fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"All"'})
         self.assertOneError(tree(skill_md(fm)), 'unknown value "All"')
 
-    def test_unapproved_value_is_a_warning_with_suggestion(self):
+    def test_unapproved_value_is_an_error_with_suggestion(self):
         fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": '"CloudWatch, Amazon S3"'})
         skill = tree(skill_md(fm))
-        self.assertEqual(self.errors(skill), [])
-        messages = [w.message for w in self.warnings(skill)]
-        self.assertEqual(len(messages), 2)
-        self.assertIn('use "Amazon CloudWatch"', messages[0])
-        self.assertIn('"Amazon S3" is not an approved aws-services value', messages[1])
+        self.assertEqual(self.warnings(skill), [])
+        errors = self.errors(skill)
+        self.assertEqual([e.line for e in errors], [9, 9])
+        self.assertEqual(errors[0].message, '"CloudWatch" is not an approved aws-services value; use "Amazon CloudWatch"')
+        self.assertEqual(
+            errors[1].message,
+            '"Amazon S3" is not an approved aws-services value; use a value from '
+            ".github/scripts/skill-rules/vocabulary.json, or add this one to it for review",
+        )
+
+    def test_an_alias_for_another_dimension_gives_no_suggestion(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.technical-domains": '"CloudWatch"'})
+        error = self.assertOneError(tree(skill_md(fm)), '"CloudWatch" is not an approved technical-domains value')
+        self.assertNotIn("Amazon CloudWatch", error.message)
+        self.assertIn("or add this one to it for review", error.message)
+
+    def test_a_value_that_differs_only_in_case_or_spacing_gets_the_approved_spelling(self):
+        for value in ("Amazon Cloudwatch", "amazon  eks", "Amazon\u00a0EKS"):
+            with self.subTest(value=value):
+                fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": f'"{value}"'})
+                error = self.assertOneError(tree(skill_md(fm)), "is not an approved aws-services value")
+                self.assertIn("which differs from it in letter case or spacing", error.message)
+                self.assertRegex(error.message, r'use "Amazon (CloudWatch|EKS)"')
 
 
 class SummaryAndAgentTypeTests(CheckSkillTestCase):

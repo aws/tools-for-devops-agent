@@ -129,9 +129,9 @@ class ValidateSkillsTests(RepoTestCase):
         self.assertIn("skills/alpha/SKILL.md:6", out)
 
     def test_warnings_are_shown_only_for_touched_skills(self):
-        off_vocabulary = '  aws-devops-agent-skills.aws-services: "Made Up Service"\n'
-        self.write("skills/alpha/SKILL.md", skill_md("alpha", extra=off_vocabulary))
-        self.write("skills/beta/SKILL.md", skill_md("beta", extra=off_vocabulary))
+        unknown_key = '  reviewed-by: "hubot"\n'
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", extra=unknown_key))
+        self.write("skills/beta/SKILL.md", skill_md("beta", extra=unknown_key))
         base = self.commit("base")
         self.write("skills/beta/CHANGELOG.md", "# Changelog\n")
         self.commit("touch beta without changing its published files")
@@ -142,8 +142,8 @@ class ValidateSkillsTests(RepoTestCase):
         self.assertIn("1 warning(s) on skills this change doesn't touch are not shown", out)
 
     def test_without_a_base_every_warning_is_shown(self):
-        off_vocabulary = '  aws-devops-agent-skills.aws-services: "Made Up Service"\n'
-        self.write("skills/alpha/SKILL.md", skill_md("alpha", extra=off_vocabulary))
+        unknown_key = '  reviewed-by: "hubot"\n'
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", extra=unknown_key))
         self.commit("base")
         code, out = self.run_check()
         self.assertEqual(code, 0, out)

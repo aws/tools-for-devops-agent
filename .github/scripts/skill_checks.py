@@ -1280,12 +1280,27 @@ def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report
                     line=line,
                 )
             elif part not in approved:
-                hint = (
-                    f'use "{rules.aliases[part]}"'
-                    if part in rules.aliases
-                    else f"approved values are listed in {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}"
+                report.error(
+                    f'"{part}" is not an approved {dimension} value; {_approved_value_hint(part, approved, rules)}',
+                    line=line,
                 )
-                report.warning(f'"{part}" is not an approved {dimension} value; {hint}', line=line)
+
+
+def _approved_value_hint(part: str, approved: frozenset[str], rules: Rules) -> str:
+    """What to write instead of an unapproved dimension value.
+
+    An alias counts only when it names a value of the same dimension. A value
+    that differs from an approved one only in letter case or spacing, such as a
+    non-breaking space copied from a web page, gets that approved spelling.
+    """
+    alias = rules.aliases.get(part)
+    if alias in approved:
+        return f'use "{alias}"'
+    folded = " ".join(part.split()).casefold()
+    spelling = next((value for value in sorted(approved) if value.casefold() == folded), None)
+    if spelling is not None:
+        return f'use "{spelling}", which differs from it in letter case or spacing'
+    return f"use a value from {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}, or add this one to it for review"
 
 
 # --- Package: the files that are published and installed -----------------------
