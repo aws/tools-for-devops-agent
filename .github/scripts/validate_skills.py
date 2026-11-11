@@ -21,10 +21,14 @@ Before checking any skill, the script runs the cases in
 skill-rules/conformance-cases.json through the same rules and stops with exit
 code 2 if any case gives the wrong result.
 
+With --check-github-logins, the metadata.author names that a pull request adds
+are also looked up on GitHub (github_logins.py).
+
 Usage:
     python3 .github/scripts/validate_skills.py --base-ref origin/main
     python3 .github/scripts/validate_skills.py              # whole tree, no base
     python3 .github/scripts/validate_skills.py --self-check-only
+    GH_TOKEN=... python3 .github/scripts/validate_skills.py --base-ref origin/main --check-github-logins
 
 Exit codes: 0 every skill passes (warnings allowed), 1 a skill breaks a rule,
 2 the check could not run (a Git failure, malformed rule data, or a failed
@@ -46,6 +50,7 @@ from pathlib import Path
 import yaml
 
 import connector_checks as cc
+import github_logins
 import skill_checks as sc
 
 SKILLS_DIR = "skills"
@@ -373,15 +378,66 @@ def _recommended_skills(root: yaml.Node | None) -> tuple[str | None, list[str]]:
     return None, names
 
 
+def author_login_findings(
+    info: sc.SkillInfo, base: sc.SkillTree | None, resolver: github_logins.Resolver
+) -> list[sc.Finding]:
+    """Findings for the metadata.author names that are new since `base`, each looked up on GitHub.
+
+    A name is new when the skill has no merge-base copy (it is new, or there is
+    no base) or when the merge-base copy's author line doesn't list it, ignoring
+    case as GitHub does. Names already on the base branch aren't looked up, so
+    an account deleted later can't fail a pull request that leaves the author
+    line alone. A team, org/team, is looked up by its organization.
+    """
+    author = info.metadata.get("author")
+    if author is None:
+        return []
+    old_author = sc.lenient_metadata_text(base, "author") if base is not None else None
+    old_names = {name.lower() for name in sc.author_names(old_author)} if old_author is not None else set()
+    findings: list[sc.Finding] = []
+    for name in dict.fromkeys(sc.author_names(author)):
+        if name.lower() in old_names:
+            continue
+        account, is_team, _ = name.partition("/")
+        lookup = resolver.lookup(account)
+        severity = "error"
+        if lookup.status == github_logins.MISSING:
+            what = f'is a team of "{account}", which isn\'t' if is_team else "isn't"
+            message = (
+                f'"{name}" in metadata.author {what} a GitHub account. Use the GitHub username of whoever maintains '
+                "the skill, or their organization or org/team"
+            )
+        elif lookup.status == github_logins.FOUND and is_team and lookup.account_type == "User":
+            message = (
+                f'"{name}" in metadata.author is a team of "{account}", but "{account}" is a GitHub user, not an '
+                "organization, so it has no teams"
+            )
+        elif lookup.status == github_logins.UNKNOWN:
+            severity = "warning"
+            message = (
+                f'"{name}" in metadata.author wasn\'t looked up on GitHub, because {lookup.reason}; '
+                "make sure it is a GitHub account"
+            )
+        else:
+            continue
+        findings.append(sc.Finding(severity, message, "SKILL.md", info.author_line))
+    return findings
+
+
 def check_repository(
-    repo_root: Path, rules: sc.Rules, base: str | None, head_ref: str
+    repo_root: Path,
+    rules: sc.Rules,
+    base: str | None,
+    head_ref: str,
+    resolver: github_logins.Resolver | None = None,
 ) -> tuple[list[SkillResult], set[str] | None]:
     """Results for every skill at `head_ref`, and the skills touched since `base` (None without a base).
 
     With a base, each skill is also compared with its merge-base copy: a folder
     can't be removed or reuse a retired path, the version must go up when the
     published files change, and the lines the pull request adds are checked
-    for internal host and tool names.
+    for internal host and tool names. With a resolver, the metadata.author
+    names that are new since the base are looked up on GitHub.
     """
     head_trees, results = read_skills(repo_root, head_ref)
     results += repository_results(repo_root, head_ref)
@@ -408,6 +464,8 @@ def check_repository(
         findings, info = sc.check_skill(head_trees[name], rules)
         if base is not None:
             findings += sc.check_added_content(base_trees.get(name), head_trees[name], rules)
+        if resolver is not None and info is not None:
+            findings += author_login_findings(info, base_trees.get(name), resolver)
         if info is not None and info.metadata.get("deprecated") == "true":
             for connector in recommended.get(name, []):
                 findings.append(
@@ -541,20 +599,34 @@ def _could_not_run(exc: GitError) -> int:
     return 2
 
 
-def main(argv: list[str] | None = None, repo_root: Path | None = None, rules_dir: Path = RULES_DIR) -> int:
+def main(
+    argv: list[str] | None = None,
+    repo_root: Path | None = None,
+    rules_dir: Path = RULES_DIR,
+    login_resolver: github_logins.Resolver | None = None,
+) -> int:
+    """Runs the check. `login_resolver` replaces the GitHub lookup, so tests never reach the network."""
     try:
-        return _run(argv, repo_root, rules_dir)
+        return _run(argv, repo_root, rules_dir, login_resolver)
     except Exception as exc:  # noqa: BLE001 - any crash means the check didn't run, never a finding.
         print(f"::error title=Skill publishing rules could not run::{_escape_data(f'{type(exc).__name__}: {exc}')}")
         print("The check stopped unexpectedly. This is not a finding about the pull request.")
         return 2
 
 
-def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int:
+def _run(
+    argv: list[str] | None, repo_root: Path | None, rules_dir: Path, login_resolver: github_logins.Resolver | None
+) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base-ref", help="the branch the pull request merges into, such as origin/main")
     parser.add_argument("--head-ref", default="HEAD", help="the commit to check (default: HEAD)")
     parser.add_argument("--self-check-only", action="store_true", help="run only the conformance cases")
+    parser.add_argument(
+        "--check-github-logins",
+        action="store_true",
+        help="look up on GitHub each metadata.author name that a new skill lists or a changed author line adds, "
+        f"with the token in {' or '.join(github_logins.TOKEN_VARIABLES)}",
+    )
     args = parser.parse_args(argv)
     repo_root = repo_root or _repo_root()
 
@@ -592,13 +664,16 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
         print("Self-check passed.")
         return 0
 
+    resolver = None
+    if args.check_github_logins:
+        resolver = login_resolver or github_logins.GitHubResolver.from_environment()
     if excludes is not None:
         # The cases above test this pull request's rules; its skills are held to the base branch's published set.
         rules = dataclasses.replace(rules, published_excludes=excludes)
     try:
         if args.head_ref == "HEAD" and uncommitted_skill_changes(repo_root):
             print(f"note: uncommitted changes under {SKILLS_DIR}/ are not checked; commit them first.\n")
-        results, touched = check_repository(repo_root, rules, base, args.head_ref)
+        results, touched = check_repository(repo_root, rules, base, args.head_ref, resolver)
     except GitError as exc:
         return _could_not_run(exc)
     return report(results, touched)

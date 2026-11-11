@@ -315,6 +315,7 @@ class SkillInfo:
     version_line: int | None = None
     deprecated_line: int | None = None
     name_line: int | None = None
+    author_line: int | None = None
 
 
 def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
@@ -889,6 +890,7 @@ def _check_skill_md(folder: str, data: bytes, rules: Rules, findings: list[Findi
         version_line=lines.get("version"),
         deprecated_line=lines.get("deprecated"),
         name_line=_line(top["name"][0]) if "name" in top else None,
+        author_line=lines.get("author"),
     )
 
 
@@ -1094,13 +1096,19 @@ def _check_author(metadata: dict, items: dict, lines: dict, metadata_line: int, 
         return
     if "author" not in metadata:
         return
-    parts = _split(metadata["author"])
-    if not all(GITHUB_LOGIN_PATTERN.fullmatch(part) or GITHUB_TEAM_PATTERN.fullmatch(part) for part in parts):
+    if author_names(metadata["author"]) != _split(metadata["author"]):
         report.error(
             '"metadata.author" must be one or more GitHub usernames or teams (org/team) separated by commas, '
             'for example "octocat", "octocat, hubot" or "octo-org/octo-team"',
             line=lines["author"],
         )
+
+
+def author_names(author: str) -> list[str]:
+    """The names in a metadata.author value that have the form of a GitHub login or org/team, in order."""
+    return [
+        part for part in _split(author) if GITHUB_LOGIN_PATTERN.fullmatch(part) or GITHUB_TEAM_PATTERN.fullmatch(part)
+    ]
 
 
 def _check_version(
@@ -1627,6 +1635,16 @@ def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
     Fixing a two-part version changes SKILL.md, so the fix itself needs a
     version above the old one: 2.6 -> 2.6.1, not 2.6.0.
     """
+    text = lenient_metadata_text(tree, "version")
+    return parse_version(text, allow_two_part=True) if text is not None else None
+
+
+def lenient_metadata_text(tree: SkillTree, key: str) -> str | None:
+    """A metadata value of a merge-base copy, as PyYAML alone reads it, or None when it isn't text.
+
+    The merge-base copy may predate the stricter frontmatter rules, so they
+    aren't applied to it.
+    """
     entry = tree.entries.get("SKILL.md")
     try:
         match = FRONTMATTER_PATTERN.match(entry.data.decode("utf-8")) if entry else None
@@ -1634,10 +1652,9 @@ def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
         return None
     scratch = _Report([])
     root = _parse_frontmatter(match.group(1) or "", scratch, strict=False) if match else None
-    metadata = _last_value(root, "metadata")
-    node = _last_value(metadata, "version")
+    node = _last_value(_last_value(root, "metadata"), key)
     if isinstance(node, ScalarNode) and node.tag == STR_TAG:
-        return parse_version(node.value, allow_two_part=True)
+        return node.value
     return None
 
 

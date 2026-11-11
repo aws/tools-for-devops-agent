@@ -49,7 +49,7 @@ Follow these guidelines for each tool:
 
 #### Skill Metadata
 
-Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user, or your team as `org/team`) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
+Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub username, your organization, or your team as `org/team`, which must exist on GitHub) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
 
 #### Skill Publishing Rules
 
@@ -64,7 +64,7 @@ Skills on `main` are published automatically, so a pull request check ([`.github
 | `title` | Optional display name. Non-empty, one line, at most 100 characters. |
 | `license`, `compatibility`, `allowed-tools` | Optional. When present, non-empty text; `compatibility` is at most 500 characters. |
 | `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `deprecated: "true"`. A key that isn't listed below is a warning, with the nearest known key when there is one. |
-| `metadata.author` | Required. One or more GitHub usernames or teams (`org/team`, such as `octo-org/octo-team`) separated by commas, without a leading `@`. |
+| `metadata.author` | Required. One or more GitHub usernames, organizations or teams (`org/team`, such as `octo-org/octo-team`) separated by commas, without a leading `@`. Each must be an existing GitHub account: on a pull request, the check looks up each name that a new skill lists or a changed `author` line adds, and a name GitHub doesn't know is an error. A team is looked up by its organization only, because GitHub shows a team only to the organization's members. When GitHub can't answer, because of a rate limit, a server error or a timeout, the name is a warning instead. |
 | `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix, suffix or leading zeros, at most 32 characters and at most 10 digits in each part. |
 | `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing or empty summary is a warning for now; it becomes required once every skill has one. |
 | `metadata.deprecated` | Optional. `"true"` or `"false"`. |
@@ -133,6 +133,8 @@ git remote add upstream https://github.com/aws/tools-for-devops-agent.git
 git fetch upstream main
 python3 .github/scripts/validate_skills.py --base-ref upstream/main
 ```
+
+The GitHub account lookup for `metadata.author` runs only with `--check-github-logins`, which the pull request check passes, and it needs a token in `GH_TOKEN` or `GITHUB_TOKEN`, such as `GH_TOKEN="$(gh auth token)"`. Without a token, each name it would look up is a warning.
 
 Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request; the YAML rules also have cases in [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json), which the unit tests run, and the connector version rules in [`connector-conformance-cases.json`](.github/scripts/skill-rules/connector-conformance-cases.json), which the script runs with the skill cases. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
 

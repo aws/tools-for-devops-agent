@@ -21,6 +21,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 
+import github_logins  # noqa: E402
 import validate_skills  # noqa: E402
 
 GIT_ENV = {
@@ -33,10 +34,10 @@ GIT_ENV = {
 }
 
 
-def skill_md(name: str, version: str = "1.0.0", extra: str = "") -> str:
+def skill_md(name: str, version: str = "1.0.0", extra: str = "", author: str = "octocat") -> str:
     return (
         f"---\nname: {name}\ndescription: Use this skill when testing {name}.\n"
-        f'metadata:\n  author: octocat\n  version: "{version}"\n'
+        f'metadata:\n  author: {author}\n  version: "{version}"\n'
         f'  summary: "Tests {name}."\n  aws-devops-agent-skills.agent-types: "CHAT"\n'
         f"{extra}---\n\n# {name}\n"
     )
@@ -74,16 +75,25 @@ class RepoTestCase(unittest.TestCase):
         return target
 
     def run_check(
-        self, *argv: str, env: dict | None = None, rules_dir: Path | None = None, repo_root: Path | None = None
+        self,
+        *argv: str,
+        env: dict | None = None,
+        rules_dir: Path | None = None,
+        repo_root: Path | None = None,
+        login_resolver=None,
     ) -> tuple[int, str]:
         # Strict UTF-8, as on a real stdout, so text that can't be printed fails the test.
         raw = io.BytesIO()
         out = io.TextIOWrapper(raw, encoding="utf-8", errors="strict", newline="\n")
-        environ = {k: v for k, v in os.environ.items() if not k.startswith("GITHUB_")}
+        # As outside GitHub Actions, with no token even if the shell exports one: github_logins reads GH_TOKEN too.
+        environ = {k: v for k, v in os.environ.items() if not k.startswith("GITHUB_") and k != "GH_TOKEN"}
         environ.update(env or {})
         with mock.patch.dict(os.environ, environ, clear=True), contextlib.redirect_stdout(out):
             code = validate_skills.main(
-                list(argv), repo_root=repo_root or self.repo, rules_dir=rules_dir or validate_skills.RULES_DIR
+                list(argv),
+                repo_root=repo_root or self.repo,
+                rules_dir=rules_dir or validate_skills.RULES_DIR,
+                login_resolver=login_resolver,
             )
         out.flush()
         return code, raw.getvalue().decode("utf-8")
@@ -667,6 +677,120 @@ class PublishedFilesFromTheBaseTests(RepoTestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("published-files.json on the base branch is malformed", out)
         self.assertNotIn("skill(s) checked", out)
+
+
+class StubResolver:
+    """Answers GitHub lookups from a table: a login it doesn't list is a user that exists."""
+
+    def __init__(self, answers: dict[str, github_logins.Lookup] | None = None):
+        self.answers = {login.lower(): lookup for login, lookup in (answers or {}).items()}
+        self.calls: list[str] = []
+
+    def lookup(self, login: str) -> github_logins.Lookup:
+        self.calls.append(login)
+        return self.answers.get(login.lower(), github_logins.Lookup(github_logins.FOUND, account_type="User"))
+
+
+class RefusingResolver:
+    def lookup(self, login: str) -> github_logins.Lookup:
+        raise AssertionError(f"looked up {login} with the flag off")
+
+
+MISSING = github_logins.Lookup(github_logins.MISSING)
+ORGANIZATION = github_logins.Lookup(github_logins.FOUND, account_type="Organization")
+# The author line of skill_md().
+AUTHOR_LINE = 5
+
+
+class GitHubLoginTests(RepoTestCase):
+    def setUp(self):
+        super().setUp()
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.base = self.commit("base")
+
+    def test_a_new_skill_whose_author_is_not_an_account_fails(self):
+        self.write("skills/beta/SKILL.md", skill_md("beta", author="octocat, no-such-login"))
+        self.commit("add beta")
+        resolver = StubResolver({"no-such-login": MISSING})
+        code, out = self.run_check("--base-ref", self.base, "--check-github-logins", login_resolver=resolver)
+        self.assertEqual(code, 1, out)
+        self.assertIn(
+            f'FAIL  skills/beta/SKILL.md:{AUTHOR_LINE}: "no-such-login" in metadata.author isn\'t a GitHub account', out
+        )
+        self.assertEqual(resolver.calls, ["octocat", "no-such-login"])
+
+    def test_an_unchanged_author_line_is_not_looked_up(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1", extra='  tier: "aws-managed"\n'))
+        self.commit("touch alpha but not its author")
+        resolver = StubResolver({"octocat": MISSING})
+        code, out = self.run_check("--base-ref", self.base, "--check-github-logins", login_resolver=resolver)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(resolver.calls, [])
+
+    def test_a_changed_author_line_looks_up_only_the_names_it_adds(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1", author="OctoCat, hubot"))
+        self.commit("add a co-author")
+        resolver = StubResolver()
+        code, out = self.run_check("--base-ref", self.base, "--check-github-logins", login_resolver=resolver)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(resolver.calls, ["hubot"])
+
+    def test_a_team_is_looked_up_by_its_organization(self):
+        self.write("skills/beta/SKILL.md", skill_md("beta", author="octo-org/octo-team"))
+        self.write("skills/gamma/SKILL.md", skill_md("gamma", author="gone-org/octo-team"))
+        self.write("skills/delta/SKILL.md", skill_md("delta", author="octocat/octo-team"))
+        self.commit("add three team-owned skills")
+        resolver = StubResolver({"octo-org": ORGANIZATION, "gone-org": MISSING})
+        code, out = self.run_check("--base-ref", self.base, "--check-github-logins", login_resolver=resolver)
+        self.assertEqual(code, 1, out)
+        self.assertEqual(sorted(resolver.calls), ["gone-org", "octo-org", "octocat"])
+        self.assertNotIn("skills/beta", out)
+        self.assertIn('"gone-org/octo-team" in metadata.author is a team of "gone-org", which isn\'t a GitHub account', out)
+        self.assertIn('"octocat" is a GitHub user, not an organization, so it has no teams', out)
+
+    def test_a_lookup_github_cannot_answer_is_a_warning(self):
+        reason = "GitHub's API rate limit was reached"
+        self.write("skills/beta/SKILL.md", skill_md("beta", author="hubot"))
+        self.commit("add beta")
+        resolver = StubResolver({"hubot": github_logins.Lookup(github_logins.UNKNOWN, reason=reason)})
+        code, out = self.run_check("--base-ref", self.base, "--check-github-logins", login_resolver=resolver)
+        self.assertEqual(code, 0, out)
+        self.assertIn(
+            f'WARN  skills/beta/SKILL.md:{AUTHOR_LINE}: "hubot" in metadata.author wasn\'t looked up on GitHub, '
+            f"because {reason}",
+            out,
+        )
+
+    def test_without_a_token_every_new_name_is_a_warning_and_nothing_is_requested(self):
+        self.write("skills/beta/SKILL.md", skill_md("beta", author="hubot"))
+        self.commit("add beta")
+        with mock.patch.object(github_logins.urllib.request.OpenerDirector, "open", side_effect=AssertionError):
+            code, out = self.run_check("--base-ref", self.base, "--check-github-logins")
+        self.assertEqual(code, 0, out)
+        self.assertIn("because no GitHub token is set in GH_TOKEN or GITHUB_TOKEN", out)
+
+    def test_without_the_flag_nothing_is_looked_up(self):
+        self.write("skills/beta/SKILL.md", skill_md("beta", author="no-such-login"))
+        self.commit("add beta")
+        code, out = self.run_check("--base-ref", self.base, login_resolver=RefusingResolver())
+        self.assertEqual(code, 0, out)
+
+    def test_without_a_base_every_author_is_looked_up(self):
+        self.write("skills/beta/SKILL.md", skill_md("beta", author="hubot"))
+        self.commit("add beta")
+        resolver = StubResolver()
+        code, out = self.run_check("--check-github-logins", login_resolver=resolver)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(resolver.calls, ["octocat", "hubot"])
+
+    def test_a_malformed_author_is_reported_once_and_not_looked_up(self):
+        self.write("skills/beta/SKILL.md", skill_md("beta", author='"octo cat"'))
+        self.commit("add beta")
+        resolver = StubResolver()
+        code, out = self.run_check("--base-ref", self.base, "--check-github-logins", login_resolver=resolver)
+        self.assertEqual(code, 1, out)
+        self.assertIn("must be one or more GitHub usernames or teams", out)
+        self.assertEqual(resolver.calls, [])
 
 
 class SelfCheckTests(RepoTestCase):

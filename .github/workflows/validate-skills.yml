@@ -8,7 +8,8 @@ name: Validate skills
 # request changes.
 #
 # It runs the unit tests for the check first, so a pull request that changes
-# the check is tested by the version it brings.
+# the check is tested by the version it brings. It also looks up on GitHub each
+# metadata.author name the pull request adds (.github/scripts/github_logins.py).
 #
 # NOTE: a red check does not block merging on its own. An admin must add the
 # job's name ("validate-skills") to the required status checks for `main` in
@@ -34,7 +35,8 @@ on:
     # passes when no skill breaks a rule.
 
 # Read-only: the job inspects Git objects and reports a status, so pull requests
-# from forks work without any elevated permissions.
+# from forks work without any elevated permissions. The job's token, read-only
+# too, is used only to look up the GitHub accounts that metadata.author names.
 permissions:
   contents: read
 
@@ -79,18 +81,22 @@ jobs:
       - name: Check every skill
         continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'skip-validate-skills') }}
         # Event values are passed through the environment rather than
-        # interpolated into the command, and quoted on use.
+        # interpolated into the command, and quoted on use. --check-github-logins
+        # looks up each metadata.author name the pull request adds with
+        # GH_TOKEN; a lookup GitHub can't answer is only a warning.
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Defensive only: a pull_request event always names its base branch.
           # Without one, check the whole tree with no base.
           if [ -z "${BASE_REF}" ]; then
-            python3 .github/scripts/validate_skills.py --head-ref HEAD
+            python3 .github/scripts/validate_skills.py --head-ref HEAD --check-github-logins
             exit $?
           fi
           git fetch --no-tags --quiet origin \
             "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
           python3 .github/scripts/validate_skills.py \
             --base-ref "origin/${BASE_REF}" \
-            --head-ref HEAD
+            --head-ref HEAD \
+            --check-github-logins
