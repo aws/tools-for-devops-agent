@@ -322,9 +322,7 @@ def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
     published = _read_json(rules_dir / PUBLISHED_FILES_FILE)
     internal = _read_json(rules_dir / INTERNAL_NAMES_FILE)
     try:
-        excludes = _string_list(published["exclude"], f"{PUBLISHED_FILES_FILE} exclude")
-        if not excludes or not all("/" not in e.rstrip("/") for e in excludes):
-            raise TypeError(f"{PUBLISHED_FILES_FILE}: exclude must list root-level names, folders ending in /")
+        excludes = published_excludes(published)
         values = _string_list(agent_types["values"], f"{AGENT_TYPES_FILE} values")
         dimensions = vocabulary["values"]
         aliases = vocabulary["aliases"]
@@ -342,11 +340,22 @@ def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
             vocabulary=vocabulary_sets,
             aliases=dict(aliases),
             allowed_extensions=allowed_extensions_from_gitignore(gitignore_text),
-            published_excludes=tuple(excludes),
+            published_excludes=excludes,
             internal_names=_internal_name_patterns(internal),
         )
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"malformed rule data in {rules_dir}: {exc}") from exc
+
+
+def published_excludes(document) -> tuple[str, ...]:
+    """The exclude list of a published-files.json document.
+
+    Raises KeyError, TypeError or AttributeError when the document is malformed.
+    """
+    excludes = _string_list(document["exclude"], f"{PUBLISHED_FILES_FILE} exclude")
+    if not excludes or not all("/" not in e.rstrip("/") for e in excludes):
+        raise TypeError(f"{PUBLISHED_FILES_FILE}: exclude must list root-level names, folders ending in /")
+    return tuple(excludes)
 
 
 def _internal_name_patterns(document) -> tuple[re.Pattern[str], ...]:

@@ -34,6 +34,8 @@ self-check), which says nothing about the pull request's content.
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import json
 import os
 import subprocess
 import sys
@@ -51,6 +53,8 @@ CONNECTORS_DIR, CONNECTOR_FILE = cc.CONNECTORS_DIR, cc.CONNECTOR_FILE
 MAX_CONNECTOR_FILE_BYTES = 32_768
 RELEASES_PATH = f"{CONNECTORS_DIR}/releases.yaml"
 RULES_DIR = Path(__file__).resolve().parent / "skill-rules"
+# Read from the merge base, like skills/.gitignore.
+PUBLISHED_FILES_PATH = f"{sc.RULES_DIR_DISPLAY}/{sc.PUBLISHED_FILES_FILE}"
 CONFORMANCE_FILE = "conformance-cases.json"
 DOCS_HINT = 'See the "Skill Publishing Rules" section of CONTRIBUTING.md.'
 
@@ -98,6 +102,12 @@ def _ls_tree(repo_root: Path, rev: str, *paths: str) -> Iterator[tuple[str, str,
             meta, _, raw_path = record.partition(b"\t")
             mode, kind, oid = meta.decode("ascii").split(" ")
             yield mode, kind, oid, _decode_path(raw_path)
+
+
+def _read_file(repo_root: Path, rev: str, path: str) -> bytes | None:
+    """The bytes of the file at `path` in `rev`, or None when `rev` has no file there."""
+    oids = [oid for _, kind, oid, found in _ls_tree(repo_root, rev, path) if kind == "blob" and found == path]
+    return _read_blobs(repo_root, oids)[0] if oids else None
 
 
 def read_skills(repo_root: Path, rev: str) -> tuple[dict[str, sc.SkillTree], list[SkillResult]]:
@@ -173,7 +183,10 @@ def uncommitted_skill_changes(repo_root: Path) -> bool:
 
 
 def read_gitignore(repo_root: Path, rev: str) -> str:
-    return _git(repo_root, "show", f"{rev}:{SKILLS_DIR}/.gitignore").decode("utf-8")
+    data = _read_file(repo_root, rev, f"{SKILLS_DIR}/.gitignore")
+    if data is None:
+        raise GitError(f"{rev} has no {SKILLS_DIR}/.gitignore")
+    return data.decode("utf-8")
 
 
 def repository_results(repo_root: Path, rev: str) -> list[SkillResult]:
@@ -281,6 +294,18 @@ def connector_results(repo_root: Path, base: str | None, head_ref: str) -> list[
         if findings:
             results.append(SkillResult(f"{CONNECTORS_DIR}/{name}", findings, is_skill=False, always_visible=True))
     return results
+
+
+def base_published_excludes(data: bytes) -> tuple[str, ...]:
+    """The exclude list in the merge base's skill-rules/published-files.json. Raises ValueError when malformed.
+
+    The base branch's list applies, so a change to it takes effect only once it
+    has merged, as a new extension in skills/.gitignore does.
+    """
+    try:
+        return sc.published_excludes(json.loads(data.decode("utf-8")))
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(f"{PUBLISHED_FILES_PATH} on the base branch is malformed: {exc}") from exc
 
 
 def connector_skill_references(repo_root: Path, rev: str) -> tuple[dict[str, list[str]], list[SkillResult]]:
@@ -534,16 +559,18 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
     repo_root = repo_root or _repo_root()
 
     base = None
+    published = None
     try:
         if args.self_check_only:
             # The cases test the rules, not the repository, so no Git is needed.
             gitignore = (repo_root / SKILLS_DIR / ".gitignore").read_text(encoding="utf-8")
         else:
-            # The extension allowlist is read from the merge base when there is
-            # one, so a new extension takes effect only after the
-            # skills/.gitignore change that adds it has merged.
+            # The extension allowlist and the published set are read from the
+            # merge base when there is one, so a new extension, or a change to
+            # what is published, takes effect only after its change has merged.
             base = merge_base(repo_root, args.base_ref, args.head_ref) if args.base_ref else None
             gitignore = read_gitignore(repo_root, base or args.head_ref)
+            published = _read_file(repo_root, base, PUBLISHED_FILES_PATH) if base is not None else None
     except OSError as exc:
         print(f"::error title=Skill publishing rules::cannot read {SKILLS_DIR}/.gitignore: {_escape_data(str(exc))}")
         return 2
@@ -551,6 +578,7 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
         return _could_not_run(exc)
     try:
         rules = sc.load_rules(rules_dir, gitignore)
+        excludes = base_published_excludes(published) if published is not None else None
     except ValueError as exc:
         print(f"::error title=Skill publishing rules::{_escape_data(str(exc))}")
         return 2
@@ -564,6 +592,9 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
         print("Self-check passed.")
         return 0
 
+    if excludes is not None:
+        # The cases above test this pull request's rules; its skills are held to the base branch's published set.
+        rules = dataclasses.replace(rules, published_excludes=excludes)
     try:
         if args.head_ref == "HEAD" and uncommitted_skill_changes(repo_root):
             print(f"note: uncommitted changes under {SKILLS_DIR}/ are not checked; commit them first.\n")

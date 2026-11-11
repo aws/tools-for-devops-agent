@@ -631,6 +631,44 @@ class ConnectorVersionTests(RepoTestCase):
         self.assertIn('FAIL  connectors/acme/connector.yaml:3: "version" is "1.1"; it must be MAJOR.MINOR.PATCH', out)
 
 
+class PublishedFilesFromTheBaseTests(RepoTestCase):
+    """skill-rules/published-files.json is read from the merge base, so a change to it applies once it has merged."""
+
+    PATH = validate_skills.PUBLISHED_FILES_PATH
+
+    def published_files(self, *exclude: str) -> str:
+        return json.dumps({"description": "Test copy.", "exclude": list(exclude)})
+
+    def test_a_name_the_pull_request_leaves_out_of_the_published_set_still_needs_a_bump(self):
+        self.write(self.PATH, self.published_files("evals/", ".skilleval.yaml", "CHANGELOG.md"))
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/alpha/NOTES.md", "one\n")
+        base = self.commit("base")
+        rules_dir = self.rules_copy()
+        widened = self.published_files("evals/", ".skilleval.yaml", "CHANGELOG.md", "NOTES.md")
+        (rules_dir / "published-files.json").write_text(widened, encoding="utf-8")
+        self.write(self.PATH, widened)
+        self.write("skills/alpha/NOTES.md", "two\n")
+        merged = self.commit("leave NOTES.md out of the published set, and change it")
+        code, out = self.run_check("--base-ref", base, rules_dir=rules_dir)
+        self.assertEqual(code, 1, out)
+        self.assertIn("metadata.version must go up from 1.0.0", out)
+        # Once the list has merged, it applies.
+        self.write("skills/alpha/NOTES.md", "three\n")
+        self.commit("change NOTES.md again")
+        code, out = self.run_check("--base-ref", merged, rules_dir=rules_dir)
+        self.assertEqual(code, 0, out)
+
+    def test_a_malformed_list_on_the_base_branch_cannot_run(self):
+        self.write(self.PATH, '{"exclude": "evals/"}')
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        base = self.commit("base")
+        code, out = self.run_check("--base-ref", base)
+        self.assertEqual(code, 2, out)
+        self.assertIn("published-files.json on the base branch is malformed", out)
+        self.assertNotIn("skill(s) checked", out)
+
+
 class SelfCheckTests(RepoTestCase):
     def test_repository_cases_pass(self):
         code, out = self.run_check("--self-check-only")

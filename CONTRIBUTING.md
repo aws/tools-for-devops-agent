@@ -76,7 +76,7 @@ The frontmatter must be plain YAML that every parser reads the same way. These a
 
 A `SKILL.md` body over 500 lines is a warning, as it is in the skill evaluation tool: move reference material into `references/` and link to it.
 
-Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). `README.md` and `images/` are published too. For the published files:
+Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). `README.md` and `images/` are published too. The check reads that list from the base branch, so a change to it takes effect only after it has merged. For the published files:
 
 - At most 100 files, each at most 1 MiB, and their zip at most 4,128,768 bytes (4 MiB less a margin, because zip sizes vary by tool). The check warns past 90% of each of these limits. The `SKILL.md` frontmatter is at most 32 KiB.
 - Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a new extension takes effect only after the `skills/.gitignore` change that adds it has merged.
