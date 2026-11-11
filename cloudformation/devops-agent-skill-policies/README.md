@@ -45,6 +45,7 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableAwsHealthEvents` | `aws-health-events` | `health:DescribeEventTypes` |
 | `EnableSupportCases` | `support-cases` | `support:DescribeCommunications` |
 | `EnableRdsOperationReview` | `rds-operation-review` | `rds:DownloadDBLogFilePortion`, `logs:GetLogEvents` |
+| `EnableCloudFrontOperationalReview` | `cloudfront-operational-review` | `cloudfront:GetVpcOrigin`, `s3:GetBucketPolicyStatus`, `s3:GetAccountPublicAccessBlock`, `pricingplanmanager:ListSubscriptions` |
 | `EnableInvestigationCostGuardrail` | `investigation-cost-guardrail` | `pricing:GetProducts` |
 | `EnableMskOperations` | `msk-operations` | `kafka:GetBootstrapBrokers` |
 | `EnableServiceQuotaCheck` | `service-quota-check` | Service Quotas read + `RequestServiceQuotaIncrease`, `CreateSupportCase`; `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics` |
