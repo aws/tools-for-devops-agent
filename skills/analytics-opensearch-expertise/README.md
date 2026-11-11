@@ -47,5 +47,5 @@ If the agent does not invoke the skill, refine the `description` field in `SKILL
 
 ## Maintainers
 
-- genealpe
+- genedragon
 - prasadnu

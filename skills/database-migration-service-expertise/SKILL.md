@@ -7,7 +7,7 @@ description: AWS Database Migration Service (DMS) operational review and trouble
   "DMS best practices audit", "DMS cost optimization", "replication instance review",
   "CDC latency issue", or "DMS task failure".
 metadata:
-  author: tabhiman
+  author: abhit-cloud
   version: "1.0.4"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "AWS Database Migration Service"

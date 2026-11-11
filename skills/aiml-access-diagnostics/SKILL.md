@@ -19,7 +19,7 @@ description: >
   review without a failure, throttling or quota errors (ThrottlingException),
   model quality issues, or non-AI/ML services.
 metadata:
-  author: tamrish
+  author: ams-thakkar
   version: "1.2.5"
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker AI, AWS IAM"

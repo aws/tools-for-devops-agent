@@ -11,8 +11,8 @@ description: Validates and bootstraps Amazon Bedrock AgentCore observability so 
   CloudWatch, X-Ray, and AgentCore control-plane APIs, and prescribes exact remediation for gaps it
   cannot directly read such as code-level OTEL instrumentation.
 metadata:
-  author: vggargav
-  version: "1.0.2"
+  author: vipulg1993
+  version: "1.0.3"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock AgentCore, Amazon CloudWatch, AWS X-Ray"
   aws-devops-agent-skills.technical-domains: "AI/ML, Observability"

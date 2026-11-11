@@ -19,8 +19,8 @@ description: >
   Do NOT use for cost optimization, performance tuning, or EFS, FSx, AWS Backup,
   or Storage Gateway.
 metadata:
-  author: hokang
-  version: "1.0.3"
+  author: howard-m-k
+  version: "1.0.4"
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "Amazon S3"
   aws-devops-agent-skills.technical-domains: "Storage"

@@ -13,8 +13,8 @@ description: Identify and quantify Amazon GuardDuty cost optimization opportunit
   free-trial cost projection, and duplicate multi-account coverage, producing a
   severity-ranked report of savings.
 metadata:
-  author: holmalla
-  version: "1.3.2"
+  author: kaiserschmarm
+  version: "1.3.3"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon GuardDuty"
   aws-devops-agent-skills.technical-domains: "Security, Cost Optimization"
