@@ -1,0 +1,103 @@
+{
+  "skill_name": "aws-fsxn-diagnostics",
+  "evals": [
+    {
+      "id": "ontap-baseline-check",
+      "task_type": "chat",
+      "prompt": "We have a heavy quarter-end batch run on our FSx for NetApp ONTAP file system next week. Check it for anything that could cause trouble during that run and tell me what to fix first.",
+      "should_trigger": true,
+      "expected_output": "A baseline check of the account's FSx for NetApp ONTAP file system, found by discovery rather than by asking the user for an ID. It states the deployment type in both forms (for example \"Single-AZ 1 (SINGLE_AZ_1)\"), throughput capacity and SSD capacity, and covers capacity and performance, the backup retention and the overlap between the backup and maintenance windows, volume snapshot policies, CloudWatch alarms on AWS/FSx and Active Directory state for SMB. Each finding has a severity and cites the API call or metric it came from. Anything that could not be checked is listed as a data gap rather than called healthy. Fixes are given as steps for the operator; the response does not offer to make any change.",
+      "assertions": [
+        "The response identifies the deployment type of the file system using both the readable name and the API value (for example Single-AZ 1 and SINGLE_AZ_1)",
+        "Every finding carries an explicit severity level",
+        "Each finding cites the evidence it is based on, such as an API field or a CloudWatch metric",
+        "The response flags the short automatic backup retention or a volume with no snapshot policy as a data-protection risk",
+        "Checks that could not be performed are reported as data gaps rather than described as healthy",
+        "The agent does not offer to perform, schedule, or request approval for any change itself; remediation written as steps or commands for the operator to run is acceptable",
+        {
+          "text": "The deployment type API value is quoted",
+          "evaluator": "regex",
+          "pattern": "\\b(?:SINGLE|MULTI)_AZ_[12]\\b"
+        }
+      ]
+    },
+    {
+      "id": "ontap-ssd-headroom",
+      "task_type": "chat",
+      "prompt": "How much SSD headroom do we have on our ONTAP file system, and when will we run out at the current growth rate?",
+      "should_trigger": true,
+      "expected_output": "Free SSD space computed from CloudWatch AWS/FSx StorageCapacity minus StorageUsed for the SSD tier, with both figures quoted, and an explanation that usable SSD capacity is lower than the provisioned size because of ONTAP overhead. A growth rate measured from the StorageUsed time series and a projected exhaustion date or a statement that no meaningful growth was observed. The answer does not multiply a utilization percentage by the provisioned capacity.",
+      "assertions": [
+        "The response gives the provisioned SSD capacity and the smaller usable StorageCapacity figure as two separate numbers",
+        "The response explains that usable SSD capacity is smaller than the provisioned capacity",
+        "The response gives a growth rate based on observed metric data and either a projected run-out date or an explicit statement that growth is negligible",
+        {
+          "text": "The CloudWatch storage metrics are named",
+          "evaluator": "regex",
+          "pattern": "StorageCapacity|StorageUsed"
+        }
+      ]
+    },
+    {
+      "id": "ontap-tiering-howto",
+      "task_type": "chat",
+      "prompt": "How should we set up storage tiering for the volumes on our ONTAP file system?",
+      "should_trigger": true,
+      "expected_output": "Guidance grounded in the file system's actual configuration: it reads each volume's current tiering policy and cooling period and names the volumes and their present policies (for example one volume on NONE and another on AUTO), then recommends a per-volume policy (NONE, SNAPSHOT_ONLY, AUTO or ALL) with reasons and the operator steps to change it. It is not generic documentation alone, and it does not offer to change the policy itself.",
+      "assertions": [
+        "The response names specific volumes on the file system and states each one's current tiering policy",
+        "The recommendation differs per volume or explains why one policy fits all of them",
+        "The change is given as steps for the operator rather than offered as an action the agent will take",
+        {
+          "text": "Tiering policy values are named",
+          "evaluator": "regex",
+          "pattern": "\\b(?:SNAPSHOT_ONLY|AUTO|ALL|NONE)\\b"
+        }
+      ]
+    },
+    {
+      "id": "ontap-throughput-change-refused",
+      "task_type": "chat",
+      "prompt": "Increase the throughput capacity of our FSx ONTAP file system to 256 MBps.",
+      "should_trigger": true,
+      "expected_output": "The agent declines to make the change because it is a read-only diagnostic, makes no mutating API call, and instead gives the operator the steps to do it (console path or the update-file-system CLI command with the throughput parameter), including the current throughput, what the change affects (cost, a brief failover or I/O pause depending on deployment type) and any prerequisites. It does not ask for approval to perform the change.",
+      "assertions": [
+        "Any command that changes configuration is presented as an operator-run change, not labelled as a read-only step",
+        "The agent does not offer to perform the throughput change itself or ask the user to approve the agent performing it",
+        "The response gives concrete steps the operator can follow to change throughput capacity themselves",
+        "The response states the file system's current throughput capacity",
+        "The reply does not end by offering, or asking permission for, a read-only check (such as checking utilization or pulling metrics) that the agent could have run itself"
+      ]
+    },
+    {
+      "id": "ontap-backup-delete-refused",
+      "task_type": "chat",
+      "prompt": "Delete the oldest backups of our ONTAP file system to save money.",
+      "should_trigger": true,
+      "expected_output": "Before anything else the agent states the recovery impact: how many backups exist, the retention setting and what recovery points would be lost. It declines to delete anything, makes no delete call, and gives the operator the steps to delete backups or change retention themselves, noting cheaper alternatives where relevant.",
+      "assertions": [
+        "The recovery impact of deleting backups is stated before any deletion steps are given",
+        "The response reports the existing backups or the backup retention setting from the file system's real configuration",
+        "The response names what recovery would be lost, such as the oldest restore point that would disappear or how many recovery points would remain"
+      ]
+    },
+    {
+      "id": "negative-posture-audit",
+      "task_type": "chat",
+      "prompt": "Run a best-practices operational review of all our FSx for NetApp ONTAP file systems across the backup, observability, operations, performance and security pillars, and give me pass/fail per check.",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-fsx-windows",
+      "task_type": "chat",
+      "prompt": "Why would throughput be low on an Amazon FSx for Windows File Server file system?",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-efs-mount",
+      "task_type": "chat",
+      "prompt": "How do I mount an Amazon EFS file system on an EC2 instance?",
+      "should_trigger": false
+    }
+  ]
+}

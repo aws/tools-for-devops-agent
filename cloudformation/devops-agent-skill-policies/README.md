@@ -57,11 +57,12 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableLiveStreamingEventReadinessReview` | `live-streaming-event-readiness-review` | `mediatailor:ListPlaybackConfigurations`, `mediatailor:GetPlaybackConfiguration`, `mediatailor:ListPrefetchSchedules`, `route53-recovery-cluster:ListRoutingControls` |
 | `EnableEosCostAnalysis` | `eos-cost-analysis` | `pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`. Resource discovery is already covered by the managed policy |
 | `EnableEksOperationReview` | `aws-eks-operations-review` | None — already covered by the managed policy |
+| `EnableAwsFsxnDiagnostics` | `aws-fsxn-diagnostics` | None — already covered by the managed policy |
 | `EnableEnrichWithSecurityAgent` | `enrich-with-aws-security-agent` | None — already covered by the managed policy |
 | `EnableCrmInvestigationGuidelines` | `crm-production-investigation-guidelines` | None — already covered by the managed policy |
 | `EnableSkipScheduledMaintenance` | `skip-scheduled-maintenance` | None — no IAM required |
 
-The last four parameters exist so the skill list stays complete and self-documenting;
+The last five parameters exist so the skill list stays complete and self-documenting;
 toggling them changes nothing in the stack.
 
 `EnableAwsHealthEvents` and `EnableSupportCases` need an AWS Business or Enterprise
