@@ -1006,10 +1006,26 @@ class GitattributesTests(unittest.TestCase):
         ]
         for line in applies:
             with self.subTest(line=line):
-                self.assertTrue(sc.gitattributes_line_applies_to_skills(line))
+                self.assertTrue(sc.gitattributes_line_applies_to(line, "skills"))
         for line in ignored:
             with self.subTest(line=line):
-                self.assertFalse(sc.gitattributes_line_applies_to_skills(line))
+                self.assertFalse(sc.gitattributes_line_applies_to(line, "skills"))
+
+    def test_a_line_is_matched_against_the_folder_it_is_asked_about(self):
+        """Connectors are published from the same archive as skills, so the rule checks both folders."""
+        for line, folders in {
+            "connectors/** export-ignore": {"connectors"},
+            "/connectors/acme/logo.svg export-subst": {"connectors"},
+            "connectors/*/README.md eol=crlf": {"connectors"},
+            "skills/** export-ignore": {"skills"},
+            "*.svg text eol=crlf": {"connectors", "skills"},
+            "[attr]gone export-ignore": {"connectors", "skills"},
+            "/connector/** export-ignore": set(),
+            "mcp/** export-ignore": set(),
+        }.items():
+            with self.subTest(line=line):
+                matched = {folder for folder in ("connectors", "skills") if sc.gitattributes_line_applies_to(line, folder)}
+                self.assertEqual(matched, folders)
 
 
 def versioned(version: str = "1.0.0", **files: bytes) -> sc.SkillTree:
