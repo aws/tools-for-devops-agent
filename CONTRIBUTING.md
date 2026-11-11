@@ -106,7 +106,17 @@ Identity and versions, compared with the base branch:
 - A new skill starts at `1.0.0`.
 - When the version goes up, add a `CHANGELOG.md` entry for it. A bump without one is a warning.
 
-Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list. Each `connector.yaml`, at most 32 KiB, and `connectors/releases.yaml` must be UTF-8 YAML that every parser reads the same way, by the frontmatter's rules, except that a flow collection on one line, a `---` line at the start, `---` inside a value, and a tab inside a quoted value, block scalar or comment are allowed. A flow collection can't span lines, and an unquoted entry in one can't start with `?` or `:`, hold a `?`, or be a lone `-` that no `:` follows. [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json) has a case for each rule. A `connector.yaml` that isn't a mapping, or whose `skills:` isn't a list of skill names, is a warning.
+Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list, which, like any change to a connector's files, needs a higher connector `version`. Each `connector.yaml`, at most 32 KiB, and `connectors/releases.yaml` must be UTF-8 YAML that every parser reads the same way, by the frontmatter's rules, except that a flow collection on one line, a `---` line at the start, `---` inside a value, and a tab inside a quoted value, block scalar or comment are allowed. A flow collection can't span lines, and an unquoted entry in one can't start with `?` or `:`, hold a `?`, or be a lone `-` that no `:` follows. [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json) has a case for each rule. A `connector.yaml` that isn't a mapping is an error, because it has no version to check; one whose `skills:` isn't a list of skill names is a warning.
+
+Connector versions, compared with the base branch as the catalog publisher compares them with the published version ([`connector_checks.py`](.github/scripts/connector_checks.py)):
+
+- A connector folder is never removed: to retire a connector, set `deprecated: true` in its `connector.yaml` and raise its version. Its `name` and `type` never change.
+- `version` is `MAJOR.MINOR.PATCH`, such as `1.0.0`. A new connector starts at `1.0.0`; another version is a warning.
+- Every file in a connector folder is published, so a change to any of them, the logo, the README and a comment in `connector.yaml` included, needs a higher `version`. The version never goes down, and going up more than one step (from `1.0.0` to anything but `1.0.1`, `1.1.0` or `2.0.0`) is a warning.
+- A change that can break a connection customers already made needs the next major version, such as `2.0.0` after `1.4.2`: changing or removing an `mcp.auth` option (any field counts, a header `label` included), removing an endpoint or changing its URL, in `mcp.endpoint` or `mcp.endpoints`, or adding an `mcp.config` field. Adding an auth option or an endpoint needs only a higher minor or patch version.
+- `connector.yaml` is compared by what it means, as the catalog publisher reads it, so comments and quoting don't count toward a major change, but types do: `pkce: "true"` is a change from `pkce: true`, while `endpoint: https://x.example` and `endpoint: "https://x.example"` are the same.
+
+[`connector-conformance-cases.json`](.github/scripts/skill-rules/connector-conformance-cases.json) has a case for each of these rules. Like the skill rules, they apply to every connector on every pull request; a warning can only come from a connector the pull request changes.
 
 The check is exact only for the base commit it ran on. Two pull requests that each pass on an older base can break the rules together, for example by both bumping a skill to the same version, so a later push to `main` can still fail. [`validate-skills-main.yml`](.github/workflows/validate-skills-main.yml) runs the check again after every push to `main` and reports such a break.
 
@@ -124,7 +134,7 @@ git fetch upstream main
 python3 .github/scripts/validate_skills.py --base-ref upstream/main
 ```
 
-Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request; the YAML rules also have cases in [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json), which the unit tests run. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
+Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request; the YAML rules also have cases in [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json), which the unit tests run, and the connector version rules in [`connector-conformance-cases.json`](.github/scripts/skill-rules/connector-conformance-cases.json), which the script runs with the skill cases. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
 
 #### Test Your Skill
 
@@ -587,10 +597,13 @@ A partner whose connector merged before the terms existed accepts them, and adds
 
 The box names the version of the terms, the date at the end of `TERMS.md`, so
 each pull request records the version its partner accepted. One acceptance covers
-every later contribution from that partner, connector and skills alike, and a
-pull request that removes a connector needs no `contact_email`. A connector is a
-definition, not a tool, so no other checklist item applies unless the pull request
-also changes a skill.
+every later contribution from that partner, connector and skills alike. A
+connector is a definition, not a tool, so no other checklist item applies unless
+the pull request also changes a skill.
+
+The `validate-skills` check holds every connector to the connector versions in
+[Skill Publishing Rules](#skill-publishing-rules): a change to any of its files
+needs a higher `version`, and a connector is never removed, only deprecated.
 
 **Revising the terms (maintainers).** AWS Legal approves the new text and updates
 its record of the terms. One pull request then updates `TERMS.md`, its

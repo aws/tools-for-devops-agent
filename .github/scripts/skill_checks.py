@@ -22,6 +22,7 @@ import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
@@ -736,6 +737,23 @@ def _plain_scalar_problem(text: str, is_in_flow_collection: bool, *, is_key: boo
     )
 
 
+def plain_scalar_value(text: str) -> bool | int | float | str | None:
+    """The JSON value of a plain (unquoted) scalar that read_yaml accepts, as every parser types it.
+
+    true and false are booleans; null, ~ and an empty value are null; an
+    integer in JavaScript's safe range, or a decimal written the shortest way,
+    is a number; anything else is text. read_yaml refuses every other plain
+    value that a parser reads as something other than text.
+    """
+    if text in ("true", "false"):
+        return text == "true"
+    if text in ("null", "~", ""):
+        return None
+    if _is_typed_alike_by_every_parser(text):
+        return int(text) if CANONICAL_INTEGER_PATTERN.fullmatch(text) else float(text)
+    return text
+
+
 def _is_read_as_non_text_by_some_parser(text: str) -> bool:
     return any(pattern.fullmatch(text) for pattern in NON_TEXT_PLAIN_SCALAR_PATTERNS)
 
@@ -855,10 +873,7 @@ def _parse_frontmatter(frontmatter: str, report: _Report, *, strict: bool = True
     that may predate the stricter rules.
     """
     if not strict:
-        try:
-            return yaml.compose(frontmatter, Loader=yaml.SafeLoader)
-        except (yaml.YAMLError, RecursionError):
-            return None
+        return compose_lenient(frontmatter)
     root, problems = read_yaml(frontmatter, "the frontmatter", FRONTMATTER_FIRST_LINE, FRONTMATTER_FORBIDDEN_TOKENS)
     for line, message in problems:
         report.error(message, line=line)
@@ -876,6 +891,14 @@ def _parse_frontmatter(frontmatter: str, report: _Report, *, strict: bool = True
         report.error("the frontmatter is empty", line=FRONTMATTER_FIRST_LINE)
         return None
     return root
+
+
+def compose_lenient(text: str) -> Node | None:
+    """The node tree as PyYAML alone reads it, or None, for a merge-base copy that may predate the stricter rules."""
+    try:
+        return yaml.compose(text, Loader=yaml.SafeLoader)
+    except (yaml.YAMLError, RecursionError):
+        return None
 
 
 def _mapping_items(node: MappingNode) -> dict[str, tuple[ScalarNode, Node]]:
@@ -1549,11 +1572,11 @@ def published_hash(tree: SkillTree, rules: Rules) -> str:
     return content_hash({p: e.data for p, e in published_files(tree, rules).items()})
 
 
-def _format_version(version: tuple[int, int, int]) -> str:
+def format_version(version: tuple[int, int, int]) -> str:
     return ".".join(str(part) for part in version)
 
 
-def _next_versions(version: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
+def next_versions(version: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
     """The only versions allowed after `version`: the next patch, minor or major release."""
     major, minor, patch = version
     return ((major, minor, patch + 1), (major, minor + 1, 0), (major + 1, 0, 0))
@@ -1617,7 +1640,7 @@ def check_history(
                 )
             ]
         if info is not None and info.version is not None and info.version != FIRST_VERSION:
-            message = f"a new skill starts at version 1.0.0, not {_format_version(info.version)}"
+            message = f"a new skill starts at version 1.0.0, not {format_version(info.version)}"
             return [Finding("error", message, "SKILL.md", info.version_line)]
         return []
 
@@ -1637,26 +1660,26 @@ def check_history(
     new = head_info.version
     changed = published_hash(base, rules) != published_hash(head, rules)
     if new < old:
-        message = f"metadata.version went down from {_format_version(old)} to {_format_version(new)}; it must never go down"
+        message = f"metadata.version went down from {format_version(old)} to {format_version(new)}; it must never go down"
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
     if new == old and changed:
         message = (
-            f"published files changed, so metadata.version must go up from {_format_version(old)}. "
+            f"published files changed, so metadata.version must go up from {format_version(old)}. "
             f"A published version is immutable. Changes only to {', '.join(rules.published_excludes)} need no bump"
         )
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
-    if new > old and new not in _next_versions(old):
-        steps = [_format_version(v) for v in _next_versions(old)]
+    if new > old and new not in next_versions(old):
+        steps = [format_version(v) for v in next_versions(old)]
         message = (
-            f"metadata.version can only go up one step from {_format_version(old)}: to {steps[0]}, {steps[1]} "
-            f"or {steps[2]}, not {_format_version(new)}"
+            f"metadata.version can only go up one step from {format_version(old)}: to {steps[0]}, {steps[1]} "
+            f"or {steps[2]}, not {format_version(new)}"
         )
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
     if new > old:
         before = base.entries.get("CHANGELOG.md")
         after = head.entries.get("CHANGELOG.md")
         if after is None or (before is not None and before.data == after.data):
-            message = f"metadata.version went up to {_format_version(new)}, but CHANGELOG.md has no new entry for it"
+            message = f"metadata.version went up to {format_version(new)}, but CHANGELOG.md has no new entry for it"
             return [Finding("warning", message, "CHANGELOG.md")]
     return []
 
@@ -1665,7 +1688,7 @@ def check_history(
 
 
 def load_cases(path: Path) -> list[dict]:
-    """The cases in conformance-cases.json. Raises ValueError when the file is malformed."""
+    """The cases in conformance-cases.json or connector-conformance-cases.json. Raises ValueError when malformed."""
     document = _read_json(path)
     cases = document.get("cases") if isinstance(document, dict) else None
     if not isinstance(cases, list) or not cases:
@@ -1692,7 +1715,7 @@ def _case_problem(case) -> str | None:
     if case["expect"] == "fail" and not isinstance(case.get("error"), str):
         return 'a "fail" case needs an "error" string'
     if "base" in case and case["base"] is not None and not isinstance(case["base"], dict):
-        return '"base" must be an object of files, or null for a skill the pull request adds'
+        return '"base" must be an object of files, or null for a folder the pull request adds'
     if "retired" in case and not isinstance(case["retired"], bool):
         return '"retired" must be true or false'
     files = case.get("files")
@@ -1738,8 +1761,8 @@ def tree_from_files(name: str, files: dict) -> SkillTree:
 
 def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
     """Problems with the rules' results on the cases; an empty list means every case gives its expected result."""
-    problems = []
-    for case in cases:
+
+    def findings_for(case: dict) -> list[Finding]:
         name = case["name"]
         head = tree_from_files(name, case["files"]) if case.get("files") is not None else None
         findings = check_skill(head, rules)[0] if head is not None else []
@@ -1747,10 +1770,19 @@ def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
             base = tree_from_files(name, case["base"]) if case.get("base") is not None else None
             retired = frozenset({name}) if case.get("retired") else frozenset()
             findings += check_history(name, base, head, rules, retired)
-        errors = [f.message for f in findings if f.severity == "error"]
+        return findings
+
+    return run_cases(cases, findings_for)
+
+
+def run_cases(cases: list[dict], findings_for: Callable[[dict], list[Finding]], label: str = "case") -> list[str]:
+    """Problems with `findings_for(case)` on each case: pass means no errors, fail an error holding the case's text."""
+    problems = []
+    for case in cases:
+        errors = [f.message for f in findings_for(case) if f.severity == "error"]
         if case["expect"] == "pass" and errors:
-            problems.append(f"case {case['id']}: expected pass, got: {'; '.join(errors)}")
+            problems.append(f"{label} {case['id']}: expected pass, got: {'; '.join(errors)}")
         elif case["expect"] == "fail" and not any(case["error"] in message for message in errors):
             got = "; ".join(errors) if errors else "no errors"
-            problems.append(f"case {case['id']}: expected an error containing {case['error']!r}, got: {got}")
+            problems.append(f"{label} {case['id']}: expected an error containing {case['error']!r}, got: {got}")
     return problems

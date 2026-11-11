@@ -353,7 +353,7 @@ class HistoryIntegrationTests(RepoTestCase):
 
     def test_a_deprecated_skill_cannot_stay_recommended_by_a_connector(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
-        self.write("connectors/acme/connector.yaml", "name: acme\nskills: [alpha, beta]\n")
+        self.write("connectors/acme/connector.yaml", "name: acme\nversion: 1.0.0\nskills: [alpha, beta]\n")
         base = self.commit("base")
         deprecated = skill_md("alpha", version="1.0.1", extra='  deprecated: "true"\n')
         self.write("skills/alpha/SKILL.md", deprecated)
@@ -362,7 +362,8 @@ class HistoryIntegrationTests(RepoTestCase):
         self.assertEqual(code, 1, out)
         line = deprecated.splitlines().index('  deprecated: "true"') + 1
         self.assertIn(f"FAIL  skills/alpha/SKILL.md:{line}: the skill is deprecated, but connectors/acme/connector.yaml still recommends it", out)
-        self.write("connectors/acme/connector.yaml", "name: acme\nskills: [beta]\n")
+        # Like any change to a connector's files, dropping a skill from its list needs a higher version.
+        self.write("connectors/acme/connector.yaml", "name: acme\nversion: 1.0.1\nskills: [beta]\n")
         self.commit("drop alpha from the connector")
         code, out = self.run_check("--base-ref", base)
         self.assertEqual(code, 0, out)
@@ -375,8 +376,12 @@ class HistoryIntegrationTests(RepoTestCase):
             "skills: " + "[" * 2000 + "]" * 2000 + "\n": "FAIL  connectors/acme/connector.yaml:1: connector.yaml is nested too deeply",
             "name: acme\nreleased: 2024-13-45\nskills: [alpha]\n": "FAIL  connectors/acme/connector.yaml:2: connector.yaml has the unquoted value 2024-13-45",
             "port: !!int abc\nskills: [alpha]\n": "FAIL  connectors/acme/connector.yaml:1: connector.yaml uses tags",
-            "name: acme\nskills: alpha\n": "WARN  connectors/acme/connector.yaml: has a skills: value that isn't a list",
-            "- alpha\n": "WARN  connectors/acme/connector.yaml: isn't a YAML mapping",
+            "name: acme\nversion: 1.0.0\nskills: alpha\n": "WARN  connectors/acme/connector.yaml: has a skills: value that isn't a list",
+            # Not a mapping, so it has no version either, which the connector version rules need.
+            "- alpha\n": "FAIL  connectors/acme/connector.yaml:1: connector.yaml must be a mapping of keys to values",
+            # An empty file, or one of only comments, holds no document, which isn't a mapping either.
+            "": "FAIL  connectors/acme/connector.yaml:1: connector.yaml must be a mapping of keys to values",
+            "# comment\n": "FAIL  connectors/acme/connector.yaml:1: connector.yaml must be a mapping of keys to values",
         }
         for text, expected in cases.items():
             with self.subTest(text=text[:24]):
@@ -385,6 +390,7 @@ class HistoryIntegrationTests(RepoTestCase):
                 code, out = self.run_check("--base-ref", base)
                 self.assertEqual(code, 1 if expected.startswith("FAIL") else 0, out)
                 self.assertIn(expected, out)
+                self.assertNotIn("isn't a YAML mapping", out)
 
     def test_a_connector_yaml_over_32_kib_fails(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
@@ -418,8 +424,8 @@ class HistoryIntegrationTests(RepoTestCase):
 
     def test_odd_connector_lists_still_find_the_skill(self):
         cases = {
-            "name: acme\nskills: [alpha, null]\n": "has a skills: entry that isn't a skill name",
-            "name: acme\nskills:\n  - 'alpha'\n": None,
+            "name: acme\nversion: 1.0.0\nskills: [alpha, null]\n": "has a skills: entry that isn't a skill name",
+            "name: acme\nversion: 1.0.0\nskills:\n  - 'alpha'\n": None,
         }
         for text, warning in cases.items():
             with self.subTest(text=text[:24]):
@@ -557,6 +563,74 @@ class HistoryIntegrationTests(RepoTestCase):
         self.assertEqual(self.git("merge-base", "main", "feature"), fork_point)
 
 
+def connector_yaml(version: str = "1.0.0", name: str = "acme") -> str:
+    return (
+        f"schema_version: 1\nname: {name}\nversion: {version}\ntype: mcp\nmcp:\n"
+        '  endpoint: "https://mcp.acme.example/mcp"\n'
+        "  auth:\n    - type: api_key\n      headers:\n"
+        '        - { header: Authorization, label: API key, prefix: "Bearer " }\n'
+    )
+
+
+class ConnectorVersionTests(RepoTestCase):
+    def setUp(self):
+        super().setUp()
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("connectors/acme/connector.yaml", connector_yaml())
+        self.write("connectors/acme/logo.svg", "<svg/>\n")
+        self.write("connectors/releases.yaml", "schema_version: 1\nconnectors: []\n")
+        self.write("connectors/schema/v1/published-files.json", '{"files": []}\n')
+        self.base = self.commit("base")
+
+    def test_a_changed_file_at_the_same_version_fails_until_the_version_goes_up(self):
+        self.write("connectors/acme/logo.svg", "<svg></svg>\n")
+        self.commit("a new logo")
+        code, out = self.run_check("--base-ref", self.base, env={"GITHUB_ACTIONS": "true"})
+        self.assertEqual(code, 1, out)
+        self.assertIn(
+            "FAIL  connectors/acme/connector.yaml:3: files in connectors/acme/ changed, so version must go up from 1.0.0",
+            out,
+        )
+        self.assertIn("::error file=connectors/acme/connector.yaml,line=3,title=Skill publishing rules::", out)
+        self.assertIn("1 skill(s) checked: 0 with errors. 1 other problem(s) in the repository.", out)
+        self.write("connectors/acme/connector.yaml", connector_yaml("1.0.1"))
+        self.commit("bump the version")
+        code, out = self.run_check("--base-ref", self.base)
+        self.assertEqual(code, 0, out)
+
+    def test_a_removed_connector_folder_fails(self):
+        self.git("rm", "-q", "-r", "connectors/acme")
+        self.commit("remove acme")
+        code, out = self.run_check("--base-ref", self.base)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  connectors/acme: the connector folder connectors/acme was removed", out)
+
+    def test_the_schema_folder_and_shared_files_are_not_connectors(self):
+        self.write("connectors/schema/v1/published-files.json", '{"files": [], "note": "changed"}\n')
+        self.write("connectors/README.md", "# Connectors\n")
+        self.commit("change shared files")
+        code, out = self.run_check("--base-ref", self.base)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("connectors/schema", out)
+
+    def test_a_new_connector_not_at_1_0_0_warns(self):
+        self.write("connectors/bravo/connector.yaml", connector_yaml("2.0.0", name="bravo"))
+        self.commit("add bravo")
+        code, out = self.run_check("--base-ref", self.base)
+        self.assertEqual(code, 0, out)
+        self.assertIn("WARN  connectors/bravo/connector.yaml:3: a new connector starts at version 1.0.0, not 2.0.0", out)
+        code, out = self.run_check()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("connectors/bravo", out)
+
+    def test_without_a_base_only_the_version_itself_is_checked(self):
+        self.write("connectors/acme/connector.yaml", connector_yaml('"1.1"'))
+        self.commit("a two-part version")
+        code, out = self.run_check()
+        self.assertEqual(code, 1, out)
+        self.assertIn('FAIL  connectors/acme/connector.yaml:3: "version" is "1.1"; it must be MAJOR.MINOR.PATCH', out)
+
+
 class SelfCheckTests(RepoTestCase):
     def test_repository_cases_pass(self):
         code, out = self.run_check("--self-check-only")
@@ -575,6 +649,17 @@ class SelfCheckTests(RepoTestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("case valid-minimal: expected an error", out)
         self.assertNotIn("skill(s) checked", out)
+
+    def test_a_wrong_connector_case_stops_the_check(self):
+        rules_dir = self.rules_copy()
+        path = rules_dir / "connector-conformance-cases.json"
+        document = json.loads(path.read_text(encoding="utf-8"))
+        unchanged = next(case for case in document["cases"] if case["id"] == "unchanged")
+        unchanged["expect"], unchanged["error"] = "fail", "anything"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        code, out = self.run_check("--self-check-only", rules_dir=rules_dir)
+        self.assertEqual(code, 2, out)
+        self.assertIn("connector case unchanged: expected an error containing 'anything'", out)
 
     def test_changed_hash_function_stops_the_check(self):
         rules_dir = self.rules_copy()
