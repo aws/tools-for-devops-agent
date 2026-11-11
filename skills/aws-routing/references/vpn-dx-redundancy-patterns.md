@@ -19,9 +19,13 @@ This document captures route preference behavior for VPN and DX redundancy desig
 - Static VPN tunnels are Route-Based only (not Policy-Based)
 - Customer advertises the same on-prem routes through all redundant connections (DX and VPN)
 
-## Key Behavior: VGW Does NOT Support ECMP
+## Key Behavior: VGW Does NOT ECMP Across VPN Connections
 
-VGW does **not** support Equal-Cost Multi-Path routing (ECMP). Return traffic from VPC to on-prem always takes a **single tunnel/path** — the "Preferred Tunnel." This is a fundamental constraint that affects all redundancy designs.
+A VGW does **not** use Equal-Cost Multi-Path routing (ECMP) across VPN tunnels or VPN connections. Return traffic from VPC to on-prem over VPN always takes a **single tunnel/path** — the "Preferred Tunnel." This is a fundamental constraint for VPN redundancy designs on a VGW.
+
+Scope of this rule:
+- It applies to **VPN on a VGW**. Two DX private VIFs on the same VGW can flow-hash (see the same-location rule below).
+- **Transit Gateway and Cloud WAN do support VPN ECMP.** On a TGW, the VPN connection must use **dynamic (BGP) routing**; ECMP is not supported on static VPN connections ([TGW quotas](https://docs.aws.amazon.com/vpc/latest/tgw/transit-gateway-quotas.html), [VPN quotas](https://docs.aws.amazon.com/vpn/latest/s2svpn/vpn-limits.html)). If a design needs VPN ECMP, use a TGW or Cloud WAN instead of a VGW.
 
 ---
 
@@ -31,7 +35,7 @@ VGW does **not** support Equal-Cost Multi-Path routing (ECMP). Return traffic fr
 
 - Customers can have static route-based tunnels in Active/Active mode
 - **Customer → VPC:** Can load balance (equal route metrics) or prefer one tunnel (unequal metrics)
-- **VPC → Customer:** Always takes a single tunnel (Preferred Tunnel) — VGW does not support ECMP
+- **VPC → Customer:** Always takes a single tunnel (Preferred Tunnel) — VGW does not ECMP across VPN tunnels
 
 - Customers can have BGP tunnels in Active/Active mode
 - **Customer → VPC:** Load balance (equal LP) or prefer one (unequal LP)
@@ -49,9 +53,10 @@ VGW does **not** support Equal-Cost Multi-Path routing (ECMP). Return traffic fr
 
 - 2 private VIFs to the same VGW over 2 DX connections
 - **Active/Active:** Equal LP + AS-path on CGW → return traffic is flow-hashed across both DX connections
-- **Active/Passive:** Unequal LP + AS-path → customer-to-VPC uses higher LP; VPC-to-customer uses lower AS-path
+- **Active/Passive:** Unequal LP + AS-path → customer-to-VPC uses the higher LP set on the customer router; VPC-to-customer uses the higher DX local-preference community, then the lower AS-path (see below)
+- **DX local-preference communities are honored on private VIFs attached directly to a VGW** (documented for private and transit VIFs in [Private virtual interface and transit virtual interface routing policies](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html#private-routing-policies)): tagging `7224:7300` (high), `7224:7200` (medium) or `7224:7100` (low) on the advertisements sent over each VIF steers VPC-to-customer (AWS → on-prem) traffic. Local preference is evaluated **before AS_PATH**, then MED, so an AS-path prepend does not override a higher LP community. Use LP communities as the primary lever for AWS → on-prem preference across the two DX connections; AS-path and MED only break ties when local preference is equal.
 
-**⚠️ ECMP only works when both DX connections terminate at the SAME DX location:**
+**⚠️ [Field knowledge] ECMP only works when both DX connections terminate at the SAME DX location:**
 - Same location (e.g., both at Equinix DC, Ashburn) → flow-hashed (ECMP)
 - Different locations in same region (e.g., Equinix DC Ashburn + CoreSite NYC) → **single path only**
 
@@ -78,8 +83,9 @@ VGW does **not** support Equal-Cost Multi-Path routing (ECMP). Return traffic fr
 - 2 DX connections from different on-prem CGW devices, 2 private VIFs to same VGW
 - **Active/Active:** Equal LP + AS-path → flow-hashed return traffic
 - **Active/Passive:** Unequal LP + AS-path → deterministic path preference
+- **[Field knowledge, SME-confirmed]** As with a single CGW, DX local-preference communities (`7224:7300/7200/7100`) on the VIF advertisements steer AWS → on-prem traffic on a VGW and are evaluated before AS_PATH (then MED). Tag the preferred CGW's VIF with the higher community so return traffic matches the inbound path.
 
-**Same ECMP caveat applies:** Flow-hashing only works when both DX connections are at the same DX location. Different locations → single path selected.
+**Same ECMP caveat applies ([Field knowledge]):** Flow-hashing only works when both DX connections are at the same DX location. Different locations → single path selected.
 
 ---
 
@@ -125,18 +131,19 @@ VGW does **not** support Equal-Cost Multi-Path routing (ECMP). Return traffic fr
 | Traffic Direction | Rule |
 |---|---|
 | VPC → On-prem (same prefix) | DX **always** preferred over VPN |
-| VPC → On-prem (VPN only) | Single tunnel — lowest AS-path or MED, no ECMP |
-| VPC → On-prem (2 DX, same location) | Flow-hashed (ECMP) |
-| VPC → On-prem (2 DX, different locations) | Single path |
+| VPC → On-prem (VPN only) | Single tunnel — lowest AS-path or MED; VGW does not ECMP across VPN (use TGW/Cloud WAN with dynamic VPN for VPN ECMP) |
+| VPC → On-prem (2 DX, same location) | Flow-hashed (ECMP) — [Field knowledge] |
+| VPC → On-prem (2 DX, different locations) | Single path — [Field knowledge] |
+| VPC → On-prem (2 DX, unequal attributes) | Higher DX local-preference community (`7224:7300/7200/7100`) on the VIF advertisement wins, evaluated before AS_PATH, then MED — [Field knowledge, SME-confirmed] |
 | On-prem → VPC (VPN) | Customer controls via LP (higher wins) |
 | On-prem → VPC (DX) | Customer controls via LP (higher wins) |
 | On-prem → VPC (DX + VPN both UP) | Customer must direct to DX |
 
 ## Key Takeaways for Customer Guidance
 
-1. **VGW does not support ECMP** — return traffic always takes one path
+1. **VGW does not ECMP across VPN connections** — VPN return traffic always takes one tunnel. TGW and Cloud WAN do support VPN ECMP (dynamic routing required on TGW; not supported on static VPN)
 2. **DX always wins over VPN** at the VGW — cannot prefer VPN for return traffic
-3. **Same DX location required for flow-hashing** — different locations in same region get single-path selection
+3. **[Field knowledge] Same DX location required for flow-hashing** across two DX VIFs on one VGW — different locations in same region get single-path selection
 4. **Use unequal LP + AS-path** for active/passive designs to avoid asymmetric routing
 5. **Asymmetric routing is the primary failure mode** — designs with equal attributes from multiple CGW devices without synchronization will cause issues
 6. **MED can influence VGW path selection** — documented at [VPN route priority](https://docs.aws.amazon.com/vpn/latest/s2svpn/vpn-route-priority.html)
