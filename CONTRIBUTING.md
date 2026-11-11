@@ -485,7 +485,7 @@ MCP server" names three types at once, so they cannot decide it.
 | Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
 | Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
 | Anything under `custom-agents/` | The same, with the Custom agents section |
-| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
+| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` and `tier: partner-managed` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
 
 So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
 a CHANGELOG or an SME sign-off, because none of it means anything for that change.
@@ -584,6 +584,18 @@ partner, as an exception, they link the partner's written authorization in the
 pull request description, and a maintainer approves the exception before review.
 A partner whose connector merged before the terms existed accepts them, and adds
 `contact_email`, in a new pull request.
+
+`tier` is the badge customers see next to a connector, so a partner's connector
+declares `tier: partner-managed`. Only a connector that an AWS team builds and
+supports may declare `aws-managed`, and it needs an entry in the AWS ownership
+record, [`.github/aws-managed-connectors.json`](.github/aws-managed-connectors.json),
+which maps each such connector's name to its owning AWS team. The checklist check
+fails a pull request whose changed `connector.yaml` declares any other tier, or a
+tier it cannot read as a single top-level line, unless the record on `main` lists
+that connector. It reads the record from `main`, not from the pull request, so a
+maintainer adds an entry in its own pull request first; that file is under
+`/.github/`, which code owners approve. The check also fails a pull request that is
+otherwise only reported on, such as one a bot opened, except a draft.
 
 The box names the version of the terms, the date at the end of `TERMS.md`, so
 each pull request records the version its partner accepted. One acceptance covers
