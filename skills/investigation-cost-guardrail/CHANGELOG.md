@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.1.2
+- Removed the `aws-services` value `All`. It isn't an AWS service, and catalog filters showed it as one. The skill still covers every service.
+
 ## 2.1.1
 - Agent types now use the API values in `metadata.aws-devops-agent-skills.agent-types` (`CHAT`, `INCIDENT_RCA`, `INCIDENT_TRIAGE`), the field that sets which agents load the skill.
 

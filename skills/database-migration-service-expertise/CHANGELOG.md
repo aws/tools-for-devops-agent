@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.4
+- `technical-domains` uses the approved value `Databases` instead of `Database`, so the skill is listed with the other database skills.
+
 ## 1.0.3
 - Updated the link to the skill IAM policies template, which moved to `cloudformation/devops-agent-skill-policies/`.
 

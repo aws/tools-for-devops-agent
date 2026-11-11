@@ -3,9 +3,9 @@ name: devops-agent-cost-insights
 description: Report what the AWS DevOps Agent itself costs to run, and where that cost comes from, per Agent Space and per role on demand in chat or on a schedule through a custom agent. Use this skill when a user asks to measure, break down, attribute, explain, or forecast DevOps Agent spend, or the cost of the downstream AWS API calls. Covers direct agent time by activity, Support plan credit offset, downstream API cost, and tool usage.
 metadata:
   author: tqquresh, inesttia
-  version: "1.0.1"
+  version: "1.0.2"
   aws-devops-agent-skills.agent-types: "CHAT"
-  aws-devops-agent-skills.aws-services: "CloudWatch, CloudTrail, AIDevOps"
+  aws-devops-agent-skills.aws-services: "Amazon CloudWatch, AWS CloudTrail"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
 ---
 

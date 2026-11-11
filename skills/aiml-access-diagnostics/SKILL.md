@@ -20,10 +20,10 @@ description: >
   model quality issues, or non-AI/ML services.
 metadata:
   author: tamrish
-  version: "1.2.4"
+  version: "1.2.5"
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
-  aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker, AWS IAM"
-  aws-devops-agent-skills.technical-domains: "Security"
+  aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker AI, AWS IAM"
+  aws-devops-agent-skills.technical-domains: "Security, AI/ML"
 ---
 
 # AI/ML Access Diagnostics
