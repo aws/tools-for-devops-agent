@@ -73,6 +73,11 @@ DIMENSION_KEYS = tuple(DIMENSION_PREFIX + d for d in DIMENSIONS)
 AGENT_TYPES_DIMENSION = "agent-types"
 AGENT_TYPES_KEY = DIMENSION_PREFIX + AGENT_TYPES_DIMENSION
 VOCABULARY_DIMENSIONS = tuple(d for d in DIMENSIONS if d != AGENT_TYPES_DIMENSION)
+# Placeholders that stand for every value, or for none, rather than naming one.
+# Catalogs would show one as a filter option of its own, so a skill can't use
+# one in aws-services or technical-domains, and vocabulary.json can't list one.
+# Compared ignoring case.
+RESERVED_DIMENSION_VALUES = frozenset({"all", "any", "none", "n/a", "other", "general", "*"})
 # Loads the skill for every agent, so it can't be combined with another type.
 GENERIC_AGENT_TYPE = "GENERIC"
 
@@ -335,6 +340,13 @@ def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
         vocabulary_sets = {
             dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in VOCABULARY_DIMENSIONS
         }
+        listed = [value for values in vocabulary_sets.values() for value in values] + [*aliases, *aliases.values()]
+        reserved = sorted(value for value in listed if is_reserved_dimension_value(value))
+        if reserved:
+            raise TypeError(
+                f'{VOCABULARY_FILE}: "{reserved[0]}" is a placeholder, which the check refuses as a value, '
+                "so it can't be listed"
+            )
         return Rules(
             agent_types=frozenset(values),
             vocabulary=vocabulary_sets,
@@ -379,6 +391,11 @@ def _string_list(value, label: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
         raise TypeError(f"{label} must be a list of non-empty strings")
     return value
+
+
+def is_reserved_dimension_value(value: str) -> bool:
+    """Whether a dimension value is a placeholder such as All, N/A or *, in any case."""
+    return value.casefold() in RESERVED_DIMENSION_VALUES
 
 
 def allowed_extensions_from_gitignore(text: str) -> frozenset[str]:
@@ -1208,9 +1225,22 @@ def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report
         if dimension == AGENT_TYPES_DIMENSION:
             continue  # _check_agent_types validates it against agent-types.json.
         approved = rules.vocabulary.get(dimension, frozenset())
-        for part in _split(metadata[key]):
+        parts = _split(metadata[key])
+        # Leaving the key out is the fix only when nothing else would be left in it.
+        fix = (
+            "Remove it from the list"
+            if any(part and not is_reserved_dimension_value(part) for part in parts)
+            else f'Leave "metadata.{key}" out instead; a skill without it still appears when no filter is chosen'
+        )
+        for part in parts:
             if not part:
                 report.error(f'"metadata.{key}" has an empty value between commas', line=line)
+            elif is_reserved_dimension_value(part):
+                report.error(
+                    f'"{part}" is a placeholder rather than a value, and catalogs would list it as a filter option '
+                    f"of its own. {fix}",
+                    line=line,
+                )
             elif part not in approved:
                 hint = (
                     f'use "{rules.aliases[part]}"'

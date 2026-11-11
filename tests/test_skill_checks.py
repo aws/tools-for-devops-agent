@@ -488,6 +488,29 @@ class DimensionTests(CheckSkillTestCase):
         fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": '"Amazon EKS, "'})
         self.assertOneError(tree(skill_md(fm)), "empty value between commas")
 
+    def test_placeholder_values_are_errors_in_any_case(self):
+        for key in ("aws-devops-agent-skills.aws-services", "aws-devops-agent-skills.technical-domains"):
+            for value in ("All", "any", "NONE", "N/A", "n/a", "Other", "General", "*"):
+                with self.subTest(key=key, value=value):
+                    skill = tree(skill_md(frontmatter_with(**{key: f'"{value}"'})))
+                    error = self.assertOneError(skill, f'"{value}" is a placeholder', line=9)
+                    self.assertIn(f'Leave "metadata.{key}" out instead', error.message)
+                    self.assertEqual(self.warnings(skill), [])
+
+    def test_a_placeholder_beside_real_values_is_removed_from_the_list(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": '"Amazon EKS, All"'})
+        error = self.assertOneError(tree(skill_md(fm)), '"All" is a placeholder')
+        self.assertTrue(error.message.endswith("Remove it from the list"), error.message)
+
+    def test_values_that_only_contain_a_placeholder_word_are_not_placeholders(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.technical-domains": '"Operations, All Services, n/a/b"'})
+        skill = tree(skill_md(fm))
+        self.assertFalse(any("placeholder" in f.message for f in self.check(skill)[0]))
+
+    def test_agent_types_report_a_placeholder_as_an_unknown_agent_type(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"All"'})
+        self.assertOneError(tree(skill_md(fm)), 'unknown value "All"')
+
     def test_unapproved_value_is_a_warning_with_suggestion(self):
         fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": '"CloudWatch, Amazon S3"'})
         skill = tree(skill_md(fm))
@@ -1166,6 +1189,18 @@ class LoadRulesValidationTests(unittest.TestCase):
         vocabulary = {"values": {"aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}
         with self.assertRaisesRegex(ValueError, "aliases"):
             sc.load_rules(self.rules_dir(None, vocabulary), "!*.md\n")
+
+    def test_a_placeholder_in_the_vocabulary_fails_closed(self):
+        cases = {
+            "All": {"values": {"aws-services": ["Amazon EKS", "All"], "technical-domains": []}, "aliases": {}},
+            "n/a": {"values": {"aws-services": [], "technical-domains": ["n/a"]}, "aliases": {}},
+            "Any": {"values": {"aws-services": ["Amazon EKS"], "technical-domains": []}, "aliases": {"Any": "Amazon EKS"}},
+            "NONE": {"values": {"aws-services": [], "technical-domains": []}, "aliases": {"EKS": "NONE"}},
+        }
+        for value, vocabulary in cases.items():
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, f'"{value}" is a placeholder'):
+                    sc.load_rules(self.rules_dir(None, vocabulary), "!*.md\n")
 
 
 class ConformanceTests(unittest.TestCase):
