@@ -39,6 +39,15 @@
 
 ### Changed before submission
 
+- After the subject-matter expert review: session revocation is written after the source credential
+  is cut off, uses a time about 30 seconds after now, and the deny is kept at least 36 hours for a
+  user and for the role's `MaxSessionDuration` for a role; chained roles and roles in other accounts
+  are revoked in the account that owns them; root temporary credentials are not limited by policy;
+  flow log and data event coverage checks read the traffic type and the read/write type; more
+  eradication rows (group membership, existing role and group policies, SAML providers, MFA
+  devices, shared snapshots and images) and defense evasion events; a write command, the
+  management account and identity source order for IAM Identity Center; and a verify step that
+  checks the revoked sessions.
 - Response commands come from `references/response-actions.md`. A command for an action the file
   does not list is labelled as not from the skill's command list, to check before running it.
 - `ConsoleLogin` Regions follow the sign-in endpoint: root in us-east-1, us-east-2 or us-west-2; IAM user

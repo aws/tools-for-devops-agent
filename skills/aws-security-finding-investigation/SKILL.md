@@ -147,7 +147,7 @@ Recommend in this order, and stop where the evidence stops:
    Isolate; don't destroy.
 
 For every action give: purpose, exact AWS CLI command with placeholders, impact, how to undo it,
-what it does not stop, and who approves it. Containing a credential always has three parts:
+what it does not stop, and who approves it. Containing a credential always has three parts, in this order:
 preserve its activity as evidence, deactivate or restrict it, and revoke the temporary
 credentials and sessions it already issued. Recommend changes only to the resources in this
 incident, not to unrelated resources you came across in the account.
@@ -222,9 +222,13 @@ and leave status lines such as "investigation in progress" out of the final answ
   are `PutBucketPublicAccessBlock` and `DeleteBucketPublicAccessBlock`. Anonymous S3 requests
   have `userIdentity.accountId` `anonymous` and no ARN.
 - Deactivating an access key does not invalidate temporary credentials issued with it, nor role
-  sessions it already assumed. Revoke them with an `aws:TokenIssueTime` deny set to the current
-  time (never an earlier one), on the user and on every role the key assumed. Revoking a role's
-  sessions does not stop someone who can assume the role again.
+  sessions it already assumed. Cut off the source credential first (deactivate the key, or deny
+  the user), then revoke with an `aws:TokenIssueTime` deny set about 30 seconds after now (never
+  earlier, and not the attacker's last visible call), on the user and on every role the key
+  assumed, including chained roles and roles in other accounts (revoke those in the account that
+  owns them). Keep a user deny at least 36 hours and a role deny at least the role's
+  `MaxSessionDuration`. Revoking a role's sessions does not stop someone who can assume the role
+  again.
 - Roles that IAM Identity Center created for permission sets (`AWSReservedSSO_*`) can't be
   edited in IAM, so a role policy can't revoke their sessions. Contain those in IAM Identity
   Center: a deny on the user's `identitystore:userId`, removed assignments, ended sessions.

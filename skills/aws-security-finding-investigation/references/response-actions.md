@@ -36,13 +36,13 @@ Notes:
 | Purpose | Command | Impact | Undo |
 |---|---|---|---|
 | Stop an IAM user's access key | `aws iam update-access-key --user-name <user> --access-key-id <access-key-id> --status Inactive` | Applications using the key fail | `--status Active` |
-| Invalidate temporary credentials an IAM user already obtained (for example with `GetSessionToken`) | `aws iam put-user-policy --user-name <user> --policy-name DenyOlderSessions --policy-document file://deny-older-sessions.json` | All of the user's sessions issued before the time in the policy are denied | `aws iam delete-user-policy --user-name <user> --policy-name DenyOlderSessions` |
-| Revoke a role's active sessions (not for `AWSReservedSSO_*` roles: see the next row) | IAM console: Roles, the role, **Revoke active sessions**. CLI equivalent: `aws iam put-role-policy --role-name <role> --policy-name AWSRevokeOlderSessions --policy-document file://deny-older-sessions.json` | Every session of the role issued before that time is denied, including legitimate workloads, until they obtain new credentials | `aws iam delete-role-policy --role-name <role> --policy-name AWSRevokeOlderSessions` |
-| Revoke an IAM Identity Center user's permission set sessions (role named `AWSReservedSSO_*`, which IAM won't let you edit) | 1. Find the instance and user ID: `aws sso-admin list-instances`, then `aws identitystore get-user-id --identity-store-id <identity-store-id> --alternate-identifier '{"UniqueAttribute":{"AttributePath":"userName","AttributeValue":"<user-name>"}}'`. 2. Add `deny-identity-center-user.json` to a service control policy attached to the account (from the management account), or merge it into the inline policy of each permission set the user holds: read the current one first with `aws sso-admin get-inline-policy-for-permission-set`, because putting a new inline policy replaces it, then `aws sso-admin provision-permission-set --instance-arn <instance-arn> --permission-set-arn <permission-set-arn> --target-type AWS_ACCOUNT --target-id <account-id>`. 3. List the user's assignments (`aws sso-admin list-account-assignments-for-principal --instance-arn <instance-arn> --principal-id <user-id> --principal-type USER`) and remove each with `aws sso-admin delete-account-assignment`, and remove the user from groups that grant access. 4. In the IAM Identity Center console, delete the user's active sessions, then disable the user (or disable them in the external identity provider). Keep the deny for at least 12 hours | The user loses every permission set in the accounts the deny covers; other users of the same permission sets are not affected | Remove the user ID from the deny policy, recreate the recorded assignments, and enable the user |
+| Invalidate temporary credentials an IAM user already obtained (for example with `GetSessionToken`) | `aws iam put-user-policy --user-name <user> --policy-name DenyOlderSessions --policy-document file://deny-older-sessions.json` | All of the user's sessions issued before the time in the policy are denied. Write it after the key is deactivated or the user is blocked, or the key can still create newer sessions | `aws iam delete-user-policy --user-name <user> --policy-name DenyOlderSessions`, but not for at least 36 hours: the credentials from `GetSessionToken` and `GetFederationToken` can last 129,600 seconds, and deleting the policy earlier makes stolen sessions valid again |
+| Revoke a role's active sessions (not for `AWSReservedSSO_*` roles: see the next row) | IAM console: Roles, the role, **Revoke active sessions**. CLI equivalent: `aws iam put-role-policy --role-name <role> --policy-name AWSRevokeOlderSessions --policy-document file://deny-older-sessions.json` | Every session of the role issued before that time is denied, including legitimate workloads, until they obtain new credentials. Write it after the key or user that can assume the role is cut off | `aws iam delete-role-policy --role-name <role> --policy-name AWSRevokeOlderSessions`, but not before the role's `MaxSessionDuration` has passed (read it with `aws iam get-role --role-name <role>`; up to 12 hours), because deleting it earlier makes stolen sessions valid again |
+| Revoke an IAM Identity Center user's permission set sessions (role named `AWSReservedSSO_*`, which IAM won't let you edit) | 1. Find the instance and user ID: `aws sso-admin list-instances`, then `aws identitystore get-user-id --identity-store-id <identity-store-id> --alternate-identifier '{"UniqueAttribute":{"AttributePath":"userName","AttributeValue":"<user-name>"}}'`. 2. Add `deny-identity-center-user.json` to a service control policy attached to the account (from the management account), or merge it into the inline policy of each permission set the user holds: read the current one first with `aws sso-admin get-inline-policy-for-permission-set`, because putting a new inline policy replaces it, write the merged policy with `aws sso-admin put-inline-policy-to-permission-set --instance-arn <instance-arn> --permission-set-arn <permission-set-arn> --inline-policy file://merged.json`, then `aws sso-admin provision-permission-set --instance-arn <instance-arn> --permission-set-arn <permission-set-arn> --target-type AWS_ACCOUNT --target-id <account-id>`. An SCP does not apply to the management account: if the user holds permission sets there, the permission set inline policy is the only option. 3. List the user's assignments (`aws sso-admin list-account-assignments-for-principal --instance-arn <instance-arn> --principal-id <user-id> --principal-type USER`) and remove each with `aws sso-admin delete-account-assignment`, and remove the user from groups that grant access. 4. If the identity source is an external identity provider or Active Directory, disable the user there first, so the user cannot start a new access portal session, then delete the user's active sessions in the IAM Identity Center console. If the identity source is the Identity Center directory, delete the active sessions first, then disable the user. Keep the deny for at least 12 hours | The user loses every permission set in the accounts the deny covers; other users of the same permission sets are not affected | Remove the user ID from the deny policy, recreate the recorded assignments, and enable the user |
 | Block a user completely while you investigate | `aws iam put-user-policy --user-name <user> --policy-name DenyAll --policy-document file://deny-all.json` | The user can do nothing, console included. Role sessions the user already assumed keep the role's permissions: revoke those roles' sessions too | `aws iam delete-user-policy --user-name <user> --policy-name DenyAll` |
 | Stop instance credentials from being used | Find the association with `aws ec2 describe-iam-instance-profile-associations --filters Name=instance-id,Values=<instance-id>`, then `aws ec2 disassociate-iam-instance-profile --association-id <association-id>` | The instance's applications lose AWS access. Credentials already issued to the instance, and any copy taken from it, stay valid until they expire: also revoke the role's active sessions (row above) | `aws ec2 associate-iam-instance-profile --instance-id <instance-id> --iam-instance-profile Name=<profile>` |
 
-`deny-older-sessions.json`, with the current UTC time:
+`deny-older-sessions.json`, with a time about 30 seconds after the current UTC time, so that it also covers sessions created while the policy takes effect:
 
 ```json
 {
@@ -51,7 +51,7 @@ Notes:
     "Effect": "Deny",
     "Action": "*",
     "Resource": "*",
-    "Condition": {"DateLessThan": {"aws:TokenIssueTime": "<current-utc-time>"}}
+    "Condition": {"DateLessThan": {"aws:TokenIssueTime": "<current-utc-time-plus-30-seconds>"}}
   }]
 }
 ```
@@ -80,10 +80,17 @@ Notes:
 ```
 
 What these do not do:
-- Deactivating a key does not invalidate temporary credentials already issued with it. Use the
-  `aws:TokenIssueTime` policy as well, set to the current UTC time (or, to spare legitimate
-  sessions, one minute after the attacker's last `GetSessionToken`, `GetFederationToken` or
-  `AssumeRole` call; never earlier), and revoke the sessions of every role the key assumed.
+- Deactivating a key does not invalidate temporary credentials already issued with it. Cut off the
+  source credential first (deactivate the key, or use the DenyAll row), then write the
+  `aws:TokenIssueTime` deny with a time about 30 seconds after now, never earlier. If you write
+  the deny first, the key can still create sessions with a later issue time. Do not use the
+  attacker's last visible `GetSessionToken` or `AssumeRole` call as the time: CloudTrail delivery
+  is delayed, Regional STS calls are logged in the Region that was called, and the key may still
+  be active.
+- Revoke the sessions of every role the key assumed, including the roles those sessions assumed
+  in turn (role chaining) and roles in other accounts. Revoke a role in the account that owns it.
+- Keep the user deny for at least 36 hours, and each role deny for at least the role's
+  `MaxSessionDuration` (up to 12 hours). Deleting it earlier makes the stolen sessions valid again.
 - Never detach an `AWSCompromisedKeyQuarantine*` policy (V2, V3, V4 or later): AWS attached it to
   contain an exposed key. Leave it until the exposure is resolved.
 - Revoking sessions does not stop anyone who can assume the role again. Fix the trust policy or
@@ -95,7 +102,9 @@ What these do not do:
 - Root credentials: contain from the console. Change the root password, remove root access keys,
   and check the MFA devices. Contact AWS Support if you cannot sign in. In AWS Organizations
   with centralized root access, the management account can remove a member account's root
-  credentials.
+  credentials. Temporary credentials that root created with `GetSessionToken` or
+  `GetFederationToken` are not limited by IAM policies and stay valid until they expire (up to
+  1 hour). In a member account, only an SCP that denies the root user applies to them.
 
 ## 3. Contain: network
 
@@ -127,7 +136,7 @@ Notes:
 | Stop public access to a bucket | `aws s3api put-public-access-block --bucket <bucket> --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true` | Public and anonymous access stops, and so does cross-account access granted by a public policy and any intended public use such as a static website | `put-public-access-block` with the recorded settings, or `delete-public-access-block` if none were set |
 | Remove a policy statement that grants access | Save the policy (`get-bucket-policy`), then `aws s3api put-bucket-policy --bucket <bucket> --policy file://policy-fixed.json` | Principals in the removed statement lose access | `put-bucket-policy` with the saved policy |
 | Stop a replication rule that copies data out | Save the configuration (`get-bucket-replication`), then `aws s3api delete-bucket-replication --bucket <bucket>` | Replication stops for all rules of the bucket | `put-bucket-replication` with the saved configuration |
-| Protect objects from further deletion | `aws s3api put-bucket-versioning --bucket <bucket> --versioning-configuration Status=Enabled` | Deleted objects keep earlier versions from now on | Versioning can be suspended, not removed |
+| Keep earlier versions of overwritten or deleted objects | `aws s3api put-bucket-versioning --bucket <bucket> --versioning-configuration Status=Enabled` | Overwritten or deleted objects keep their earlier versions from now on. Anyone with `s3:DeleteObjectVersion`, and any lifecycle rule that expires noncurrent versions, can still remove them | Versioning can be suspended, not removed |
 
 What these do not do:
 - Block Public Access does not stop reads by IAM principals that are already allowed. It does not
@@ -149,6 +158,11 @@ Run the read-only check first, then remove only what the evidence ties to the at
 | Roles the attacker created | `aws iam get-role --role-name <role>` and the `CreateRole` events | Revoke the role's sessions, detach its managed policies, delete its inline policies (`aws iam delete-role-policy`), remove it from instance profiles (`aws iam remove-role-from-instance-profile`), then `aws iam delete-role --role-name <role>` after confirmation | **Irreversible** |
 | A changed role trust policy | `aws iam get-role --role-name <role>` and the AWS Config history of the role | `aws iam update-assume-role-policy --role-name <role> --policy-document file://trust-before.json` | Apply the changed policy again |
 | Users the attacker created | `aws iam list-users` and the `CreateUser` events | Remove their keys, login profile, signing certificates, SSH public keys, service-specific credentials, MFA devices, policies and group memberships (find them with `aws iam list-signing-certificates`, `list-ssh-public-keys`, `list-service-specific-credentials`), then `aws iam delete-user --user-name <user>` after confirmation | **Irreversible** |
+| Group memberships the attacker added | `aws iam list-groups-for-user --user-name <user>` and the `AddUserToGroup` events | `aws iam remove-user-from-group --user-name <user> --group-name <group>` | `aws iam add-user-to-group --user-name <user> --group-name <group>` |
+| Policies the attacker attached or wrote on existing roles and groups | `aws iam list-attached-role-policies --role-name <role>`, `list-role-policies`, `aws iam list-attached-group-policies --group-name <group>`, `list-group-policies`, and the `AttachRolePolicy`, `PutRolePolicy`, `AttachGroupPolicy` and `PutGroupPolicy` events | Save an inline policy first (`aws iam get-role-policy`, `get-group-policy`), then `aws iam detach-role-policy --role-name <role> --policy-arn <policy-arn>`, `aws iam delete-role-policy --role-name <role> --policy-name <name>`, `aws iam detach-group-policy --group-name <group> --policy-arn <policy-arn>` or `aws iam delete-group-policy --group-name <group> --policy-name <name>`. Remove only what the events tie to the attacker: other users and workloads rely on these roles and groups | Attach or put the policy again from the saved copy |
+| A SAML provider the attacker added | The `CreateSAMLProvider` events (the provider ARN is in the response elements), then `aws iam get-saml-provider --saml-provider-arn <provider-arn>` | Record it first (`get-saml-provider`) and the roles whose trust policy names it (`aws iam list-roles`, look for the provider ARN in `AssumeRolePolicyDocument`), then `aws iam delete-saml-provider --saml-provider-arn <provider-arn>` after confirmation. Those roles stay in the account and cannot be assumed until it is recreated | `aws iam create-saml-provider --name <name> --saml-metadata-document file://metadata.xml` with the recorded metadata |
+| MFA devices the attacker registered | The `CreateVirtualMFADevice` and `EnableMFADevice` events (they show the serial number), and `aws iam list-virtual-mfa-devices --assignment-status Assigned` | `aws iam deactivate-mfa-device --user-name <user> --serial-number <serial-number>`, then for a virtual device `aws iam delete-virtual-mfa-device --serial-number <serial-number>`. Keep the user's own legitimate device | The user registers a device again |
+| Snapshots and images the attacker shared | `aws ec2 describe-snapshot-attribute --snapshot-id <snapshot-id> --attribute createVolumePermission`, `aws ec2 describe-image-attribute --image-id <image-id> --attribute launchPermission`, `aws rds describe-db-snapshot-attributes --db-snapshot-identifier <snapshot-id>`, and the `ModifySnapshotAttribute`, `ModifyImageAttribute`, `ModifyDBSnapshotAttribute` and `ModifyDBClusterSnapshotAttribute` events | `aws ec2 modify-snapshot-attribute --snapshot-id <snapshot-id> --attribute createVolumePermission --operation-type remove --group-names all` (or `--user-ids <account-id>` for one account), `aws ec2 modify-image-attribute --image-id <image-id> --launch-permission '{"Remove":[{"Group":"all"}]}'`, `aws rds modify-db-snapshot-attribute --db-snapshot-identifier <snapshot-id> --attribute-name restore --values-to-remove all` (for a cluster snapshot, `modify-db-cluster-snapshot-attribute --db-cluster-snapshot-identifier <snapshot-id>`). Whoever already copied a snapshot keeps the copy | Add the permission again with the same command and `--operation-type add`, `Add` or `--values-to-add` |
 | Instances the attacker launched, in any Region | `aws ec2 describe-instances --region <region>` per Region, and the `RunInstances` events | After the snapshots in section 1: `aws ec2 terminate-instances --instance-ids <instance-id>` after confirmation | **Irreversible**; only for instances the attacker created |
 
 Do not clean a compromised instance in place. Recommend replacing it from a known-good image.
@@ -165,7 +179,8 @@ Do not clean a compromised instance in place. Recommend replacing it from a know
 | Rotate a legitimate user's key | Create the new key, update the applications, confirm the old key is no longer used (`get-access-key-last-used`), then delete the old key |
 
 Verify with read-only checks and say which ones passed:
-- The contained key shows no use after containment (`aws iam get-access-key-last-used`).
+- The contained key shows no use after containment (`aws iam get-access-key-last-used`; it covers the long-term key only).
+- Session revocation worked: in CloudTrail, find the `ASIA…` access keys issued before the revocation time and confirm that their later calls now fail with an explicit-deny `AccessDenied`.
 - `aws s3api get-bucket-policy-status --bucket <bucket>` reports `IsPublic` false.
 - The security group no longer has the opened rule (`describe-security-group-rules`), and flow
   logs show no new accepted connections on that port.

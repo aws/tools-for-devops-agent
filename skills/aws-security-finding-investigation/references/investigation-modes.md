@@ -94,7 +94,11 @@ but keep looking for paths that succeeded.
 Signals: `Stealth:IAMUser/CloudTrailLoggingDisabled`, `Stealth:IAMUser/PasswordPolicyChange`,
 `DefenseEvasion:IAMUser/AnomalousBehavior`, and events such as `StopLogging`, `DeleteTrail`,
 `UpdateTrail`, `PutEventSelectors`, `StopConfigurationRecorder`, `DeleteConfigurationRecorder`,
-`DeleteDetector`, `UpdateDetector`, `DeleteFlowLogs`, `DeleteLogGroup`.
+`DeleteDetector`, `UpdateDetector`, `DeleteFlowLogs`, `DeleteLogGroup`, `DeleteDeliveryChannel`,
+`DeleteResolverQueryLogConfig`, `CreateIPSet` or `UpdateIPSet` (a trusted IP list suppresses
+findings), `CreateFilter` or `UpdateFilter` (auto-archive rules), `DisassociateFromAdministratorAccount`,
+`DisableSecurityHub`, `BatchUpdateFindings`, `LeaveOrganization`, and `PutBucketLifecycle` or
+`PutBucketPolicy` on the bucket that holds the trail's logs.
 
 Collect: what was turned off, when, by whom, whether it was turned back on (`StartLogging`,
 `StartConfigurationRecorder`, a new detector), and the gap it leaves. Everything in that gap is

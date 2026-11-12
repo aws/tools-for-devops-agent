@@ -48,14 +48,14 @@ Trail settings (is a trail logging, which Regions, does it record data events):
 |---|---|---|
 | Which trails exist, multi-Region, where they deliver | `aws cloudtrail describe-trails` (per Region; a multi-Region trail appears in every Region): `IsMultiRegionTrail`, `HomeRegion`, `S3BucketName`, `CloudWatchLogsLogGroupArn`, `HasCustomEventSelectors` | AWS Config: `aws configservice list-discovered-resources --resource-type AWS::CloudTrail::Trail`, then `get-resource-config-history` for each **(extra permission)**. The same fields are in `configuration` |
 | Is a trail logging, and since when | `aws cloudtrail get-trail-status --name <trail>`: `IsLogging`, `StartLoggingTime`, `StopLoggingTime`, `LatestDeliveryTime`, `LatestCloudWatchLogsDeliveryTime`, `LatestDeliveryError` | `supplementaryConfiguration.isLogging` (the text `"true"` or `"false"`) in the trail's latest Config item, and the `StopLogging` / `StartLogging` events below |
-| Does a trail record data events for a bucket | `aws cloudtrail get-event-selectors --trail-name <trail>`: a selector for `AWS::S3::Object` (advanced: `resources.type`, and `resources.ARN` covering the bucket) | The last `PutEventSelectors` event for each trail, in its request parameters (the Config history doesn't hold the selectors). No such event in the last 90 days means Unknown, not none |
+| Does a trail record data events for a bucket | `aws cloudtrail get-event-selectors --trail-name <trail>`: a selector for `AWS::S3::Object` (advanced: `resources.type`, and `resources.ARN` covering the bucket), and whether it records reads: `ReadWriteType` on a basic selector (`WriteOnly` records no `GetObject`), or the `readOnly` and `eventName` field selectors on an advanced one | The last `PutEventSelectors` event for each trail, in its request parameters, with the same fields (the Config history doesn't hold the selectors). No such event in the last 90 days means Unknown, not none |
 | Was logging stopped, restarted, or the selectors changed | Management events with `EventName` = `StopLogging`, `StartLogging`, `DeleteTrail`, `UpdateTrail`, `PutEventSelectors` (for a CloudTrail Lake event data store: `StopEventDataStoreIngestion`, `StartEventDataStoreIngestion`): who, when, and the new selectors. A `StopLogging` followed by `StartLogging` leaves a gap between the two, not an open-ended one | Same |
 
 ## 2. Check the other sources are recording
 
 | Question | Command | What to read |
 |---|---|---|
-| Are flow logs on for the ENI or VPC | `aws ec2 describe-flow-logs --filter Name=resource-id,Values=<vpc-or-eni-id>` | `FlowLogStatus`, `LogDestination`, `LogFormat`, `CreationTime` |
+| Are flow logs on for the ENI, its subnet or its VPC, and what traffic do they record | `aws ec2 describe-flow-logs --filter Name=resource-id,Values=<eni-id>,<subnet-id>,<vpc-id>` | `FlowLogStatus`, `TrafficType`, `LogDestination`, `LogFormat`, `CreationTime`. A flow log with `TrafficType` `REJECT` never holds `ACCEPT` records, so it can't show that an opening was used |
 | Is GuardDuty on in this Region | `aws guardduty list-detectors`, then `aws guardduty get-detector --detector-id <id>` | `Status`, enabled features |
 | Is AWS Config recording | `aws configservice describe-configuration-recorder-status` | `recording`, `lastStatus` |
 
@@ -89,10 +89,15 @@ Change events to look for in the window:
 - Exposure: `AuthorizeSecurityGroupIngress`, `PutBucketPolicy`, `PutBucketAcl`,
   `ModifyImageAttribute` (read `launchPermission`), `ModifyDBInstance` (read `publiclyAccessible`),
   `PutBucketPublicAccessBlock`, `DeleteBucketPublicAccessBlock`, `PutAccountPublicAccessBlock`,
-  `DeleteAccountPublicAccessBlock`, `ModifySnapshotAttribute`, `PutBucketReplication`
+  `DeleteAccountPublicAccessBlock`, `ModifySnapshotAttribute`, `ModifyDBSnapshotAttribute`,
+  `ModifyDBClusterSnapshotAttribute`, `PutBucketReplication`
 - Logging and detection: `StopLogging`, `StartLogging`, `DeleteTrail`, `UpdateTrail`,
   `PutEventSelectors`, `StopConfigurationRecorder`, `DeleteConfigurationRecorder`,
-  `DeleteDetector`, `UpdateDetector`, `DeleteFlowLogs`, `DeleteLogGroup`
+  `DeleteDetector`, `UpdateDetector`, `DeleteFlowLogs`, `DeleteLogGroup`, `DeleteDeliveryChannel`,
+  `DeleteResolverQueryLogConfig`, `DisassociateResolverQueryLogConfig`, `CreateIPSet`, `UpdateIPSet`,
+  `CreateFilter`, `UpdateFilter`, `DisassociateFromAdministratorAccount`, `DisableSecurityHub`,
+  `BatchUpdateFindings`, `LeaveOrganization`; `PutBucketLifecycle` or `PutBucketPolicy` on the bucket
+  that holds the trail's logs
 - Keys: `ScheduleKeyDeletion`, `DisableKey`, `PutKeyPolicy`, `CreateGrant`
 - Compute and federation: `RunInstances`, `CreateOpenIDConnectProvider`, `CreateSAMLProvider`,
   `PutUserPermissionsBoundary`, `DeleteUserPermissionsBoundary`, `PutRolePermissionsBoundary`,
@@ -125,7 +130,7 @@ If a Logs Insights query times out, narrow the window or the filter before retry
 
 `GetObject` and other object-level calls are data events. They are never in Event history or
 `lookup_cloudtrail_events`. They can be counted here only when the trail that records them also
-delivers to a CloudWatch Logs group (`cloudWatchLogsLogGroupArn` in section 1). Then:
+delivers to a CloudWatch Logs group (`cloudWatchLogsLogGroupArn` in section 1) and its selectors record reads (section 1: a trail that records only `WriteOnly` data events gives 0 `GetObject`, which is Unknown, not zero). Then:
 
 ```
 fields userIdentity.arn, userIdentity.accountId, errorCode, requestParameters.key
@@ -194,7 +199,7 @@ fields @timestamp, srcAddr, dstAddr, dstPort, bytes
 | limit 50
 ```
 
-No accepted flows, with flow logs on for the whole period, is "exposure without observed use".
+No accepted flows is "exposure without observed use" only if flow logs recorded `ACCEPT` traffic (`TrafficType` `ALL` or `ACCEPT`) for the whole period, at the ENI, its subnet or its VPC.
 Flow logs off for part of the period, or records with `logStatus` `SKIPDATA`, make use Unknown
 for that part. `NODATA` means the ENI had no traffic in that interval. For deeper flow log
 analysis, use the `network-log-analyzer` skill when it is available.
