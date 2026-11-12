@@ -115,7 +115,7 @@ one is granted by the AWS managed
 
 There is no CloudFormation template to deploy and no
 `--additional-permissions-file` for the skill evaluation tool. Full table:
-[references/permissions.md](references/permissions.md).
+[references/permissions.md](https://github.com/aws/tools-for-devops-agent/blob/main/skills/cloudtrail-coverage-auditor/references/permissions.md).
 
 The skill never calls `CreateTrail`, `UpdateTrail`, `DeleteTrail`,
 `PutEventSelectors`, `PutInsightSelectors`, `StartLogging`, `StopLogging`,
