@@ -2,7 +2,8 @@
 name: aws-routing
 description: 'Use this skill when the user wants to know which path AWS will pick for their traffic, why traffic took an unexpected route, or how to make AWS prefer a path. Covers Cloud WAN CNE route evaluation, Direct Connect Gateway local vs remote region preference, Transit Gateway route tables, ECMP and peering, VPC longest-prefix-match, BGP traffic engineering (LP communities 7224:7100/7200/7300, AS-path prepending, MED), DX + VPN redundancy and failover, and asymmetric routing. Use it even when the user only describes a symptom, such as "traffic is leaving the region", "not using my local Direct Connect", "routing to the wrong VIF/location", or "path is asymmetric". Read-only: analysis, recommendations, and describe/get/list validation commands grounded in public AWS docs.'
 metadata:
-  version: "1.2.5"
+  version: "1.2.6"
+  summary: "Explains which path AWS picks across Cloud WAN, Transit Gateway, Direct Connect and VPN, why traffic took an unexpected route, and how to steer it."
   author: midakin
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
 ---
@@ -74,15 +75,43 @@ Work through this checklist in order; each step depends on the one before it.
 
 ## Key evaluation rules
 
+### Every route table does its own lookup
+Each construct that owns a route table makes its own decision. The DXGW is a distributed set of BGP
+route reflectors outside the data path: it selects the best VIF per prefix and reflects it, so a TGW
+or Cloud WAN CNE sees the DXGW as (usually) a single next hop and traffic goes straight to that VIF.
+There is no second packet lookup at the DXGW.
+
+### ECMP is an outcome, not a step
+Longest prefix match comes first (a route lookup, not a BGP attribute). Then BGP attributes are
+compared in order and selection stops at the first attribute that differs. If all of them are equal,
+the result is ECMP.
+
 ### Cloud WAN (per CNE)
-Longest prefix match → static → VPC-propagated (same region) → unequal AS-path/MED (shortest wins) →
-equal AS-path & MED source preference: DXGW-propagated → Cloud WAN Connect → S2S VPN → other
-(TGW peering, remote CNEs; identical from 2+ sources = deterministically random).
+Longest prefix match first; then static → system routes (1:1 NAT) → VPC-propagated (same region) →
+dynamic routes compared in order, stopping at the first difference: local preference set by a Cloud
+WAN routing policy (higher wins, default 0; its position before AS_PATH is SME-confirmed field
+knowledge) → shortest AS-path → lowest MED → equal-attribute source preference:
+DXGW-propagated → Cloud WAN Connect → S2S VPN → other (TGW peering, remote CNEs; identical from 2+
+sources = deterministically random, chosen per segment / network function group). With multiple
+DXGWs, Cloud WAN works differently from TGW: the CNE evaluates the route from each DXGW attachment
+itself. Steer between DXGWs with inbound Cloud WAN routing policies (`set-local-preference`,
+`prepend-asn-list`/`remove-asn-list`/`replace-asn-list`, or `set-med`; policy version 2025.11+). Without a policy, identical routes give non-deterministic selection.
 
 ### Direct Connect (private/transit VIF, outbound AWS→on-prem)
-Longest prefix match → local preference → AS_PATH length → MED → ECMP (equal AS_PATH and BGP
-attributes). LP communities `7224:7300/7200/7100` (High/Medium/Low) set local preference and are
-evaluated before AS-path. DXGW prefers the local associated-region DX by default.
+Longest prefix match first; then local preference → AS_PATH length → MED, stopping at the first
+difference. If all are equal, the result is ECMP across the VIFs. LP communities `7224:7300/7200/7100`
+(High/Medium/Low) set local preference and are evaluated before AS-path. These BGP attributes are
+set at the VIF level on the on-prem router's advertisements and evaluated by the DXGW. DXGW prefers
+the local associated-region DX by default. Some DX locations serve more than one Region by port
+speed, so check the associated Region of the specific connection, not just the location.
+
+### Transit Gateway with Direct Connect
+Use one DXGW with multiple transit VIFs for ECMP. BGP attributes stay on the VIFs and do not pass to
+the TGW. Use multiple DXGWs only for traffic isolation or multiple primary paths. Across DXGWs on a
+TGW with no LP community and equal AS_PATH/MED, a local associated-Region DX wins on local
+preference over a remote one (no ECMP), and ECMP also needs matching DXGW Amazon-side ASNs. For
+ECMP across DXGW attachments, LP communities and failover timing, load
+[Transit Gateway routing patterns](references/tgw-routing-patterns.md).
 
 ### Direction & tooling guidance
 - **AWS → on-prem (egress):** control with DX LP communities.

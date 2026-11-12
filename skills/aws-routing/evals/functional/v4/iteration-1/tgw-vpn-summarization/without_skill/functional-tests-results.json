@@ -1,0 +1,69 @@
+{
+  "version": "v4",
+  "iteration": 1,
+  "eval_id": "tgw-vpn-summarization",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a specific, somewhat nuanced mechanism: keep VPC propagation enabled (so specifics remain for longest-prefix-match return forwarding), add a static summary route in the VPN-associated TGW route table, and rely on the fact that under the advertised-route cap, static routes take priority over propagated ones and the least-specific route is what gets advertised first \u2014 so the summary survives and is advertised while specifics remain for internal TGW routing/return path integrity. The summary should be anchored to a persistent attachment.\n\nThe agent's response gets some pieces right (static summary route per attachment, contiguous CIDR allocation, matching CGW-side route) but it fundamentally misunderstands/omits the core mechanism described in the expected output. Specifically:\n- The agent never mentions keeping propagation enabled alongside the static summary - it explicitly says to 'stop propagating the individual CIDRs' (step 1), which contradicts the expected approach of keeping specifics propagated for longest-prefix-match return routing.\n- The agent never explains the advertised-route cap behavior where static beats propagated and least-specific is advertised first under the cap - this is the key technical insight explaining why the summary approach works without breaking the return path, and it's completely absent.\n- The agent frames the return-path breakage as being about summary over-coverage (black holes from unallocated space) rather than the actual mechanism in the expected answer (keeping specifics internally for return routing while advertising only the summary).\n\nThis is a materially different (and partially contradictory) technical explanation from what's expected. The agent's answer, while plausible-sounding and containing some correct general advice, misses the specific mechanism the expected output is testing for.</reasoning>\n<parameter name=\"evidence\">Agent says: 'Add the static aggregate, stop propagating the individual CIDRs, and let the detailed routing happen inside that VPC/appliance instead of at the TGW BGP session.' This contradicts the expected approach of 'Keep VPC propagation enabled (specifics needed for longest-prefix-match return forwarding)'. The agent also never mentions the cap behavior where 'under the cap, static beats propagated and least-specific is advertised first.'",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "keeps VPC route propagation enabled for the return path",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output says 'Add the static aggregate, stop propagating the individual CIDRs, and let the detailed routing happen inside that VPC/appliance instead of at the TGW BGP session.' This discusses stopping propagation of specific CIDRs, not keeping VPC route propagation enabled for return path purposes. No explicit statement about keeping VPC route propagation enabled is found.",
+          "reasoning": "The output does not explicitly state that VPC route propagation should remain enabled for the return path. In fact, it recommends the opposite in some sense - it says to 'stop propagating the individual CIDRs' and replace with a static summary, which is about the TGW-to-VPN advertisement, not VPC propagation into TGW. The assertion about keeping VPC route propagation enabled for the return path is not addressed anywhere in the output.",
+          "confidence": "medium"
+        },
+        {
+          "text": "adds a static summary route in the TGW route table associated with the VPN attachment",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'A single static summary route in the TGW route table can point to only one attachment... Add the static aggregate, stop propagating the individual CIDRs...'",
+          "reasoning": "The output explicitly recommends adding a static summary route in the TGW route table for the attachment.",
+          "confidence": "high"
+        },
+        {
+          "text": "explains static-over-propagated and least-specific selection under the advertisement cap",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states route limits ('On-prem \u2192 TGW: 1,000 routes', 'TGW \u2192 on-prem: 5,000 routes') and discusses summarization via static routes, but does not explain how TGW chooses between static and propagated routes when both exist, nor address 'least-specific selection' concepts explicitly.",
+          "reasoning": "The output does not explicitly explain the concept of static routes taking precedence over propagated routes (static-over-propagated) nor does it explain least-specific route selection logic under the advertisement cap. It discusses the 5,000 route limit and summarization strategies, but doesn't address route selection preference rules (static vs propagated) or least-specific match behavior in the context of exceeding the cap.",
+          "confidence": "medium"
+        },
+        {
+          "text": "does not contain 'error'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Scanning the full response, no instance of the word 'error' appears.",
+          "reasoning": "The output does not contain the literal word 'error' anywhere in the text.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "57s",
+    "cost": "$0.47",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}
