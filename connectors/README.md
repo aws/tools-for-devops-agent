@@ -16,4 +16,6 @@ A connector is the definition of an MCP server that a partner hosts, for custome
 
 `tier` is the badge customers see. A partner's connector declares `partner-managed`. `aws-managed` is only for a connector an AWS team builds and supports, listed in [`.github/aws-managed-connectors.json`](../.github/aws-managed-connectors.json) on `main`; the pull request checklist enforces this (see "Partner Connectors" in [CONTRIBUTING.md](../CONTRIBUTING.md)).
 
+A partner-managed connector needs an entry in [`.github/partner-managed-connectors.json`](../.github/partner-managed-connectors.json) on `main`: its vendor, domains and the GitHub users AWS confirmed with the partner's contact. The pull request checklist checks that the entry lists the pull request's author, and the publish pipeline checks the connector's `vendor`, `maintainers`, URLs and `contact_email` against it (see "Partner Connectors" in [CONTRIBUTING.md](../CONTRIBUTING.md)).
+
 A partner accepts the [AWS DevOps Agent Partner Connector Terms and Conditions](TERMS.md) in the pull request that adds or changes its connector; see "Partner Connectors" in [CONTRIBUTING.md](../CONTRIBUTING.md). A full guide to writing a connector will be added to [CONTRIBUTING.md](../CONTRIBUTING.md).

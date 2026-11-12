@@ -485,7 +485,7 @@ MCP server" names three types at once, so they cannot decide it.
 | Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
 | Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
 | Anything under `custom-agents/` | The same, with the Custom agents section |
-| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` and `tier: partner-managed` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
+| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` and `tier: partner-managed` in each changed `connector.yaml`, and an entry for each changed partner-managed connector in `.github/partner-managed-connectors.json` that lists the author (see [Partner Connectors](#partner-connectors)) |
 
 So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
 a CHANGELOG or an SME sign-off, because none of it means anything for that change.
@@ -596,6 +596,26 @@ that connector. It reads the record from `main`, not from the pull request, so a
 maintainer adds an entry in its own pull request first; that file is under
 `/.github/`, which code owners approve. The check also fails a pull request that is
 otherwise only reported on, such as one a bot opened, except a draft.
+
+Before a partner-managed connector first merges, AWS confirms with the partner's
+contact, the person AWS works with on the listing, which GitHub users may open
+pull requests for the connector and which domains it uses. A maintainer records
+them in the partner record,
+[`.github/partner-managed-connectors.json`](.github/partner-managed-connectors.json):
+for each connector its `vendor`, its `domains`, the `github` users and teams that
+maintain it, and the date AWS `confirmed` them. The checklist check reads the
+record from `main` and fails a pull request that changes a partner-managed
+connector with no entry, or whose author the entry does not list, unless the
+author is a member of the `aws` organization. A team in the entry may maintain the
+connector, but only a listed user may open its pull requests, because the check
+cannot see who is on a team. Before publishing a new version, the publish pipeline
+checks that its `vendor` equals the entry's, that every `maintainers` name is in
+the entry's `github`, and that every endpoint, authorization, documentation and
+support URL and the `contact_email` are on the entry's `domains`; a URL whose
+whole host the customer types is not checked. To add a user or a domain, ask your
+AWS contact: a maintainer updates the record in a pull request that changes no
+connector directory, which the check enforces, and you then push to your pull
+request again.
 
 The box names the version of the terms, the date at the end of `TERMS.md`, so
 each pull request records the version its partner accepted. One acceptance covers

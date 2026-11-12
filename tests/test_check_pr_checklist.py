@@ -33,6 +33,10 @@ SKILLS_TICKED = "## Skills — complete if this PR adds or changes a skill\n- [x
 CONNECTORS_TICKED = "## Connectors — complete if this PR adds or changes a connector\n- [x] I accept the terms."
 PARTNER_YAML = "name: acme\ntier: partner-managed\ncontact_email: devops@acme.example\n"
 AWS_YAML = "name: acme\ntier: aws-managed\ncontact_email: devops@acme.example\n"
+ACME_ENTRY = {"vendor": "Acme, Inc.", "domains": ["acme.example"], "github": ["Acme-Dev", "acme/devops"],
+              "confirmed": "2026-11-12"}
+ACME_RECORD = json.dumps({"connectors": {"acme": ACME_ENTRY}})
+PARTNER_AUTHOR = {"user": {"type": "User", "login": "acme-dev"}, "author_association": "CONTRIBUTOR"}
 
 
 class TemplateTest(unittest.TestCase):
@@ -282,6 +286,122 @@ class TierTest(unittest.TestCase):
         self.assertIn(cpc.OWNERSHIP_RECORD, cpc.summary([], [], False, "complete", True))
 
 
+class PartnerRecordTest(unittest.TestCase):
+    def test_the_committed_record_is_well_formed(self):
+        text = (ROOT / cpc.PARTNER_RECORD).read_text(encoding="utf-8")
+        self.assertIsInstance(cpc.partner_record(text), dict)
+
+    def test_a_well_formed_entry_parses(self):
+        self.assertEqual(cpc.partner_record(ACME_RECORD), {"acme": ACME_ENTRY})
+
+    def test_a_record_the_base_branch_lacks_lists_no_connector(self):
+        self.assertEqual(cpc.partner_record(None), {})
+
+    def test_a_malformed_record_is_an_error_not_a_grant(self):
+        def entry(**fields):
+            return json.dumps({"connectors": {"acme": {**ACME_ENTRY, **fields}}})
+        cases = {
+            "not json": "not json",
+            "a list": "[]",
+            "no connectors": "{}",
+            "another top-level key": json.dumps({"connectors": {}, "extra": 1}),
+            "connectors as a list": '{"connectors": []}',
+            "a repeated connector": '{"connectors": {"acme": {}, "acme": {}}}',
+            "a missing key": json.dumps({"connectors": {"acme": {k: v for k, v in ACME_ENTRY.items()
+                                                                 if k != "confirmed"}}}),
+            "an extra key": entry(notes="x"),
+            "an empty vendor": entry(vendor=" "),
+            "a long vendor": entry(vendor="x" * 129),
+            "no domains": entry(domains=[]),
+            "an uppercase domain": entry(domains=["Acme.example"]),
+            "a scheme": entry(domains=["https://acme.example"]),
+            "a wildcard": entry(domains=["*.acme.example"]),
+            "a trailing dot": entry(domains=["acme.example."]),
+            "a single label": entry(domains=["example"]),
+            "a repeated domain": entry(domains=["acme.example", "acme.example"]),
+            "eleven domains": entry(domains=[f"d{i}.example" for i in range(11)]),
+            "no github": entry(github=[]),
+            "a leading @": entry(github=["@acme-dev"]),
+            "a repeated user in another case": entry(github=["acme-dev", "Acme-Dev"]),
+            "a user with a space": entry(github=["acme dev"]),
+            "a user over 39 characters": entry(github=["a" * 40]),
+            "an organization over 39 characters": entry(github=[f"{'o' * 40}/team"]),
+            "a team with a dot": entry(github=["acme/dev.ops"]),
+            "a bare organization with a slash": entry(github=["acme/"]),
+            "an entry not named like a connector": json.dumps({"connectors": {"Acme_Co": ACME_ENTRY}}),
+            "a date with a time": entry(confirmed="2026-11-12T00:00:00Z"),
+            "an impossible date": entry(confirmed="2026-02-30"),
+        }
+        for name, text in cases.items():
+            with self.subTest(name):
+                with self.assertRaises(ValueError):
+                    cpc.partner_record(text)
+
+    def test_a_partner_connector_needs_an_entry(self):
+        files = {"connectors/acme/connector.yaml": PARTNER_YAML}
+        unmet = cpc.unconfirmed_partner(CONNECTOR_PR, files.get, {}.get, PARTNER_AUTHOR)
+        self.assertEqual(len(unmet), 1)
+        self.assertIn(f"acme has no entry in {cpc.PARTNER_RECORD}", unmet[0])
+
+    def test_a_listed_author_passes_in_any_case(self):
+        files = {"connectors/acme/connector.yaml": PARTNER_YAML}
+        for login in ("acme-dev", "ACME-DEV"):
+            with self.subTest(login):
+                pr = {"user": {"login": login}, "author_association": "NONE"}
+                self.assertEqual(cpc.unconfirmed_partner(
+                    CONNECTOR_PR, files.get, {cpc.PARTNER_RECORD: ACME_RECORD}.get, pr), [])
+
+    def test_an_unlisted_author_fails_and_a_team_authorizes_no_one(self):
+        files = {"connectors/acme/connector.yaml": PARTNER_YAML}
+        for login in ("someone-else", "acme/devops", "acme", ""):
+            with self.subTest(login):
+                pr = {"user": {"login": login}, "author_association": "CONTRIBUTOR"}
+                unmet = cpc.unconfirmed_partner(CONNECTOR_PR, files.get, {cpc.PARTNER_RECORD: ACME_RECORD}.get, pr)
+                self.assertEqual(len(unmet), 1)
+                self.assertIn("is not a GitHub user that", unmet[0])
+
+    def test_a_member_of_the_owning_organization_needs_no_listing(self):
+        files = {"connectors/acme/connector.yaml": PARTNER_YAML}
+        read_base = {cpc.PARTNER_RECORD: ACME_RECORD}.get
+        for association, expected in (("MEMBER", 0), ("OWNER", 0), ("COLLABORATOR", 1), ("CONTRIBUTOR", 1),
+                                      ("FIRST_TIME_CONTRIBUTOR", 1), (None, 1)):
+            with self.subTest(association):
+                pr = {"user": {"login": "aws-dev"}, "author_association": association}
+                self.assertEqual(len(cpc.unconfirmed_partner(CONNECTOR_PR, files.get, read_base, pr)), expected)
+
+    def test_a_member_still_needs_the_connector_to_have_an_entry(self):
+        files = {"connectors/acme/connector.yaml": PARTNER_YAML}
+        pr = {"user": {"login": "aws-dev"}, "author_association": "MEMBER"}
+        self.assertEqual(len(cpc.unconfirmed_partner(CONNECTOR_PR, files.get, {}.get, pr)), 1)
+
+    def test_other_tiers_and_removed_connectors_never_read_the_record(self):
+        def read_base(path):
+            raise AssertionError(path)
+        files = {"connectors/acme/connector.yaml": AWS_YAML}
+        paths = [*CONNECTOR_PR, "connectors/gone/connector.yaml", "connectors/README.md", "connectors/releases.yaml"]
+        self.assertEqual(cpc.unconfirmed_partner(paths, files.get, read_base, PARTNER_AUTHOR), [])
+
+    def test_a_malformed_record_raises_when_a_connector_needs_it(self):
+        files = {"connectors/acme/connector.yaml": PARTNER_YAML}
+        with self.assertRaises(ValueError):
+            cpc.unconfirmed_partner(CONNECTOR_PR, files.get, {cpc.PARTNER_RECORD: "{}"}.get, PARTNER_AUTHOR)
+
+    def test_the_record_never_arrives_with_a_connector(self):
+        cases = [
+            ([cpc.PARTNER_RECORD, "connectors/acme/connector.yaml"], 1),
+            ([cpc.PARTNER_RECORD, "connectors/acme/README.md"], 1),
+            ([cpc.PARTNER_RECORD], 0),
+            ([cpc.PARTNER_RECORD, "CONTRIBUTING.md", "connectors/README.md", "tests/test_x.py"], 0),
+            (["connectors/acme/connector.yaml"], 0),
+        ]
+        for paths, expected in cases:
+            with self.subTest(paths):
+                self.assertEqual(len(cpc.record_with_connector(paths)), expected)
+
+    def test_the_summary_names_the_partner_record_for_a_connector_pr(self):
+        self.assertIn(cpc.PARTNER_RECORD, cpc.summary([], [], False, "complete", True))
+
+
 class DecideTest(unittest.TestCase):
     AFTER = "2026-10-20T00:00:00Z"
     BEFORE = "2026-10-01T00:00:00Z"
@@ -326,11 +446,11 @@ class MainTest(unittest.TestCase):
     def git(self, *args):
         subprocess.run(["git", "-C", str(self.tmp / "repo"), *args], check=True, capture_output=True)
 
-    def event(self, pr_body):
+    def event(self, pr_body, **fields):
         path = self.tmp / "event.json"
         path.write_text(json.dumps({"pull_request": {
             "body": pr_body, "number": 1, "created_at": "2026-10-20T00:00:00Z",
-            "draft": False, "user": {"type": "User"}, "labels": [],
+            "draft": False, "labels": [], **PARTNER_AUTHOR, **fields,
         }}), encoding="utf-8")
         return str(path)
 
@@ -340,28 +460,31 @@ class MainTest(unittest.TestCase):
         self.assertEqual((self.out / "outcome").read_text().strip(), "error")
         self.assertFalse((self.out / "reason").exists())
 
-    def connector_pr(self, connector_yaml, base_record=None, pr_record=None):
+    def connector_pr(self, connector_yaml, base_record=None, pr_record=None, base_partner_record=ACME_RECORD,
+                     pr_partner_record=None, **event_fields):
         repo = self.tmp / "repo"
         repo.mkdir()
         self.git("init", "-q", "-b", "main")
-        if base_record is not None:
-            (repo / ".github").mkdir()
-            (repo / cpc.OWNERSHIP_RECORD).write_text(base_record, encoding="utf-8")
-            self.git("add", ".")
+        for path, text in ((cpc.OWNERSHIP_RECORD, base_record), (cpc.PARTNER_RECORD, base_partner_record)):
+            if text is not None:
+                (repo / ".github").mkdir(exist_ok=True)
+                (repo / path).write_text(text, encoding="utf-8")
+        self.git("add", ".")
         self.git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "base")
         self.git("checkout", "-q", "-b", "pr")
         (repo / "connectors" / "acme").mkdir(parents=True)
         (repo / "connectors" / "acme" / "connector.yaml").write_text(connector_yaml, encoding="utf-8")
-        if pr_record is not None:
-            (repo / ".github").mkdir(exist_ok=True)
-            (repo / cpc.OWNERSHIP_RECORD).write_text(pr_record, encoding="utf-8")
+        for path, text in ((cpc.OWNERSHIP_RECORD, pr_record), (cpc.PARTNER_RECORD, pr_partner_record)):
+            if text is not None:
+                (repo / ".github").mkdir(exist_ok=True)
+                (repo / path).write_text(text, encoding="utf-8")
         self.git("add", ".")
         self.git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "connector")
         cwd = os.getcwd()
         os.chdir(repo)
         self.addCleanup(os.chdir, cwd)
         text = body(REQUIRED_ALL_TICKED, CONNECTORS_TICKED, LICENSE_TICKED)
-        return cpc.main(["--event", self.event(text), "--base-ref", "main", "--out", str(self.out)])
+        return cpc.main(["--event", self.event(text, **event_fields), "--base-ref", "main", "--out", str(self.out)])
 
     def test_a_connector_pr_with_contact_email_passes(self):
         self.assertEqual(self.connector_pr(PARTNER_YAML), 0)
@@ -382,6 +505,27 @@ class MainTest(unittest.TestCase):
     def test_an_entry_the_pr_adds_itself_grants_nothing(self):
         record = json.dumps({"connectors": {"acme": "aws/devops-agent-team"}})
         self.assertEqual(self.connector_pr(AWS_YAML, pr_record=record), 1)
+
+    def test_a_partner_connector_without_an_entry_fails(self):
+        self.assertEqual(self.connector_pr(PARTNER_YAML, base_partner_record=None), 1)
+        self.assertEqual((self.out / "reason").read_text().strip(), "incomplete")
+
+    def test_a_partner_entry_the_pr_adds_itself_grants_nothing(self):
+        self.assertEqual(self.connector_pr(PARTNER_YAML, base_partner_record=None, pr_partner_record=ACME_RECORD), 1)
+
+    def test_a_partner_connector_from_an_unlisted_author_fails(self):
+        self.assertEqual(self.connector_pr(PARTNER_YAML, user={"type": "User", "login": "stranger"}), 1)
+
+    def test_a_partner_connector_from_an_unlisted_bot_fails(self):
+        self.assertEqual(self.connector_pr(PARTNER_YAML, user={"type": "Bot", "login": "some-bot[bot]"}), 1)
+
+    def test_a_partner_connector_from_an_organization_member_passes(self):
+        self.assertEqual(self.connector_pr(PARTNER_YAML, user={"type": "User", "login": "aws-dev"},
+                                           author_association="MEMBER"), 0)
+
+    def test_a_malformed_partner_record_is_an_error_not_a_finding(self):
+        self.assertEqual(self.connector_pr(PARTNER_YAML, base_partner_record='{"connectors": []}'), 2)
+        self.assertEqual((self.out / "outcome").read_text().strip(), "error")
 
     def test_a_head_ref_git_cannot_read_is_an_error_not_a_finding(self):
         self.connector_pr(PARTNER_YAML)

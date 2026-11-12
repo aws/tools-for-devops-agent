@@ -31,6 +31,14 @@ the base branch so a PR cannot add its own entry. ``tier`` is the badge customer
 see, so this finding fails even a PR that is otherwise only reported on, except a
 draft, which is checked again when it is marked ready for review.
 
+A partner-managed connector also needs an entry in the partner record,
+``.github/partner-managed-connectors.json``, read from the base branch: the vendor,
+its domains and the GitHub users AWS confirmed with the partner's contact. The PR's
+author must be a user that entry lists, or a member of the organization that owns
+the repository. A PR that changes the record changes no connector directory, so a
+connector and its own entry never arrive together. These findings fail every PR
+but a draft, as the tier finding does.
+
 Exit status: 0 pass, 1 fail, 2 the check could not run. An error says nothing
 about the PR, and the labeler leaves the PR's label and comment alone on it.
 """
@@ -43,6 +51,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 # When the gated PR template reached main (commit 49f31c1, merged with PR #135),
@@ -76,6 +85,27 @@ CONTACT_EMAIL = re.compile(r"""^contact_email:[ \t]*(?![>|]|""|'')[^\s#]""", re.
 TIER_KEY = re.compile(r"""^(?:\?[ \t]*)?(["']?)tier\1[ \t]*(?::|$)""")
 PARTNER_TIER = re.compile(r"""^tier:[ \t]*(["']?)partner-managed\1[ \t]*(?:#.*)?$""")
 OWNERSHIP_RECORD = ".github/aws-managed-connectors.json"
+# Who a partner-managed connector belongs to: for each connector, the vendor, its
+# domains and the GitHub users AWS confirmed with the partner's contact. Nothing in a
+# connector PR can vouch for its own author, so the record is read from the base
+# branch and changed only in a PR that touches no connector directory. The publish
+# Lambda reads the same file and checks vendor, maintainers and domains against it,
+# which needs a YAML parser this check does not have; this check covers the author.
+PARTNER_RECORD = ".github/partner-managed-connectors.json"
+PARTNER_ENTRY_KEYS = {"vendor", "domains", "github", "confirmed"}
+MAX_ENTRY_ITEMS = 10
+MAX_VENDOR_LENGTH = 128
+# The PR author is accepted as a member of the organization that owns the
+# repository. GitHub sets author_association; a PR cannot choose it.
+OWNER_ASSOCIATIONS = {"MEMBER", "OWNER"}
+GITHUB_USER = re.compile(r"^[A-Za-z0-9](?:-?[A-Za-z0-9])*$")
+GITHUB_TEAM = re.compile(r"^[A-Za-z0-9](?:-?[A-Za-z0-9])*/[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")
+CONNECTOR_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+# Lowercase host names of at least two labels. That a domain is registrable, not a
+# public suffix such as com or github.io, needs the Public Suffix List, which the
+# publish Lambda checks.
+DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # Items every PR is held to, tool or not, and that can never be marked n/a: the
 # repository is public, and the licence is a statement only the author can make.
@@ -177,6 +207,114 @@ def unowned_tier(paths: list[str], read, read_base) -> list[str]:
     return unmet
 
 
+def _unique_object(pairs: list[tuple[str, object]]) -> dict:
+    """A JSON object that refuses a repeated key, which json.loads would let the
+    last value win silently."""
+    seen: dict = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(f"{PARTNER_RECORD} repeats the key {key!r}")
+        seen[key] = value
+    return seen
+
+
+def _github_handle(value: str) -> bool:
+    """A username or org/team under connector.yaml's maintainers rules: a username
+    of at most 39 characters, an org/team of at most 140 with the org under the
+    username rule."""
+    if GITHUB_TEAM.match(value):
+        return len(value) <= 140 and value.index("/") <= 39
+    return len(value) <= 39 and bool(GITHUB_USER.match(value))
+
+
+def _entry_problem(entry: object) -> str | None:
+    """Why one partner record entry is malformed, or None."""
+    if not isinstance(entry, dict) or set(entry) != PARTNER_ENTRY_KEYS:
+        return f"must be an object with exactly the keys {sorted(PARTNER_ENTRY_KEYS)}"
+    vendor = entry["vendor"]
+    if not isinstance(vendor, str) or not vendor.strip() or len(vendor) > MAX_VENDOR_LENGTH:
+        return f"vendor must be a non-empty string of at most {MAX_VENDOR_LENGTH} characters"
+    for key, valid in (("domains", DOMAIN.match), ("github", _github_handle)):
+        values = entry[key]
+        if (not isinstance(values, list) or not 1 <= len(values) <= MAX_ENTRY_ITEMS
+                or not all(isinstance(v, str) and valid(v) for v in values)
+                or len({v.lower() for v in values}) != len(values)):
+            return f"{key} must list 1 to {MAX_ENTRY_ITEMS} distinct, well-formed values"
+    confirmed = entry["confirmed"]
+    if not isinstance(confirmed, str) or not DATE.match(confirmed):
+        return "confirmed must be a YYYY-MM-DD date"
+    try:
+        date.fromisoformat(confirmed)
+    except ValueError:
+        return "confirmed must be a YYYY-MM-DD date"
+    return None
+
+
+def partner_record(text: str | None) -> dict[str, dict]:
+    """The partner record's entries by connector name. A record the base branch does
+    not have lists none. A malformed one raises, so main() reports an error rather
+    than granting or refusing anything on a record it cannot read."""
+    if text is None:
+        return {}
+    record = json.loads(text, object_pairs_hook=_unique_object)
+    if not isinstance(record, dict) or set(record) != {"connectors"} or not isinstance(record["connectors"], dict):
+        raise ValueError(f"{PARTNER_RECORD} must be {{\"connectors\": {{\"<name>\": {{...}}}}}}")
+    for name, entry in record["connectors"].items():
+        if not CONNECTOR_NAME.match(name) or len(name) > 64:
+            raise ValueError(f"{PARTNER_RECORD} entry {name!r} must be named like a connector directory")
+        problem = _entry_problem(entry)
+        if problem:
+            raise ValueError(f"{PARTNER_RECORD} entry {name!r} {problem}")
+    return record["connectors"]
+
+
+def author_confirmed(entry: dict, pr: dict) -> bool:
+    """Whether the PR's author may change this connector: a user the entry lists, or
+    a member of the organization that owns the repository. An org/team in the entry
+    authorizes no one here, because this check cannot see who is on a team."""
+    if pr.get("author_association") in OWNER_ASSOCIATIONS:
+        return True
+    login = ((pr.get("user") or {}).get("login") or "").lower()
+    return bool(login) and login in {g.lower() for g in entry["github"] if "/" not in g}
+
+
+def unconfirmed_partner(paths: list[str], read, read_base, pr: dict) -> list[str]:
+    """Unmet entries for each changed partner-managed connector that has no entry in
+    the partner record on the base branch, or whose entry does not list the PR's
+    author. A connector that declares another tier is unowned_tier's to judge. The
+    record is read only when a connector needs it."""
+    names = sorted({m.group(1) for m in map(CONNECTOR_DIR.match, paths) if m})
+    unmet = []
+    entries = None
+    for name in names:
+        text = read(f"connectors/{name}/connector.yaml")
+        if text is None or not declares_partner_tier(text):
+            continue
+        if entries is None:
+            entries = partner_record(read_base(PARTNER_RECORD))
+        entry = entries.get(name)
+        if entry is None:
+            unmet.append(f"{CONNECTOR_SECTION} → {name} has no entry in {PARTNER_RECORD} on the base branch. AWS "
+                         "adds it in its own pull request, after confirming the connector's GitHub maintainers and "
+                         "domains with the partner's contact")
+        elif not author_confirmed(entry, pr):
+            login = (pr.get("user") or {}).get("login") or "the author"
+            unmet.append(f"{CONNECTOR_SECTION} → {login} is not a GitHub user that {PARTNER_RECORD} lists for "
+                         f"{name} on the base branch. AWS adds a user after confirming them with the partner's "
+                         "contact")
+    return unmet
+
+
+def record_with_connector(paths: list[str]) -> list[str]:
+    """An unmet entry when the PR changes the partner record and a connector
+    directory together: the record is what vouches for a connector PR's author, so
+    it never arrives in the same PR as a connector."""
+    if PARTNER_RECORD in paths and changes_connector(paths):
+        return [f"{PARTNER_RECORD} → a pull request that changes the partner record changes no connectors/<name>/ "
+                "directory; move the connector changes to their own pull request"]
+    return []
+
+
 def required_sections(paths: list[str]) -> tuple[list[str], bool]:
     """The sections the changed files call for, and whether this is a tool PR."""
     tool_dirs = [d for d in TOOL_DIRS if any(p.startswith(d) for p in paths)]
@@ -252,7 +390,9 @@ def summary(unmet: list[str], waived: list[str], is_tool: bool, reason: str, is_
     if is_connector:
         lines.append("It changes a connector, so the partner terms in the Connectors section must be accepted, "
                      "and each changed connector's connector.yaml must set contact_email and declare "
-                     f"tier: partner-managed, unless the connector is listed in {OWNERSHIP_RECORD}.")
+                     f"tier: partner-managed, unless the connector is listed in {OWNERSHIP_RECORD}. "
+                     f"A partner-managed connector needs an entry in {PARTNER_RECORD} that lists "
+                     "the pull request's author.")
     if waived:
         lines += ["", "Marked n/a, with a reason:", ""] + [f"- {w}" for w in waived]
     heading = {
@@ -308,6 +448,8 @@ def main(argv: list[str] | None = None) -> int:
         unmet, waived, is_tool = evaluate(pr.get("body") or "", paths)
         unmet += missing_contact(paths, read_at(args.head_ref))
         binding = unowned_tier(paths, read_at(args.head_ref), read_at(args.base_ref))
+        binding += unconfirmed_partner(paths, read_at(args.head_ref), read_at(args.base_ref), pr)
+        binding += record_with_connector(paths)
         unmet += binding
         outcome, reason = decide(pr, unmet, binding)
         report = summary(unmet, waived, is_tool, reason, changes_connector(paths))
