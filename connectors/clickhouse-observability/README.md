@@ -17,7 +17,7 @@ No API keys or OAuth clients need to be created in ClickHouse Cloud.
 
 ## Which service the agent queries
 
-By default, the agent queries the first observability service provisioned and used by your account. To use a different service, change the default service in **User Preferences** in ClickStack. Requests can also target a specific service with the `x-service-id` header, which overrides the default.
+By default, the agent queries the first observability service provisioned and used by your account. To use a different service, change the default service in **User Preferences** in ClickStack.
 
 ## What the agent can do
 
