@@ -28,15 +28,20 @@ only the reads for the branch the symptom points to.
 
 ### IAM Permissions Required
 
-The DevOps Agent role needs read-only access. Every API the skill uses is covered by the
+The DevOps Agent role needs read-only access. Most APIs the skill uses are covered by the
 [AIDevOpsAgentAccessPolicy](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html)
-managed policy (verified against **v14**), with one optional add-on:
+managed policy (verified against **v15**). Two capabilities are NOT covered by default and
+ship together as an opt-in parameter in the shared `cloudformation/devops-agent-skill-policies`
+template (see `references/opt-in-policy.md` for the exact grant and snippet):
 
-- **Optional (one action):** `bedrock:GetIngestionJob` is not in the managed policy. It is the
-  only call that returns job-level `failureReasons` when ingestion-log delivery is not
-  configured. It ships as an opt-in parameter in `cloudformation/devops-agent-skill-policies`
-  (see `cloudformation/opt-in-getingestionjob.md`). Without it, the skill uses ingestion logs
-  and per-document status and says job-level reasons are unavailable.
+- **Source-bucket reads** - `s3:ListBucket` and `s3:GetBucketLocation`, scoped to the data
+  source buckets. The managed policy allows `s3:ListBucket` only for the `AWSLogs/*` prefix, so
+  without this grant the staleness and file checks cannot run and are reported as **Not checked**.
+- **`bedrock:GetIngestionJob`** - the only call that returns `failureReasons`, and the only way
+  to name a file dropped at intake (an oversized or unsupported file is absent from both
+  `ListKnowledgeBaseDocuments` and the ingestion logs). Without this grant, the skill infers a
+  drop from the job `statistics` (`scanned - indexed - failed - skipped`) and reports the file
+  identities as **Not checked**.
 
 **Not in the managed policy, disclosed rather than skipped silently:**
 - `s3vectors:*` reads - S3 Vectors stores are reported as **Not checked**.
@@ -88,8 +93,8 @@ IDs in quoted ARNs.
 ## Limitations
 
 - Does not measure retrieval quality, run evaluation jobs, or judge answer correctness.
-- Job-level failure reasons need either CloudWatch Logs delivery or the opt-in
-  `bedrock:GetIngestionJob`.
+- Naming a file dropped at intake needs the opt-in `bedrock:GetIngestionJob`; without it the
+  skill reports a drop count from job statistics but not the file identities.
 - AOSS index engine and Aurora table columns are data-plane facts - reported as Inspect.
 - S3 Vectors stores and third-party stores (Pinecone, Redis Enterprise Cloud, MongoDB Atlas)
   are not checkable from AWS APIs.

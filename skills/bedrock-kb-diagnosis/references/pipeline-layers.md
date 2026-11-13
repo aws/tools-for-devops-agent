@@ -8,10 +8,15 @@ All APIs are read-only. No `Create*`/`Update*`/`Delete*`/`Start*`, no
 - **bedrock / bedrock-agent:** `ListKnowledgeBases`, `GetKnowledgeBase`, `ListDataSources`,
   `GetDataSource`, `ListIngestionJobs`, `ListKnowledgeBaseDocuments`, `GetFoundationModel`
   (embedding model lifecycle), `ListAgents`, `ListAgentVersions`, `ListAgentKnowledgeBases`,
-  `GetAgentKnowledgeBase`. Optional opt-in: `GetIngestionJob` (job-level `failureReasons`).
-- **logs:** `DescribeDeliverySources`, `DescribeDeliveries`, `DescribeDeliveryDestinations`
-  (find the KB's `APPLICATION_LOGS` destination), `StartQuery`, `GetQueryResults`.
-- **s3:** `ListBucket`, `GetBucketLocation`.
+  `GetAgentKnowledgeBase`. Opt-in (not in the default managed policy): `GetIngestionJob` - the
+  only call that names a file dropped at intake.
+- **logs:** `DescribeDeliverySources` (match a delivery source's `resourceArns` against the KB
+  ARN), then `DescribeDeliveries`, `DescribeDeliveryDestinations` to resolve the KB's
+  `APPLICATION_LOGS` destination; `StartQuery`, `GetQueryResults`. An empty match is
+  **Not checked**, never "no logging configured".
+- **s3 (opt-in, not in the default managed policy for source buckets):** `ListBucket`,
+  `GetBucketLocation`, scoped to the source buckets. The default policy allows `s3:ListBucket`
+  only for the `AWSLogs/*` prefix, so a source listing needs the opt-in grant.
 - **aoss:** `BatchGetCollection`, `GetSecurityPolicy`, `ListSecurityPolicies`,
   `GetAccessPolicy`, `ListAccessPolicies`, `ListVpcEndpoints`.
 - **rds:** `DescribeDBClusters`. **secretsmanager:** `DescribeSecret` (existence only, never
@@ -51,7 +56,10 @@ indexed > 0 docs, cited by job ID) and **did the last sync succeed**.
 - `ListKnowledgeBaseDocuments` - per-document `FAILED`/`IGNORED`. `statusReason` returned only
   for `IGNORED`.
 - `EMBEDDING_FAILED` / `INDEXING_FAILED` reasons: KB `APPLICATION_LOGS` `status_reasons`
-  (CloudWatch Logs only). Or the optional `GetIngestionJob` for job-level `failureReasons`.
+  (CloudWatch Logs only). A file dropped at intake is absent from both
+  `ListKnowledgeBaseDocuments` and the logs; `GetIngestionJob.failureReasons` (opt-in) is the
+  only call that names it. Without the grant, infer drops from `statistics`
+  (`scanned - indexed - failed - skipped > 0`) and list the files as Not checked.
 - Finding the logs: `logs:DescribeDeliverySources` / `DescribeDeliveries`. Disclose
   S3/Firehose destinations as not queryable. Log delivery is not supported for structured
   stores or Kendra GenAI indexes.
@@ -82,3 +90,7 @@ indexed > 0 docs, cited by job ID) and **did the last sync succeed**.
   before prescribing any customer-side fix.
 - Paginate every list call to the end.
 - Knowledge bases are regional - use the user's region or the current region, and say which.
+- A **deleted** data source: recover its `dataDeletionPolicy` from CloudTrail `CreateDataSource`
+  and confirm the deletion with `DeleteDataSource`, since `GetDataSource` no longer returns it.
+- A sync **rejected at start** (`ValidationException ... storage configuration provided is
+  invalid`) creates no job; treat the empty job list as a vector-store fault, not "never synced".

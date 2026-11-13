@@ -18,5 +18,6 @@ Initial release.
   disclosed as Not checked; Kendra GenAI / structured / graph KBs deferred.
 - Handoffs to `aiml-access-diagnostics` (IAM), `bedrock-operation-review` (posture), and
   `service-quota-check` (embedding throttles).
-- IAM: covered by `AIDevOpsAgentAccessPolicy` v14, with `bedrock:GetIngestionJob` as an
-  optional opt-in CloudFormation parameter.
+- IAM: core reads covered by `AIDevOpsAgentAccessPolicy` v15; source-bucket reads
+  (`s3:ListBucket`/`s3:GetBucketLocation`) and `bedrock:GetIngestionJob` ship as one opt-in
+  CloudFormation parameter, required to name files dropped at intake.
