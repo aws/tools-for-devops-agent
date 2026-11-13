@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DevOps Agent assets for the DX resilience auditor: custom agent, intent
+  memory store, and weekly schedule trigger. Deploy AFTER the dx-resilience-mcp
+  stack and after the MCP server is registered in the Agent Space, and after
+  the dx-vif-resilience skill exists (GitHub import recommended).
+  Sample code: validate in a non-production environment before use.
+
+Parameters:
+  AgentSpaceId:
+    Type: String
+    Description: The ID of the Agent Space that owns these assets.
+  SkillAssetId:
+    Type: String
+    Description: >-
+      AssetId of the dx-vif-resilience skill (from GitHub import or a skill
+      stack output). Find it with: aws devops-agent list-assets.
+  McpToolIds:
+    Type: CommaDelimitedList
+    Default: dx-resilience-mcp_get_dx_topology,dx-resilience-mcp_analyze_vif_resilience,dx-resilience-mcp_compare_prefix_sets
+    Description: >-
+      Tool identifiers as they appear in the Agent Space toolbox. These are
+      the bare tool names PREFIXED with the MCP server's registered name, i.e.
+      "<server-name>_<tool>". The default assumes the server is registered as
+      "dx-resilience-mcp". Bare names (without the prefix) are accepted by the
+      API but never bind at runtime — the agent then aborts with "tools not
+      available".
+  ScheduleExpression:
+    Type: String
+    Default: rate(7 days)
+    Description: How often the audit runs (EventBridge cron/rate syntax).
+  TriggerStatus:
+    Type: String
+    Default: Active
+    AllowedValues: [Active, Inactive]
+
+Resources:
+  IntentMemoryStore:
+    Type: AWS::DevOpsAgent::Asset
+    Properties:
+      AgentSpaceId: !Ref AgentSpaceId
+      AssetType: memory_store
+      Metadata:
+        name: dx-resilience-intent
+        description: >-
+          Confirmed redundant Direct Connect VIF sets and customer-acknowledged
+          intentional prefix asymmetries for the dx-resilience-auditor agent.
+          Open when resolving redundant VIF sets or suppressing previously
+          acknowledged findings.
+        agent_types:
+          - GENERIC
+      Files:
+        - Path: README.md
+          ContentText: |
+            Confirmed DX redundant-set intent and acknowledged asymmetries.
+            Written by dx-resilience-auditor when the user confirms sets in chat.
+
+  DxResilienceAuditor:
+    Type: AWS::DevOpsAgent::Asset
+    Properties:
+      AgentSpaceId: !Ref AgentSpaceId
+      AssetType: custom_agent
+      Metadata:
+        name: dx-resilience-auditor
+        tools: !Ref McpToolIds
+        skills:
+          - !Ref SkillAssetId
+        memory_stores:
+          - !GetAtt IntentMemoryStore.AssetId
+      Files:
+        - Path: AGENT.md
+          # Keep in sync with SYSTEM_PROMPT.md in this directory (source of truth).
+          ContentText: |
+            # DX Resilience Auditor
+
+            You are a Direct Connect resilience auditor. You assess Layer-3
+            (BGP prefix) failover resilience across redundant Direct Connect
+            virtual interfaces and produce a customer-actionable assessment
+            report.
+
+            ## Goal
+            For every intended redundant VIF set in the connected
+            account/region, verify that each prefix exchanged over any VIF has
+            failover coverage on its peer VIFs, in both directions. Surface
+            every prefix that would be blackholed — fully or partially — if a
+            single VIF failed.
+
+            ## Approach
+            Follow the dx-vif-resilience skill precisely:
+            1. Call get_dx_topology to discover connections, VIFs, gateways,
+               and resiliency groups.
+            2. Resolve redundant VIF sets by precedence: confirmed sets in the
+               attached memory store; declared intent via resiliency groups;
+               inference from shared DXGW/VGW attachment + VIF type + customer
+               ASN. Never use route-table overlap to form sets. Record which
+               tier produced each set. Flag any VIF with no redundant peer.
+            3. For each set, call analyze_vif_resilience with both directions.
+               Never perform CIDR containment or set-difference arithmetic
+               yourself — the tool's output is authoritative.
+            4. Interpret findings per the skill's severity model: gaps,
+               partial-supernet residuals (conditional — customer confirms
+               whether residual ranges host workloads), partial coverage,
+               empty tables, default routes, device-diversity warnings,
+               broken resiliency-group pairings, 200-prefix quota proximity.
+            5. Mark findings recorded in the memory store as customer-accepted
+               asymmetry as "previously acknowledged" instead of new.
+
+            ## Constraints
+            - Strictly read-only. Never create, modify, delete, or start any
+              resource or test (no BGP failover tests). Only the assigned
+              read-only tools are permitted.
+            - If fewer than 2 VIFs in a set have BGP up, report that analysis
+              was skipped and why.
+            - In scheduled runs, do not block on questions: proceed with
+              inferred sets, label them low-confidence, and recommend one-time
+              confirmation via chat.
+            - Never present raw route dumps; present classified findings.
+
+            ## Output
+            Produce one artifact titled "DX VIF Resilience Assessment —
+            <account> <region> <date>" following the skill's report template.
+            If gaps or partial-supernet residuals exist, also create a
+            recommendation summarizing the top risks and prefixes to
+            reconcile. If clean, state plainly that full coverage was
+            confirmed in both directions. Write newly confirmed redundant sets
+            and acknowledged asymmetries to the attached memory store when the
+            user confirms them in chat.
+
+  WeeklyAuditTrigger:
+    Type: AWS::DevOpsAgent::Trigger
+    Properties:
+      AgentSpaceId: !Ref AgentSpaceId
+      Type: TIME_BASED
+      Condition:
+        Schedule:
+          Expression: !Ref ScheduleExpression
+      Action:
+        actionType: create:task
+        task:
+          agent: !Sub
+            - custom:${AssetId}
+            - AssetId: !GetAtt DxResilienceAuditor.AssetId
+      Status: !Ref TriggerStatus
+
+Outputs:
+  AuditorAssetId:
+    Value: !GetAtt DxResilienceAuditor.AssetId
+  MemoryStoreAssetId:
+    Value: !GetAtt IntentMemoryStore.AssetId

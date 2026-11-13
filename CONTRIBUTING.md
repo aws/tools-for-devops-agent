@@ -112,7 +112,7 @@ The check is exact only for the base commit it ran on. Two pull requests that ea
 
 If the check is wrong about a pull request, a maintainer can add the `skip-validate-skills` label: the check still runs and reports, but it no longer blocks the merge. If the check itself breaks and blocks every pull request, an admin removes `validate-skills` from the required status checks for `main` until the fix merges, then adds it back.
 
-Once branch protection requires it, changes under `.github/` and `tests/`, and to the root `.gitattributes`, need a code owner's approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)). A separate check, `build-docs`, runs `mkdocs build --strict` on every pull request; to run it locally, in the virtual environment below, `python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict`.
+Once branch protection requires it, changes under `.github/` and `tests/`, and to the root `.gitattributes`, need a code owner's approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)). A separate check, `build-docs`, runs `mkdocs build --strict` on every pull request; to run it locally, in the virtual environment below, `python3 -m pip install --require-hashes -r .github/scripts/docs/requirements.txt && mkdocs build --strict`.
 
 Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
 
@@ -485,7 +485,7 @@ MCP server" names three types at once, so they cannot decide it.
 | Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
 | Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
 | Anything under `custom-agents/` | The same, with the Custom agents section |
-| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
+| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` and `tier: partner-managed` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
 
 So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
 a CHANGELOG or an SME sign-off, because none of it means anything for that change.
@@ -584,6 +584,18 @@ partner, as an exception, they link the partner's written authorization in the
 pull request description, and a maintainer approves the exception before review.
 A partner whose connector merged before the terms existed accepts them, and adds
 `contact_email`, in a new pull request.
+
+`tier` is the badge customers see next to a connector, so a partner's connector
+declares `tier: partner-managed`. Only a connector that an AWS team builds and
+supports may declare `aws-managed`, and it needs an entry in the AWS ownership
+record, [`.github/aws-managed-connectors.json`](.github/aws-managed-connectors.json),
+which maps each such connector's name to its owning AWS team. The checklist check
+fails a pull request whose changed `connector.yaml` declares any other tier, or a
+tier it cannot read as a single top-level line, unless the record on `main` lists
+that connector. It reads the record from `main`, not from the pull request, so a
+maintainer adds an entry in its own pull request first; that file is under
+`/.github/`, which code owners approve. The check also fails a pull request that is
+otherwise only reported on, such as one a bot opened, except a draft.
 
 The box names the version of the terms, the date at the end of `TERMS.md`, so
 each pull request records the version its partner accepted. One acceptance covers

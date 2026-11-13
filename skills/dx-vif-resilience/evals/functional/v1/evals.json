@@ -1,0 +1,136 @@
+{
+  "skill_name": "dx-vif-resilience",
+  "evals": [
+    {
+      "id": "symmetric-full-coverage",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Using the dx-resilience tools, assess Layer-3 failover coverage for two redundant VIFs. VIF-A advertises 10.10.0.0/24, 10.10.1.0/24, 10.10.2.0/24, 10.10.3.0/24. VIF-B advertises the same four prefixes. Will all prefixes survive a single VIF failure?",
+      "expected_output": "Reports full symmetric coverage: 0 gaps, all four prefixes covered on both VIFs. If either VIF fails, the peer covers 100% of the prefixes. No failover risk in this direction.",
+      "assertions": [
+        "reports zero gaps",
+        "states all prefixes are covered on both VIFs",
+        "does not invent a gap where prefix sets are identical"
+      ]
+    },
+    {
+      "id": "hard-gap-single-vif",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Assess DX failover coverage. VIF-A advertises 10.10.0.0/24, 10.10.1.0/24, 192.168.1.0/24. VIF-B advertises 10.10.0.0/24, 10.10.1.0/24. What is at risk?",
+      "expected_output": "Flags 192.168.1.0/24 as a hard gap present only on VIF-A. If VIF-A fails, traffic to 192.168.1.0/24 is blackholed because VIF-B has no coverage for it. The two 10.10 prefixes are covered.",
+      "assertions": [
+        "identifies 192.168.1.0/24 as a gap present only on VIF-A",
+        "states the blackhole consequence if VIF-A fails",
+        "does not flag the shared 10.10 prefixes as gaps"
+      ]
+    },
+    {
+      "id": "supernet-covers-more-specific",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Assess DX failover coverage. VIF-A advertises 10.10.0.0/22. VIF-B advertises 10.10.0.0/22 and 10.10.1.0/24. Is 10.10.1.0/24 at risk if VIF-B fails?",
+      "expected_output": "No gap. 10.10.1.0/24 on VIF-B is fully covered by VIF-A's 10.10.0.0/22 supernet, and the /22 is present on both. Coverage is CIDR-aware, so a more-specific prefix is covered by a peer's containing supernet.",
+      "assertions": [
+        "states 10.10.1.0/24 is covered by the 10.10.0.0/22 supernet",
+        "reports zero gaps",
+        "does not treat the more-specific prefix as missing"
+      ]
+    },
+    {
+      "id": "partial-supernet-residual",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Assess DX failover coverage. VIF-A advertises only 10.10.1.0/24. VIF-B advertises 10.10.0.0/22. If VIF-B fails, what part of the /22 is at risk?",
+      "expected_output": "Partial supernet coverage. VIF-A covers only 10.10.1.0/24 of VIF-B's 10.10.0.0/22; the uncovered residual is 10.10.0.0/24 and 10.10.2.0/23 — reachable while VIF-B is up, blackholed if it fails. Conditional severity: confirm whether workloads exist in the residual ranges.",
+      "assertions": [
+        "identifies the uncovered residual as 10.10.0.0/24 and 10.10.2.0/23",
+        "does not call the /22 fully covered",
+        "asks whether workloads exist in the residual ranges (conditional severity)"
+      ]
+    },
+    {
+      "id": "aggregate-tiling-covered",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Assess DX failover coverage. VIF-A advertises 10.10.0.0/24, 10.10.1.0/24, 10.10.2.0/23. VIF-B advertises 10.10.0.0/22. Is the /22 fully protected if VIF-B fails?",
+      "expected_output": "Fully covered. VIF-A's three more-specifics (10.10.0.0/24 + 10.10.1.0/24 + 10.10.2.0/23) exactly tile VIF-B's 10.10.0.0/22, so every address is reachable via VIF-A. Zero gaps, no partial-supernet — the residual is empty.",
+      "assertions": [
+        "states the /22 is fully covered because the more-specifics tile it",
+        "reports zero gaps and zero partial-supernet",
+        "does not report a false partial or gap for the tiled supernet"
+      ]
+    },
+    {
+      "id": "traffic-engineering-not-a-gap",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "VIF-A and VIF-B both advertise 10.10.0.0/24 and 10.10.1.0/24 over Direct Connect, but VIF-A prepends its AS-path so VIF-B is preferred. Is the AS-path difference a failover coverage gap?",
+      "expected_output": "No. Coverage is by prefix presence; both prefixes exist on both VIFs, so there is full coverage. Differing AS-path/MED/communities are intentional traffic engineering, not a failover gap.",
+      "assertions": [
+        "states there is full coverage / zero gaps",
+        "explains AS-path differences are traffic engineering, not a gap",
+        "does not flag the prepended prefixes as missing"
+      ]
+    },
+    {
+      "id": "two-direction-requirement",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "When auditing redundant Direct Connect VIFs for failover resilience, which BGP directions must be checked and why?",
+      "expected_output": "Both directions: accepted (on-prem to AWS) and advertised (AWS to on-prem). A prefix missing in the accepted direction means AWS cannot reach that on-prem destination after failover; missing in the advertised direction means on-prem cannot reach that AWS destination. In multi-DXGW topologies the advertised sets can differ per VIF.",
+      "assertions": [
+        "states both accepted and advertised directions must be checked",
+        "explains the failover consequence of a gap in each direction",
+        "notes advertised routes can differ per VIF in multi-DXGW setups"
+      ]
+    },
+    {
+      "id": "empty-vif-vs-lag-caution",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "A Direct Connect resilience assessment shows one redundant VIF with BGP up but zero received routes, while its peer shows a full table. Should this be reported as an empty VIF immediately?",
+      "expected_output": "Not immediately. An empty accepted table on a BGP-up VIF is ambiguous — it may be genuinely empty or the ListVirtualInterfaceRoutes view may not have converged yet (eventually-consistent, can lag minutes). Recommend re-running to confirm before asserting an empty-VIF finding; treat as point-in-time.",
+      "assertions": [
+        "cautions that an empty view on a BGP-up VIF may be propagation lag, not a true empty VIF",
+        "recommends re-running / confirming before asserting the finding"
+      ]
+    },
+    {
+      "id": "verification-no-fabrication",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Is there an official AWS API that returns the BGP-received routes for a private Direct Connect virtual interface, or is that impossible?",
+      "expected_output": "Yes — ListVirtualInterfaceRoutes returns the routes for a virtual interface (accepted and advertised directions), including private VIFs. Does not claim the capability is impossible or fabricate an alternative.",
+      "assertions": [
+        "identifies ListVirtualInterfaceRoutes as the API that returns VIF routes",
+        "does not claim received routes for private VIFs cannot be retrieved",
+        "does not fabricate a nonexistent API or workaround"
+      ]
+    },
+    {
+      "id": "negative-unrelated-coding",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "Write a Python function to reverse a linked list."
+    },
+    {
+      "id": "negative-s3-pricing",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "What is the pricing for an Amazon S3 Standard bucket in us-east-1?"
+    },
+    {
+      "id": "negative-lambda-timeout",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "Help me troubleshoot why my Lambda function is timing out."
+    },
+    {
+      "id": "negative-iam-key-rotation",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "How do I rotate an IAM access key?"
+    }
+  ]
+}
