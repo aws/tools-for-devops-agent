@@ -64,7 +64,7 @@ before this check existed" in CONTRIBUTING.md.
 
 ## Skills — complete if this PR adds or changes a skill
 
-<!-- The validate-skills check verifies the SKILL.md frontmatter, the files a skill publishes and its version history automatically; see "Skill Publishing Rules" in CONTRIBUTING.md. -->
+<!-- The validate-skills check verifies the SKILL.md frontmatter, the files a skill publishes and its version history automatically, and looks up each new metadata.author name on GitHub; see "Skill Publishing Rules" in CONTRIBUTING.md. -->
 
 - [ ] `SKILL.md` frontmatter is valid: `name` matches the directory, `description` present and within length limits, body at most 500 lines.
 - [ ] The `description` is written from the agent's point of view — scenarios, services, error types, symptoms.
@@ -94,7 +94,7 @@ before this check existed" in CONTRIBUTING.md.
 
 ## Connectors — complete if this PR adds or changes a connector
 
-<!-- Applies to any change inside a connectors/<name>/ directory. The partner that owns the connector opens the PR; see "Partner Connectors" in CONTRIBUTING.md. This item cannot be marked n/a. -->
+<!-- Applies to any change inside a connectors/<name>/ directory. The partner that owns the connector opens the PR; see "Partner Connectors" in CONTRIBUTING.md. This item cannot be marked n/a. The validate-skills check compares the connector with main, so a change to any of its files needs a higher version. -->
 
 - [ ] **I accept the [AWS DevOps Agent Partner Connector Terms and Conditions](https://github.com/aws/tools-for-devops-agent/blob/main/connectors/TERMS.md), version 2026-11-03, on behalf of the company that owns this connector, and I have authority to do so.**
 

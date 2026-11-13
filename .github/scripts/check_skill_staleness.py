@@ -7,8 +7,9 @@ last commit that touched ``skills/<name>/`` — a real, always-present signal,
 unlike CHANGELOG dates which are inconsistent across skills.
 
 The script reads each ``skills/<name>/SKILL.md`` frontmatter for the ``author``
-field (an internal alias, surfaced in the issue as plain text for a maintainer
-to route to — it is NOT a GitHub login and is never mentioned or assigned) and
+field (GitHub accounts, which validate-skills checks, surfaced in the issue as
+plain text for a maintainer to route to — never mentioned or assigned, because an
+author can be an organization, a team or someone who isn't a collaborator) and
 prints:
 
   * a human-readable summary to stderr, and
@@ -55,10 +56,10 @@ def issue_title(skill: StaleSkill) -> str:
 
 
 def issue_body(skill: StaleSkill, max_age_days: int) -> str:
-    # The frontmatter `author` is the skill's declared owner, but in this repo it
-    # is an internal alias, NOT a GitHub login (e.g. "hokang" -> GitHub user
-    # "howard-m-k"). So it is surfaced as plain text for a maintainer to route to,
-    # never @-mentioned or used as an assignee.
+    # The frontmatter `author` is the skill's declared owner: GitHub accounts,
+    # which validate-skills checks. It is still surfaced as plain text for a
+    # maintainer to route to, never @-mentioned or used as an assignee, because an
+    # author can be an organization, a team or someone who isn't a collaborator.
     listed_author = ", ".join(f"`{a}`" for a in skill.authors) or (
         "_none listed in SKILL.md frontmatter_"
     )

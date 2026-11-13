@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Check that every skill in skills/ can be published.
+"""Check that every skill in skills/, and every connector in connectors/, can be published.
 
 Skills on `main` are published automatically, so this check applies the
 rules in skill_checks.py to every skill folder on every pull request, not only
 to the skills the pull request changes. See the "Skill
 Publishing Rules" section of CONTRIBUTING.md.
+
+Connectors on `main` are published the same way, so every connectors/<name>/
+folder is checked by the rules in connector_checks.py too.
 
 Skills are read from Git objects, never from the working tree, so a run sees
 exactly what a commit contains (file modes included) and nothing a checkout
@@ -18,10 +21,14 @@ Before checking any skill, the script runs the cases in
 skill-rules/conformance-cases.json through the same rules and stops with exit
 code 2 if any case gives the wrong result.
 
+With --check-github-logins, the metadata.author names that a pull request adds
+are also looked up on GitHub (github_logins.py).
+
 Usage:
     python3 .github/scripts/validate_skills.py --base-ref origin/main
     python3 .github/scripts/validate_skills.py              # whole tree, no base
     python3 .github/scripts/validate_skills.py --self-check-only
+    GH_TOKEN=... python3 .github/scripts/validate_skills.py --base-ref origin/main --check-github-logins
 
 Exit codes: 0 every skill passes (warnings allowed), 1 a skill breaks a rule,
 2 the check could not run (a Git failure, malformed rule data, or a failed
@@ -31,19 +38,28 @@ self-check), which says nothing about the pull request's content.
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import json
 import os
 import subprocess
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
+import connector_checks as cc
+import github_logins
 import skill_checks as sc
 
 SKILLS_DIR = "skills"
-CONNECTORS_DIR = "connectors"
+CONNECTORS_DIR, CONNECTOR_FILE = cc.CONNECTORS_DIR, cc.CONNECTOR_FILE
+MAX_CONNECTOR_FILE_BYTES = 32_768
+RELEASES_PATH = f"{CONNECTORS_DIR}/releases.yaml"
 RULES_DIR = Path(__file__).resolve().parent / "skill-rules"
+# Read from the merge base, like skills/.gitignore.
+PUBLISHED_FILES_PATH = f"{sc.RULES_DIR_DISPLAY}/{sc.PUBLISHED_FILES_FILE}"
 CONFORMANCE_FILE = "conformance-cases.json"
 DOCS_HINT = 'See the "Skill Publishing Rules" section of CONTRIBUTING.md.'
 
@@ -84,18 +100,27 @@ def _decode_path(raw: bytes) -> str:
     return raw.decode("utf-8", "surrogateescape")
 
 
+def _ls_tree(repo_root: Path, rev: str, *paths: str) -> Iterator[tuple[str, str, str, str]]:
+    """(mode, kind, oid, path) for each entry of `git ls-tree -r` at `rev`, under `paths` when there are any."""
+    for record in _git(repo_root, "ls-tree", "-r", "-z", "--full-tree", rev, "--", *paths).split(b"\0"):
+        if record:
+            meta, _, raw_path = record.partition(b"\t")
+            mode, kind, oid = meta.decode("ascii").split(" ")
+            yield mode, kind, oid, _decode_path(raw_path)
+
+
+def _read_file(repo_root: Path, rev: str, path: str) -> bytes | None:
+    """The bytes of the file at `path` in `rev`, or None when `rev` has no file there."""
+    oids = [oid for _, kind, oid, found in _ls_tree(repo_root, rev, path) if kind == "blob" and found == path]
+    return _read_blobs(repo_root, oids)[0] if oids else None
+
+
 def read_skills(repo_root: Path, rev: str) -> tuple[dict[str, sc.SkillTree], list[SkillResult]]:
     """Every skill folder at `rev`, plus results for entries in skills/ that aren't skill folders."""
-    listing = _git(repo_root, "ls-tree", "-r", "-z", "--full-tree", rev, "--", f"{SKILLS_DIR}/")
     trees: dict[str, sc.SkillTree] = {}
     loose: list[SkillResult] = []
     blobs: list[tuple[str, str, str, str]] = []  # (skill, relative path, mode, oid)
-    for record in listing.split(b"\0"):
-        if not record:
-            continue
-        meta, _, raw_path = record.partition(b"\t")
-        mode, kind, oid = meta.decode("ascii").split(" ")
-        path = _decode_path(raw_path)
+    for mode, kind, oid, path in _ls_tree(repo_root, rev, f"{SKILLS_DIR}/"):
         _, _, rest = path.partition("/")
         skill, _, inner = rest.partition("/")
         if not inner:
@@ -163,7 +188,10 @@ def uncommitted_skill_changes(repo_root: Path) -> bool:
 
 
 def read_gitignore(repo_root: Path, rev: str) -> str:
-    return _git(repo_root, "show", f"{rev}:{SKILLS_DIR}/.gitignore").decode("utf-8")
+    data = _read_file(repo_root, rev, f"{SKILLS_DIR}/.gitignore")
+    if data is None:
+        raise GitError(f"{rev} has no {SKILLS_DIR}/.gitignore")
+    return data.decode("utf-8")
 
 
 def repository_results(repo_root: Path, rev: str) -> list[SkillResult]:
@@ -173,14 +201,8 @@ def repository_results(repo_root: Path, rev: str) -> list[SkillResult]:
     must contain no symbolic link, and a root .gitattributes setting can change
     the bytes that archive holds for a skill's files.
     """
-    listing = _git(repo_root, "ls-tree", "-r", "-z", "--full-tree", rev)
     results: list[SkillResult] = []
-    for record in listing.split(b"\0"):
-        if not record:
-            continue
-        meta, _, raw_path = record.partition(b"\t")
-        mode, kind, oid = meta.decode("ascii").split(" ")
-        path = _decode_path(raw_path)
+    for mode, kind, oid, path in _ls_tree(repo_root, rev):
         if path.startswith(f"{SKILLS_DIR}/"):
             continue  # Checked per skill.
         if mode == "120000":
@@ -243,86 +265,179 @@ def retired_skills(repo_root: Path, base: str, present: set[str]) -> frozenset[s
     return frozenset(names - present)
 
 
+def read_connectors(repo_root: Path, rev: str) -> dict[str, sc.SkillTree]:
+    """Every connectors/<name>/ folder at `rev`.
+
+    Files directly in connectors/, such as releases.yaml, belong to no folder,
+    and connectors/schema/ holds the schemas, not a connector.
+    """
+    blobs: list[tuple[str, str, str, str]] = []  # (connector, path in its folder, mode, oid)
+    for mode, kind, oid, path in _ls_tree(repo_root, rev, f"{CONNECTORS_DIR}/"):
+        parts = path.split("/", 2)
+        if kind == "blob" and len(parts) == 3 and parts[1] != cc.SCHEMA_FOLDER:
+            blobs.append((parts[1], parts[2], mode, oid))
+    folders: dict[str, sc.SkillTree] = {}
+    for (name, inner, mode, _), data in zip(blobs, _read_blobs(repo_root, [blob[3] for blob in blobs])):
+        folders.setdefault(name, sc.SkillTree(name)).entries[inner] = sc.Entry(inner, mode, data)
+    return folders
+
+
+def connector_results(repo_root: Path, base: str | None, head_ref: str) -> list[SkillResult]:
+    """The connector_checks.py rules for every connector folder, compared with the merge base when there is one.
+
+    Every finding shows, as for the connector YAML: a warning can only come from
+    a folder that differs from its merge-base copy.
+    """
+    head_folders = read_connectors(repo_root, head_ref)
+    base_folders = read_connectors(repo_root, base) if base is not None else {}
+    results: list[SkillResult] = []
+    for name in sorted(set(head_folders) | set(base_folders)):
+        head = head_folders.get(name)
+        findings = cc.check_connector(name, head) if head is not None else []
+        if base is not None:
+            findings += cc.check_history(name, base_folders.get(name), head)
+        if findings:
+            results.append(SkillResult(f"{CONNECTORS_DIR}/{name}", findings, is_skill=False, always_visible=True))
+    return results
+
+
+def base_published_excludes(data: bytes) -> tuple[str, ...]:
+    """The exclude list in the merge base's skill-rules/published-files.json. Raises ValueError when malformed.
+
+    The base branch's list applies, so a change to it takes effect only once it
+    has merged, as a new extension in skills/.gitignore does.
+    """
+    try:
+        return sc.published_excludes(json.loads(data.decode("utf-8")))
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(f"{PUBLISHED_FILES_PATH} on the base branch is malformed: {exc}") from exc
+
+
 def connector_skill_references(repo_root: Path, rev: str) -> tuple[dict[str, list[str]], list[SkillResult]]:
     """Skill name -> the connectors whose connector.yaml lists it under skills: (recommended skills).
 
-    Also returns a warning for each connector.yaml that can't be read, isn't a
-    mapping, has a skills: value that isn't a list of skill names, or writes
-    skills: more than once, so a broken file doesn't silently skip the check. The YAML is composed, not
-    constructed, so a value PyYAML can't build (a bad date, say) can't stop
-    the check.
+    Also returns an error for each connector.yaml, and for connectors/releases.yaml,
+    that isn't UTF-8 or that breaks the YAML rules of sc.read_yaml, since the
+    connectors are published from the same files. A connector.yaml whose skills:
+    value isn't a list of skill names gets a warning, so a broken file doesn't
+    silently skip the check; the connector version rules report one that isn't a
+    mapping.
     """
-    listing = _git(repo_root, "ls-tree", "-r", "-z", "--full-tree", rev, "--", f"{CONNECTORS_DIR}/")
     files: list[tuple[str, str]] = []
-    for record in listing.split(b"\0"):
-        if not record:
-            continue
-        meta, _, raw_path = record.partition(b"\t")
-        _, kind, oid = meta.decode("ascii").split(" ")
-        parts = _decode_path(raw_path).split("/")
-        if kind == "blob" and len(parts) == 3 and parts[2] == "connector.yaml":
-            files.append((parts[1], oid))
+    for _, kind, oid, path in _ls_tree(repo_root, rev, f"{CONNECTORS_DIR}/"):
+        parts = path.split("/")
+        is_connector_file = len(parts) == 3 and parts[2] == CONNECTOR_FILE
+        if kind == "blob" and (is_connector_file or path == RELEASES_PATH):
+            files.append((path, oid))
     references: dict[str, list[str]] = {}
-    unreadable: list[SkillResult] = []
-    for (connector, _), data in zip(files, _read_blobs(repo_root, [oid for _, oid in files])):
-        try:
-            problem, skills = _recommended_skills(*_compose_connector(data.decode("utf-8")))
-        except (UnicodeDecodeError, yaml.YAMLError, RecursionError):
-            problem, skills = "can't be read as YAML, so its skills: list wasn't checked", []
-        if problem:
-            message = f"{problem} against deprecated skills"
-            path = f"{CONNECTORS_DIR}/{connector}/connector.yaml"
-            unreadable.append(SkillResult(path, [sc.Finding("warning", message)], is_skill=False, always_visible=True))
-        for skill in skills:
-            references.setdefault(skill, []).append(connector)
-    return references, unreadable
+    results: list[SkillResult] = []
+    for (path, _), data in zip(files, _read_blobs(repo_root, [oid for _, oid in files])):
+        root, findings = _read_connector_yaml(path, data)
+        if path != RELEASES_PATH and not findings:
+            problem, skills = _recommended_skills(root)
+            if problem:
+                findings.append(sc.Finding("warning", f"{problem} against deprecated skills"))
+            for skill in skills:
+                references.setdefault(skill, []).append(path.split("/")[1])
+        if findings:
+            results.append(SkillResult(path, findings, is_skill=False, always_visible=True))
+    return references, results
 
 
-def _compose_connector(text: str) -> tuple[yaml.Node | None, int]:
-    """The YAML node tree of a connector.yaml, with merge keys (<<) resolved, and how many skills: keys it writes.
-
-    No values are built. The count is taken before merging, since a merge can
-    supply skills: as well without the file being ambiguous.
-    """
-    loader = yaml.SafeLoader(text)
+def _read_connector_yaml(path: str, data: bytes) -> tuple[yaml.Node | None, list[sc.Finding]]:
+    """The YAML node tree of a file under connectors/, or None with an error for each problem."""
+    file_name = path.rsplit("/", 1)[-1]
+    if file_name == CONNECTOR_FILE and len(data) > MAX_CONNECTOR_FILE_BYTES:
+        message = f"{file_name} is {len(data):,} bytes; the limit is {MAX_CONNECTOR_FILE_BYTES:,}"
+        return None, [sc.Finding("error", message)]
     try:
-        root = loader.get_single_node()
-        written = 0
-        if isinstance(root, yaml.MappingNode):
-            written = sum(1 for key, _ in root.value if isinstance(key, yaml.ScalarNode) and key.value == "skills")
-            loader.flatten_mapping(root)
-        return root, written
-    finally:
-        loader.dispose()
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return None, [sc.Finding("error", f"{file_name} is not valid UTF-8", line=data.count(b"\n", 0, exc.start) + 1)]
+    root, problems = sc.read_yaml(text, file_name, first_line=1)
+    return root, [sc.Finding("error", message, line=line) for line, message in problems]
 
 
-def _recommended_skills(root: yaml.Node | None, written: int) -> tuple[str | None, list[str]]:
-    """The skill names under a connector.yaml's skills: key, and what kept any of it from being checked."""
+def _recommended_skills(root: yaml.Node | None) -> tuple[str | None, list[str]]:
+    """The skill names under a connector.yaml's skills: key, and what kept any of it from being checked.
+
+    A root that isn't a mapping has no skills: key, and the connector version
+    rules already report it as an error.
+    """
     if not isinstance(root, yaml.MappingNode):
-        return "isn't a YAML mapping, so its skills: list wasn't checked", []
-    values = [value for key, value in root.value if isinstance(key, yaml.ScalarNode) and key.value == "skills"]
-    if not values:
         return None, []
-    if not isinstance(values[-1], yaml.SequenceNode):
+    skills_node = next((value for key, value in root.value if key.value == "skills"), None)
+    if skills_node is None:
+        return None, []
+    if not isinstance(skills_node, yaml.SequenceNode):
         return "has a skills: value that isn't a list, so it wasn't checked", []
-    items = values[-1].value  # As in PyYAML, the last skills: key wins.
+    items = skills_node.value
     names = [item.value for item in items if isinstance(item, yaml.ScalarNode) and item.tag == sc.STR_TAG]
     if len(names) < len(items):
         return "has a skills: entry that isn't a skill name, so that entry wasn't checked", names
-    if written > 1:
-        return "has more than one skills: key, so only the last one was checked", names
     return None, names
 
 
+def author_login_findings(
+    info: sc.SkillInfo, base: sc.SkillTree | None, resolver: github_logins.Resolver
+) -> list[sc.Finding]:
+    """Findings for the metadata.author names that are new since `base`, each looked up on GitHub.
+
+    A name is new when the skill has no merge-base copy (it is new, or there is
+    no base) or when the merge-base copy's author line doesn't list it, ignoring
+    case as GitHub does. Names already on the base branch aren't looked up, so
+    an account deleted later can't fail a pull request that leaves the author
+    line alone. A team, org/team, is looked up by its organization.
+    """
+    author = info.metadata.get("author")
+    if author is None:
+        return []
+    old_author = sc.lenient_metadata_text(base, "author") if base is not None else None
+    old_names = {name.lower() for name in sc.author_names(old_author)} if old_author is not None else set()
+    findings: list[sc.Finding] = []
+    for name in dict.fromkeys(sc.author_names(author)):
+        if name.lower() in old_names:
+            continue
+        account, is_team, _ = name.partition("/")
+        lookup = resolver.lookup(account)
+        severity = "error"
+        if lookup.status == github_logins.MISSING:
+            what = f'is a team of "{account}", which isn\'t' if is_team else "isn't"
+            message = (
+                f'"{name}" in metadata.author {what} a GitHub account. Use the GitHub username of whoever maintains '
+                "the skill, or their organization or org/team"
+            )
+        elif lookup.status == github_logins.FOUND and is_team and lookup.account_type == "User":
+            message = (
+                f'"{name}" in metadata.author is a team of "{account}", but "{account}" is a GitHub user, not an '
+                "organization, so it has no teams"
+            )
+        elif lookup.status == github_logins.UNKNOWN:
+            severity = "warning"
+            message = (
+                f'"{name}" in metadata.author wasn\'t looked up on GitHub, because {lookup.reason}; '
+                "make sure it is a GitHub account"
+            )
+        else:
+            continue
+        findings.append(sc.Finding(severity, message, "SKILL.md", info.author_line))
+    return findings
+
+
 def check_repository(
-    repo_root: Path, rules: sc.Rules, base: str | None, head_ref: str
+    repo_root: Path,
+    rules: sc.Rules,
+    base: str | None,
+    head_ref: str,
+    resolver: github_logins.Resolver | None = None,
 ) -> tuple[list[SkillResult], set[str] | None]:
     """Results for every skill at `head_ref`, and the skills touched since `base` (None without a base).
 
     With a base, each skill is also compared with its merge-base copy: a folder
     can't be removed or reuse a retired path, the version must go up when the
     published files change, and the lines the pull request adds are checked
-    for internal host and tool names.
+    for internal host and tool names. With a resolver, the metadata.author
+    names that are new since the base are looked up on GitHub.
     """
     head_trees, results = read_skills(repo_root, head_ref)
     results += repository_results(repo_root, head_ref)
@@ -342,12 +457,15 @@ def check_repository(
             history[name] = sc.check_history(name, base_trees.get(name), head_trees.get(name), rules, retired)
         for name in sorted(set(base_trees) - set(head_trees)):
             results.append(SkillResult(f"{SKILLS_DIR}/{name}", history[name], is_skill=False))
-    recommended, unreadable = connector_skill_references(repo_root, head_ref)
-    results += unreadable
+    recommended, connector_yaml_results = connector_skill_references(repo_root, head_ref)
+    results += connector_yaml_results
+    results += connector_results(repo_root, base, head_ref)
     for name in sorted(head_trees):
         findings, info = sc.check_skill(head_trees[name], rules)
         if base is not None:
             findings += sc.check_added_content(base_trees.get(name), head_trees[name], rules)
+        if resolver is not None and info is not None:
+            findings += author_login_findings(info, base_trees.get(name), resolver)
         if info is not None and info.metadata.get("deprecated") == "true":
             for connector in recommended.get(name, []):
                 findings.append(
@@ -465,9 +583,10 @@ def self_check(rules_dir: Path, rules: sc.Rules) -> list[str]:
     try:
         cases = sc.load_cases(rules_dir / CONFORMANCE_FILE)
         golden_files, golden_hash = sc.load_golden_hash(rules_dir / CONFORMANCE_FILE)
+        connector_cases = sc.load_cases(rules_dir / cc.CONFORMANCE_FILE)
     except ValueError as exc:
         return [str(exc)]
-    problems = sc.run_conformance(cases, rules)
+    problems = sc.run_conformance(cases, rules) + cc.run_conformance(connector_cases)
     actual = sc.content_hash(golden_files)
     if actual != golden_hash:
         problems.append(f"the content hash of the golden fixture is {actual}, not {golden_hash}")
@@ -480,34 +599,50 @@ def _could_not_run(exc: GitError) -> int:
     return 2
 
 
-def main(argv: list[str] | None = None, repo_root: Path | None = None, rules_dir: Path = RULES_DIR) -> int:
+def main(
+    argv: list[str] | None = None,
+    repo_root: Path | None = None,
+    rules_dir: Path = RULES_DIR,
+    login_resolver: github_logins.Resolver | None = None,
+) -> int:
+    """Runs the check. `login_resolver` replaces the GitHub lookup, so tests never reach the network."""
     try:
-        return _run(argv, repo_root, rules_dir)
+        return _run(argv, repo_root, rules_dir, login_resolver)
     except Exception as exc:  # noqa: BLE001 - any crash means the check didn't run, never a finding.
         print(f"::error title=Skill publishing rules could not run::{_escape_data(f'{type(exc).__name__}: {exc}')}")
         print("The check stopped unexpectedly. This is not a finding about the pull request.")
         return 2
 
 
-def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int:
+def _run(
+    argv: list[str] | None, repo_root: Path | None, rules_dir: Path, login_resolver: github_logins.Resolver | None
+) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base-ref", help="the branch the pull request merges into, such as origin/main")
     parser.add_argument("--head-ref", default="HEAD", help="the commit to check (default: HEAD)")
     parser.add_argument("--self-check-only", action="store_true", help="run only the conformance cases")
+    parser.add_argument(
+        "--check-github-logins",
+        action="store_true",
+        help="look up on GitHub each metadata.author name that a new skill lists or a changed author line adds, "
+        f"with the token in {' or '.join(github_logins.TOKEN_VARIABLES)}",
+    )
     args = parser.parse_args(argv)
     repo_root = repo_root or _repo_root()
 
     base = None
+    published = None
     try:
         if args.self_check_only:
             # The cases test the rules, not the repository, so no Git is needed.
             gitignore = (repo_root / SKILLS_DIR / ".gitignore").read_text(encoding="utf-8")
         else:
-            # The extension allowlist is read from the merge base when there is
-            # one, so a new extension takes effect only after the
-            # skills/.gitignore change that adds it has merged.
+            # The extension allowlist and the published set are read from the
+            # merge base when there is one, so a new extension, or a change to
+            # what is published, takes effect only after its change has merged.
             base = merge_base(repo_root, args.base_ref, args.head_ref) if args.base_ref else None
             gitignore = read_gitignore(repo_root, base or args.head_ref)
+            published = _read_file(repo_root, base, PUBLISHED_FILES_PATH) if base is not None else None
     except OSError as exc:
         print(f"::error title=Skill publishing rules::cannot read {SKILLS_DIR}/.gitignore: {_escape_data(str(exc))}")
         return 2
@@ -515,6 +650,7 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
         return _could_not_run(exc)
     try:
         rules = sc.load_rules(rules_dir, gitignore)
+        excludes = base_published_excludes(published) if published is not None else None
     except ValueError as exc:
         print(f"::error title=Skill publishing rules::{_escape_data(str(exc))}")
         return 2
@@ -528,10 +664,16 @@ def _run(argv: list[str] | None, repo_root: Path | None, rules_dir: Path) -> int
         print("Self-check passed.")
         return 0
 
+    resolver = None
+    if args.check_github_logins:
+        resolver = login_resolver or github_logins.GitHubResolver.from_environment()
+    if excludes is not None:
+        # The cases above test this pull request's rules; its skills are held to the base branch's published set.
+        rules = dataclasses.replace(rules, published_excludes=excludes)
     try:
         if args.head_ref == "HEAD" and uncommitted_skill_changes(repo_root):
             print(f"note: uncommitted changes under {SKILLS_DIR}/ are not checked; commit them first.\n")
-        results, touched = check_repository(repo_root, rules, base, args.head_ref)
+        results, touched = check_repository(repo_root, rules, base, args.head_ref, resolver)
     except GitError as exc:
         return _could_not_run(exc)
     return report(results, touched)

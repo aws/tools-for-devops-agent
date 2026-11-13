@@ -8,7 +8,7 @@ description: Review pull requests that add or change a partner connector under c
 
 A connector is `connectors/<name>/`: a `connector.yaml` describing a partner-hosted MCP server, a `logo.svg` (optional `logo-dark.svg`), and a `README.md` setup guide, plus the skills listed under `skills:`. It holds no server code. Several connector PRs are usually open at once and reviewed by different maintainers, so review every one the same way and report in the same shape.
 
-Repository facts to re-check if anything looks different: `/connectors/` is owned by the admin team in `.github/CODEOWNERS`; `connectors/README.md` says submissions are not open yet; the PR checklist check deliberately skips `connectors/` but still holds any `skills/` in the PR to the skill checklist; there is no repository validator for connector files, so step 3 does that work.
+Repository facts to re-check if anything looks different: `/connectors/` is owned by the admin team in `.github/CODEOWNERS`; `connectors/README.md` says submissions are not open yet; the PR checklist check holds a connector change to the Connectors section (the partner terms box and `contact_email`) and any `skills/` in the PR to the skill checklist; `validate_skills` checks each connector's YAML and version rules (3c and 3d) but not its schema or the published-file allowlist, which step 3a covers.
 
 Partners build to the Connector Guide for Partners until it moves into `CONTRIBUTING.md`. Once `CONTRIBUTING.md` has a connector guide, it takes precedence over this file wherever the two disagree.
 
@@ -236,7 +236,7 @@ git diff --name-only "origin/main...origin/pr/$N" -- connectors/releases.yaml   
 (
 . "$HOME/.cache/connector-review/${N:?set N to the PR number}.env" || exit 1
 [ -z "$(git status --porcelain)" ] || { echo "STOP: the trial merge has uncommitted changes" >&2; exit 1; }
-python3 .github/scripts/validate_skills.py --base-ref origin/main
+env -u GH_TOKEN -u GITHUB_TOKEN python3 .github/scripts/validate_skills.py --base-ref origin/main --check-github-logins
 python3 .github/scripts/validate_skill_evals.py --base-ref origin/main --head-ref HEAD --pr-number $N --labels "$(gh pr view $N -R $REPO --json labels --jq '[.labels[].name]')"
 python3 .github/scripts/scan_aws_identifiers.py --base-ref origin/main
 python3 -m unittest discover -s tests
@@ -244,13 +244,14 @@ pip install -q "mkdocs-material==$(git show origin/main:.github/workflows/build-
 )
 ```
 
-Record the command, exit status, test count, and warning count for each. The unit-test output includes an `::error::The PR checklist check could not run` line; a checklist test prints it on purpose. Judge the tests by the `Ran N tests` and `OK` lines. `scan_aws_identifiers` covers only account and EC2 instance IDs, so sweep the connector and skill files yourself for the strings listed under Ground rules.
+Record the command, exit status, test count, and warning count for each. The unit-test output includes an `::error::The PR checklist check could not run` line; a checklist test prints it on purpose. Judge the tests by the `Ran N tests` and `OK` lines. `scan_aws_identifiers` covers only account and EC2 instance IDs, so sweep the connector and skill files yourself for the strings listed under Ground rules. CI passes `--check-github-logins` with its own token, and a `metadata.author` name GitHub doesn't know fails it. Here the flag runs without a token, so the trial merge never gets your credentials: it lists each new name as a warning instead, and you look each one up with `gh api users/<name>`.
 
 **3d. Versions.**
 
 - A new connector or skill normally starts at `1.0.0`.
-- For an existing connector, any change to its files needs a higher `version`.
-- For an existing skill, any change to published content needs a higher `metadata.version`. `validate_skills` checks skills, not connectors.
+- For an existing connector, any change to its files needs a higher `version`. Changing or removing an auth option (a header label included), removing an endpoint or changing its URL, or adding an `mcp.config` field needs a new major version.
+- For an existing skill, any change to published content needs a higher `metadata.version`.
+- `validate_skills` in 3c checks both against the merge base, so treat any version error it reports as a blocker. It compares with `main`, not with the catalog: while publishing is stalled and `main` holds a version the catalog hasn't published, also compare the pull request with the version the catalog serves.
 
 **3e. Find the write-capable skills.** Use both searches; the second catches skills that describe writes in prose without naming a tool.
 

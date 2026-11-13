@@ -22,6 +22,7 @@ import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
@@ -72,6 +73,11 @@ DIMENSION_KEYS = tuple(DIMENSION_PREFIX + d for d in DIMENSIONS)
 AGENT_TYPES_DIMENSION = "agent-types"
 AGENT_TYPES_KEY = DIMENSION_PREFIX + AGENT_TYPES_DIMENSION
 VOCABULARY_DIMENSIONS = tuple(d for d in DIMENSIONS if d != AGENT_TYPES_DIMENSION)
+# Placeholders that stand for every value, or for none, rather than naming one.
+# Catalogs would show one as a filter option of its own, so a skill can't use
+# one in aws-services or technical-domains, and vocabulary.json can't list one.
+# Compared ignoring case.
+RESERVED_DIMENSION_VALUES = frozenset({"all", "any", "none", "n/a", "other", "general", "*"})
 # Loads the skill for every agent, so it can't be combined with another type.
 GENERIC_AGENT_TYPE = "GENERIC"
 
@@ -188,8 +194,51 @@ YAML12_NUMBER_PATTERN = re.compile(
 )
 # Characters PyYAML reads as line breaks and YAML 1.2 parsers don't.
 YAML11_LINE_BREAK_PATTERN = re.compile("[\x85\u2028\u2029]")
+# Plain values that PyYAML's resolver (with the y and n of the YAML 1.1 bool
+# type) or the YAML 1.2 core schema reads as something other than text.
+NON_TEXT_PLAIN_SCALAR_PATTERNS = (
+    re.compile(r"[yYnN]|yes|Yes|YES|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF"),
+    re.compile(r"~|null|Null|NULL|"),
+    re.compile(r"<<|="),
+    re.compile(r"[-+]?(?:0b[0-1_]+|0[0-7_]+|0|[1-9][0-9_]*|0x[0-9a-fA-F_]+|[1-9][0-9_]*(?::[0-5]?[0-9])+)"),
+    re.compile(
+        r"[-+]?[0-9][0-9_]*\.[0-9_]*(?:[eE][-+][0-9]+)?|\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?"
+        r"|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN)"
+    ),
+    re.compile(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:[Tt]|[ \t]+)[0-9]{1,2}:[0-9]{2}:[0-9]{2}"
+        r"(?:\.[0-9]*)?(?:[ \t]*(?:Z|[-+][0-9]{1,2}(?::[0-9]{2})?))?"
+    ),
+    re.compile(r"[-+]?[0-9]+|[-+]?0o[0-7]+|0x[0-9a-fA-F]+"),
+    re.compile(r"[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN)"),
+    YAML12_NUMBER_PATTERN,
+)
+CANONICAL_INTEGER_PATTERN = re.compile(r"-?(?:0|[1-9][0-9]*)")
+CANONICAL_DECIMAL_PATTERN = re.compile(r"-?(?:0|[1-9][0-9]*)\.[0-9]+")
+# A JavaScript number holds integers only up to 2**53, and Python writes a
+# decimal below 1e-4 with an exponent, so neither keeps its text as JSON.
+MAX_SAFE_INTEGER = 2**53 - 1
+MIN_DECIMAL_MAGNITUDE = 1e-4
+# PyYAML ends a plain scalar at a ? in a flow collection, and reads a ? or : at its start as an indicator.
+FLOW_PLAIN_SCALAR_PATTERN = re.compile(r"^[?:]|\?")
+FLOW_PLAIN_SCALAR_PROBLEM = (
+    "has an unquoted entry in a flow collection that starts with ? or :, holds a ?, or is a lone -, which YAML "
+    "parsers read differently; put it in quotes"
+)
+# Each escape is matched once, so an escaped backslash can't start another escape.
+DOUBLE_QUOTED_ESCAPE_PATTERN = re.compile(r"\\(?:u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|(\r?\n[ \t]*\r?\n)|.)", re.S)
+BLOCK_SCALAR_INDICATORS_PATTERN = re.compile(r"[|>][-+0-9]*")
+# The blank lines after a block scalar's header, then the indentation of the first line that isn't blank.
+BLOCK_SCALAR_LEADING_LINES_PATTERN = re.compile(r"((?: *\r?\n)*)( *)[^ \r\n]")
+MAX_YAML_DEPTH = 64
+YAML_TEXT_PROBLEMS = (
+    (YAML11_LINE_BREAK_PATTERN, "U+{code:04X}, which YAML parsers disagree on as a line break; use a newline"),
+    (re.compile(r"\r(?!\n)"), "a carriage return without a line feed, which PyYAML reads as a line break; use a newline"),
+    (re.compile("\ufeff"), "a byte order mark (U+FEFF), which YAML parsers don't all read the same way; remove it"),
+)
 
 FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(?:(.*?)\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.S)
+FRONTMATTER_FIRST_LINE = 2
 
 STR_TAG = "tag:yaml.org,2002:str"
 _SCALAR_KINDS = {
@@ -201,16 +250,18 @@ _SCALAR_KINDS = {
 }
 
 # YAML features that different parsers read differently, or that let one part
-# of the frontmatter silently change another. Other tools parse the same text,
-# in other languages, so the frontmatter is limited to plain block mappings and
-# scalars that every parser reads the same way.
-_FORBIDDEN_TOKENS = (
+# of a file silently change another. Other tools parse the same text, in other
+# languages.
+YAML_FORBIDDEN_TOKENS = (
     (yaml.AnchorToken, "anchors (&)"),
     (yaml.AliasToken, "aliases (*)"),
     (yaml.TagToken, "tags (! or !!)"),
     (yaml.DirectiveToken, "directives (%)"),
-    (yaml.DocumentStartToken, "document markers (--- or ...)"),
-    (yaml.DocumentEndToken, "document markers (--- or ...)"),
+    (yaml.DocumentEndToken, "document end markers (...)"),
+)
+# The frontmatter is limited further, to plain block mappings and scalars.
+FRONTMATTER_FORBIDDEN_TOKENS = YAML_FORBIDDEN_TOKENS + (
+    (yaml.DocumentStartToken, "document start markers (---)"),
     (yaml.FlowMappingStartToken, "flow collections ({...} or [...])"),
     (yaml.FlowSequenceStartToken, "flow collections ({...} or [...])"),
 )
@@ -264,6 +315,7 @@ class SkillInfo:
     version_line: int | None = None
     deprecated_line: int | None = None
     name_line: int | None = None
+    author_line: int | None = None
 
 
 def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
@@ -276,9 +328,7 @@ def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
     published = _read_json(rules_dir / PUBLISHED_FILES_FILE)
     internal = _read_json(rules_dir / INTERNAL_NAMES_FILE)
     try:
-        excludes = _string_list(published["exclude"], f"{PUBLISHED_FILES_FILE} exclude")
-        if not excludes or not all("/" not in e.rstrip("/") for e in excludes):
-            raise TypeError(f"{PUBLISHED_FILES_FILE}: exclude must list root-level names, folders ending in /")
+        excludes = published_excludes(published)
         values = _string_list(agent_types["values"], f"{AGENT_TYPES_FILE} values")
         dimensions = vocabulary["values"]
         aliases = vocabulary["aliases"]
@@ -291,16 +341,34 @@ def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
         vocabulary_sets = {
             dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in VOCABULARY_DIMENSIONS
         }
+        listed = [value for values in vocabulary_sets.values() for value in values] + [*aliases, *aliases.values()]
+        reserved = sorted(value for value in listed if is_reserved_dimension_value(value))
+        if reserved:
+            raise TypeError(
+                f'{VOCABULARY_FILE}: "{reserved[0]}" is a placeholder, which the check refuses as a value, '
+                "so it can't be listed"
+            )
         return Rules(
             agent_types=frozenset(values),
             vocabulary=vocabulary_sets,
             aliases=dict(aliases),
             allowed_extensions=allowed_extensions_from_gitignore(gitignore_text),
-            published_excludes=tuple(excludes),
+            published_excludes=excludes,
             internal_names=_internal_name_patterns(internal),
         )
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"malformed rule data in {rules_dir}: {exc}") from exc
+
+
+def published_excludes(document) -> tuple[str, ...]:
+    """The exclude list of a published-files.json document.
+
+    Raises KeyError, TypeError or AttributeError when the document is malformed.
+    """
+    excludes = _string_list(document["exclude"], f"{PUBLISHED_FILES_FILE} exclude")
+    if not excludes or not all("/" not in e.rstrip("/") for e in excludes):
+        raise TypeError(f"{PUBLISHED_FILES_FILE}: exclude must list root-level names, folders ending in /")
+    return tuple(excludes)
 
 
 def _internal_name_patterns(document) -> tuple[re.Pattern[str], ...]:
@@ -324,6 +392,11 @@ def _string_list(value, label: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
         raise TypeError(f"{label} must be a list of non-empty strings")
     return value
+
+
+def is_reserved_dimension_value(value: str) -> bool:
+    """Whether a dimension value is a placeholder such as All, N/A or *, in any case."""
+    return value.casefold() in RESERVED_DIMENSION_VALUES
 
 
 def allowed_extensions_from_gitignore(text: str) -> frozenset[str]:
@@ -393,6 +466,340 @@ def build_zip(files: dict[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
+# --- YAML -------------------------------------------------------------------------
+
+# A file line, or None when PyYAML gives no position, and a message.
+YamlProblem = tuple[int | None, str]
+
+
+def read_yaml(
+    text: str, subject: str, first_line: int, forbidden_tokens: tuple = YAML_FORBIDDEN_TOKENS
+) -> tuple[Node | None, list[YamlProblem]]:
+    """The composed node tree of `text`, and each (line, message) problem that YAML parsers could read differently.
+
+    The tree is None when there is a problem or no document. `subject` names the
+    text in the messages, such as "the frontmatter", and `first_line` is the
+    file line of the text's first line.
+    """
+    problems = _yaml_text_problems(text, subject, first_line) or _yaml_token_problems(
+        text, subject, first_line, forbidden_tokens
+    )
+    if problems:
+        return None, problems
+    try:
+        root = yaml.compose(text, Loader=yaml.SafeLoader)
+    except yaml.YAMLError as exc:
+        return None, [_yaml_error_problem(exc, subject, first_line)]
+    except RecursionError:
+        return None, [(first_line, f"{subject} is nested too deeply to read")]
+    if root is None:
+        return None, []
+    problems = _yaml_node_problems(root, subject, first_line)
+    if problems:
+        return None, problems
+    return root, []
+
+
+def _yaml_text_problems(text: str, subject: str, first_line: int) -> list[YamlProblem]:
+    problems: list[YamlProblem] = []
+    for pattern, problem in YAML_TEXT_PROBLEMS:
+        if match := pattern.search(text):
+            line = _line_at(text, match.start()) + first_line - 1
+            problems.append((line, f"{subject} contains " + problem.format(code=ord(match.group()))))
+    return problems
+
+
+def _yaml_token_problems(
+    text: str, subject: str, first_line: int, forbidden_tokens: tuple
+) -> list[YamlProblem]:
+    problems: list[YamlProblem] = []
+    open_flow_collections: list[yaml.Token] = []
+    block_collection_columns: list[int] = []
+    try:
+        for token in yaml.scan(text, Loader=yaml.SafeLoader):
+            line = token.start_mark.line + first_line
+            problems += [
+                (line, f"{subject} uses {what}, which is not allowed")
+                for kind, what in forbidden_tokens
+                if isinstance(token, kind)
+            ]
+            # PyYAML reads a # right after a closing quote or bracket as a comment, and other parsers refuse it.
+            is_quoted_scalar = isinstance(token, yaml.ScalarToken) and token.style in ("'", '"')
+            is_flow_collection_end = isinstance(token, (yaml.FlowMappingEndToken, yaml.FlowSequenceEndToken))
+            if (is_quoted_scalar or is_flow_collection_end) and text.startswith("#", token.end_mark.index):
+                message = (
+                    f"{subject} has a # right after a closing quote or bracket, which other YAML parsers don't read "
+                    "as a comment; put a space before the #"
+                )
+                problems.append((token.end_mark.line + first_line, message))
+            if isinstance(token, (yaml.BlockMappingStartToken, yaml.BlockSequenceStartToken)):
+                block_collection_columns.append(token.start_mark.column)
+            elif isinstance(token, yaml.BlockEndToken) and block_collection_columns:
+                block_collection_columns.pop()
+            elif isinstance(token, (yaml.FlowMappingStartToken, yaml.FlowSequenceStartToken)):
+                open_flow_collections.append(token)
+            elif isinstance(token, (yaml.FlowMappingEndToken, yaml.FlowSequenceEndToken)) and open_flow_collections:
+                start = open_flow_collections.pop()
+                if not open_flow_collections and start.start_mark.line != token.start_mark.line:
+                    problems.append(
+                        (
+                            start.start_mark.line + first_line,
+                            f"{subject} has a flow collection ({{...}} or [...]) over more than one line, which YAML "
+                            "parsers read differently; keep it on one line or use block style",
+                        )
+                    )
+            elif isinstance(token, yaml.KeyToken) and open_flow_collections:
+                is_question_mark_before_text = text.startswith("?", token.start_mark.index) and bool(
+                    text[token.end_mark.index:token.end_mark.index + 1].strip()
+                )
+                if is_question_mark_before_text:
+                    problems.append((line, f"{subject} {FLOW_PLAIN_SCALAR_PROBLEM}"))
+            # More open collections put the innermost past the depth limit; stopping here keeps deep input fast.
+            if len(open_flow_collections) + len(block_collection_columns) > MAX_YAML_DEPTH + 1:
+                problems.append((line, f"{subject} is nested too deeply; the limit is {MAX_YAML_DEPTH} levels"))
+                break
+            if isinstance(token, yaml.ScalarToken):
+                # Other parsers read a lone - in a flow collection as a block list item, unless a : follows it.
+                is_lone_dash_in_flow_collection = (
+                    token.plain
+                    and token.value == "-"
+                    and bool(open_flow_collections)
+                    and not text.startswith(":", token.end_mark.index)
+                )
+                if is_lone_dash_in_flow_collection:
+                    problems.append((line, f"{subject} {FLOW_PLAIN_SCALAR_PROBLEM}"))
+                parent_indentation = block_collection_columns[-1] if block_collection_columns else -1
+                problems += _scalar_source_problems(text, token, subject, first_line, parent_indentation)
+    except yaml.YAMLError as exc:
+        problems.append(_yaml_error_problem(exc, subject, first_line))
+    except (ValueError, OverflowError):
+        # PyYAML raises these, not a YAMLError, for an escape past the last Unicode character.
+        problems.append((None, f"{subject} is not valid YAML: it has an escape past U+10FFFF"))
+    return problems
+
+
+def _scalar_source_problems(
+    text: str, token: yaml.ScalarToken, subject: str, first_line: int, parent_indentation: int
+) -> list[YamlProblem]:
+    """Problems in how a quoted or block scalar is written, which PyYAML reads without an error.
+
+    `parent_indentation` is the column of the block mapping or list that holds the scalar, or -1 at the top.
+    """
+    if token.style in ("'", '"'):
+        problems = _quoted_scalar_indentation_problems(text, token, subject, first_line, parent_indentation)
+        if token.style == '"':
+            problems += _double_quoted_escape_problems(text, token, subject, first_line)
+        return problems
+    if token.style in ("|", ">"):
+        return _block_scalar_problems(text, token, subject, first_line, parent_indentation)
+    return []
+
+
+def _quoted_scalar_indentation_problems(
+    text: str, token: yaml.ScalarToken, subject: str, first_line: int, parent_indentation: int
+) -> list[YamlProblem]:
+    lines = text[token.start_mark.index:token.end_mark.index].split("\n")
+    for line_offset, line in enumerate(lines[1:], start=1):
+        indentation = len(line) - len(line.lstrip(" "))
+        # PyYAML takes a tab, or too few spaces, as the indentation of a quoted value's next line; others refuse it.
+        if line.strip(" \r") and indentation <= parent_indentation:
+            line_number = token.start_mark.line + line_offset + first_line
+            message = (
+                f"{subject} has a quoted value whose next line isn't indented past its key or list item with spaces, "
+                "which YAML parsers read differently; indent the line with more spaces"
+            )
+            return [(line_number, message)]
+    return []
+
+
+def _double_quoted_escape_problems(
+    text: str, token: yaml.ScalarToken, subject: str, first_line: int
+) -> list[YamlProblem]:
+    start = token.start_mark.index
+    problems: list[YamlProblem] = []
+    for escape in DOUBLE_QUOTED_ESCAPE_PATTERN.finditer(text[start:token.end_mark.index]):
+        utf16_hex, utf32_hex, line_break_before_blank_line = escape.groups()
+        hex_digits = utf16_hex or utf32_hex
+        line = _line_at(text, start + escape.start()) + first_line - 1
+        # PyYAML decodes each escape on its own, so even an escaped surrogate pair stays two surrogates.
+        if hex_digits and 0xD800 <= int(hex_digits, 16) <= 0xDFFF:
+            problems.append(
+                (
+                    line,
+                    f"{subject} has an escape for a UTF-16 surrogate (U+D800 to U+DFFF), which can't be written "
+                    "as UTF-8; write the character itself",
+                )
+            )
+        elif line_break_before_blank_line is not None:
+            problems.append(
+                (
+                    line,
+                    f"{subject} has an escaped line break before a blank line in a double-quoted value, which "
+                    "YAML parsers read differently",
+                )
+            )
+    return problems
+
+
+def _block_scalar_problems(
+    text: str, token: yaml.ScalarToken, subject: str, first_line: int, parent_indentation: int
+) -> list[YamlProblem]:
+    start, end = token.start_mark.index, token.end_mark.index
+    header, line_break, content = text[start:end].partition("\n")
+    indicators = BLOCK_SCALAR_INDICATORS_PATTERN.match(header).group()
+    line = token.start_mark.line + first_line
+    if any(character.isdigit() for character in indicators):
+        message = (
+            f"{subject} has a block scalar indentation indicator, which YAML parsers read differently; "
+            "remove the digit after | or >"
+        )
+        return [(line, message)]
+    problems: list[YamlProblem] = []
+    leading_lines = BLOCK_SCALAR_LEADING_LINES_PATTERN.match(text, start + len(header) + 1) if line_break else None
+    first_line_indentation = len(leading_lines.group(2)) if leading_lines else None
+    if leading_lines:
+        longest_blank_line = max(len(blank_line) for blank_line in leading_lines.group(1).replace("\r", "").split("\n"))
+        # PyYAML takes the content's indentation from the longest blank line before it, others from the first line.
+        if parent_indentation < first_line_indentation < longest_blank_line:
+            message = (
+                f"{subject} has a block scalar whose first line is indented less than a blank line before it, which "
+                "YAML parsers read differently; remove the spaces from the blank line"
+            )
+            problems.append((line, message))
+    is_strip_chomped = "-" in indicators
+    is_keep_chomped = "+" in indicators
+    is_missing_final_line_break = bool(content) and not content.endswith("\n") and not text.endswith("\n")
+    # Other parsers keep a final line of spaces past the parent's indentation in the scalar when the scalar has no
+    # lines before it, or when the spaces reach past the content's indentation, or reach it for |+ and >+.
+    final_spaces = len(text) - end if not text[end:].strip(" ") else 0
+    if final_spaces and first_line_indentation is None:
+        keeps_final_spaces = final_spaces > parent_indentation and (is_keep_chomped or content == "")
+    elif final_spaces:
+        keeps_final_spaces = final_spaces > first_line_indentation or (
+            is_keep_chomped and final_spaces == first_line_indentation
+        )
+    else:
+        keeps_final_spaces = False
+    # PyYAML leaves out the final line break that other parsers add, unless |- or >- strips it for both.
+    if not is_strip_chomped and (is_missing_final_line_break or keeps_final_spaces):
+        message = (
+            f"{subject} ends in a block scalar with no line break after it, which YAML parsers read "
+            "differently; use |- or >-, or put another key after it"
+        )
+        problems.append((line, message))
+    return problems
+
+
+def _yaml_error_problem(exc: yaml.YAMLError, subject: str, first_line: int) -> YamlProblem:
+    mark = getattr(exc, "problem_mark", None)
+    problem = getattr(exc, "problem", None) or str(exc)
+    line = mark.line + first_line if mark else None
+    return line, f"{subject} is not valid YAML: {problem}"
+
+
+def _yaml_node_problems(root: Node, subject: str, first_line: int) -> list[YamlProblem]:
+    """Problems at any depth: nesting, keys that aren't plain text or that repeat, and unquoted values.
+
+    PyYAML keeps the last value of a repeated key, while other parsers reject the file.
+    """
+    problems: list[YamlProblem] = []
+    # Each entry is a node, the key path to it, its depth, and whether it is inside a flow collection.
+    stack: list[tuple[Node, str, int, bool]] = [(root, "", 0, False)]
+    while stack:
+        node, prefix, depth, is_in_flow_collection = stack.pop()
+        line = node.start_mark.line + first_line
+        if depth > MAX_YAML_DEPTH:
+            problems.append((line, f"{subject} is nested too deeply; the limit is {MAX_YAML_DEPTH} levels"))
+        elif isinstance(node, ScalarNode) and node.style is None:
+            problem = _plain_scalar_problem(node.value, is_in_flow_collection, is_key=False)
+            if problem:
+                problems.append((line, f"{subject} {problem}"))
+        elif isinstance(node, SequenceNode):
+            is_item_in_flow_collection = is_in_flow_collection or bool(node.flow_style)
+            stack += [(item, prefix, depth + 1, is_item_in_flow_collection) for item in node.value]
+        elif isinstance(node, MappingNode):
+            is_item_in_flow_collection = is_in_flow_collection or bool(node.flow_style)
+            seen: set[str] = set()
+            for key_node, value_node in node.value:
+                key_line = key_node.start_mark.line + first_line
+                key_problem = _key_problem(key_node, is_item_in_flow_collection)
+                if key_problem:
+                    problems.append((key_line, f"{subject} {key_problem}"))
+                    continue
+                if key_node.value in seen:
+                    problems.append((key_line, f'{subject} has the duplicate key "{prefix}{key_node.value}"'))
+                seen.add(key_node.value)
+                stack.append((value_node, f"{prefix}{key_node.value}.", depth + 1, is_item_in_flow_collection))
+    return sorted(problems)
+
+
+def _key_problem(key_node: Node, is_in_flow_collection: bool) -> str | None:
+    if not isinstance(key_node, ScalarNode):
+        return "keys must be plain text, not a list or mapping"
+    if key_node.value == "<<":
+        return "has a << key, which YAML 1.1 parsers read as a merge; rename it"
+    if key_node.style is None:
+        return _plain_scalar_problem(key_node.value, is_in_flow_collection, is_key=True)
+    return None
+
+
+def _plain_scalar_problem(text: str, is_in_flow_collection: bool, *, is_key: bool) -> str | None:
+    """Why YAML parsers could read an unquoted key or value differently, or None."""
+    if is_in_flow_collection and FLOW_PLAIN_SCALAR_PATTERN.search(text):
+        return FLOW_PLAIN_SCALAR_PROBLEM
+    if not _is_read_as_non_text_by_some_parser(text):
+        return None
+    if is_key and text == "":
+        return "keys must be plain text, not empty"
+    if is_key:
+        return (
+            f"keys must be plain text, but YAML parsers don't all read the unquoted key {text} as text; "
+            f'put it in quotes, as in "{text}"'
+        )
+    if _is_typed_alike_by_every_parser(text):
+        return None
+    return (
+        f"has the unquoted value {text}, which YAML parsers don't all read as the same type; "
+        f'put it in quotes, as in "{text}"'
+    )
+
+
+def plain_scalar_value(text: str) -> bool | int | float | str | None:
+    """The JSON value of a plain (unquoted) scalar that read_yaml accepts, as every parser types it.
+
+    true and false are booleans; null, ~ and an empty value are null; an
+    integer in JavaScript's safe range, or a decimal written the shortest way,
+    is a number; anything else is text. read_yaml refuses every other plain
+    value that a parser reads as something other than text.
+    """
+    if text in ("true", "false"):
+        return text == "true"
+    if text in ("null", "~", ""):
+        return None
+    if _is_typed_alike_by_every_parser(text):
+        return int(text) if CANONICAL_INTEGER_PATTERN.fullmatch(text) else float(text)
+    return text
+
+
+def _is_read_as_non_text_by_some_parser(text: str) -> bool:
+    return any(pattern.fullmatch(text) for pattern in NON_TEXT_PLAIN_SCALAR_PATTERNS)
+
+
+def _is_typed_alike_by_every_parser(text: str) -> bool:
+    """True for true, false, null, ~, an empty value, and an integer or decimal every parser reads as the same number."""
+    if text in ("true", "false", "null", "~", ""):
+        return True
+    if CANONICAL_INTEGER_PATTERN.fullmatch(text):
+        digits = text.removeprefix("-")
+        # int() refuses more than 4,300 digits, and no number that long is safe anyway.
+        return text != "-0" and len(digits) <= len(str(MAX_SAFE_INTEGER)) and int(digits) <= MAX_SAFE_INTEGER
+    if CANONICAL_DECIMAL_PATTERN.fullmatch(text):
+        decimal = float(text)
+        # repr gives back the text only for a decimal written the shortest way, so 1.10 stays text.
+        return repr(decimal) == text and not decimal.is_integer() and abs(decimal) >= MIN_DECIMAL_MAGNITUDE
+    return False
+
+
 # --- SKILL.md -----------------------------------------------------------------
 
 
@@ -410,7 +817,7 @@ class _Report:
 
 
 def _line(node: Node) -> int:
-    return node.start_mark.line + 2
+    return node.start_mark.line + FRONTMATTER_FIRST_LINE
 
 
 def _kind(node: Node) -> str:
@@ -449,13 +856,6 @@ def _check_skill_md(folder: str, data: bytes, rules: Rules, findings: list[Findi
         line = frontmatter.count("\n", 0, frontmatter.index("\t")) + 2
         report.error("the frontmatter contains a tab character; use spaces", line=line)
         return None
-    if line_break := YAML11_LINE_BREAK_PATTERN.search(frontmatter):
-        report.error(
-            f"the frontmatter contains U+{ord(line_break.group()):04X}, which YAML parsers disagree on as a line "
-            "break; use a newline",
-            line=frontmatter.count("\n", 0, line_break.start()) + 2,
-        )
-        return None
 
     root = _parse_frontmatter(frontmatter, report)
     if root is None:
@@ -464,7 +864,7 @@ def _check_skill_md(folder: str, data: bytes, rules: Rules, findings: list[Findi
         report.error("the frontmatter must be a mapping of keys to values, such as name: my-skill", line=2)
         return None
 
-    top = _mapping_items(root, "", report)
+    top = _mapping_items(root)
     for key, (key_node, _) in top.items():
         if key not in TOP_LEVEL_KEYS:
             close = difflib.get_close_matches(key, TOP_LEVEL_KEYS, n=1)
@@ -490,6 +890,7 @@ def _check_skill_md(folder: str, data: bytes, rules: Rules, findings: list[Findi
         version_line=lines.get("version"),
         deprecated_line=lines.get("deprecated"),
         name_line=_line(top["name"][0]) if "name" in top else None,
+        author_line=lines.get("author"),
     )
 
 
@@ -500,97 +901,37 @@ def _parse_frontmatter(frontmatter: str, report: _Report, *, strict: bool = True
     that may predate the stricter rules.
     """
     if not strict:
-        try:
-            return yaml.compose(frontmatter, Loader=yaml.SafeLoader)
-        except (yaml.YAMLError, RecursionError):
-            return None
-    try:
-        forbidden = [
-            (token, what)
-            for token in yaml.scan(frontmatter, Loader=yaml.SafeLoader)
-            for kind, what in _FORBIDDEN_TOKENS
-            if isinstance(token, kind)
-        ]
-    except yaml.YAMLError as exc:
-        _report_yaml_error(exc, report)
-        return None
-    for token, what in forbidden:
-        report.error(f"the frontmatter uses {what}, which is not allowed", line=token.start_mark.line + 2)
-    if forbidden:
+        return compose_lenient(frontmatter)
+    root, problems = read_yaml(frontmatter, "the frontmatter", FRONTMATTER_FIRST_LINE, FRONTMATTER_FORBIDDEN_TOKENS)
+    for line, message in problems:
+        report.error(message, line=line)
+    if problems:
         return None
     marker = frontmatter.find("---")
     if marker != -1:
         # Some readers end the frontmatter at the first "---", even inside a value.
         report.error(
             'the frontmatter contains "---", which other tools read as its end',
-            line=frontmatter.count("\n", 0, marker) + 2,
+            line=frontmatter.count("\n", 0, marker) + FRONTMATTER_FIRST_LINE,
         )
         return None
-    try:
-        root = yaml.compose(frontmatter, Loader=yaml.SafeLoader)
-    except yaml.YAMLError as exc:
-        _report_yaml_error(exc, report)
-        return None
-    except RecursionError:
-        report.error("the frontmatter is nested too deeply to read", line=2)
-        return None
     if root is None:
-        report.error("the frontmatter is empty", line=2)
-        return None
-    if _report_key_problems(root, report):
+        report.error("the frontmatter is empty", line=FRONTMATTER_FIRST_LINE)
         return None
     return root
 
 
-def _report_key_problems(root: Node, report: _Report) -> bool:
-    """Report keys, in any mapping at any depth, that parsers could read differently. True if there were any.
-
-    A key must be plain text that no parser reads as a number, true/false or
-    null, and must not repeat: PyYAML keeps the last value of a repeated key,
-    while other parsers reject the file.
-    """
-    problems: list[tuple[int, str]] = []
-    stack: list[tuple[Node, str]] = [(root, "")]
-    while stack:
-        node, prefix = stack.pop()
-        if isinstance(node, MappingNode):
-            seen: set[str] = set()
-            for key_node, value_node in node.value:
-                if not (
-                    isinstance(key_node, ScalarNode)
-                    and key_node.tag == STR_TAG
-                    and not (key_node.style is None and YAML12_NUMBER_PATTERN.fullmatch(key_node.value))
-                ):
-                    problems.append((_line(key_node), "frontmatter keys must be plain text"))
-                    continue
-                if key_node.value in seen:
-                    problems.append((_line(key_node), f'duplicate key "{prefix}{key_node.value}"'))
-                seen.add(key_node.value)
-                stack.append((value_node, f"{prefix}{key_node.value}."))
-        elif isinstance(node, SequenceNode):
-            stack += [(item, prefix) for item in node.value]
-    for line, message in sorted(problems):
-        report.error(message, line=line)
-    return bool(problems)
+def compose_lenient(text: str) -> Node | None:
+    """The node tree as PyYAML alone reads it, or None, for a merge-base copy that may predate the stricter rules."""
+    try:
+        return yaml.compose(text, Loader=yaml.SafeLoader)
+    except (yaml.YAMLError, RecursionError):
+        return None
 
 
-def _report_yaml_error(exc: yaml.YAMLError, report: _Report) -> None:
-    mark = getattr(exc, "problem_mark", None)
-    problem = getattr(exc, "problem", None) or str(exc)
-    report.error(f"the frontmatter is not valid YAML: {problem}", line=mark.line + 2 if mark else None)
-
-
-def _mapping_items(node: MappingNode, prefix: str, report: _Report) -> dict[str, tuple[ScalarNode, Node]]:
-    items: dict[str, tuple[ScalarNode, Node]] = {}
-    for key_node, value_node in node.value:
-        if not (isinstance(key_node, ScalarNode) and key_node.tag == STR_TAG):
-            report.error("frontmatter keys must be plain text", line=_line(key_node))
-            continue
-        if key_node.value in items:
-            report.error(f'duplicate key "{prefix}{key_node.value}"', line=_line(key_node))
-            continue
-        items[key_node.value] = (key_node, value_node)
-    return items
+def _mapping_items(node: MappingNode) -> dict[str, tuple[ScalarNode, Node]]:
+    """The key and value nodes by key. read_yaml has already refused keys that aren't text or that repeat."""
+    return {key_node.value: (key_node, value_node) for key_node, value_node in node.value}
 
 
 def _text(items: dict, key: str, label: str, report: _Report, *, required: bool = False) -> str | None:
@@ -599,13 +940,6 @@ def _text(items: dict, key: str, label: str, report: _Report, *, required: bool 
         return None
     key_node, value_node = items[key]
     if isinstance(value_node, ScalarNode) and value_node.tag == STR_TAG:
-        if value_node.style is None and YAML12_NUMBER_PATTERN.fullmatch(value_node.value):
-            report.error(
-                f'"{label}" must be text, but other YAML parsers read {value_node.value} as a number. '
-                f'Put the value in quotes, for example {key}: "{value_node.value}"',
-                line=_line(key_node),
-            )
-            return None
         return value_node.value
     if isinstance(value_node, ScalarNode) and value_node.tag == "tag:yaml.org,2002:null":
         advice = "give it a value" if required else "give it a value or remove the key"
@@ -713,7 +1047,7 @@ def _check_metadata(
         report.error('"metadata" must be a mapping, with one key: value pair per line', line=metadata_line)
         return {}, None, {}
 
-    items = _mapping_items(node, "metadata.", report)
+    items = _mapping_items(node)
     metadata: dict[str, str] = {}
     lines: dict[str, int] = {}
     for key in items:
@@ -762,13 +1096,19 @@ def _check_author(metadata: dict, items: dict, lines: dict, metadata_line: int, 
         return
     if "author" not in metadata:
         return
-    parts = _split(metadata["author"])
-    if not all(GITHUB_LOGIN_PATTERN.fullmatch(part) or GITHUB_TEAM_PATTERN.fullmatch(part) for part in parts):
+    if author_names(metadata["author"]) != _split(metadata["author"]):
         report.error(
             '"metadata.author" must be one or more GitHub usernames or teams (org/team) separated by commas, '
             'for example "octocat", "octocat, hubot" or "octo-org/octo-team"',
             line=lines["author"],
         )
+
+
+def author_names(author: str) -> list[str]:
+    """The names in a metadata.author value that have the form of a GitHub login or org/team, in order."""
+    return [
+        part for part in _split(author) if GITHUB_LOGIN_PATTERN.fullmatch(part) or GITHUB_TEAM_PATTERN.fullmatch(part)
+    ]
 
 
 def _check_version(
@@ -893,16 +1233,29 @@ def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report
         if dimension == AGENT_TYPES_DIMENSION:
             continue  # _check_agent_types validates it against agent-types.json.
         approved = rules.vocabulary.get(dimension, frozenset())
-        for part in _split(metadata[key]):
+        parts = _split(metadata[key])
+        # Leaving the key out is the fix only when nothing else would be left in it.
+        fix = (
+            "Remove it from the list"
+            if any(part and not is_reserved_dimension_value(part) for part in parts)
+            else f'Leave "metadata.{key}" out instead; a skill without it still appears when no filter is chosen'
+        )
+        for part in parts:
             if not part:
                 report.error(f'"metadata.{key}" has an empty value between commas', line=line)
+            elif is_reserved_dimension_value(part):
+                report.error(
+                    f'"{part}" is a placeholder rather than a value, and catalogs would list it as a filter option '
+                    f"of its own. {fix}",
+                    line=line,
+                )
             elif part not in approved:
                 hint = (
                     f'use "{rules.aliases[part]}"'
                     if part in rules.aliases
-                    else f"approved values are listed in {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}"
+                    else f"use a value from {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}, or add this one to it for review"
                 )
-                report.warning(f'"{part}" is not an approved {dimension} value; {hint}', line=line)
+                report.error(f'"{part}" is not an approved {dimension} value; {hint}', line=line)
 
 
 # --- Package: the files that are published and installed -----------------------
@@ -1266,11 +1619,11 @@ def published_hash(tree: SkillTree, rules: Rules) -> str:
     return content_hash({p: e.data for p, e in published_files(tree, rules).items()})
 
 
-def _format_version(version: tuple[int, int, int]) -> str:
+def format_version(version: tuple[int, int, int]) -> str:
     return ".".join(str(part) for part in version)
 
 
-def _next_versions(version: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
+def next_versions(version: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
     """The only versions allowed after `version`: the next patch, minor or major release."""
     major, minor, patch = version
     return ((major, minor, patch + 1), (major, minor + 1, 0), (major + 1, 0, 0))
@@ -1282,6 +1635,16 @@ def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
     Fixing a two-part version changes SKILL.md, so the fix itself needs a
     version above the old one: 2.6 -> 2.6.1, not 2.6.0.
     """
+    text = lenient_metadata_text(tree, "version")
+    return parse_version(text, allow_two_part=True) if text is not None else None
+
+
+def lenient_metadata_text(tree: SkillTree, key: str) -> str | None:
+    """A metadata value of a merge-base copy, as PyYAML alone reads it, or None when it isn't text.
+
+    The merge-base copy may predate the stricter frontmatter rules, so they
+    aren't applied to it.
+    """
     entry = tree.entries.get("SKILL.md")
     try:
         match = FRONTMATTER_PATTERN.match(entry.data.decode("utf-8")) if entry else None
@@ -1289,10 +1652,9 @@ def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
         return None
     scratch = _Report([])
     root = _parse_frontmatter(match.group(1) or "", scratch, strict=False) if match else None
-    metadata = _last_value(root, "metadata")
-    node = _last_value(metadata, "version")
+    node = _last_value(_last_value(root, "metadata"), key)
     if isinstance(node, ScalarNode) and node.tag == STR_TAG:
-        return parse_version(node.value, allow_two_part=True)
+        return node.value
     return None
 
 
@@ -1334,7 +1696,7 @@ def check_history(
                 )
             ]
         if info is not None and info.version is not None and info.version != FIRST_VERSION:
-            message = f"a new skill starts at version 1.0.0, not {_format_version(info.version)}"
+            message = f"a new skill starts at version 1.0.0, not {format_version(info.version)}"
             return [Finding("error", message, "SKILL.md", info.version_line)]
         return []
 
@@ -1354,26 +1716,26 @@ def check_history(
     new = head_info.version
     changed = published_hash(base, rules) != published_hash(head, rules)
     if new < old:
-        message = f"metadata.version went down from {_format_version(old)} to {_format_version(new)}; it must never go down"
+        message = f"metadata.version went down from {format_version(old)} to {format_version(new)}; it must never go down"
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
     if new == old and changed:
         message = (
-            f"published files changed, so metadata.version must go up from {_format_version(old)}. "
+            f"published files changed, so metadata.version must go up from {format_version(old)}. "
             f"A published version is immutable. Changes only to {', '.join(rules.published_excludes)} need no bump"
         )
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
-    if new > old and new not in _next_versions(old):
-        steps = [_format_version(v) for v in _next_versions(old)]
+    if new > old and new not in next_versions(old):
+        steps = [format_version(v) for v in next_versions(old)]
         message = (
-            f"metadata.version can only go up one step from {_format_version(old)}: to {steps[0]}, {steps[1]} "
-            f"or {steps[2]}, not {_format_version(new)}"
+            f"metadata.version can only go up one step from {format_version(old)}: to {steps[0]}, {steps[1]} "
+            f"or {steps[2]}, not {format_version(new)}"
         )
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
     if new > old:
         before = base.entries.get("CHANGELOG.md")
         after = head.entries.get("CHANGELOG.md")
         if after is None or (before is not None and before.data == after.data):
-            message = f"metadata.version went up to {_format_version(new)}, but CHANGELOG.md has no new entry for it"
+            message = f"metadata.version went up to {format_version(new)}, but CHANGELOG.md has no new entry for it"
             return [Finding("warning", message, "CHANGELOG.md")]
     return []
 
@@ -1382,7 +1744,7 @@ def check_history(
 
 
 def load_cases(path: Path) -> list[dict]:
-    """The cases in conformance-cases.json. Raises ValueError when the file is malformed."""
+    """The cases in conformance-cases.json or connector-conformance-cases.json. Raises ValueError when malformed."""
     document = _read_json(path)
     cases = document.get("cases") if isinstance(document, dict) else None
     if not isinstance(cases, list) or not cases:
@@ -1409,7 +1771,7 @@ def _case_problem(case) -> str | None:
     if case["expect"] == "fail" and not isinstance(case.get("error"), str):
         return 'a "fail" case needs an "error" string'
     if "base" in case and case["base"] is not None and not isinstance(case["base"], dict):
-        return '"base" must be an object of files, or null for a skill the pull request adds'
+        return '"base" must be an object of files, or null for a folder the pull request adds'
     if "retired" in case and not isinstance(case["retired"], bool):
         return '"retired" must be true or false'
     files = case.get("files")
@@ -1455,8 +1817,8 @@ def tree_from_files(name: str, files: dict) -> SkillTree:
 
 def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
     """Problems with the rules' results on the cases; an empty list means every case gives its expected result."""
-    problems = []
-    for case in cases:
+
+    def findings_for(case: dict) -> list[Finding]:
         name = case["name"]
         head = tree_from_files(name, case["files"]) if case.get("files") is not None else None
         findings = check_skill(head, rules)[0] if head is not None else []
@@ -1464,10 +1826,19 @@ def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
             base = tree_from_files(name, case["base"]) if case.get("base") is not None else None
             retired = frozenset({name}) if case.get("retired") else frozenset()
             findings += check_history(name, base, head, rules, retired)
-        errors = [f.message for f in findings if f.severity == "error"]
+        return findings
+
+    return run_cases(cases, findings_for)
+
+
+def run_cases(cases: list[dict], findings_for: Callable[[dict], list[Finding]], label: str = "case") -> list[str]:
+    """Problems with `findings_for(case)` on each case: pass means no errors, fail an error holding the case's text."""
+    problems = []
+    for case in cases:
+        errors = [f.message for f in findings_for(case) if f.severity == "error"]
         if case["expect"] == "pass" and errors:
-            problems.append(f"case {case['id']}: expected pass, got: {'; '.join(errors)}")
+            problems.append(f"{label} {case['id']}: expected pass, got: {'; '.join(errors)}")
         elif case["expect"] == "fail" and not any(case["error"] in message for message in errors):
             got = "; ".join(errors) if errors else "no errors"
-            problems.append(f"case {case['id']}: expected an error containing {case['error']!r}, got: {got}")
+            problems.append(f"{label} {case['id']}: expected an error containing {case['error']!r}, got: {got}")
     return problems

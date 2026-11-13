@@ -49,7 +49,7 @@ Follow these guidelines for each tool:
 
 #### Skill Metadata
 
-Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub user, or your team as `org/team`) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
+Make sure the frontmatter in the `SKILL.md` file includes a `metadata` block with `version`, `author` (your GitHub username, your organization, or your team as `org/team`, which must exist on GitHub) and `aws-devops-agent-skills.*` fields (see examples in existing skills)
 
 #### Skill Publishing Rules
 
@@ -64,19 +64,19 @@ Skills on `main` are published automatically, so a pull request check ([`.github
 | `title` | Optional display name. Non-empty, one line, at most 100 characters. |
 | `license`, `compatibility`, `allowed-tools` | Optional. When present, non-empty text; `compatibility` is at most 500 characters. |
 | `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `deprecated: "true"`. A key that isn't listed below is a warning, with the nearest known key when there is one. |
-| `metadata.author` | Required. One or more GitHub usernames or teams (`org/team`, such as `octo-org/octo-team`) separated by commas, without a leading `@`. |
+| `metadata.author` | Required. One or more GitHub usernames, organizations or teams (`org/team`, such as `octo-org/octo-team`) separated by commas, without a leading `@`. Each must be an existing GitHub account: on a pull request, the check looks up each name that a new skill lists or a changed `author` line adds, and a name GitHub doesn't know is an error. A team is looked up by its organization only, because GitHub shows a team only to the organization's members. When GitHub can't answer, because of a rate limit, a server error or a timeout, the name is a warning instead. |
 | `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix, suffix or leading zeros, at most 32 characters and at most 10 digits in each part. |
 | `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing or empty summary is a warning for now; it becomes required once every skill has one. |
 | `metadata.deprecated` | Optional. `"true"` or `"false"`. |
 | `metadata.tier` | Optional. `"aws-managed"` or `"partner-managed"`: who maintains the skill. |
 | `metadata.aws-devops-agent-skills.agent-types` | The agents that load the skill, as comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json), such as `"INCIDENT_RCA"`. An unknown value is an error, because this key decides which agents load the skill rather than only how catalogs filter it. `GENERIC` loads the skill for every agent, so it is an error to combine it with another value. Without the key the skill installs as `GENERIC` and loads for every agent, which is a warning. |
-| `metadata.aws-devops-agent-skills.*` | Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. Any other key under this prefix, or a misspelling of the prefix, is an error, so a typo can't drop the skill from a filter. For `aws-services` and `technical-domains`, a value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is a warning, with the approved spelling when there is one. |
+| `metadata.aws-devops-agent-skills.*` | Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. Any other key under this prefix, or a misspelling of the prefix, is an error, so a typo can't drop the skill from a filter. For `aws-services` and `technical-domains`, a value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is an error, with the approved spelling when there is one, because catalogs show each value as a filter option and a near-duplicate splits the skills between two. To use a new value, add it to `vocabulary.json` in the same pull request, where a maintainer reviews it. A placeholder such as `All`, `Any`, `None`, `N/A`, `Other`, `General` or `*`, in any case, is an error, because catalogs would list it as a filter option of its own: leave the key out instead, and the skill still appears when no filter is chosen. |
 
-The frontmatter must be plain YAML that every parser reads the same way. These are rejected: tabs; a byte order mark at the start of the file; line breaks other than newlines (U+0085, U+2028, U+2029); `---` anywhere but the closing line; anchors (`&`), aliases (`*`), tags (`!`), directives (`%`) and document markers; flow collections (`[...]` or `{...}`); keys that aren't plain text, and duplicate keys, at any depth; and unquoted values that some parsers read as numbers, such as `1e3`. A top-level key other than the Agent Skills specification's fields and `title` is a warning.
+The frontmatter must be plain YAML that every parser reads the same way. These are rejected: tabs; a byte order mark anywhere; line breaks other than newlines (U+0085, U+2028, U+2029, or a carriage return without a line feed); `---` anywhere but the closing line; anchors (`&`), aliases (`*`), tags (`!`), directives (`%`) and document markers; flow collections (`[...]` or `{...}`); keys that aren't plain text, `<<` keys, and duplicate keys, at any depth; nesting more than 64 levels deep; unquoted values that some parsers read as another type, such as `1e3`, `yes`, `y` or `2026-11-08`; in a double-quoted value, an escaped UTF-16 surrogate such as `\uD83D`, or an escaped line break before a blank line; a block scalar indentation indicator, such as `|2`; a block scalar whose first line is indented less than a blank line before it; a `#` right after a closing quote or bracket; a quoted value whose next line isn't indented past its key or list item with spaces; and a block scalar as the last key, unless it is `|-` or `>-`. A top-level key other than the Agent Skills specification's fields and `title` is a warning.
 
 A `SKILL.md` body over 500 lines is a warning, as it is in the skill evaluation tool: move reference material into `references/` and link to it.
 
-Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). `README.md` and `images/` are published too. For the published files:
+Published files. Everything in the skill folder is published and installed into customers' Agent Spaces except `evals/`, `.skilleval.yaml` and `CHANGELOG.md` at the skill root ([`published-files.json`](.github/scripts/skill-rules/published-files.json)). `README.md` and `images/` are published too. The check reads that list from the base branch, so a change to it takes effect only after it has merged. For the published files:
 
 - At most 100 files, each at most 1 MiB, and their zip at most 4,128,768 bytes (4 MiB less a margin, because zip sizes vary by tool). The check warns past 90% of each of these limits. The `SKILL.md` frontmatter is at most 32 KiB.
 - Each file's extension must be one that `skills/.gitignore` allows. The check reads that list from the base branch, so a new extension takes effect only after the `skills/.gitignore` change that adds it has merged.
@@ -106,7 +106,17 @@ Identity and versions, compared with the base branch:
 - A new skill starts at `1.0.0`.
 - When the version goes up, add a `CHANGELOG.md` entry for it. A bump without one is a warning.
 
-Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list. A `connector.yaml` that can't be read is a warning.
+Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list, which, like any change to a connector's files, needs a higher connector `version`. Each `connector.yaml`, at most 32 KiB, and `connectors/releases.yaml` must be UTF-8 YAML that every parser reads the same way, by the frontmatter's rules, except that a flow collection on one line, a `---` line at the start, `---` inside a value, and a tab inside a quoted value, block scalar or comment are allowed. A flow collection can't span lines, and an unquoted entry in one can't start with `?` or `:`, hold a `?`, or be a lone `-` that no `:` follows. [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json) has a case for each rule. A `connector.yaml` that isn't a mapping is an error, because it has no version to check; one whose `skills:` isn't a list of skill names is a warning.
+
+Connector versions, compared with the base branch as the catalog publisher compares them with the published version ([`connector_checks.py`](.github/scripts/connector_checks.py)):
+
+- A connector folder is never removed: to retire a connector, set `deprecated: true` in its `connector.yaml` and raise its version. Its `name` and `type` never change.
+- `version` is `MAJOR.MINOR.PATCH`, such as `1.0.0`. A new connector starts at `1.0.0`; another version is a warning.
+- Every file in a connector folder is published, so a change to any of them, the logo, the README and a comment in `connector.yaml` included, needs a higher `version`. The version never goes down, and going up more than one step (from `1.0.0` to anything but `1.0.1`, `1.1.0` or `2.0.0`) is a warning.
+- A change that can break a connection customers already made needs the next major version, such as `2.0.0` after `1.4.2`: changing or removing an `mcp.auth` option (any field counts, a header `label` included), removing an endpoint or changing its URL, in `mcp.endpoint` or `mcp.endpoints`, or adding an `mcp.config` field. Adding an auth option or an endpoint needs only a higher minor or patch version.
+- `connector.yaml` is compared by what it means, as the catalog publisher reads it, so comments and quoting don't count toward a major change, but types do: `pkce: "true"` is a change from `pkce: true`, while `endpoint: https://x.example` and `endpoint: "https://x.example"` are the same.
+
+[`connector-conformance-cases.json`](.github/scripts/skill-rules/connector-conformance-cases.json) has a case for each of these rules. Like the skill rules, they apply to every connector on every pull request; a warning can only come from a connector the pull request changes.
 
 The check is exact only for the base commit it ran on. Two pull requests that each pass on an older base can break the rules together, for example by both bumping a skill to the same version, so a later push to `main` can still fail. [`validate-skills-main.yml`](.github/workflows/validate-skills-main.yml) runs the check again after every push to `main` and reports such a break.
 
@@ -124,7 +134,9 @@ git fetch upstream main
 python3 .github/scripts/validate_skills.py --base-ref upstream/main
 ```
 
-Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
+The GitHub account lookup for `metadata.author` runs only with `--check-github-logins`, which the pull request check passes, and it needs a token in `GH_TOKEN` or `GITHUB_TOKEN`, such as `GH_TOKEN="$(gh auth token)"`. Without a token, each name it would look up is a warning.
+
+Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request; the YAML rules also have cases in [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json), which the unit tests run, and the connector version rules in [`connector-conformance-cases.json`](.github/scripts/skill-rules/connector-conformance-cases.json), which the script runs with the skill cases. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
 
 #### Test Your Skill
 
@@ -599,10 +611,13 @@ otherwise only reported on, such as one a bot opened, except a draft.
 
 The box names the version of the terms, the date at the end of `TERMS.md`, so
 each pull request records the version its partner accepted. One acceptance covers
-every later contribution from that partner, connector and skills alike, and a
-pull request that removes a connector needs no `contact_email`. A connector is a
-definition, not a tool, so no other checklist item applies unless the pull request
-also changes a skill.
+every later contribution from that partner, connector and skills alike. A
+connector is a definition, not a tool, so no other checklist item applies unless
+the pull request also changes a skill.
+
+The `validate-skills` check holds every connector to the connector versions in
+[Skill Publishing Rules](#skill-publishing-rules): a change to any of its files
+needs a higher `version`, and a connector is never removed, only deprecated.
 
 **Revising the terms (maintainers).** AWS Legal approves the new text and updates
 its record of the terms. One pull request then updates `TERMS.md`, its
