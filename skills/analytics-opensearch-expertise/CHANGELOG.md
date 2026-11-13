@@ -2,6 +2,10 @@
 
 All notable changes to the `analytics-opensearch-expertise` skill are documented here.
 
+## [2.6.3] - 2026-11-10
+- Added `aws-services` (`Amazon OpenSearch Service`) and `technical-domains` (`Analytics`), so catalogs list the skill under OpenSearch Service and Analytics.
+- `metadata.author` is the contributor's GitHub username, `genedragon`, so catalogs link to their profile. The README's Maintainers list uses it too.
+
 ## [2.6.2] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

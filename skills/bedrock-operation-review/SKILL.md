@@ -9,8 +9,8 @@ description: Comprehensive Amazon Bedrock review aligned with the AWS
   assessment", "review my Bedrock account", "Bedrock health check", "Bedrock cost
   optimization review", or "ORR for Bedrock".
 metadata:
-  author: smnixon
-  version: "1.0.2"
+  author: sean-nixon
+  version: "1.0.3"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock"
   aws-devops-agent-skills.technical-domains: "Machine Learning, GenAI"

@@ -2,6 +2,10 @@
 
 All notable changes to this skill are documented here. New entries go at the top.
 
+## [1.2.5] - 2026-11-10
+- Added the `AI/ML` technical domain, and changed `Amazon SageMaker` to `Amazon SageMaker AI` in `aws-services`: the training jobs and endpoints this skill diagnoses are SageMaker AI.
+- `metadata.author` is the contributor's GitHub username, `ams-thakkar`, so catalogs link to their profile.
+
 ## [1.2.4] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 
