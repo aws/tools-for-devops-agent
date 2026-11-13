@@ -5,7 +5,7 @@ metadata:
   author: tipuq, inesttia
   version: "1.0.2"
   aws-devops-agent-skills.agent-types: "CHAT"
-  aws-devops-agent-skills.aws-services: "Amazon CloudWatch, AWS CloudTrail"
+  aws-devops-agent-skills.aws-services: "AWS DevOps Agent, Amazon CloudWatch, AWS CloudTrail"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
 ---
 

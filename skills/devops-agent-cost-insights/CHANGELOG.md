@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.0.2
-- `aws-services` uses the approved names `Amazon CloudWatch` and `AWS CloudTrail`, and no longer lists `AIDevOps`, which isn't an AWS service name.
+- `aws-services` lists `AWS DevOps Agent`, the service this skill reports on, plus the approved names `Amazon CloudWatch` and `AWS CloudTrail`. It no longer lists `AIDevOps`, which is a metric namespace rather than a service name.
 - `metadata.author` uses the co-authors' GitHub usernames, `tipuq, inesttia`, so catalogs link to their profiles.
 
 ## 1.0.1
