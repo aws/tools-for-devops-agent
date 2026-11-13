@@ -43,6 +43,9 @@ import skill_checks as sc
 
 SKILLS_DIR = "skills"
 CONNECTORS_DIR = "connectors"
+CONNECTOR_FILE = "connector.yaml"
+MAX_CONNECTOR_FILE_BYTES = 32_768
+RELEASES_PATH = f"{CONNECTORS_DIR}/releases.yaml"
 RULES_DIR = Path(__file__).resolve().parent / "skill-rules"
 CONFORMANCE_FILE = "conformance-cases.json"
 DOCS_HINT = 'See the "Skill Publishing Rules" section of CONTRIBUTING.md.'
@@ -246,11 +249,11 @@ def retired_skills(repo_root: Path, base: str, present: set[str]) -> frozenset[s
 def connector_skill_references(repo_root: Path, rev: str) -> tuple[dict[str, list[str]], list[SkillResult]]:
     """Skill name -> the connectors whose connector.yaml lists it under skills: (recommended skills).
 
-    Also returns a warning for each connector.yaml that can't be read, isn't a
-    mapping, has a skills: value that isn't a list of skill names, or writes
-    skills: more than once, so a broken file doesn't silently skip the check. The YAML is composed, not
-    constructed, so a value PyYAML can't build (a bad date, say) can't stop
-    the check.
+    Also returns an error for each connector.yaml, and for connectors/releases.yaml,
+    that isn't UTF-8 or that breaks the YAML rules of sc.read_yaml, since the
+    connectors are published from the same files. A connector.yaml that isn't a
+    mapping or has a skills: value that isn't a list of skill names gets a
+    warning, so a broken file doesn't silently skip the check.
     """
     listing = _git(repo_root, "ls-tree", "-r", "-z", "--full-tree", rev, "--", f"{CONNECTORS_DIR}/")
     files: list[tuple[str, str]] = []
@@ -259,58 +262,53 @@ def connector_skill_references(repo_root: Path, rev: str) -> tuple[dict[str, lis
             continue
         meta, _, raw_path = record.partition(b"\t")
         _, kind, oid = meta.decode("ascii").split(" ")
-        parts = _decode_path(raw_path).split("/")
-        if kind == "blob" and len(parts) == 3 and parts[2] == "connector.yaml":
-            files.append((parts[1], oid))
+        path = _decode_path(raw_path)
+        parts = path.split("/")
+        is_connector_file = len(parts) == 3 and parts[2] == CONNECTOR_FILE
+        if kind == "blob" and (is_connector_file or path == RELEASES_PATH):
+            files.append((path, oid))
     references: dict[str, list[str]] = {}
-    unreadable: list[SkillResult] = []
-    for (connector, _), data in zip(files, _read_blobs(repo_root, [oid for _, oid in files])):
-        try:
-            problem, skills = _recommended_skills(*_compose_connector(data.decode("utf-8")))
-        except (UnicodeDecodeError, yaml.YAMLError, RecursionError):
-            problem, skills = "can't be read as YAML, so its skills: list wasn't checked", []
-        if problem:
-            message = f"{problem} against deprecated skills"
-            path = f"{CONNECTORS_DIR}/{connector}/connector.yaml"
-            unreadable.append(SkillResult(path, [sc.Finding("warning", message)], is_skill=False, always_visible=True))
-        for skill in skills:
-            references.setdefault(skill, []).append(connector)
-    return references, unreadable
+    results: list[SkillResult] = []
+    for (path, _), data in zip(files, _read_blobs(repo_root, [oid for _, oid in files])):
+        root, findings = _read_connector_yaml(path, data)
+        if path != RELEASES_PATH and not findings:
+            problem, skills = _recommended_skills(root)
+            if problem:
+                findings.append(sc.Finding("warning", f"{problem} against deprecated skills"))
+            for skill in skills:
+                references.setdefault(skill, []).append(path.split("/")[1])
+        if findings:
+            results.append(SkillResult(path, findings, is_skill=False, always_visible=True))
+    return references, results
 
 
-def _compose_connector(text: str) -> tuple[yaml.Node | None, int]:
-    """The YAML node tree of a connector.yaml, with merge keys (<<) resolved, and how many skills: keys it writes.
-
-    No values are built. The count is taken before merging, since a merge can
-    supply skills: as well without the file being ambiguous.
-    """
-    loader = yaml.SafeLoader(text)
+def _read_connector_yaml(path: str, data: bytes) -> tuple[yaml.Node | None, list[sc.Finding]]:
+    """The YAML node tree of a file under connectors/, or None with an error for each problem."""
+    file_name = path.rsplit("/", 1)[-1]
+    if file_name == CONNECTOR_FILE and len(data) > MAX_CONNECTOR_FILE_BYTES:
+        message = f"{file_name} is {len(data):,} bytes; the limit is {MAX_CONNECTOR_FILE_BYTES:,}"
+        return None, [sc.Finding("error", message)]
     try:
-        root = loader.get_single_node()
-        written = 0
-        if isinstance(root, yaml.MappingNode):
-            written = sum(1 for key, _ in root.value if isinstance(key, yaml.ScalarNode) and key.value == "skills")
-            loader.flatten_mapping(root)
-        return root, written
-    finally:
-        loader.dispose()
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return None, [sc.Finding("error", f"{file_name} is not valid UTF-8", line=data.count(b"\n", 0, exc.start) + 1)]
+    root, problems = sc.read_yaml(text, file_name, first_line=1)
+    return root, [sc.Finding("error", message, line=line) for line, message in problems]
 
 
-def _recommended_skills(root: yaml.Node | None, written: int) -> tuple[str | None, list[str]]:
+def _recommended_skills(root: yaml.Node | None) -> tuple[str | None, list[str]]:
     """The skill names under a connector.yaml's skills: key, and what kept any of it from being checked."""
     if not isinstance(root, yaml.MappingNode):
         return "isn't a YAML mapping, so its skills: list wasn't checked", []
-    values = [value for key, value in root.value if isinstance(key, yaml.ScalarNode) and key.value == "skills"]
-    if not values:
+    skills_node = next((value for key, value in root.value if key.value == "skills"), None)
+    if skills_node is None:
         return None, []
-    if not isinstance(values[-1], yaml.SequenceNode):
+    if not isinstance(skills_node, yaml.SequenceNode):
         return "has a skills: value that isn't a list, so it wasn't checked", []
-    items = values[-1].value  # As in PyYAML, the last skills: key wins.
+    items = skills_node.value
     names = [item.value for item in items if isinstance(item, yaml.ScalarNode) and item.tag == sc.STR_TAG]
     if len(names) < len(items):
         return "has a skills: entry that isn't a skill name, so that entry wasn't checked", names
-    if written > 1:
-        return "has more than one skills: key, so only the last one was checked", names
     return None, names
 
 
@@ -342,8 +340,8 @@ def check_repository(
             history[name] = sc.check_history(name, base_trees.get(name), head_trees.get(name), rules, retired)
         for name in sorted(set(base_trees) - set(head_trees)):
             results.append(SkillResult(f"{SKILLS_DIR}/{name}", history[name], is_skill=False))
-    recommended, unreadable = connector_skill_references(repo_root, head_ref)
-    results += unreadable
+    recommended, connector_results = connector_skill_references(repo_root, head_ref)
+    results += connector_results
     for name in sorted(head_trees):
         findings, info = sc.check_skill(head_trees[name], rules)
         if base is not None:

@@ -19,6 +19,8 @@ sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 
 import skill_checks as sc  # noqa: E402
 
+YAML_CASES_FILE = ROOT / ".github" / "scripts" / "skill-rules" / "yaml-conformance-cases.json"
+
 RULES = sc.Rules(
     agent_types=frozenset({"GENERIC", "CHAT", "INCIDENT_RCA"}),
     vocabulary={
@@ -211,13 +213,104 @@ class FileAndYamlTests(CheckSkillTestCase):
         self.assertOneError(tree(skill_md(fm)), 'contains "---"', line=3)
 
     def test_directives_and_document_markers_are_rejected(self):
-        self.assertOneError(tree(b"---\n%YAML 1.1\n--- # start\n" + skill_md()[4:]), "directives (%)", also=("document markers",))
-        self.assertOneError(tree(skill_md(VALID_FRONTMATTER + "...\n")), "document markers", line=9)
+        self.assertOneError(tree(b"---\n%YAML 1.1\n--- # start\n" + skill_md()[4:]), "directives (%)", also=("document start markers",))
+        self.assertOneError(tree(skill_md(VALID_FRONTMATTER + "...\n")), "document end markers", line=9)
 
     def test_empty_frontmatter_is_named(self):
         for content in (b"---\n\n---\n# Demo\n", b"---\n---\n# Demo\n"):
             with self.subTest(content=content):
                 self.assertOneError(tree(content), "the frontmatter is empty")
+
+
+class ReadYamlTests(unittest.TestCase):
+    def messages(self, text: str) -> list[str]:
+        return [message for _, message in sc.read_yaml(text, "connector.yaml", first_line=1)[1]]
+
+    def test_shared_yaml_cases_give_their_expected_results(self):
+        cases = json.loads(YAML_CASES_FILE.read_text(encoding="utf-8"))["cases"]
+        self.assertTrue(cases)
+        ids = [case["id"] for case in cases]
+        self.assertEqual(len(ids), len(set(ids)))
+        for case in cases:
+            with self.subTest(case["id"]):
+                self.assertIn(case["expect"], ("pass", "fail"))
+                if case["expect"] == "fail":
+                    self.assertIsInstance(case.get("error"), str)
+                    self.assertTrue(case["error"])
+                messages = self.messages(case["yaml"])
+                if case["expect"] == "pass":
+                    self.assertEqual(messages, [])
+                else:
+                    self.assertTrue(any(case["error"] in message for message in messages), messages)
+
+    def test_problems_are_reported_on_file_lines(self):
+        root, problems = sc.read_yaml("a: 1\nb: !!str x\n", "the frontmatter", first_line=2)
+        self.assertIsNone(root)
+        self.assertEqual(problems, [(3, "the frontmatter uses tags (! or !!), which is not allowed")])
+        for text, line in (('a: "x\n  \\uD800"\n', 2), ("a: 1\nb: [x,\n  y]\n", 2), ("a:\n  b: 1\n  b: 2\n", 3)):
+            with self.subTest(text=text):
+                self.assertEqual([line for line, _ in sc.read_yaml(text, "connector.yaml", first_line=1)[1]], [line])
+
+    def test_numbers_are_typed_alike_only_within_the_safe_range(self):
+        for value in ("9007199254740991", "-9007199254740991", "0.0001", "-1.5", "123456789012345.6"):
+            with self.subTest(accepts=value):
+                self.assertEqual(self.messages(f"a: {value}\n"), [])
+        for value in ("9007199254740992", "0.00009", "2.0", "-0.0", "1" * 5000):
+            with self.subTest(rejects=value[:20]):
+                (message,) = self.messages(f"a: {value}\n")
+                self.assertIn("don't all read as the same type", message)
+
+    def test_numbers_only_yaml_12_parsers_read_are_rejected_too(self):
+        for value in ("1_0e3", "0o1_0", "._5"):
+            with self.subTest(value=value):
+                self.assertIn("the same type", self.messages(f"a: {value}\n")[0])
+                self.assertIn("keys must be plain text", self.messages(f"{value}: a\n")[0])
+
+    def test_a_lone_dash_in_a_flow_collection_is_rejected_unless_a_colon_follows_it(self):
+        for text in ("k: [a, -]\n", "k: {a: -}\n", "k: {-}\n"):
+            with self.subTest(text=text):
+                self.assertIn("is a lone -", self.messages(text)[0])
+        for text in ("k: {-: v}\n", "k: [-: v]\n", "k: [-a]\n"):
+            with self.subTest(text=text):
+                self.assertEqual(self.messages(text), [])
+
+    def test_a_quoted_value_line_is_indented_past_the_collection_that_holds_it(self):
+        rejected = {"k:\n  j: \"a\n  b\"\n": 3, "k:\n  - 'a\n  b'\n": 3, "k:\n- \"a\nb\"\n": 3, "k: \"a\n\t\n b\"\n": 2}
+        for text, line in rejected.items():
+            with self.subTest(text=text):
+                ((problem_line, message),) = sc.read_yaml(text, "connector.yaml", first_line=1)[1]
+                self.assertEqual(problem_line, line)
+                self.assertIn("isn't indented past its key or list item", message)
+        for text in ("k:\n  j: \"a\n   b\"\n", "k:\n- \"a\n b\"\n", "\"a\nb\"\n", "k: \"a\n\n b\"\n", "k: \"a\n \t\n b\"\n"):
+            with self.subTest(text=text):
+                self.assertEqual(self.messages(text), [])
+
+    def test_block_scalar_lines_are_measured_from_the_collection_that_holds_it(self):
+        self.assertIn("less than a blank line", self.messages("a:\n  b: |\n     \n   # c\n  c: 1\n")[0])
+        self.assertEqual(self.messages("a:\n  b: |\n     \n  # c\n  c: 1\n"), [])
+        self.assertEqual(self.messages("a:\n  - >+\n\n  "), [])
+        self.assertIn("no line break after it", self.messages("a: >+\n\n  ")[0])
+        for text in ("a: |\n  x\n   ", "a: |+\n  x\n  "):
+            with self.subTest(text=text):
+                self.assertIn("no line break after it", self.messages(text)[0])
+        for text in ("a: |\n  x\n  ", "a: |+\n  x\n ", "a: |-\n  x\n   ", "a: |\n\n  "):
+            with self.subTest(text=text):
+                self.assertEqual(self.messages(text), [])
+
+    def test_deep_nesting_stops_the_scan_at_the_limit(self):
+        for text in ("a: " + "[" * 20000, "a: " + "{" * 20000):
+            with self.subTest(text=text[:5]):
+                self.assertEqual(self.messages(text), ["connector.yaml is nested too deeply; the limit is 64 levels"])
+        self.assertEqual(self.messages("a: " + "[" * 63 + "x" + "]" * 63 + "\n"), [])
+        self.assertIn("nested too deeply", self.messages("a: " + "[" * 64 + "x" + "]" * 64 + "\n")[0])
+
+    def test_an_empty_key_is_named(self):
+        self.assertEqual(self.messages("? \n: v\n"), ["connector.yaml keys must be plain text, not empty"])
+
+    def test_an_escape_past_the_last_unicode_character_is_a_problem_not_a_crash(self):
+        for escape in ("\\U00110000", "\\UFFFFFFFF"):
+            with self.subTest(escape=escape):
+                self.assertIn("escape past U+10FFFF", self.messages(f'a: "{escape}"\n')[0])
 
 
 class NameTests(CheckSkillTestCase):
@@ -274,7 +367,7 @@ class DescriptionAndTitleTests(CheckSkillTestCase):
     def test_title_limit_and_single_line(self):
         fm = VALID_FRONTMATTER + f"title: {'T' * 101}\n"
         self.assertOneError(tree(skill_md(fm)), '"title" is 101 characters; the limit is 100')
-        fm = VALID_FRONTMATTER + "title: |\n  Two\n  lines\n"
+        fm = VALID_FRONTMATTER.replace("metadata:\n", "title: |\n  Two\n  lines\nmetadata:\n")
         self.assertOneError(tree(skill_md(fm)), '"title" must be a single line')
 
 
@@ -288,7 +381,7 @@ class MetadataTests(CheckSkillTestCase):
         self.assertOneError(tree(skill_md(fm)), '"metadata" must be a mapping', line=4)
 
     def test_metadata_values_must_be_strings(self):
-        fm = frontmatter_with(version="1.0")
+        fm = frontmatter_with(version="1.5")
         error = self.assertOneError(tree(skill_md(fm)), '"metadata.version" must be text, not a number', line=6)
         self.assertIn("quotes", error.message)
 
@@ -487,15 +580,17 @@ class LimitsAndTierTests(CheckSkillTestCase):
         error = self.assertOneError(tree(skill_md(frontmatter_with(author=""))), '"metadata.author" has no value')
         self.assertNotIn("remove the key", error.message)
 
-    def test_special_yaml_values_are_named(self):
-        fm = frontmatter_with().replace("metadata:\n", "license: =\nmetadata:\n")
-        self.assertOneError(tree(skill_md(fm)), '"license" must be text, not a special YAML value')
+    def test_unquoted_merge_and_value_indicators_are_rejected(self):
+        for value in ("=", "<<"):
+            with self.subTest(value=value):
+                fm = frontmatter_with().replace("metadata:\n", f"license: {value}\nmetadata:\n")
+                self.assertOneError(tree(skill_md(fm)), f"the unquoted value {value}, which YAML parsers", line=4)
 
     def test_values_other_parsers_read_as_numbers_must_be_quoted(self):
         for value in ("1e3", "-1.0e3", "+.5", "0o17", "+0o17", "1_0e3", "._5", "1_0.5e3"):
             with self.subTest(value=value):
                 fm = frontmatter_with().replace("metadata:\n", f"title: {value}\nmetadata:\n")
-                self.assertOneError(tree(skill_md(fm)), "other YAML parsers read")
+                self.assertOneError(tree(skill_md(fm)), "don't all read as the same type")
         fm = frontmatter_with().replace("metadata:\n", 'title: "1e3"\nmetadata:\n')
         self.assertEqual(self.errors(tree(skill_md(fm))), [])
 
