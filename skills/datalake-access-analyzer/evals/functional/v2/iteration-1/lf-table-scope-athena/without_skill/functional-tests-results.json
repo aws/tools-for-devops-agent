@@ -1,0 +1,70 @@
+{
+  "version": "v2",
+  "iteration": 1,
+  "eval_id": "lf-table-scope-athena",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to diagnose a specific root cause: a catalog/database-level Lake Formation grant that lacks table-level SELECT permission (a scope mismatch), and to recommend granting table-level SELECT plus DESCRIBE on the database. The agent's actual response takes a completely different diagnostic path: it claims the 'sales' table doesn't exist anywhere in the catalog, that zero Lake Formation permissions exist account-wide, that the analytics IAM role has no policies attached at all, and that there's an S3/KMS registration failure for the data bucket. None of these match the expected diagnosis of a catalog-vs-table grant scope mismatch. The agent never identifies a database-level grant missing table-level SELECT, nor does it recommend granting table-level SELECT and DESCRIBE specifically to resolve a scope mismatch. The conclusions reached are substantively different from and inconsistent with the expected output criteria.",
+      "evidence": "\"The `sales` table doesn't exist in this catalog... Zero Lake Formation permissions exist account-wide... The analytics role has no IAM policies attached at all... The Lake Formation service role can't read the likely data bucket.\" vs expected: \"detects a catalog/database-level grant that lacks table-level SELECT (a catalog-vs-table scope mismatch), and recommends granting table-level SELECT plus DESCRIBE on the database.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response walks the authorization chain in order rather than guessing a single cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response is structured as a numbered chain: '1. The sales table doesn't exist...', '2. Zero Lake Formation permissions exist account-wide...', '3. The analytics role has no IAM policies attached at all.', '4. The Lake Formation service role can't read the likely data bucket.' This walks through the authorization chain (catalog/table existence, LF permissions, IAM policies, S3/KMS access) in order rather than asserting a single cause.",
+          "reasoning": "The output explicitly enumerates multiple layers of the access chain in sequence, investigating each rather than jumping to one guessed cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "It identifies the breaking layer as the Lake Formation grant scope (database-level grant without table-level SELECT)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'Zero Lake Formation permissions exist account-wide. list_permissions came back completely empty \u2014 no grants to anyone, on anything' and does not mention a database-level grant without table-level SELECT scope issue.",
+          "reasoning": "The agent found no LF permissions existed at all, not a scope mismatch between database-level and table-level grants. This is a different root cause than the one asserted.",
+          "confidence": "high"
+        },
+        {
+          "text": "It recommends a concrete corrective grant (table-level SELECT, and DESCRIBE on the database)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The recommendation given is 'Grant LF SELECT/DESCRIBE explicitly on the real table to that role's exact ARN' once the real table is identified, but this is not framed as a fix for a database-vs-table scope mismatch, and DESCRIBE on the database specifically is not clearly separated out.",
+          "reasoning": "While SELECT and DESCRIBE are mentioned together as a bundled recommendation on the table, the assertion specifically wants table-level SELECT plus DESCRIBE on the database as a correction to a scope-level grant error, which isn't the issue identified or the exact recommendation given.",
+          "confidence": "high"
+        },
+        {
+          "text": "It notes that a Lake Formation grant alone does not guarantee access when the scope is wrong",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says the grant 'likely silently failed or targeted the wrong principal/table' and that 'list_permissions came back completely empty' \u2014 this points to the grant not existing or targeting wrong principal, not to a scope issue where a grant exists but is insufficient in scope.",
+          "reasoning": "The assertion is about scope being wrong (e.g., database grant without table SELECT) causing failure despite a grant existing. The agent's finding is that no grant exists at all, which is a different claim than 'a grant exists but has wrong scope so access fails anyway.'",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.25
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m31s",
+    "cost": "$1.26",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "skill_name": "datalake-access-analyzer",
+  "evals": [
+    {
+      "id": "lf-table-scope-athena",
+      "task_type": "chat",
+      "prompt": "My analytics role gets access denied querying the sales table in Athena even though I granted it in Lake Formation. What's missing?",
+      "expected_output": "A diagnosis that walks the Lake Formation grant layer, detects a catalog/database-level grant that lacks table-level SELECT (a catalog-vs-table scope mismatch), and recommends granting table-level SELECT plus DESCRIBE on the database.",
+      "should_trigger": true,
+      "assertions": [
+        "The response walks the authorization chain in order rather than guessing a single cause",
+        "It identifies the breaking layer as the Lake Formation grant scope (database-level grant without table-level SELECT)",
+        "It recommends a concrete corrective grant (table-level SELECT, and DESCRIBE on the database)",
+        "It notes that a Lake Formation grant alone does not guarantee access when the scope is wrong"
+      ]
+    },
+    {
+      "id": "cross-account-share-invisible",
+      "task_type": "chat",
+      "prompt": "A consumer account can't see the shared Glue database we shared through Lake Formation.",
+      "expected_output": "A diagnosis covering the cross-account share chain: the producer's cross-account Lake Formation grant, acceptance of the AWS RAM resource share in the consumer, the Data Catalog resource policy, and the resource link in the consumer account.",
+      "should_trigger": true,
+      "assertions": [
+        "The response checks whether the AWS RAM resource share was accepted in the consumer account",
+        "It checks the Data Catalog (Glue) resource policy permits the consumer",
+        "It checks for a resource link in the consuming account",
+        "It names which part of the cross-account chain is missing rather than giving a generic answer"
+      ]
+    },
+    {
+      "id": "granted-but-unlinked",
+      "task_type": "chat",
+      "prompt": "We granted Lake Formation permission on the table but queries still fail with not authorized.",
+      "expected_output": "A diagnosis that ranks the most likely causes: a missing lakeformation:GetDataAccess IAM permission (with Resource '*'), a grant-scope mismatch, or a missing resource link (granted-but-unlinked).",
+      "should_trigger": true,
+      "assertions": [
+        "The response considers that lakeformation:GetDataAccess may be missing from the querying identity's IAM policy",
+        "It notes the GetDataAccess policy Resource must be '*'",
+        "It considers a granted-but-unlinked resource link as a cause",
+        "It does not stop at the Lake Formation grant, since the grant is already present"
+      ]
+    },
+    {
+      "id": "emr-governed-table",
+      "task_type": "chat",
+      "prompt": "EMR Spark job fails reading a governed table with insufficient Lake Formation permissions.",
+      "expected_output": "A diagnosis that the EMR execution role (not the submitting user) must hold lakeformation:GetDataAccess with Resource '*', walking Lake Formation, IAM, S3, and KMS layers.",
+      "should_trigger": true,
+      "assertions": [
+        "The response identifies the EMR execution role as the identity that needs lakeformation:GetDataAccess, not the submitting user",
+        "It contrasts this with Athena, where the caller needs GetDataAccess",
+        "It recommends adding lakeformation:GetDataAccess (Resource '*') to the execution role"
+      ]
+    },
+    {
+      "id": "negative-unrelated-lambda",
+      "task_type": "chat",
+      "prompt": "My Lambda function is timing out after 3 seconds.",
+      "should_trigger": false
+    }
+  ]
+}
