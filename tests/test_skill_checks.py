@@ -453,11 +453,16 @@ class LimitsAndTierTests(CheckSkillTestCase):
         self.assertEqual(self.errors(tree(skill_md(frontmatter_with(version=long_version)))), [])
 
     def test_tier_values(self):
-        for good in ('"aws-managed"', '"partner-managed"'):
+        for good in ('"aws-managed"', '"aws-support-managed"', '"partner-managed"'):
             with self.subTest(good=good):
                 self.assertEqual(self.errors(tree(skill_md(frontmatter_with(tier=good)))), [])
-        self.assertOneError(tree(skill_md(frontmatter_with(tier='"community"'))), '"metadata.tier" must be')
-        self.assertOneError(tree(skill_md(frontmatter_with(tier='"AWS-managed"'))), '"metadata.tier" must be')
+        self.assertOneError(
+            tree(skill_md(frontmatter_with(tier='"community"'))),
+            '"metadata.tier" must be "aws-managed", "aws-support-managed" or "partner-managed"',
+        )
+        for bad in ('"AWS-managed"', '"aws-support"', '"AWS-Support-managed"'):
+            with self.subTest(bad=bad):
+                self.assertOneError(tree(skill_md(frontmatter_with(tier=bad))), '"metadata.tier" must be')
 
     def test_spec_text_fields_must_not_be_empty(self):
         for key in ("license", "compatibility", "allowed-tools"):

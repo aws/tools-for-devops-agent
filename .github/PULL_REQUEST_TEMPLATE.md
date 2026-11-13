@@ -66,6 +66,18 @@ before this check existed" in CONTRIBUTING.md.
 
 <!-- The validate-skills check verifies the SKILL.md frontmatter, the files a skill publishes and its version history automatically; see "Skill Publishing Rules" in CONTRIBUTING.md. -->
 
+<!--
+REVIEWERS: if this PR sets a skill's `metadata.tier` to `aws-support-managed`,
+a maintainer confirms, through AWS Support's internal ownership process, that
+the named owner or team has accepted ongoing AWS Support maintenance of the
+skill. Look the record up by this pull request's URL, and don't post internal
+task numbers or links here. Once confirmed, add the
+`aws-support-managed-verified` label or leave a comment saying it was verified.
+Who opened the pull request isn't the test: a maintainer may open it on the
+owner's behalf. The validate-skills check accepts the value from anyone, so this
+verification is what stops a wrong claim.
+-->
+
 - [ ] `SKILL.md` frontmatter is valid: `name` matches the directory, `description` present and within length limits, body at most 500 lines.
 - [ ] The `description` is written from the agent's point of view — scenarios, services, error types, symptoms.
 - [ ] Scoped to a specific agent type in `metadata.aws-devops-agent-skills.agent-types` (`INCIDENT_RCA`, `INCIDENT_TRIAGE`, `INCIDENT_MITIGATION`, …), not left `GENERIC` without reason.
