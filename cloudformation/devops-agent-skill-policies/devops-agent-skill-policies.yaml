@@ -34,6 +34,7 @@ Metadata:
           - EnableSageMakerAIOpsReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
+          - EnableBedrockKbDiagnosis
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -202,6 +203,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableBedrockKbDiagnosis:
+    Type: String
+    Description: Bedrock Knowledge Base Diagnosis skill (adds bedrock:GetIngestionJob and s3:ListBucket/GetBucketLocation for source checks).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -219,6 +226,7 @@ Conditions:
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
+  SkillBedrockKbDiagnosis: !Equals [!Ref EnableBedrockKbDiagnosis, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -724,6 +732,31 @@ Resources:
             Effect: Allow
             Action:
               - route53-recovery-cluster:ListRoutingControls
+            Resource: '*'
+
+  # bedrock-kb-diagnosis: adds bedrock:GetIngestionJob (the only call that names a file dropped
+  # at intake) and s3:ListBucket/GetBucketLocation for source-bucket staleness and file checks.
+  # The managed policy allows s3:ListBucket only for the AWSLogs/* prefix.
+  PolicyBedrockKbDiagnosis:
+    Type: AWS::IAM::Policy
+    Condition: SkillBedrockKbDiagnosis
+    Properties:
+      PolicyName: DevOpsAgentSkill-BedrockKbDiagnosis
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BedrockGetIngestionJob
+            Effect: Allow
+            Action:
+              - bedrock:GetIngestionJob
+            Resource: '*'
+          - Sid: SourceBucketListing
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
             Resource: '*'
 
 Outputs:
