@@ -1,6 +1,6 @@
 # Set up Coralogix
 
-Before you connect, choose your Coralogix region and either OAuth sign-in or a personal or team API key. If you want Coralogix alerts to open investigations, also do step 3 after you connect.
+Before you connect, choose your Coralogix region and either OAuth sign-in or a personal or team API key. If your Coralogix team uses IP access allowlisting, you must add the AWS DevOps Agent source IP addresses for your Agent Space's Region to the allowlist; see [section 3](#3-configure-network-access). If you want Coralogix alerts to open investigations, also do step 4 after you connect.
 
 ## 1. Find your region
 
@@ -38,7 +38,13 @@ Use a personal or team key, not a Send-Your-Data (ingestion) key. A personal key
 
 Ensure the API key has the permissions required by the tools you want to use. For example, to use the Alerts tools, select **Alerts** in **Role Presets**.
 
-## 3. Trigger investigations from alerts
+## 3. Configure network access
+
+If your Coralogix team has IP access allowlisting enabled, add the AWS DevOps Agent public source IP addresses for the AWS Region hosting your Agent Space before connecting. Otherwise, DevOps Agent cannot reach the Coralogix MCP endpoint.
+
+Use the complete regional list in the [AWS DevOps Agent network connectivity documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security.html#network-connectivity), rather than allowlisting only an individual IP observed in a request. In Coralogix, manage these entries in **Settings** > **Login access policy** > **IP access**; see [Login access policy](https://coralogix.com/docs/user-guides/account-management/user-management/login-access-policy/).
+
+## 4. Trigger investigations from alerts
 
 To automatically start an AWS DevOps Agent investigation when a Coralogix alert fires, use the webhook URL, API key, and request body that AWS DevOps Agent provides for your Agent Space.
 
