@@ -68,10 +68,14 @@ before this check existed" in CONTRIBUTING.md.
 
 <!--
 REVIEWERS: if this PR sets a skill's `metadata.tier` to `aws-support-managed`,
-check that AWS Support maintains the skill: the pull request's author and the
-named owner are part of AWS Support. Catalogs show the tier as a label, and the
-validate-skills check accepts the value from anyone, so review is the only thing
-that stops a wrong claim.
+a maintainer confirms, through AWS Support's internal ownership process, that
+the named owner or team has accepted ongoing AWS Support maintenance of the
+skill. Look the record up by this pull request's URL, and don't post internal
+task numbers or links here. Once confirmed, add the
+`aws-support-managed-verified` label or leave a comment saying it was verified.
+Who opened the pull request isn't the test: a maintainer may open it on the
+owner's behalf. The validate-skills check accepts the value from anyone, so this
+verification is what stops a wrong claim.
 -->
 
 - [ ] `SKILL.md` frontmatter is valid: `name` matches the directory, `description` present and within length limits, body at most 500 lines.
