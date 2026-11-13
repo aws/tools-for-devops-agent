@@ -1,0 +1,77 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "bizctx-recent-change-correlation",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies the technical root cause as a connection storm: ~90 idle admin sessions from the bastion filling all writer connection slots, confirmed via DatabaseConnections metrics (jump to 90, threshold 70) and Performance Insights (Threads_connected jumping from 7 to 97 while db.load stayed at 0). It explicitly checks for and finds a recent change - the CloudTrail ModifyDBClusterParameterGroup / ModifyDBCluster calls by example-session at 23:17:19Z/23:17:21Z switching to example-cluster-params - and places it in time relative to the incident (the connection spike at 23:20-23:21, about 2 minutes after the 23:18 switch), correlating multiple historical occurrences of this pattern. The summary also discusses gaps around business impact (no application telemetry for dependent services like checkout-service, order-history-api, analytics-etl) which aligns with the expected output's requirement to cover affected services/cost/compliance as findings or gaps - here it's acknowledged as a gap rather than a finding, which still satisfies 'findings or gaps' in the expected criteria. All key elements match: connection storm root cause, metrics-based detection, recent-change correlation via CloudTrail, and business impact addressed (even if as gaps).",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response checks AWS Config history or CloudTrail for recent changes to the cluster or its parameter group",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "CloudTrail shows user example-session calling ModifyDBClusterParameterGroup on example-cluster-params at 23:17:19Z, then ModifyDBCluster on example-cluster at 23:17:21Z... RDS events show example-cluster switching to DB cluster parameter group example-cluster-params at 17:27, 18:30...",
+          "reasoning": "The investigation explicitly cites CloudTrail API calls (ModifyDBClusterParameterGroup, ModifyDBCluster) and RDS events showing parameter group history, demonstrating a check of recent changes via CloudTrail and RDS event history (functionally AWS Config-like change history).",
+          "confidence": "high"
+        },
+        {
+          "text": "Any recent change found is placed in time relative to the incident start, or the response says no change was found",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The latest switch, at 23:18:53, happened about 1 minute before the 23:20 connection spike.\" and the alarm fired at 2026-11-13T23:21:46Z, with Threads_connected jumping 'about 2 min after the 23:18 switch.'",
+          "reasoning": "The change (parameter group switch at 23:18:53) is explicitly placed in time relative to the alarm/incident start (23:20-23:21), satisfying the requirement to temporally correlate the change with the incident.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary covers all four business-impact categories, in the symptom description, findings or gaps: affected services, cost or SLA impact, compliance exposure, and recent changes",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The summary covers cause, hypotheses, and recent changes (parameter group swaps) extensively, but under 'Gaps' it states: 'There is no telemetry for checkout-service, order-history-api or analytics-etl, so whether any of them actually failed to connect couldn't be checked.' There is no mention of cost impact or SLA impact, and no mention of compliance exposure anywhere in the summary.",
+          "reasoning": "While affected services (dependent services) and recent changes are discussed, there is no coverage of cost/SLA impact or compliance exposure in the summary - these categories are entirely absent, not even labeled as unverified in a dedicated way beyond the services gap.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary identifies the cluster parameter group change made shortly before the alarm as a recent change",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Manual parameter group change by example-session at 23:17 UTC: CloudTrail shows user example-session calling ModifyDBClusterParameterGroup on example-cluster-params at 23:17:19Z, then ModifyDBCluster on example-cluster at 23:17:21Z to attach that group.' and 'The latest switch, at 23:18:53, happened about 1 minute before the 23:20 connection spike.'",
+          "reasoning": "The summary explicitly identifies the cluster parameter group change as a recent change closely preceding the alarm, and ties it causally (via hypothesis) to the connection spike.",
+          "confidence": "high"
+        },
+        {
+          "text": "Business-context tags such as DependentServices or RevenuePerMinute are cross-checked against evidence or labeled unverified, not repeated at face value",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The summary mentions 'checkout-service, order-history-api or analytics-etl' only in a Gaps note stating 'There is no telemetry for... so whether any of them actually failed to connect couldn't be checked.' There is no mention of DependentServices or RevenuePerMinute tags, nor any explicit cross-check or labeling of such tags as unverified elsewhere.",
+          "reasoning": "The assertion expects business-context tags like DependentServices/RevenuePerMinute to be explicitly cross-checked against evidence or labeled unverified. The summary does mention three dependent service names and flags lack of telemetry as a gap, which could be seen as a partial labeling as unverified, but there's no explicit reference to tags named 'DependentServices' or 'RevenuePerMinute', nor any cost/revenue figures being checked or dismissed. The business-context tag handling for cost/revenue is entirely absent, so this is not satisfied in full as asserted.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m6s",
+    "cost": "$3.04",
+    "context_window": {
+      "utilization": "8.8%",
+      "compaction_count": 0
+    }
+  }
+}

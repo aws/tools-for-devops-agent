@@ -42,13 +42,14 @@
         {
             "id": "bizctx-recent-change-correlation",
             "task_type": "investigation",
-            "prompt": "Investigate the Aurora MySQL cluster in us-west-2. Assume connections spiked and writes started failing about an hour ago. Find the technical cause, check whether a recent change could explain it, and tell me the business impact: who is affected, what it costs, and any compliance exposure.",
-            "expected_root_cause": "The technical root cause from metrics and logs, plus a recent-change check using AWS Config history and CloudTrail events such as ModifyDBClusterParameterGroup or ModifyDBCluster, ranked by proximity to the incident start time.",
+            "prompt": "The connections-high alarm is firing on the Aurora MySQL cluster in us-west-2. Find the technical cause, check whether a recent change could explain it, and tell me the business impact: who is affected, what it costs, and any compliance exposure.",
+            "expected_root_cause": "A connection storm exhausting the writer's connections, found from DatabaseConnections metrics and Performance Insights, plus a recent-change check that finds the cluster parameter group change made shortly before the alarm (CloudTrail ModifyDBClusterParameterGroup or AWS Config history), placed in time relative to the incident start. The summary also covers affected services, cost or SLA impact, and compliance exposure as findings or gaps.",
             "should_trigger": true,
             "assertions": [
                 "The response checks AWS Config history or CloudTrail for recent changes to the cluster or its parameter group",
                 "Any recent change found is placed in time relative to the incident start, or the response says no change was found",
-                "The investigation summary includes business impact (who is affected, cost, or compliance exposure), not only technical findings",
+                "The investigation summary covers all four business-impact categories, in the symptom description, findings or gaps: affected services, cost or SLA impact, compliance exposure, and recent changes",
+                "The investigation summary identifies the cluster parameter group change made shortly before the alarm as a recent change",
                 "Business-context tags such as DependentServices or RevenuePerMinute are cross-checked against evidence or labeled unverified, not repeated at face value"
             ],
             "additional_permissions_file": "evals/additional-permissions.json"
@@ -71,6 +72,21 @@
                     "pattern": "\\b\\d{12}\\b",
                     "match": "absent"
                 }
+            ]
+        },
+        {
+            "id": "bizctx-compliance-availability",
+            "task_type": "chat",
+            "prompt": "Our Aurora PostgreSQL cluster has been unavailable for 25 minutes and the customer portal can't load accounts. The cluster is tagged Compliance=GDPR and DataClassification=PersonalData. Answer here in chat: what's the business impact, and do we have a reporting deadline?",
+            "expected_output": "A Business Impact section with all four lines. The Compliance exposure line names GDPR and its window (72 hours to the supervisory authority) as conditional on the incident being assessed as a personal data breach, for the compliance owner to decide. It doesn't say the deadline is running and doesn't say it is ruled out because this is only an availability incident.",
+            "should_trigger": true,
+            "assertions": [
+                "The Compliance exposure line names GDPR because the cluster is tagged with it",
+                "The response presents the GDPR reporting window as conditional on a breach determination by the compliance owner or a similar role",
+                "The response does not state that a reporting deadline is running or has started",
+                "The response does not state that no reporting deadline applies because the incident is only an outage or loss of availability",
+                "The response does not apply a framework other than GDPR, such as PCI-DSS, HIPAA, or SOC 2",
+                "The response includes a Business Impact section with all four lines: dependent services, estimated cost, compliance exposure, and recent changes"
             ]
         },
         {

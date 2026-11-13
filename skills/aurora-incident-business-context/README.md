@@ -15,9 +15,9 @@ and what does it cost us."
 DevOps Agent's built-in investigation tools (CloudWatch, Performance
 Insights, RDS/Aurora logs) answer *what* is technically wrong. This skill
 adds the *business* half of the incident report: which teams/services are
-affected, a defensible dollar estimate of downtime cost, whether a
-compliance reporting clock has started, and whether a recent change
-correlates with the incident.
+affected, a defensible dollar estimate of downtime cost, which compliance
+reporting obligations could apply (for the compliance owner to assess), and
+whether a recent change correlates with the incident.
 
 It is evidence-driven, not generative — it tells the agent **where to look**
 (resource tags, AWS Config history, CloudTrail, customer-supplied
@@ -31,11 +31,14 @@ asks the operator, rather than guessing.
 For the skill to find real evidence (rather than reporting gaps), the
 target account should have some of the following in place:
 
-- **IAM permissions** on the DevOps Agent operator/investigation role:
-  `rds:ListTagsForResource`, `resourcegroupstaggingapi:GetResources`,
-  `config:GetResourceConfigHistory`, `cloudtrail:LookupEvents` (all
-  read-only; covered by most existing DevOps Agent IAM policies, no extra
-  policy typically required — confirm against `AIDevOpsAgentAccessPolicy`).
+- **IAM permissions** on the DevOps Agent role. All four are read-only.
+  `AIDevOpsAgentAccessPolicy` already covers `rds:ListTagsForResource`,
+  `tag:GetResources` and `cloudtrail:LookupEvents`. It doesn't cover
+  `config:GetResourceConfigHistory`, which the recent-change check uses. Add
+  it with the `EnableAuroraIncidentBusinessContext` parameter of
+  [`devops-agent-skill-policies.yaml`](../../cloudformation/devops-agent-skill-policies/).
+  Without it, the skill falls back to CloudTrail and says that Config
+  history wasn't readable.
 - **Resource tags** on the Aurora/RDS resource, e.g. `DependentServices`,
   `OnCallTeam`, `RevenuePerMinute`, `SLAThresholdMinutes`,
   `DataClassification`, `Compliance`. None are required for the skill to
@@ -58,10 +61,11 @@ You can also invoke it on demand in chat, e.g.:
 ## Origin
 
 Adapted from the business-context enrichment logic prototyped in the
-[Aurora MySQL Incident Investigation with AWS DevOps Agent](https://github.com/aws-samples/sample-aws-genai-ops-demos/tree/main/observability/aurora-mysql-incident-investigation-devops-agent)
-demo (GenAI Ops Demo Library). That demo originally shipped this as a
+Aurora MySQL Incident Investigation with AWS DevOps Agent demo (GenAI Ops
+Demo Library), currently proposed in
+[aws-samples/sample-aws-genai-ops-demos#95](https://github.com/aws-samples/sample-aws-genai-ops-demos/pull/95). That demo originally shipped this as a
 Lambda-backed mock MCP server returning synthetic example data
-(fictional dependency graph, a fixed $5,100/min figure, canned compliance
+(fictional dependency graph, a fixed revenue figure, canned compliance
 thresholds) for demonstration purposes. This skill generalizes that same
 reasoning into an evidence-based framework suitable for real accounts,
 with no infrastructure to deploy.

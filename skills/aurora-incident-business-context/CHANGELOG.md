@@ -19,3 +19,13 @@
   marked provisional when the incident is unconfirmed.
 - The SLA result (breached, or minutes remaining) on the Estimated cost
   line, with `SLAPenaltyUsd` applied when the SLA is breached.
+- The agent never states whether a compliance reporting deadline has started
+  or doesn't apply. It names tagged frameworks and their windows "if assessed
+  as a breach, for the compliance owner to decide".
+- Fallback to CloudTrail when `config:GetResourceConfigHistory` is denied,
+  plus the `EnableAuroraIncidentBusinessContext` parameter in
+  `devops-agent-skill-policies.yaml` that grants it.
+- AWS account IDs are never written in a response, including in sentences
+  and quoted ARNs.
+- In investigations, each unconfirmed business-impact line is also written as
+  an "Investigation gap" item, the form the generated summary keeps.

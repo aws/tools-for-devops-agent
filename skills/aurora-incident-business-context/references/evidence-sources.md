@@ -7,9 +7,9 @@ Detailed lookup reference for each business-context category. Kept out of
 
 | Evidence source | How to query | Notes |
 |---|---|---|
-| Resource tags | `aws rds list-tags-for-resource --resource-name <arn>` or `resourcegroupstaggingapi:GetResources` | Look for `DependentServices`, `Owner`, `Criticality`, `OnCallTeam` |
+| Resource tags | `rds:ListTagsForResource` on the cluster/instance ARN, or `tag:GetResources` filtered by tag key | Look for `DependentServices`, `Owner`, `Criticality`, `OnCallTeam` |
 | Customer dependency map | Operator-supplied CMDB export / architecture doc / JSON config | Treat as authoritative for the session; don't assume it's current |
-| Network evidence | VPC Flow Logs, security group references, `SHOW PROCESSLIST` / Performance Insights top callers | Weakest signal — shows *what connects*, not *criticality* |
+| Connection evidence | Performance Insights `pi:DescribeDimensionKeys` grouped by `db.host`, `db.user`, or `db.application`; VPC Flow Logs; security group references | Weakest signal: shows *what connects*, not *criticality* |
 
 ## 2. Cost of downtime
 
@@ -21,41 +21,21 @@ Detailed lookup reference for each business-context category. Kept out of
 
 ## 3. Compliance and reporting exposure
 
-| Framework | Typical mandatory reporting window | Trigger condition |
+| Framework | Reporting window | Starts when |
 |---|---|---|
-| PCI-DSS | Immediate notification to acquirer/processor | Suspected cardholder data exposure |
-| SOC 2 Type II | Per the org's documented IR policy (commonly ≤60 min internal escalation) | Availability/security incident affecting in-scope systems |
-| GDPR | 72 hours to supervisory authority | Personal-data breach |
-| HIPAA | 60 days to HHS + affected individuals | Breach of unsecured PHI |
+| PCI-DSS | Immediate notification to the acquirer/processor | A compromise of cardholder data is suspected or confirmed |
+| GDPR | Without undue delay, and where feasible within 72 hours, to the supervisory authority | The controller becomes aware of a personal data breach. A loss of availability of personal data can itself be a breach. |
+| HIPAA | Individuals: without unreasonable delay, no later than 60 days. HHS: within 60 days if 500 or more people are affected, otherwise within 60 days after the end of the calendar year | A breach of unsecured PHI is discovered |
 
 Only apply a framework if the resource carries a matching `DataClassification`
-or `Compliance` tag, or the operator states it applies. Do not assume by
-default.
+or `Compliance` tag, or the operator states it applies. Write each window as
+conditional ("if assessed as a breach, for the compliance owner to decide").
+Never state whether a reporting deadline has started or doesn't apply.
 
 ## 4. Recent-change correlation
 
 | Evidence source | How to query | Notes |
 |---|---|---|
-| AWS Config | `config:GetResourceConfigHistory` for the cluster/parameter group | Default lookback: 14 days |
+| AWS Config | `config:GetResourceConfigHistory` for the cluster/parameter group | Default lookback: 14 days. Not in `AIDevOpsAgentAccessPolicy`; on AccessDenied, use CloudTrail and say Config history wasn't readable |
 | CloudTrail | `cloudtrail:LookupEvents` for `ModifyDBClusterParameterGroup`, `ModifyDBCluster`, `ModifyDBInstance`, `FailoverDBCluster`, engine upgrades | Rank by proximity to incident start |
 | Customer change system | Pipeline history, change tickets (if named by the operator) | Use if referenced; don't assume access |
-
-## Illustrative example (from the original demo prototype)
-
-The Aurora MySQL Incident Investigation demo's original mock MCP server used
-this synthetic data purely to make the demo self-contained and runnable
-without real tags/config. It is **not** real data and must not be reused as
-a default or fallback value by this skill:
-
-```json
-{
-  "dependent_services": [
-    {"name": "checkout-service", "criticality": "CRITICAL"},
-    {"name": "order-history-api", "criticality": "HIGH"},
-    {"name": "analytics-etl", "criticality": "MEDIUM"}
-  ],
-  "revenue_per_minute_usd": 5100,
-  "sla_penalty_threshold_min": 20,
-  "compliance_frameworks": ["PCI-DSS", "SOC 2 Type II", "GDPR"]
-}
-```

@@ -1,0 +1,99 @@
+{
+    "skill_name": "aurora-incident-business-context",
+    "evals": [
+        {
+            "id": "bizctx-no-evidence-tagged",
+            "task_type": "chat",
+            "prompt": "One of our Aurora PostgreSQL clusters has been degraded for 20 minutes. It has no business tags at all, no dependency map exists, and I don't know our revenue per minute. Who is affected, what is this costing us, and do we have a compliance reporting deadline?",
+            "expected_output": "A Business Impact section covering dependent services, cost, compliance exposure and recent changes. Where tags or other evidence are missing, it says so plainly and asks the operator instead of inventing owners, dollar figures or frameworks.",
+            "should_trigger": true,
+            "assertions": [
+                "The response covers all four categories: dependent services, cost of downtime, compliance exposure, and recent changes",
+                "Where no dependency tags or dependency map exist, the response says so instead of naming invented downstream services",
+                "Where no revenue-per-minute input exists, the response says a dollar estimate can't be calculated instead of inventing one",
+                "The response does not assume a compliance framework such as GDPR or HIPAA applies unless the resource is tagged with it",
+                "The response asks the operator for the missing inputs or recommends tagging the resource",
+                {
+                    "text": "No raw 12-digit account IDs are exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bizctx-cost-from-operator-input",
+            "task_type": "chat",
+            "prompt": "Our RDS instance has been down for 10 minutes. We make $1,200 per minute from it and our SLA threshold is 15 minutes. What is the business impact so far?",
+            "expected_output": "Estimated loss of $12,000 (1,200 x 10). The SLA is not yet breached: 10 minutes is under the 15-minute threshold, leaving 5 minutes. The SLA result is reported on the Estimated cost line of the Business Impact section.",
+            "should_trigger": true,
+            "assertions": [
+                "The response states the SLA has not been breached yet",
+                "The response states that about 5 minutes remain before the SLA threshold",
+                "The response includes a Business Impact section with all four lines: dependent services, estimated cost, compliance exposure, and recent changes",
+                "The response shows the inputs it used for the estimate",
+                {
+                    "text": "The estimated loss is $12,000",
+                    "evaluator": "regex",
+                    "pattern": "12,?000"
+                }
+            ]
+        },
+        {
+            "id": "bizctx-recent-change-correlation",
+            "task_type": "investigation",
+            "prompt": "The connections-high alarm is firing on the Aurora MySQL cluster in us-west-2. Find the technical cause, check whether a recent change could explain it, and tell me the business impact: who is affected, what it costs, and any compliance exposure.",
+            "expected_root_cause": "A connection storm exhausting the writer's connections, found from DatabaseConnections metrics and Performance Insights, plus a recent-change check that finds the cluster parameter group change made shortly before the alarm (CloudTrail ModifyDBClusterParameterGroup or AWS Config history), placed in time relative to the incident start. The summary also covers affected services, cost or SLA impact, and compliance exposure as findings or gaps.",
+            "should_trigger": true,
+            "assertions": [
+                "The response checks AWS Config history or CloudTrail for recent changes to the cluster or its parameter group",
+                "Any recent change found is placed in time relative to the incident start, or the response says no change was found",
+                "The investigation summary covers all four business-impact categories, in the symptom description, findings or gaps: affected services, cost or SLA impact, compliance exposure, and recent changes",
+                "The investigation summary identifies the cluster parameter group change made shortly before the alarm as a recent change",
+                "Business-context tags such as DependentServices or RevenuePerMinute are cross-checked against evidence or labeled unverified, not repeated at face value"
+            ],
+            "additional_permissions_file": "evals/additional-permissions.json"
+        },
+        {
+            "id": "bizctx-suspected-no-alarm",
+            "task_type": "chat",
+            "prompt": "A developer said our checkout app felt slow this morning and thinks the Aurora MySQL database might be the cause, but I don't see any alarms and I haven't confirmed anything. Answer here in chat without opening an investigation: what would the business impact be if there is a problem?",
+            "expected_output": "A Business Impact section titled as provisional because the incident isn't confirmed, with a Status line saying what evidence would confirm it (for example an alarm, a metric anomaly, or error logs). All four lines are present, each grounded in evidence or marked as not found, with no invented services, dollar figures, or compliance frameworks.",
+            "should_trigger": true,
+            "assertions": [
+                "The response includes a Business Impact section even though no incident is confirmed",
+                "The Business Impact section is marked provisional or unconfirmed",
+                "The response says what evidence would confirm the incident, such as an alarm, a metric anomaly, or error logs",
+                "The Business Impact section has all four lines: dependent services, estimated cost, compliance exposure, and recent changes",
+                "The response does not invent downstream services, dollar figures, or compliance frameworks",
+                {
+                    "text": "No raw 12-digit account IDs are exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bizctx-compliance-availability",
+            "task_type": "chat",
+            "prompt": "Our Aurora PostgreSQL cluster has been unavailable for 25 minutes and the customer portal can't load accounts. The cluster is tagged Compliance=GDPR and DataClassification=PersonalData. Answer here in chat: what's the business impact, and do we have a reporting deadline?",
+            "expected_output": "A Business Impact section with all four lines. The Compliance exposure line names GDPR and its window (72 hours to the supervisory authority) as conditional on the incident being assessed as a personal data breach, for the compliance owner to decide. It doesn't say the deadline is running and doesn't say it is ruled out because this is only an availability incident.",
+            "should_trigger": true,
+            "assertions": [
+                "The Compliance exposure line names GDPR because the cluster is tagged with it",
+                "The response presents the GDPR reporting window as conditional on a breach determination by the compliance owner or a similar role",
+                "The response does not state that a reporting deadline is running or has started",
+                "The response does not state that no reporting deadline applies because the incident is only an outage or loss of availability",
+                "The response does not apply a framework other than GDPR, such as PCI-DSS, HIPAA, or SOC 2",
+                "The response includes a Business Impact section with all four lines: dependent services, estimated cost, compliance exposure, and recent changes"
+            ]
+        },
+        {
+            "id": "unrelated-question",
+            "task_type": "chat",
+            "prompt": "What is the difference between an Application Load Balancer and a Network Load Balancer?",
+            "should_trigger": false
+        }
+    ]
+}
