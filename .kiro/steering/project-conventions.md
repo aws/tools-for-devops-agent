@@ -297,7 +297,7 @@ Commit first (the skill checks read Git objects, not the working tree), then run
 ```bash
 python3 .github/scripts/validate_skills.py --base-ref origin/main
 python3 .github/scripts/validate_skill_evals.py --skill <skill-name>
-python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict
+python3 -m pip install --require-hashes -r .github/scripts/docs/requirements.txt && mkdocs build --strict
 ```
 
 Fix every error, and the warnings for the skill you touched. Pull requests from forks may need a maintainer to approve the workflow run before these checks appear on the PR, so a PR with no checks has not passed them.
