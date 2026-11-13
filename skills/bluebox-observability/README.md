@@ -26,7 +26,7 @@ Bluebox is an observability agent that reads a workspace's live traces, logs, me
 - The skill can only use what the workspace's telemetry contains. A service that sends no telemetry to Bluebox is missing from its answers.
 - Each `ask` counts against the Bluebox workspace's daily AI usage.
 - Telemetry arrives with a short delay, so a check right after a change can be too early to judge.
-- Bluebox informs decisions. Approvals and the Agent Space's permissions still decide what runs.
+- Bluebox findings, verdicts and recommended actions are recommendations that need human approval. The skill tells the agent never to carry them out on its own. Approvals and the Agent Space's permissions still decide what runs.
 
 ## Agent Types
 
