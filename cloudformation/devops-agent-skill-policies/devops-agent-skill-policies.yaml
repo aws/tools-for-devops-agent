@@ -29,6 +29,7 @@ Metadata:
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
           - EnableAwsBackupCoverageReview
+          - EnableAuroraIncidentBusinessContext
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
@@ -135,6 +136,13 @@ Parameters:
       config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*).
     AllowedValues: ['true', 'false']
     Default: 'true'
+  EnableAuroraIncidentBusinessContext:
+    Type: String
+    Description: >
+      Aurora Incident Business Context skill (adds config:GetResourceConfigHistory
+      for the recent-change check).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
 
   EnableAgentCoreObservabilitySetup:
     Type: String
@@ -213,6 +221,7 @@ Conditions:
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAwsBackupCoverageReview: !Equals [!Ref EnableAwsBackupCoverageReview, 'true']
+  SkillAuroraIncidentBusinessContext: !Equals [!Ref EnableAuroraIncidentBusinessContext, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
@@ -452,6 +461,27 @@ Resources:
               - storagegateway:ListFileShares
               - storagegateway:ListGateways
               - storagegateway:ListVolumes
+            Resource: '*'
+
+  # aurora-incident-business-context: AIDevOpsAgentAccessPolicy already grants the
+  # skill's rds:List*, tag:GetResources and cloudtrail:LookupEvents calls. Its AWS
+  # Config grant covers Describe*/List* and the aggregate reads but not the
+  # single-resource history the recent-change check uses. Read-only.
+  PolicyAuroraIncidentBusinessContext:
+    Type: AWS::IAM::Policy
+    Condition: SkillAuroraIncidentBusinessContext
+    Properties:
+      PolicyName: DevOpsAgentSkill-AuroraIncidentBusinessContext
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AuroraIncidentBusinessContextDelta
+            Effect: Allow
+            Action:
+              # Configuration timeline for the cluster and its parameter group
+              - config:GetResourceConfigHistory
             Resource: '*'
 
   # agentcore-observability-setup: adds read-only AgentCore control-plane, X-Ray Transaction Search,
@@ -751,6 +781,7 @@ Outputs:
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
+        - aurora-incident-business-context: ${EnableAuroraIncidentBusinessContext} (config:GetResourceConfigHistory)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)

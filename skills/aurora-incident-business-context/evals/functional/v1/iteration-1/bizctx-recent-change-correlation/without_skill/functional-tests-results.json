@@ -1,0 +1,77 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "bizctx-recent-change-correlation",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation identified the core technical cause (connection storm exhausting the writer's 90-connection limit, confirmed via DatabaseConnections metrics showing a plateau at 90, and attempted Performance Insights analysis which returned no keys since connections were idle). It also checked for a recent change and found a strong temporal correlation between the example-cluster-params parameter group changes (via CloudTrail CreateDBClusterParameterGroup/ModifyDBCluster/DeleteDBClusterParameterGroup calls by example-session) and each connection storm onset, explicitly noting 'Every switch to example-cluster-params is followed by a 90-connection plateau' with specific timestamps correlated to alarm onsets. This matches the expected root cause: a connection storm found via DatabaseConnections/Performance Insights, combined with a recent-change check (CloudTrail parameter group modification) placed in time relative to incident start. The investigation also covered business impact (affected services: checkout-service CRITICAL, order-history-api, analytics-etl; SLA breach risk at 23:38-23:40 UTC) though compliance exposure and cost were not explicitly detailed, they are acknowledged as gaps (e.g., no application logs to confirm revenue loss). Overall the key identifying root cause elements align well with the expected root cause.</reasoning>\n<parameter name=\"evidence\">\"Every switch to example-cluster-params is followed by a 90-connection plateau... each switch of example-cluster to the custom group example-cluster-params (17:27, 18:30, 18:59, 19:57, 21:47, 23:18) is followed by a plateau of up to 90 connections that clears after the revert to default.aurora-mysql8.0... CloudTrail shows example-session recreating the group (CreateDBClusterParameterGroup 23:17:17) and modifying it (23:17:19) just before the latest switch.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response checks AWS Config history or CloudTrail for recent changes to the cluster or its parameter group",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "CloudTrail is referenced extensively: 'CloudTrail shows user example-session running the same cycle repeatedly. At 22:14:05 UTC the cluster was reverted to default.aurora-mysql8.0 (ModifyDBCluster)...', and parameter history is checked: 'describe_db_parameters returned no explicit max_connections...'",
+          "reasoning": "The investigation explicitly uses CloudTrail to find ModifyDBCluster, CreateDBClusterParameterGroup, DeleteDBClusterParameterGroup calls tied to the cluster and its parameter group, satisfying the requirement to check for recent changes.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any recent change found is placed in time relative to the incident start, or the response says no change was found",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'each switch of example-cluster to the custom group example-cluster-params (17:27, 18:30, 18:59, 19:57, 21:47, 23:18) is followed by a plateau of up to 90 connections' and 'At 23:17:17 it was recreated, at 23:17:19 aurora_fwd_writer_idle_timeout was set to 30, and at 23:17:21 it was attached to the cluster again' compared to alarm firing at 23:21:46 UTC",
+          "reasoning": "The change timestamps (23:17:17-23:17:21) are explicitly placed relative to the alarm time (23:21:46 UTC) and symptom onset, showing the change happened minutes before the incident, satisfying the temporal correlation requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary covers all four business-impact categories, in the symptom description, findings or gaps: affected services, cost or SLA impact, compliance exposure, and recent changes",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The symptom description covers affected services ('checkout-service (CRITICAL), order-history-api and analytics-etl are at risk') and SLA ('The 20-minute SLA tag would be breached around 23:38\u201323:40 UTC') and recent changes (parameter group hypothesis), but there is no mention of cost (dollar figures, revenue loss quantification) anywhere, and no compliance exposure is discussed at all. A gap notes 'it's unconfirmed whether any connections were refused and how much revenue was actually lost' but this acknowledges absence rather than providing cost/compliance coverage.",
+          "reasoning": "While affected services, SLA, and recent changes are covered, cost impact (beyond an unconfirmed gap) and compliance exposure are not addressed anywhere in the findings, symptoms, or gaps sections. The assertion requires all four categories to be covered, and compliance exposure is completely absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary identifies the cluster parameter group change made shortly before the alarm as a recent change",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The latest cycle was 23:17:17\u201323:17:21 UTC, and each storm started within minutes of an attach' under the hypothesis titled 'The example-cluster-params parameter group change causes the storms'",
+          "reasoning": "The summary explicitly identifies the parameter group attach at 23:17:17-23:17:21 UTC, shortly before the 23:21:46 UTC alarm, as a recent change and ties it causally to the connection storms.",
+          "confidence": "high"
+        },
+        {
+          "text": "Business-context tags such as DependentServices or RevenuePerMinute are cross-checked against evidence or labeled unverified, not repeated at face value",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The text states the SLA tag directly: 'The 20-minute SLA tag would be breached around 23:38\u201323:40 UTC' and references 'checkout-service (CRITICAL)' without showing cross-checking of a DependentServices tag or RevenuePerMinute tag against actual evidence, nor are they explicitly labeled as unverified.",
+          "reasoning": "The output uses business-context labels like 'CRITICAL' for checkout-service and a '20-minute SLA tag' at face value without demonstrating that these tags were cross-checked against telemetry/evidence or flagged as unverified assumptions. There's no RevenuePerMinute figure or explicit cost impact calculation, and no discussion of verifying or questioning the SLA/criticality tags themselves.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m41s",
+    "cost": "$3.83",
+    "context_window": {
+      "utilization": "8.2%",
+      "compaction_count": 0
+    }
+  }
+}

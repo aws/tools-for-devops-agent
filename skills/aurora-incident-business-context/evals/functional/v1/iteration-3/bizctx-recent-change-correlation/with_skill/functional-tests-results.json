@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "bizctx-recent-change-correlation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aurora-incident-business-context' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'aurora-incident-business-context' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies a connection storm (idle admin connections from the bastion reaching ~90, matching max_connections for db.t4g.medium) exhausting the writer's connection capacity, derived from DatabaseConnections metrics and Performance Insights (Threads_connected, db.load.avg). It also performs the recent-change check via CloudTrail, finding ModifyDBClusterParameterGroup/ModifyDBCluster by example-session at 23:17:19-21 UTC, correlating the parameter group attach timing with the connection spikes across all 6 occurrences that day, placing it ~3 minutes before the 23:20-23:21 alarm. The summary also covers business impact (cost ~$15,300 and growing, SLA breach timing), affected services (checkout-service, order-history-api, analytics-etl via gaps), and compliance exposure (DataClassification=Confidential, master-user credential usage, no framework tag - flagged as a gap for compliance owner). All key elements of the expected root cause are present: connection storm cause, metrics-based detection, recent-change correlation via CloudTrail, and business/compliance impact coverage.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response checks AWS Config history or CloudTrail for recent changes to the cluster or its parameter group",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The report explicitly states: 'No AWS Config history for example-cluster: get_resource_config_history for AWS::RDS::DBCluster ... returned ResourceNotDiscoveredException. AWS Config is not recording this cluster, so the configuration timeline must come from RDS events and CloudTrail instead.' It also cites CloudTrail directly: 'CloudTrail (23:05\u201323:24 UTC) shows ModifyDBClusterParameterGroup on example-cluster-params at 23:17:19, then ModifyDBCluster on example-cluster at 23:17:21...'",
+          "reasoning": "The agent attempted AWS Config (got ResourceNotDiscoveredException) and successfully used CloudTrail to find the parameter group change, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any recent change found is placed in time relative to the incident start, or the response says no change was found",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'This attached the eval parameter group about 3 minutes before the 23:20\u201323:21 spike.' and the alarm fired at 23:21:46 while the ModifyDBCluster call was at 23:17:21 UTC.",
+          "reasoning": "The change (parameter group attach) is explicitly placed in time relative to the alarm/incident start (~3 minutes before), satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary covers all four business-impact categories, in the symptom description, findings or gaps: affected services, cost or SLA impact, compliance exposure, and recent changes",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Affected services: 'checkout-service (CRITICAL), order-history-api (HIGH) and analytics-etl (MEDIUM) come only from the DependentServices tag... Impact on dependent services unverified'. Cost/SLA: 'Business cost and SLA exposure unconfirmed... ~$15,300 so far (RevenuePerMinute tag 5100 \u00d7 ~3 min), growing $5,100/min... SLA (20 min tag) not breached; breach about 23:40 UTC if it continues.' Compliance: 'Reporting obligation undetermined: DataClassification=Confidential, with no framework tag (PCI-DSS, GDPR, HIPAA). Master-user credentials were used for bulk connections from the bastion.' Recent changes: 'Manual ModifyDBCluster by example-session at 23:17 UTC... All 6 connection spikes today start right after the eval parameter group is attached.'",
+          "reasoning": "All four categories (affected services, cost/SLA, compliance, recent changes) are explicitly addressed somewhere in the findings or gaps sections.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary identifies the cluster parameter group change made shortly before the alarm as a recent change",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Hypothesis: A manual test routine both switches the parameter group and opens the connections' with supporting observation 'Manual ModifyDBClusterParameterGroup on example-cluster-params at 23:17:19, then ModifyDBCluster on example-cluster at 23:17:21... This attached the eval parameter group about 3 minutes before the 23:20\u201323:21 spike.'",
+          "reasoning": "The summary clearly identifies the parameter group change (attachment of example-cluster-params) shortly before the alarm as a recent change and a hypothesis for the cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "Business-context tags such as DependentServices or RevenuePerMinute are cross-checked against evidence or labeled unverified, not repeated at face value",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Impact on dependent services unverified: checkout-service (CRITICAL), order-history-api (HIGH) and analytics-etl (MEDIUM) come only from the DependentServices tag. The DB security group admits only the bastion SG, and no compute for these services was found in us-west-2.' Also: 'Business cost and SLA exposure unconfirmed... ~$15,300 so far (RevenuePerMinute tag 5100 \u00d7 ~3 min)... but only if this counts as customer-facing downtime... No SLAPenaltyUsd tag.'",
+          "reasoning": "Both DependentServices and RevenuePerMinute tags are explicitly flagged as unverified/unconfirmed rather than being repeated as established fact, with supporting reasoning (no compute found, conditional cost calculation).",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m58s",
+    "cost": "$3.98",
+    "context_window": {
+      "utilization": "10.1%",
+      "compaction_count": 0
+    }
+  }
+}
