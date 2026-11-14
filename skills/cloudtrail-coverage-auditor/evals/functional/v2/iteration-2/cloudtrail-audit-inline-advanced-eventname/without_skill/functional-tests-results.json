@@ -1,0 +1,99 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "cloudtrail-audit-inline-advanced-eventname",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tools_ready": {
+    "outcome": "ready",
+    "ready": true,
+    "waited_seconds": 166.5,
+    "probes": 3,
+    "summary": "Agent space tools ready after 3 probe(s) in 2m 46s"
+  },
+  "skill_load": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to identify that the eventName allowlist misses multipart uploads (CreateMultipartUpload, UploadPart, CompleteMultipartUpload) AND bulk deletes (DeleteObjects) AND all reads, and recommend widening/removing the eventName condition. The agent correctly identified the multipart upload gap (CompleteMultipartUpload, UploadPart) and mentioned CopyObject/metadata calls as additional gaps, and correctly covered the finance/hr vs scratch-bucket logic. However, it explicitly got the DeleteObjects point WRONG - it claimed 'batch DeleteObjects calls are not a gap' because S3 logs each deleted object as its own DeleteObject record, which contradicts the expected output's assertion that DeleteObjects bulk deletes ARE a gap that should be flagged. The agent also did not mention that 'all reads' (Data events default to read+write, but this selector with eventCategory=Data and only PutObject/DeleteObject excludes reads) are missed - this is a significant omission since the expected output explicitly calls out that reads are not covered. Additionally, the fix suggested was about ARN scope (switching to allow-list) rather than widening/removing the eventName condition as the primary fix, which is a different recommendation path than expected. The agent did not mention Lambda/DynamoDB absence point explicitly but that's a minor expected detail. Overall, the response misses two of the three required gap callouts (bulk deletes DeleteObjects, and reads) and incorrectly asserts DeleteObjects is not a gap, which is a notable factual deviation from the expected output.</reasoning>\n<parameter name=\"evidence\">\"Verified separately: batch `DeleteObjects` calls are *not* a gap \u2014 S3 logs each deleted object as its own `DeleteObject` record... so that's already covered.\" \u2014 this contradicts the expected output's claim that DeleteObjects (bulk deletes) is a gap. Also the response never mentions that 'all reads' are missing from coverage.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reports finance-bucket and hr-bucket as covered only for the PutObject and DeleteObject events named in the selector.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Net effect: writes to finance-bucket and hr-bucket get logged; writes to scratch-bucket are excluded. That matches a 'log everything except the noisy scratch bucket' intent.\" and later notes 'PutObject Equals [PutObject, DeleteObject] only catches single-shot object writes and deletes' implying coverage limited to those events for finance/hr buckets.",
+          "reasoning": "The agent explicitly states finance-bucket and hr-bucket writes get logged under the PutObject/DeleteObject selector, and separately flags that CompleteMultipartUpload etc. are missed, implying coverage is limited to the named events.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports scratch-bucket as not covered and attributes that to the resources.ARN NotStartsWith exclusion.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"writes to scratch-bucket are excluded\" and \"resources.ARN NotStartsWith [[redacted ARN]] uses a trailing slash, so it correctly scopes to objects inside that bucket\"",
+          "reasoning": "The response clearly attributes scratch-bucket's exclusion to the NotStartsWith clause.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that the eventName allowlist misses multipart upload operations (CreateMultipartUpload, UploadPart, CompleteMultipartUpload), the bulk DeleteObjects operation and all read operations, and presents this as a gap for an audit.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response lists 'CompleteMultipartUpload', 'UploadPart, CopyObject (object created via copy), and metadata-mutating calls like PutObjectTagging, PutObjectAcl, PutObjectRetention/PutObjectLegalHold, RestoreObject' as gaps, but explicitly states 'Verified separately: batch DeleteObjects calls are not a gap' and does not mention CreateMultipartUpload or read operations as missed.",
+          "reasoning": "The assertion requires the response to state that CreateMultipartUpload, UploadPart, CompleteMultipartUpload, bulk DeleteObjects, and all read operations are missed. The response mentions UploadPart and CompleteMultipartUpload but not CreateMultipartUpload, explicitly denies DeleteObjects is a gap, and does not mention read operations as missing (it doesn't say read ops like GetObject are gaps either, since eventCategory=Data could include reads but the response focuses only on write events). This fails key parts of the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response describes the fix as widening or removing the eventName condition and does not apply or offer to draft the change.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not explicitly state the fix is to 'widen or remove the eventName condition.' Instead it focuses on adding missing eventNames like CompleteMultipartUpload and CopyObject as the main gap, and separately suggests changing the ARN matching from NotStartsWith to StartsWith for scope design, not widening eventName.",
+          "reasoning": "The assertion requires the fix to be described as widening/removing eventName condition. The response implies additional eventNames should be added but doesn't frame it explicitly as 'widening or removing' the eventName condition; it's close but not stated in those terms. It does not apply or offer to draft the change, which satisfies the second half of the assertion, but the first half about explicit framing is ambiguous.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not claim coverage or gaps for Lambda functions or DynamoDB tables beyond noting that none were supplied.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of Lambda functions or DynamoDB tables anywhere in the response.",
+          "reasoning": "The response makes no claims about Lambda or DynamoDB coverage or gaps, nor does it mention that none were supplied (which is fine since the assertion only requires it not to claim coverage/gaps beyond noting absence).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action. An operator command such as `aws cloudtrail get-event-selectors --trail-name <ARN>` to be run from the CLI or the management account is a required next step, not an offer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response ends with 'Bottom line: the selector works as written, but for an audit meant to capture \"s3 writes\" comprehensively, I'd flag the missing CompleteMultipartUpload (and likely CopyObject) as the main gap.' No offers to create, modify, or run any AWS CLI commands or support cases.",
+          "reasoning": "The response is purely analytical, offering no write actions, no CLI commands, and no offers to extend scope. It satisfies this assertion fully.",
+          "confidence": "high"
+        },
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.7143
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "36s",
+    "cost": "$0.30",
+    "context_window": {
+      "utilization": "5.0%",
+      "compaction_count": 0
+    }
+  }
+}
