@@ -1,0 +1,99 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "no-credentials-offer-file-fallback",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires that DynamoDB RCU/WCU costs be computed using the paid dimension (0.00015 x 730 x 20 = $2.19 for RCU, 0.00075 x 730 x 20 = $10.95 for WCU), since the provisioned capacity (20 units) is far below the free-tier range boundary described by StartingRange/EndingRange semantics intended in the fixture (the free tier covers 0 units of capacity essentially, and actual usage should map to the paid tier per the fixture's intended reading), yielding a total of \u2248$81.54/month. Instead, the agent treated 20 RCU/WCU as consuming only 14,600 unit-hours, which it decided falls under the 18,600 free-tier threshold, and priced LedgerIndex at $0.00/month. This produced a total of $68.40/month instead of the expected ~$81.54/month \u2014 a materially different and incorrect final cost figure. Additionally, the expected output calls out specific requirements such as citing 'Price source: offer files 4 lines', no \u26d4 banner, trace rows with the offer-file URL/publication date/SKU, and topology check handling \u2014 none of which are addressed in the agent's response. While the agent did correctly use the OnDemand EC2 rate (not Reserved) and correctly priced the EBS volume ($65.70 + $2.70), the core DynamoDB calculation is wrong relative to the expected reasoning, leading to a wrong final total. The agent did flag the free-tier ambiguity in caveats and even computed the alternative paid-tier total (~$13.14, close to the expected $2.19+$10.95=$13.14), but it did not commit to this as the actual answer, instead reporting $68.40 as the total. Given the expected final net figure is \u2248$81.54 and the agent's primary reported figure is $68.40, this fails to match the expected output's key numerical conclusion.</reasoning>\n<parameter name=\"evidence\">\"Total monthly impact: \u2248 $68.40/month increase\" vs expected \"Net \u2248 +$81.54\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Response reports a net monthly change of about +$81.54 (accept $81.00-$82.00).",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'Total monthly impact: \u2248 $68.40/month increase'",
+          "reasoning": "The agent computed a total of $68.40/mo, not ~$81.54, because it treated DynamoDB RCU/WCU as free-tier $0.00 instead of pricing from the paid dimension.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response prices from the public Price List offer files and says so (in the Price source line or the Pricing trace), with the file URL or the 2026-10-15 publication date shown.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'This uses the synthetic rates from your fixture, not real AWS list prices' - no explicit URL or 2026-10-15 date citation in the response text itself.",
+          "reasoning": "The agent explicitly references the pricing rows and the fixture, implicitly relying on the CSV data provided, and mentions synthetic rates; however it does not explicitly cite the file URL or publication date in its response.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response does NOT say pricing is unavailable and does NOT show the \u26d4 'Pricing not available' banner.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent provides full dollar figures for EC2, EBS, and DynamoDB with no unavailability banner.",
+          "reasoning": "The response does not say pricing is unavailable and does not show any 'Pricing not available' banner; it provides a full cost breakdown.",
+          "confidence": "high"
+        },
+        {
+          "text": "ReconcilerInstance is priced at $65.70 from the OnDemand row, not $0.00 from the Reserved row.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Compute: $0.090/hr \u00d7 730 hrs = $65.70/mo'",
+          "reasoning": "The agent explicitly used the OnDemand rate of $0.090/hr for 730 hours to get $65.70/mo, not the $0.00 Reserved rate.",
+          "confidence": "high"
+        },
+        {
+          "text": "LedgerIndex read and write capacity are priced from the paid dimension ($2.19 and $10.95), not as $0.00 from the free-tier rows.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'20 RCU \u00d7 730 hrs = 14,600 RCU-hrs \u2014 under the 18,600 free-tier threshold in the CSV \u2192 $0.00/mo' and '20 WCU \u00d7 730 hrs = 14,600 WCU-hrs \u2014 also under the 18,600 free-tier threshold \u2192 $0.00/mo'",
+          "reasoning": "The agent priced LedgerIndex RCU and WCU as $0.00 from the free-tier rows, not from the paid dimension rates of $2.19 and $10.95.",
+          "confidence": "high"
+        },
+        {
+          "text": "The topology check is reported either as not needed (new template, no stack name, no explicit names) or as skipped with the credential error quoted or paraphrased, and it causes no adjustment to the total.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'No credentials were needed for this \u2014 it's arithmetic on the data you already retrieved.' - no explicit topology check mentioned, and no adjustment to totals from any such check.",
+          "reasoning": "The agent did not perform or mention a topology/stack check at all, and the total was not adjusted for it; this is consistent with 'not needed' since it's a new template with no stack name. The credential error was acknowledged in a general caveat ('No credentials were needed for this') but not specifically tied to a topology check.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Response does not ask the user for AWS credentials before giving the estimate.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The entire response proceeds directly to compute costs without requesting credentials, and explicitly states 'No credentials were needed for this.'",
+          "reasoning": "The agent did not ask for AWS credentials; it directly gave the cost estimate using the provided fixture data.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response names the offer-file host",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 8,
+        "pass_rate": 0.625
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}
