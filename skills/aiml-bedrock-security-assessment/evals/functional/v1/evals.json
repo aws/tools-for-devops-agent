@@ -1,0 +1,196 @@
+{
+  "skill_name": "aiml-bedrock-security-assessment",
+  "evals": [
+    {
+      "id": "bedrock-sec-kb-vector-not-failed",
+      "task_type": "chat",
+      "prompt": "I'm reviewing the security posture of our Amazon Bedrock setup with a read-only misconfiguration assessment. One knowledge base's GetKnowledgeBase response shows knowledgeBaseConfiguration.type VECTOR, storageConfiguration.type OPENSEARCH_SERVERLESS, status ACTIVE, and no serverSideEncryptionConfiguration field. What status should the knowledge base encryption check give it, and can I call it unencrypted?",
+      "expected_output": "Gives N/A under the knowledge base customer-managed KMS check (BR-18), because that check only evaluates MANAGED knowledge bases. The absent field means an AWS-owned key, not unencrypted. It does not report Failed or High for this resource.",
+      "should_trigger": true,
+      "assertions": [
+        {
+          "text": "Cites check ID BR-18",
+          "evaluator": "regex",
+          "pattern": "BR-18"
+        },
+        {
+          "text": "Gives N/A",
+          "evaluator": "regex",
+          "pattern": "N/A"
+        },
+        "The response says the knowledge base must not be reported as unencrypted, because an absent encryption field means the AWS-owned key",
+        "The response does not report Failed or High severity for this VECTOR knowledge base"
+      ]
+    },
+    {
+      "id": "bedrock-sec-kb-managed-cmk",
+      "task_type": "chat",
+      "prompt": "I'm reviewing the security posture of our Amazon Bedrock setup with a read-only misconfiguration assessment. I have two MANAGED knowledge bases: kb-a has serverSideEncryptionConfiguration.kmsKeyArn set to a customer-managed key ARN, and kb-b has no serverSideEncryptionConfiguration. What does the encryption check emit for each, and how many findings does kb-b produce?",
+      "expected_output": "kb-a is Passed, citing the key ARN. kb-b is Failed at High under BR-18 because the missing field means an AWS-owned key. kb-b produces exactly one finding, not two.",
+      "should_trigger": true,
+      "assertions": [
+        {
+          "text": "Cites check ID BR-18",
+          "evaluator": "regex",
+          "pattern": "BR-18"
+        },
+        "kb-a is reported Passed, with the customer-managed key ARN cited",
+        "kb-b is reported Failed at High severity",
+        "kb-b produces exactly one finding rather than a duplicate from a second knowledge base encryption check",
+        {
+          "text": "Does not cite the retired duplicate check BR-09",
+          "evaluator": "regex",
+          "pattern": "BR-09",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "bedrock-sec-custom-model-single-finding",
+      "task_type": "chat",
+      "prompt": "I'm reviewing the security posture of our Amazon Bedrock setup with a read-only misconfiguration assessment. A custom model's GetCustomModel response has no modelKmsKeyArn. Which check or checks fire, at what status and severity, and what does the missing field mean?",
+      "expected_output": "Exactly one finding, BR-15, Failed at High: the missing modelKmsKeyArn means the AWS-owned key is used rather than a customer-managed key. No second custom-model encryption check fires.",
+      "should_trigger": true,
+      "assertions": [
+        {
+          "text": "Cites check ID BR-15",
+          "evaluator": "regex",
+          "pattern": "BR-15"
+        },
+        "Reports exactly one finding at Failed status and High severity",
+        "Explains that the missing modelKmsKeyArn means an AWS-owned key is used, not that the model is unencrypted",
+        {
+          "text": "Does not cite a second custom-model check BR-17 or BR-11",
+          "evaluator": "regex",
+          "pattern": "BR-1[17]\\b",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "bedrock-sec-grounding-needs-rag",
+      "task_type": "chat",
+      "prompt": "I'm reviewing the security posture of our Amazon Bedrock setup with a read-only misconfiguration assessment. In one region I have a single guardrail with only content filters and sensitive-information filters, and no knowledge bases. What do the contextual grounding check and the Automated Reasoning check report?",
+      "expected_output": "Contextual grounding (BR-25) is N/A because it applies only to RAG workloads and the region has no knowledge bases. Automated Reasoning (BR-22) is at most a Failed finding at Informational severity because it is opt-in. Neither is Medium or High.",
+      "should_trigger": true,
+      "assertions": [
+        {
+          "text": "Cites BR-25 and BR-22",
+          "evaluator": "regex",
+          "pattern": "BR-25[\\s\\S]*BR-22|BR-22[\\s\\S]*BR-25"
+        },
+        "Contextual grounding is reported N/A because there is no knowledge base or RAG workload in the region",
+        "Automated Reasoning is at most Informational severity, described as opt-in, and not Medium or High"
+      ]
+    },
+    {
+      "id": "bedrock-sec-vpc-endpoint-gated",
+      "task_type": "chat",
+      "prompt": "I'm reviewing the security posture of our Amazon Bedrock setup with a read-only misconfiguration assessment. In a region where we use Bedrock there is only the default VPC and no Bedrock interface VPC endpoint. What does the VPC endpoint check report, and at what severity?",
+      "expected_output": "BR-02 reports N/A because the region has no non-default VPC and so no VPC-resident workload to route privately. If a non-default VPC existed with no endpoint it would be Failed at Informational severity, never High.",
+      "should_trigger": true,
+      "assertions": [
+        {
+          "text": "Cites check ID BR-02",
+          "evaluator": "regex",
+          "pattern": "BR-02"
+        },
+        {
+          "text": "Gives N/A",
+          "evaluator": "regex",
+          "pattern": "N/A"
+        },
+        "The response says it would be at most Informational severity, never High"
+      ]
+    },
+    {
+      "id": "bedrock-sec-iam-user-visibility",
+      "task_type": "chat",
+      "prompt": "I'm reviewing the security posture of our Amazon Bedrock setup with a read-only misconfiguration assessment. For the least-privilege IAM check, iam:ListAttachedRolePolicies succeeds and shows no role attaching AmazonBedrockFullAccess, but iam:ListAttachedUserPolicies returns AccessDenied. What status does it report?",
+      "expected_output": "N/A, naming the denied iam:ListAttachedUserPolicies action, because role-only visibility cannot show a user attaching AmazonBedrockFullAccess. It must never be Passed.",
+      "should_trigger": true,
+      "assertions": [
+        {
+          "text": "Cites check ID BR-01",
+          "evaluator": "regex",
+          "pattern": "BR-01"
+        },
+        {
+          "text": "Gives N/A",
+          "evaluator": "regex",
+          "pattern": "N/A"
+        },
+        {
+          "text": "Names the denied action",
+          "evaluator": "regex",
+          "pattern": "iam:ListAttachedUserPolicies"
+        },
+        "The response says the check must not be reported Passed when user-side policy reads are denied"
+      ]
+    },
+    {
+      "id": "bedrock-sec-stale-access-prescribe-only",
+      "task_type": "chat",
+      "prompt": "I'm reviewing the security posture of our Amazon Bedrock setup with a read-only misconfiguration assessment. What status does the stale Bedrock access check report under the DevOps Agent, and why?",
+      "expected_output": "BR-12 is Prescribe-only and always reported N/A, because it requires iam:GenerateServiceLastAccessedDetails, a Generate* verb the DevOps Agent read-only guardrail blocks. It is never Passed or Failed.",
+      "should_trigger": true,
+      "assertions": [
+        {
+          "text": "Cites check ID BR-12",
+          "evaluator": "regex",
+          "pattern": "BR-12"
+        },
+        {
+          "text": "Gives N/A",
+          "evaluator": "regex",
+          "pattern": "N/A"
+        },
+        {
+          "text": "Names the blocked verb",
+          "evaluator": "regex",
+          "pattern": "GenerateServiceLastAccessedDetails|Generate\\*"
+        },
+        "The response says the check is never reported Passed or Failed"
+      ]
+    },
+    {
+      "id": "bedrock-sec-iam-action-prefix",
+      "task_type": "chat",
+      "prompt": "I'm running a read-only Amazon Bedrock security posture assessment. The agent guardrail association check failed because listing Bedrock agents returned AccessDenied. Which IAM action should I tell the customer to grant, and what is 'bedrock-agent'?",
+      "expected_output": "bedrock:ListAgents. Bedrock Agents, Knowledge Bases, Flows and Prompts use the bedrock: IAM prefix; bedrock-agent is only the SDK client name and not an IAM service prefix.",
+      "should_trigger": true,
+      "assertions": [
+        {
+          "text": "Names the action",
+          "evaluator": "regex",
+          "pattern": "bedrock:ListAgents"
+        },
+        {
+          "text": "Does not name a bedrock-agent: IAM action",
+          "evaluator": "regex",
+          "pattern": "bedrock-agent:[A-Z]",
+          "match": "absent"
+        },
+        "The response explains that bedrock-agent is only the SDK client name, not an IAM prefix"
+      ]
+    },
+    {
+      "id": "bedrock-sec-neg-sagemaker",
+      "task_type": "chat",
+      "prompt": "Audit our SageMaker notebooks and domains for internet exposure and encryption at rest",
+      "should_trigger": false
+    },
+    {
+      "id": "bedrock-sec-neg-access-denied",
+      "task_type": "chat",
+      "prompt": "My bedrock:InvokeModel call is returning AccessDenied \u2014 trace which IAM hop is blocking it",
+      "should_trigger": false
+    },
+    {
+      "id": "bedrock-sec-neg-adoption",
+      "task_type": "chat",
+      "prompt": "Are we ready to run Bedrock in production? Check our quota headroom and data-retention posture",
+      "should_trigger": false
+    }
+  ]
+}
