@@ -1,0 +1,32 @@
+# Systems Manager / OpsCenter / Incident Manager / ITSM administration and integrations
+
+Catalog of the 485 AWS-owned Automation runbooks, generated from their document content as published on 2026-11-04. Do not edit by hand.
+
+Availability and the default version differ by Region. Before recommending or starting a runbook, call `ssm:DescribeDocument` with `--name <runbook>` in the target Region and read its parameters from the response. If the call fails, the runbook is not available there.
+
+| Runbook | Tier | Target type | What it does | Required parameters | Notes |
+|---|---|---|---|---|---|
+| `AWS-CreateServiceNowIncident` | read-only | — | Creates an incident in the ServiceNow incident table. | `Description`, `ServiceNowInstancePassword`, `ServiceNowInstanceURL`, `ServiceNowInstanceUsername`, `ShortDescription` |  |
+| `AWS-ExportOpsDataToS3` | read-only | — | Retrieves a list of OpsData summaries in AWS Systems Manager Explorer and exports them to an object in a specified Amazon S3 bucket. | `assumeRole`, `s3BucketName`, `snsTopicArn` |  |
+| `AWS-HelloWorld` | read-only | — | Is a sample HelloWorld runbook to use with the AWS-HelloWorldChangeTemplate document when trying out Change Manager. The document prints a simple message when it runs. | — |  |
+| `AWS-RunCfnLint` | read-only | — | Uses a CloudFormation Linter (cfn-python-lint) to validate YAML and JSON templates against the AWS CloudFormation resource specification. The AWS-RunCfnLint document performs additional checks, such as ensuring that valid values have been entered for resource properties. | `TemplateFileName`, `TemplateS3BucketName` |  |
+| `AWS-RunPacker` | read-only | — | Uses the HashiCorp packer tool to validate, fix, or build packer templates that are used to create machine images. This document is using Packer v1.7.2. | `TemplateFileName`, `TemplateS3BucketName` |  |
+| `AWSIncidents-CriticalIncidentRunbookTemplate` | read-only | — | Is intended as a template for an incident response runbook in Incident Manager. | — |  |
+| `AWSSupport-RequestSageMakerLimitIncrease` | read-only | — | Enables bulk submission of multiple Amazon SageMaker quota increase requests in a single operation, streamlining the quota management process for customers managing large-scale machine learning workloads. This automation provides efficient validation and processing while maintaining AWS service standards. | `ApproverIAM`, `ResourcesMapping`, `SNSTopicArn` | approval step, 3× onFailure:Continue |
+| `AWS-AddOpsItemDedupStringToEventBridgeRule` | mutating-reversible | — | Automation document adds a dedup string for all OpsItem targets associated with a given EventBridge rule. This document skips adding a Dedup string if there is already an existing one. | `DedupString`, `RuleName` |  |
+| `AWS-BulkEditOpsItems` | mutating-reversible | — | Updates a given list of up to 50 OpsItemIds with the new specified status, severity, category, or priority. | `OpsItemIds` |  |
+| `AWS-BulkResolveOpsItems` | mutating-reversible | — | Retrieves the list of OpsItems that matches the filter pattern, resolves them, adds OpsInsightId as a related resource if specified.Writes the result summary to S3. Notifies via SNS when execution completes | `Filters` |  |
+| `AWS-ConfigureMaintenanceWindows` | mutating-reversible | — | Automation document enables or disables SSM Maintenance Windows in bulk. | `MaintenanceWindows`, `MaintenanceWindowsstatus` |  |
+| `AWS-CreateJiraIssue` | mutating-reversible | — | Creates a Jira issue. AssigneeName has been deprecated, please use AssigneeId instead. | `IssueDescription`, `IssueSummary`, `IssueTypeName`, `JiraURL`, `JiraUsername`, `ProjectKey`, `SSMParameterName` | failure branch |
+| `AWS-DisableEventBridgeRule` | mutating-reversible | — | Automation document disables the rule in EventBridge | `RuleName` |  |
+| `AWS-EnableExplorer` | mutating-reversible | — | Enables the Systems Manager Explorer feature. | — |  |
+| `AWS-ExportNodes` | mutating-reversible | — | Retrieves a list of nodes in Systems Manager, adds them to a CSV file, and writes the file to a specified Amazon S3 bucket. The runbook retrieves the data using the ListNodes API action. | `S3BucketName` |  |
+| `AWS-MigrateIncidentManagerCloudWatchAlarms` | mutating-reversible | — | Automates the migration of CloudWatch alarms from AWS Systems Manager Incident Manager to OpsCenter with comprehensive safety features and monitoring capabilities. It provides the following features | — | approval step |
+| `AWS-MigrateIncidentManagerEventBridgeRules` | mutating-reversible | — | Automates the migration of EventBridge rules from AWS Systems Manager Incident Manager to OpsCenter with comprehensive safety features and monitoring capabilities. It provides the following features | — | approval step |
+| `AWS-SetupInventory` | mutating-reversible | AWS::EC2::Instance | Creates an association for specified instances | — |  |
+| `AWSQuickSetupType-ConfigureDevOpsGuru` | mutating-reversible | — | The AWS-ConfigureDevOpsGuru automation runbook configures DevOps Guru for all CloudFormation stacks in your current AWS account.. | — |  |
+| `AWSQuickSetupType-EnableAREX` | mutating-reversible | — | Enables the AWS Resource Explorer service by creating entities such as indexes, promoting aggregators, or creating views. | `AggregatorIndexRegion`, `DemoteExistingAggregatorIndex` |  |
+| `AWSQuickSetupType-SSM-ManageResources` | mutating-reversible | — | Manages resources needed by the integrated Systems Manager Console | `ExecutionMode`, `GlobalResourceRegion`, `QSConfigurationId` |  |
+| `AWSSupport-SetupConfig` | mutating-reversible | — | Helps to setup AWS Config by creating the AWS Identity and Access Management (IAM) service-linked role, a configuration recorder powered by AWS Config and a delivery channel with an Amazon Simple Storage Service (Amazon S3) bucket where AWS Config sends configuration snapshots and configuration history files. | — |  |
+| `AWS-BulkDeleteAssociation` | destructive | — | Delete State Manager associations in bulk. | `AssociationsIds` |  |
+| `AWS-MigrateSSMDocumentSharingToRAM` | destructive | — | Document migrates SSM documents from custom sharing (using ModifyDocumentPermission) to AWS Resource Access Manager (RAM) resource shares. The document can migrate a single document or all documents in an account that have custom sharing enabled. | `DocumentName` | failure branch |

