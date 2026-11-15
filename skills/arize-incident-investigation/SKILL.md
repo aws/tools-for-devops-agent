@@ -82,7 +82,7 @@ These tools show when a version was created, not when a label was moved to it. I
 
 ### Step 7: Report
 
-State the root cause with the trace IDs, span IDs, monitor names and prompt version IDs that support it. Separate what the spans show from what you infer: Arize does not see the application's code, so present code-level causes as likely, not certain. If a fix is visible in later traces, say which inputs it was confirmed for. Say which steps found nothing and what you could not determine. If the cause is outside the AI layer, such as a slow database behind a tool span, name the service and hand off to the tools that cover it.
+State the root cause with the trace IDs, span IDs, monitor names and prompt version IDs that support it. If evidence is insufficient, report that the application root cause is unknown; missing telemetry is an evidence gap, not the cause of the application incident. Separate what the spans show from what you infer: Arize does not see the application's code, so present code-level causes as likely, not certain. If a fix is visible in later traces, say which inputs it was confirmed for. Say which steps found nothing and what you could not determine. If the cause is outside the AI layer, such as a slow database behind a tool span, name the service and hand off to the tools that cover it.
 
 ## When results are empty or unclear
 
