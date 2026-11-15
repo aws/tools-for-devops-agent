@@ -24,3 +24,5 @@ Teaches DevOps Agent how to investigate incidents in LLM applications and AI age
 7. Reports the root cause with trace, span, monitor and prompt version IDs.
 
 The skill only calls read tools.
+
+Validate this sample investigation workflow in a non-production environment before production use.

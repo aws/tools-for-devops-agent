@@ -31,7 +31,7 @@ A user key from **Settings** > **Account Settings** > **API Keys** also works, b
 
 The server exposes read tools and tools that create, update or delete Arize AX data. Annotations mark each one, and the server does not enforce them: with a key that has write access, a destructive call runs as soon as it is sent.
 
-For investigations, enable the read tools (`get_*`, `list_*`, `search_*` and `server_info`). If you enable any `update_*`, `delete_*`, `annotate_*`, `trigger_task_run`, `cancel_task_run` or prompt label tool, require operator approval for it.
+For investigations, enable the read tools (`get_*`, `list_*`, `search_*` and `server_info`). If you enable any `update_*`, `delete_*`, `annotate_*`, `assign_*`, `trigger_task_run`, `cancel_task_run` or prompt label tool, require operator approval for it.
 
 ## Limits
 

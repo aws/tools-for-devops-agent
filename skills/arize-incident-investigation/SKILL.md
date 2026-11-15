@@ -40,7 +40,7 @@ Arize AX holds traces of LLM applications and agents in OpenInference format: on
 ### Step 1: Orient and set the time window
 
 1. `list_projects`, passing `name` if the operator gave a service name. If no project matches, list the candidates and ask the operator which one to use. Record the `project_id` and `space_id`.
-2. Take the incident start time from the operator or the alert that opened the investigation. Monitors do not record when they changed state. If you have no start time, call `list_spans` with `filter` `status_code = 'ERROR'` over the last 24 hours and narrow the window until the errors begin.
+2. Take the incident start time from the operator or the alert that opened the investigation. Monitors do not record when they changed state. If you have no start time, call `list_spans` with `filter` `status_code = 'ERROR'` over the last 24 hours and follow pagination back through the search window before establishing onset. A newest-first page is not the whole window. Do not narrow around the oldest result on an incomplete page and call it incident onset; if you stop early, report onset as unknown and give only sampled times. Keep cursor query parameters fixed. Before reporting an earliest timestamp, verify that it is the minimum returned start_time from a complete query and cite that exact span. Preserve fractional seconds in boundary comparisons.
 
 ### Step 2: Check monitors
 
@@ -54,7 +54,7 @@ Call `list_spans` on the project for a window starting just before the incident,
 - Latency: `latency_ms > <threshold>`. Compare against the root span's duration before treating a whole request as slow.
 - Model calls only: `attributes.openinference.span.kind = 'LLM'`
 
-Run the same call for an equal window before the incident as a baseline. Compare the two samples for what the failing spans share: span name, model name (`attributes.llm.model_name`), tool name, session or user attributes.
+Run the same call for an equal window before the incident as a baseline. If the symptom-filtered baseline is empty, check an unfiltered or successful-request sample before claiming the baseline had traffic but no errors or that no baseline traces exist. Compare the two samples for what the failing spans share: span name, model name (`attributes.llm.model_name`), tool name, session or user attributes.
 
 ### Step 4: Read the spans in two or three traces
 
@@ -63,19 +63,19 @@ Pick two or three representative trace IDs from Step 3 and get each trace's span
 - The span with `status_code` `ERROR`, its `status_message`, and its exception events. Provider errors (rate limits, authentication, context length, content filter) show up on LLM spans.
 - The span whose duration accounts for most of the trace. A slow LLM span points to the provider or model; a slow tool or retriever span points to the downstream service it calls, which other tools can then examine.
 - Token counts on LLM spans (`llm.token_count.prompt`, `llm.token_count.completion`). A jump in prompt tokens with no traffic change often means a prompt or retrieval change.
-- Repeated tool calls or agent steps within one trace, which indicates an agent loop.
+- Repeated tool calls or agent steps within one trace, which may indicate a loop; check whether calls make progress or are legitimate retries before concluding.
 
 ### Step 5: Check evals
 
-1. Eval results are stored on spans, in each span's `evaluations` and as `eval.<name>.label` and `eval.<name>.score` columns. If the spans from Step 4 have evaluations, run `list_spans` with a filter on the eval (for example `eval.<name>.label = 'hallucinated'`) for the incident window and the baseline window, and compare.
+1. Before filtering or projecting evaluation columns, read a small unprojected span sample to discover actual evaluation names. Do not invent evaluation names. If your previous included_columns selection omitted evaluations, that is not evidence evaluations are absent. Eval results are stored on spans, in each span's `evaluations` and as `eval.<name>.label` and `eval.<name>.score` columns. If the spans from Step 4 have evaluations, run `list_spans` with a filter on the eval (for example `eval.<name>.label = 'hallucinated'`) for the incident window and the baseline window, and compare.
 2. `list_tasks` for the project, then `list_task_runs` for each eval task, shows whether the eval pipeline itself failed (`status`, `num_errors`, `failure_reason`). Check `FAILED` and `CANCELLED` runs: a cancelled run can mean some evals were written before it hit errors. `list_tasks` leaves out decision-judge tasks unless you pass `type` `DECISION_JUDGE_EVALUATION`. A run that failed on an LLM provider error means the judge model failed, not the application. Report it separately.
 
 ### Step 6: Check prompt changes
 
-A new prompt version is a deployment.
+A new prompt version is not necessarily a deployment. Establish the version actually served from trace metadata and deployment evidence. Current labels cannot prove historical usage.
 
 1. Find the prompt. If the LLM spans record a prompt template, version or name attribute, use it; otherwise ask the operator which prompt the service uses. `list_prompts` for the space gives the `prompt_id`.
-2. `get_prompt_label` with `production` (or the label the team serves) gives the version in use. `list_prompt_versions` gives each version's `created_at` and current labels.
+2. `get_prompt_label` with `production` (or the label the team serves) gives the version currently referenced by that label, not necessarily served by the application. `list_prompt_versions` gives each version's `created_at` and current labels.
 3. If the served version was created shortly before the incident, compare traces before and after that time as in Step 3.
 
 These tools show when a version was created, not when a label was moved to it. If the served version is older than the incident, say that a label change cannot be ruled out from Arize data alone.
@@ -86,7 +86,7 @@ State the root cause with the trace IDs, span IDs, monitor names and prompt vers
 
 ## When results are empty or unclear
 
-- A `404` on a resource the operator can see in the UI means the key lacks read access to that space or project, or belongs to a different region. Report it; do not retry.
+- A `404` can mean the requested resource or label does not exist, the ID is stale or wrong, or access/region does not match. Use the error detail and verify identifiers before diagnosing permissions. Report it; do not retry.
 - No traces in the window: widen the window for late-arriving data, check the project, then ask whether the service is instrumented.
 - `429`: wait the number of seconds in `Retry-After`, then narrow the filter or time window before retrying.
 - A call that times out after 30 seconds: shorten the time window or lower `limit`.
