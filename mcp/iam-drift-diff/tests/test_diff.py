@@ -491,3 +491,21 @@ def test_notresource_is_explicit():
     a = _doc({"Effect": "Allow", "Action": "s3:GetObject", "NotResource": "arn:aws:s3:::secret/*"})
     c, body = _body_change(_doc({"Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::pub/*"}), a)
     assert "s3:GetObject @ NOT[arn:aws:s3:::secret/*]" in body["grants_added"]
+
+
+def test_condition_added_to_existing_grants_is_down_not_mixed():
+    """The 1.0.1 execution-role update: same S3 grants, now conditioned."""
+    plain = {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": "arn:aws:s3:::b/*"}
+    guarded = dict(plain, Condition={"StringEquals": {"aws:ResourceAccount": ACCT}})
+    c, body = _body_change(_doc(plain), _doc(guarded))
+    assert body["grants_added"] == [] and body["grants_removed"] == []
+    assert body["grants_conditioned"] == ["s3:GetObject @ arn:aws:s3:::b/*", "s3:PutObject @ arn:aws:s3:::b/*"]
+    assert c["direction"] == "down"
+
+
+def test_condition_removed_from_grant_is_up():
+    plain = {"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"}
+    guarded = dict(plain, Condition={"Bool": {"aws:SecureTransport": "true"}})
+    c, body = _body_change(_doc(guarded), _doc(plain))
+    assert body["grants_unconditioned"] == ["s3:GetObject @ *"] and body["grants_added"] == []
+    assert c["direction"] == "up"

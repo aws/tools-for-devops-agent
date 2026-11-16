@@ -198,13 +198,24 @@ def _denies(doc: Any) -> set[str]:
     return _statement_strings(doc, "Deny")
 
 
+_COND = " (conditioned)"
+
+
 def _policy_body_change(before_doc: Any, after_doc: Any) -> dict[str, Any]:
     b, a = _grants(before_doc), _grants(after_doc)
-    added, removed = sorted(a - b), sorted(b - a)
+    added, removed = a - b, b - a
+    # The same action @ resource gaining a condition is a tightening, and
+    # losing one is a broadening. Report them as such instead of as a grant
+    # removed plus a grant added, which would read as "mixed".
+    conditioned = {r for r in removed if r + _COND in added}
+    unconditioned = {x for x in added if x + _COND in removed}
+    added -= {c + _COND for c in conditioned} | unconditioned
+    removed -= conditioned | {u + _COND for u in unconditioned}
+    added, removed = sorted(added), sorted(removed)
     bd, ad = _denies(before_doc), _denies(after_doc)
     denies_added, denies_removed = sorted(ad - bd), sorted(bd - ad)
-    up = bool(added or denies_removed)
-    down = bool(removed or denies_added)
+    up = bool(added or denies_removed or unconditioned)
+    down = bool(removed or denies_added or conditioned)
     if up and down:
         direction = "mixed"
     elif up:
@@ -214,6 +225,8 @@ def _policy_body_change(before_doc: Any, after_doc: Any) -> dict[str, Any]:
     else:
         direction = "lateral"  # e.g. condition-only edits
     return {"grants_added": added, "grants_removed": removed,
+            "grants_conditioned": sorted(conditioned),
+            "grants_unconditioned": sorted(unconditioned),
             "denies_added": denies_added, "denies_removed": denies_removed,
             "direction": direction}
 

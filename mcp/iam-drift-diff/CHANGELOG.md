@@ -9,6 +9,8 @@
 - A malformed `x-amzn-request-context` header no longer makes a tool that already did its work return an error; the audit line is still written, with empty caller fields.
 - Trust `high_risk` now tracks the condition keys guarding each principal (`principal_conditions_lost`), flags new unconditioned `Federated` principals (`unguarded_federated_principals_added`) and removed trust `Deny` statements (`deny_statements_removed`).
 - Policy-body diffs render `NotAction` / `NotResource` explicitly (`NOT[...]`) and report `denies_added` / `denies_removed`; a removed `Deny` is direction `up`, an added one `down`.
+- A grant that gains a condition is reported in `grants_conditioned` (direction `down`), and one that loses a condition in `grants_unconditioned` (`up`), instead of as a grant removed plus a grant added (`mixed`).
+- Drift prompt: one authoritative recommendation rule, and the run must end with the full report even after updating an existing artifact.
 - `coverage.denied_calls` carries the AWS error code only; full error text goes to the function log.
 - Refused calls (account not allowlisted) and unexpected errors now write an audit line.
 - The function logs to its own log group `/iam-drift-diff/<stage>` with `LogRetentionDays` (default 365). New output `FunctionLogGroupName`. The old `/aws/lambda/iam-drift-diff-mcp-<stage>` group is no longer written and can be deleted after review.
