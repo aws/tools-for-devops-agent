@@ -42,7 +42,7 @@ MAX_SUMMARY_LENGTH = 200
 MAX_COMPATIBILITY_LENGTH = 500
 # The skill evaluation tool's structure test warns above this many body lines.
 MAX_BODY_LINES = 500
-TIERS = ("aws-managed", "partner-managed")
+TIERS = ("aws-managed", "aws-support-managed", "partner-managed")
 
 VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 # At most 10 digits in each part, so a version is at most 32 characters and
@@ -829,8 +829,9 @@ def _check_deprecated(metadata: dict, lines: dict, report: _Report) -> None:
 def _check_tier(metadata: dict, lines: dict, report: _Report) -> None:
     tier = metadata.get("tier")
     if tier is not None and tier not in TIERS:
+        allowed = ", ".join(f'"{t}"' for t in TIERS[:-1]) + f' or "{TIERS[-1]}"'
         report.error(
-            '"metadata.tier" must be "aws-managed" or "partner-managed": who maintains the skill',
+            f'"metadata.tier" must be {allowed}: who maintains the skill',
             line=lines["tier"],
         )
 
