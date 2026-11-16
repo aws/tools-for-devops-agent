@@ -13,6 +13,7 @@
 - Refused calls (account not allowlisted) and unexpected errors now write an audit line.
 - The function logs to its own log group `/iam-drift-diff/<stage>` with `LogRetentionDays` (default 365). New output `FunctionLogGroupName`. The old `/aws/lambda/iam-drift-diff-mcp-<stage>` group is no longer written and can be deleted after review.
 - Tests: execution-role scope assertion on `template.yaml`; account gate refuses in every tool.
+- Deploy docs and `samconfig.toml` now pass `CAPABILITY_NAMED_IAM` (required because the invoke role has a fixed name).
 
 ## [1.0.0] - 2026-11-02
 ### Pre-release hardening (security)

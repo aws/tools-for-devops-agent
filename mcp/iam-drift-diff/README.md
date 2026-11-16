@@ -236,7 +236,7 @@ the Lambda runtime, not the (possibly macOS/arm64) build host.
 sam build        # builds the deps layer via its Makefile (platform-pinned wheels)
 sam deploy --guided \
   --stack-name iam-drift-diff-mcp \
-  --capabilities CAPABILITY_IAM \
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
   --parameter-overrides \
     AllowedAccounts=<your 12-digit account id> \
     SourceAccount=<account id that owns the DevOps Agent space>
