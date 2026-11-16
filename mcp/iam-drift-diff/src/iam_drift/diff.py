@@ -14,6 +14,7 @@ the agent may override it.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from iam_drift.snapshot import _doc_hash
@@ -42,6 +43,19 @@ def _field_set_diff(before: list, after: list) -> tuple[list, list]:
 def _entity_changes(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     """Compute per-field changes for one principal present in both snapshots."""
     changes: dict[str, Any] = {}
+    # Fingerprint scope changed between snapshot schemas (schema 1 recorded
+    # `/service-role/` roles by presence only; schema 2 fingerprints them). The
+    # before side has no fields to compare, so report the scope change itself
+    # instead of a false "everything was added". The full current state is in
+    # the after snapshot (iam_snapshot_get_entity) for a one-time review.
+    if bool(before.get("aws_managed")) != bool(after.get("aws_managed")):
+        return {"fingerprint_scope_changed": {
+            "before_aws_managed": bool(before.get("aws_managed")),
+            "after_aws_managed": bool(after.get("aws_managed")),
+            "note": ("This role was not fully fingerprinted in the earlier snapshot, so it "
+                     "cannot be compared this run. Review its current state once with "
+                     "iam_snapshot_get_entity; the next diff compares it normally."),
+        }}
 
     # attached managed policies
     if "attached" in before or "attached" in after:
@@ -143,20 +157,29 @@ def _principals(doc: Any) -> set[str]:
     return out
 
 
-def _grants(doc: Any) -> set[str]:
-    """Allow-statement grants as 'action @ resource' strings (order-independent).
-    Coarse but exact: any new grant string = something broadened; any missing
-    grant string = something narrowed."""
+def _as_list(v: Any) -> list:
+    return v if isinstance(v, list) else [v]
+
+
+def _statement_strings(doc: Any, effect: str) -> set[str]:
+    """Statements with the given Effect as 'action @ resource' strings
+    (order-independent). `NotAction` / `NotResource` are rendered explicitly as
+    `NOT[a,b]` so an Allow + NotAction (which grants everything except the
+    listed actions) is never invisible. Conditioned statements are marked."""
     out: set[str] = set()
     if not isinstance(doc, dict):
         return out
-    for s in doc.get("Statement", []) or []:
-        if not isinstance(s, dict) or s.get("Effect") != "Allow":
+    for s in _as_list(doc.get("Statement", []) or []):
+        if not isinstance(s, dict) or s.get("Effect") != effect:
             continue
-        acts = s.get("Action", [])
-        res = s.get("Resource", "*")
-        acts = acts if isinstance(acts, list) else [acts]
-        res = res if isinstance(res, list) else [res]
+        if "NotAction" in s:
+            acts = ["NOT[" + ",".join(sorted(str(x) for x in _as_list(s["NotAction"]))) + "]"]
+        else:
+            acts = [str(x) for x in _as_list(s.get("Action", []))]
+        if "NotResource" in s:
+            res = ["NOT[" + ",".join(sorted(str(x) for x in _as_list(s["NotResource"]))) + "]"]
+        else:
+            res = [str(x) for x in _as_list(s.get("Resource", "*"))]
         cond = "" if not s.get("Condition") else " (conditioned)"
         for a in acts:
             for r in res:
@@ -164,18 +187,35 @@ def _grants(doc: Any) -> set[str]:
     return out
 
 
+def _grants(doc: Any) -> set[str]:
+    """Allow-statement grants. Coarse but exact: any new grant string =
+    something broadened; any missing grant string = something narrowed."""
+    return _statement_strings(doc, "Allow")
+
+
+def _denies(doc: Any) -> set[str]:
+    """Deny-statement strings. A removed deny broadens; an added deny narrows."""
+    return _statement_strings(doc, "Deny")
+
+
 def _policy_body_change(before_doc: Any, after_doc: Any) -> dict[str, Any]:
     b, a = _grants(before_doc), _grants(after_doc)
     added, removed = sorted(a - b), sorted(b - a)
-    if added and removed:
+    bd, ad = _denies(before_doc), _denies(after_doc)
+    denies_added, denies_removed = sorted(ad - bd), sorted(bd - ad)
+    up = bool(added or denies_removed)
+    down = bool(removed or denies_added)
+    if up and down:
         direction = "mixed"
-    elif added:
+    elif up:
         direction = "up"
-    elif removed:
+    elif down:
         direction = "down"
     else:
-        direction = "lateral"  # e.g. Deny/condition/NotAction edits
-    return {"grants_added": added, "grants_removed": removed, "direction": direction}
+        direction = "lateral"  # e.g. condition-only edits
+    return {"grants_added": added, "grants_removed": removed,
+            "denies_added": denies_added, "denies_removed": denies_removed,
+            "direction": direction}
 
 
 def _unguarded_principals(doc: Any) -> set[str]:
@@ -201,6 +241,36 @@ def _account_of(principal: str) -> str | None:
     return parts[4] if len(parts) > 4 and parts[4].isdigit() else None
 
 
+def _guard_keys(doc: Any) -> dict[str, frozenset]:
+    """For each Allow principal, the condition keys that guard EVERY statement
+    granting it (operator:key, case-insensitive key). A principal granted by any
+    unconditioned statement maps to an empty set (unguarded)."""
+    out: dict[str, frozenset] = {}
+    if not isinstance(doc, dict):
+        return out
+    for stmt in _as_list(doc.get("Statement", []) or []):
+        if not isinstance(stmt, dict) or stmt.get("Effect") != "Allow":
+            continue
+        cond = stmt.get("Condition")
+        keys = frozenset(
+            f"{op}:{str(k).lower()}"
+            for op, kv in (cond.items() if isinstance(cond, dict) else [])
+            if isinstance(kv, dict) for k in kv
+        )
+        for p in _principals({"Statement": [stmt]}):
+            out[p] = keys if p not in out else (out[p] & keys)
+    return out
+
+
+def _deny_statements(doc: Any) -> set[str]:
+    """Canonical JSON of each Deny statement (trust policies)."""
+    if not isinstance(doc, dict):
+        return set()
+    return {json.dumps(s, sort_keys=True, separators=(",", ":"))
+            for s in _as_list(doc.get("Statement", []) or [])
+            if isinstance(s, dict) and s.get("Effect") == "Deny"}
+
+
 def _condition_count(doc: Any) -> int:
     if not isinstance(doc, dict):
         return 0
@@ -213,16 +283,26 @@ def _condition_count(doc: Any) -> int:
 def _trust_analysis(before_doc: Any, after_doc: Any, own_account: str | None = None) -> dict[str, Any]:
     """Explain a trust-policy change and give it a direction.
 
-    up   = a principal was added, a wildcard "*" appeared, or a condition was
-           removed (any of which widens who can assume the role)
+    up   = a principal was added, a wildcard "*" appeared, a condition was
+           removed or lost by a principal, or a Deny was removed (any of which
+           widens who can assume the role)
     down = principals only removed, conditions not reduced
     lateral = changed but neither of the above (e.g. condition values edited)
     """
     b, a = _principals(before_doc), _principals(after_doc)
     added, removed = sorted(a - b), sorted(b - a)
     wildcard_new = "*" in a and "*" not in b
-    conditions_removed = _condition_count(after_doc) < _condition_count(before_doc)
-    if added or wildcard_new or conditions_removed:
+    # Per-principal: which guarding condition keys did a surviving principal
+    # lose? Counting conditioned statements alone misses a condition moved to a
+    # different statement or swapped for a weaker key.
+    bg, ag = _guard_keys(before_doc), _guard_keys(after_doc)
+    principal_conditions_lost = {
+        p: sorted(bg[p] - ag[p]) for p in sorted(set(bg) & set(ag)) if bg[p] - ag[p]
+    }
+    deny_removed = len(_deny_statements(before_doc) - _deny_statements(after_doc))
+    conditions_removed = (_condition_count(after_doc) < _condition_count(before_doc)
+                          or bool(principal_conditions_lost))
+    if added or wildcard_new or conditions_removed or deny_removed:
         direction = "up"
     elif removed:
         direction = "down"
@@ -238,13 +318,21 @@ def _trust_analysis(before_doc: Any, after_doc: Any, own_account: str | None = N
         p for p in added
         if p in unguarded and _account_of(p) and _account_of(p) != own_account
     )
-    high_risk = bool(wildcard_new or conditions_removed or unguarded_external_added)
+    # A federated principal (OIDC / SAML provider) with no condition lets any
+    # identity from that provider assume the role.
+    unguarded_federated_added = sorted(
+        p for p in added if p in unguarded and p.startswith("Federated:"))
+    high_risk = bool(wildcard_new or conditions_removed or unguarded_external_added
+                     or unguarded_federated_added or deny_removed)
     return {
         "principals_added": added,
         "principals_removed": removed,
         "wildcard_principal_added": wildcard_new,
         "conditions_removed": conditions_removed,
+        "principal_conditions_lost": principal_conditions_lost,
+        "deny_statements_removed": deny_removed,
         "unguarded_external_principals_added": unguarded_external_added,
+        "unguarded_federated_principals_added": unguarded_federated_added,
         "high_risk": high_risk,
         "direction": direction,
         "before": before_doc,
@@ -300,8 +388,9 @@ def diff_snapshots(before: dict[str, Any], after: dict[str, Any]) -> dict[str, A
     for arn in sorted(a_arns - b_arns):
         e = a_entities[arn]
         # A new customer principal: trust surface alone makes it risk-up even
-        # with no grants. A new AWS service-linked/service role is created by
-        # AWS when a service is enabled -- informational, not customer drift.
+        # with no grants. A new service-linked role (/aws-service-role/) is
+        # created by AWS when a service is enabled -- informational, not
+        # customer drift. A new /service-role/ role is a customer role: "up".
         hint = "info" if e.get("aws_managed") else "up"
         added_principals.append({
             "arn": arn,
@@ -330,7 +419,8 @@ def diff_snapshots(before: dict[str, Any], after: dict[str, Any]) -> dict[str, A
                 "type": a_entities[arn].get("type"),
                 "name": a_entities[arn].get("name"),
                 "changes": ch,
-                "direction": _direction_hint(ch, a_entities[arn]),
+                "direction": ("info" if "fingerprint_scope_changed" in ch
+                              else _direction_hint(ch, a_entities[arn])),
             })
 
     b_cov = before.get("coverage", {})
@@ -350,7 +440,8 @@ def diff_snapshots(before: dict[str, Any], after: dict[str, Any]) -> dict[str, A
             "up": sum(1 for c in changed if c["direction"] == "up")
                   + sum(1 for p in added_principals if p["direction"] == "up"),
             "mixed": sum(1 for c in changed if c["direction"] == "mixed"),
-            "info": sum(1 for p in added_principals if p["direction"] == "info"),
+            "info": sum(1 for p in added_principals if p["direction"] == "info")
+                    + sum(1 for c in changed if c["direction"] == "info"),
             "down": sum(1 for c in changed if c["direction"] == "down")
                     + len(removed_principals),
             "lateral": sum(1 for c in changed if c["direction"] == "lateral"),

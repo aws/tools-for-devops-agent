@@ -90,11 +90,16 @@ def _doc_hash(document: Any) -> str:
 
 
 def _is_aws_managed_role(arn: str, path: str) -> bool:
-    """Service-linked / AWS-managed roles are AWS-controlled, not customer drift
-    surface. We record them by name/presence only and skip their policy bodies.
-    Identified by the reserved path prefixes.
+    """Service-linked roles are AWS-controlled, not customer drift surface. We
+    record them by name/presence only and skip their policy bodies.
+
+    Only `/aws-service-role/` is reserved by IAM for service-linked roles.
+    `/service-role/` is NOT reserved -- it is
+    the console's default path for customer-created service roles and any
+    principal with iam:CreateRole can use it -- so roles there are fully
+    fingerprinted like any other customer role.
     """
-    return path.startswith("/aws-service-role/") or path.startswith("/service-role/")
+    return path.startswith("/aws-service-role/")
 
 
 def _inline_docs(policies: list) -> dict[str, Any]:
@@ -109,9 +114,10 @@ def _inline_docs(policies: list) -> dict[str, Any]:
 def normalize_role(role: dict[str, Any]) -> dict[str, Any]:
     """Normalize one RoleDetailList entry into a fingerprint.
 
-    Customer roles get full attached-ARN sets, inline name+hash sets, and a
-    trust-policy hash. AWS-managed/service-linked roles are recorded by
-    presence only (aws_managed=True) with no policy bodies.
+    Customer roles (including any under `/service-role/`) get full attached-ARN
+    sets, inline name+hash sets, and a trust-policy hash. Service-linked roles
+    (`/aws-service-role/`) are recorded by presence only (aws_managed=True)
+    with no policy bodies.
     """
     arn = role["Arn"]
     path = role.get("Path", "/")
@@ -252,7 +258,9 @@ def build_snapshot(
     }
 
     return {
-        "schema": 1,
+        # schema 2: `/service-role/` roles are fully fingerprinted (schema 1
+        # recorded them by presence only). See diff._entity_changes.
+        "schema": 2,
         "entities": entities,
         "coverage": coverage,
     }

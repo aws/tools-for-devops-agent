@@ -74,11 +74,20 @@ never hide behind "everything matches."
 
 ### What is intentionally skipped
 
-Policy documents of AWS service-linked / service-role principals (reserved path
-prefixes `/aws-service-role/`, `/service-role/`) are recorded by presence only —
-they are AWS-controlled, not customer drift surface. This is scoped by role
-**type**, never by whether a role changed, so it cannot cause the quiet-role
-miss.
+Policy documents of AWS service-linked roles (the IAM-reserved path prefix
+`/aws-service-role/`) are recorded by presence only — they are AWS-controlled,
+not customer drift surface. This is scoped by role **type**, never by whether a
+role changed, so it cannot cause the quiet-role miss. Roles under
+`/service-role/` are customer roles (it is the console's default path for
+service roles, and any principal with `iam:CreateRole` can use it), so they are
+fully fingerprinted and diffed like any other role.
+
+**Upgrading from 1.0.0:** 1.0.0 recorded `/service-role/` roles by presence
+only. The first diff after upgrading lists each of them once under
+`changed_principals` with `fingerprint_scope_changed` and direction `info`,
+because the older snapshot has nothing to compare against. Review their
+current state once (`iam_snapshot_get_entity`); later diffs compare them
+normally.
 
 ## Architecture & security
 
@@ -110,8 +119,9 @@ miss.
 - Only the server's execution role can write or delete objects in the snapshot bucket (`DenyObjectWritesExceptServerRole`). This blocks account administrators too, by design.
 - Snapshot ids must be real UTC capture times (`20261102T120000Z`). Keys that are not, or are dated in the future, are ignored, so a foreign object can never become "latest" or push real snapshots out. Ids passed to tools are validated before they reach S3, and each stored snapshot carries its own id, which is checked on read.
 - Versioning (90-day noncurrent retention) allows recovery.
+- Every S3 call passes `ExpectedBucketOwner` (the account the server runs in), and the execution role's S3 permissions carry an `aws:ResourceAccount` condition, so if the bucket were deleted and its name re-created in another account, the server fails instead of writing the IAM map there.
 
-**Baseline and capture throttle.** With no arguments, `iam_snapshot_diff` compares the latest snapshot against the one the last complete report used, and returns `intervening_snapshots` (captures made in between). Only a diff called with `record_baseline: true` (the scheduled drift run) moves that baseline, so ad-hoc diffs have no side effects. A capture or an exploratory diff made right after an IAM change therefore cannot hide that change from the next scheduled run. Captures closer together than `MinCaptureIntervalSeconds` (default 300) return the latest snapshot with `throttled: true` and write nothing. Retention keeps the newest `SnapshotRetain` snapshots (minimum 4) and never prunes the pair the last report used. Residual: a caller with invoke rights can still call `iam_snapshot_diff` with `record_baseline: true` to advance the baseline deliberately; every call, including that flag, is in the audit log.
+**Baseline and capture throttle.** With no arguments, `iam_snapshot_diff` compares the latest snapshot against the one the last complete report used, and returns `intervening_snapshots` (captures made in between). Only a diff called with `record_baseline: true` (the scheduled drift run) moves that baseline, so ad-hoc diffs have no side effects. A capture or an exploratory diff made right after an IAM change therefore cannot hide that change from the next scheduled run. Captures closer together than `MinCaptureIntervalSeconds` (default 300) return the latest snapshot with `throttled: true` and write nothing. Retention keeps the newest `SnapshotRetain` snapshots (minimum 4) and never prunes the pair the last report used. Residual: a caller with invoke rights can still call `iam_snapshot_diff` with `record_baseline: true` to advance the baseline deliberately; every call, including that flag, is in the audit log. Reads of the baseline pointer fail closed: if it cannot be read for any reason other than "not found" (AccessDenied, KMS or S3 throttling, a service error), capture and diff write, prune and compare nothing and return a retryable error, so a transient failure never looks like a first run. If the pointer is readable but invalid, or names snapshots that no longer exist, the diff compares against the oldest retained snapshot (`baseline_source: baseline_pointer_invalid` or `previous_baseline_missing`) so no retained change is skipped; an invalid pointer also makes capture skip pruning until the next scheduled diff rewrites it.
 
 **Encryption.** SSE-KMS with a dedicated, rotating CMK. The key policy denies data-key use except through S3 in the owning account (`kms:ViaService`, `kms:CallerAccount`). TLS is required by bucket policy and all Block Public Access settings are on.
 
@@ -119,7 +129,7 @@ miss.
 
 **Invocation.** With `RestrictInvokeToFunctionUrl=true` (default), the invoke role's `lambda:InvokeFunction` is limited to calls made through the Function URL (`lambda:InvokedViaFunctionUrl`). Set it to `false` only if registration fails with 403.
 
-**Audit log.** Each tool call writes one JSON line to the function's log: tool name, request id, caller account and ARN (from the Function URL request context), and snapshot ids. No policy content or snapshot principals are logged. For a durable record, enable CloudTrail data events for the function and bucket.
+**Audit log.** Each tool call writes one JSON line to the function's log group (`FunctionLogGroupName` output, `/iam-drift-diff/<stage>`, retention `LogRetentionDays`, default 365): tool name, request id, caller account and ARN (from the Function URL request context), and snapshot ids. Refused calls (account not in `ALLOWED_ACCOUNTS`), unreadable baseline pointers and unexpected errors also write a line with an `error` field. No policy content or snapshot principals are logged. For a durable record, enable CloudTrail data events for the function and bucket.
 
 **Teardown.** Because object deletes are denied to everyone but the server, delete the bucket policy first (`aws s3api delete-bucket-policy --bucket <SnapshotBucketName>`), empty the bucket including all versions, then empty the access-log bucket (`AccessLogBucketName`) including all versions, then delete the stack.
 
@@ -129,8 +139,12 @@ miss.
 - *Principals with `s3:GetObject` and the right IAM rights* can read stored snapshots. The content equals what `iam:GetAccountAuthorizationDetails` already returns live; add a `GetObject` deny to the bucket policy if historical state must be restricted further.
 - *Administrators* can remove the bucket policy or change `AuthType`. Administrators are trusted; use an SCP that requires `lambda:FunctionUrlAuthType = AWS_IAM` to guard against misconfiguration.
 - *Diff engine defects* could cause a false negative. The engine is deterministic and unit-tested, and incomplete reads are always flagged.
+- *Diff engine defects* in trust and policy-body classification are covered by tests for the known hard cases: a condition removed from or swapped on one trust principal (`principal_conditions_lost`), a new unconditioned `Federated` principal, a removed trust `Deny` (`deny_statements_removed`), `Allow` + `NotAction` / `NotResource` (rendered as `NOT[...]` grants), and removed or added `Deny` statements in policy bodies (`denies_removed` / `denies_added`). Before/after trust documents are always returned.
 - *Capture flooding and cost* are bounded by the capture throttle. No reserved concurrency is set, because new accounts often lack spare concurrency to reserve.
-- *AWS error text* in `coverage.denied_calls` is returned to the already-authorized caller and the function log only.
+- *Errors:* `coverage.denied_calls` carries only the AWS error code (for example `AccessDenied`); the full error text goes to the function log only.
+- *Stack deletion* removes the KMS key and bucket resources (no `DeletionPolicy: Retain`). CloudFormation cannot delete a non-empty versioned bucket, and deleting the stack is an administrator action; add `DeletionPolicy: Retain` if snapshots must outlive the stack.
+- *The KMS key policy* gives the account root full key administration, as in the AWS default key policy, so the key stays manageable. Data-key use is denied except through S3 in the owning account.
+- *Large responses:* `iam_snapshot_diff` returns the whole diff and `iam_snapshot_list` reads up to 50 snapshots. Both are bounded by the account's own IAM size and the list limit, and only the authorized caller receives them.
 - *Dependencies* are hash-locked: `layers/dependencies/requirements.txt` pins `fastmcp==4.1.2`, `boto3==1.43.123` and every transitive dependency with SHA-256 hashes, and the layer build uses `pip --require-hashes`. Packages come from PyPI, not an AWS-controlled mirror. The Lambda Web Adapter layer version is pinned.
 
 ## DevOps Agent only

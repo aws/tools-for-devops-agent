@@ -1,4 +1,18 @@
 # Changelog
+## [1.0.1] - 2026-11-16
+### Fixed (security review)
+- Roles under `/service-role/` are now fully fingerprinted and diffed. 1.0.0 treated that path as AWS-reserved and skipped their trust, attached, inline and boundary fields, so changes to them showed as "no drift". Only `/aws-service-role/` (service-linked roles) is recorded by presence only. Snapshot `schema` is now 2; the first diff after upgrading reports each `/service-role/` role once as `fingerprint_scope_changed` (direction `info`).
+- Baseline pointer reads fail closed. 1.0.0 treated any read error (AccessDenied, throttling, 5xx) as "no baseline", so a scheduled run could compare only the latest two snapshots, then record past unreported changes, and capture could prune the reported pair. Now only "not found" means no baseline; other errors return a retryable error with nothing written or pruned. An invalid pointer makes the diff compare against the oldest retained snapshot (`baseline_source: baseline_pointer_invalid`) and capture skip pruning.
+- `iam_snapshot_list` reports `baseline_error` instead of failing when the pointer is unreadable or invalid.
+- A baseline pointer that names snapshots no longer in the bucket now also makes the diff compare against the oldest retained snapshot (`previous_baseline_missing`), instead of the latest two.
+- Every S3 call passes `ExpectedBucketOwner`, and the execution role's S3 statement requires `aws:ResourceAccount` to be the deploying account.
+- A malformed `x-amzn-request-context` header no longer makes a tool that already did its work return an error; the audit line is still written, with empty caller fields.
+- Trust `high_risk` now tracks the condition keys guarding each principal (`principal_conditions_lost`), flags new unconditioned `Federated` principals (`unguarded_federated_principals_added`) and removed trust `Deny` statements (`deny_statements_removed`).
+- Policy-body diffs render `NotAction` / `NotResource` explicitly (`NOT[...]`) and report `denies_added` / `denies_removed`; a removed `Deny` is direction `up`, an added one `down`.
+- `coverage.denied_calls` carries the AWS error code only; full error text goes to the function log.
+- Refused calls (account not allowlisted) and unexpected errors now write an audit line.
+- The function logs to its own log group `/iam-drift-diff/<stage>` with `LogRetentionDays` (default 365). New output `FunctionLogGroupName`. The old `/aws/lambda/iam-drift-diff-mcp-<stage>` group is no longer written and can be deleted after review.
+- Tests: execution-role scope assertion on `template.yaml`; account gate refuses in every tool.
 
 ## [1.0.0] - 2026-11-02
 ### Pre-release hardening (security)

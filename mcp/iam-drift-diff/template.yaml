@@ -52,6 +52,13 @@ Parameters:
     Description: >
       Captures closer together than this return the latest snapshot instead of
       writing a new one, so repeated captures cannot push older snapshots out.
+  LogRetentionDays:
+    Type: Number
+    Default: 365
+    AllowedValues: [30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
+    Description: >
+      Retention for the function's log group (audit lines and errors). The
+      function logs to its own log group created by this stack.
   RestrictInvokeToFunctionUrl:
     Type: String
     Default: 'true'
@@ -228,10 +235,20 @@ Resources:
                 aws:PrincipalArn: !GetAtt IamDriftDiffFunctionRole.Arn
 
   # ---- Lambda (Lambda Web Adapter, Streamable HTTP) ---------------------
+  # Dedicated log group with finite retention (threat model M18). A new name,
+  # not /aws/lambda/<function>, so updating an existing stack does not collide
+  # with the log group Lambda created implicitly.
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /iam-drift-diff/${StageName}
+      RetentionInDays: !Ref LogRetentionDays
   IamDriftDiffFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub iam-drift-diff-mcp-${StageName}
+      LoggingConfig:
+        LogGroup: !Ref FunctionLogGroup
       Handler: run.sh
       CodeUri: src/
       Description: iam-drift-diff MCP Server - Streamable HTTP via Lambda Web Adapter
@@ -272,6 +289,11 @@ Resources:
               Resource:
                 - !GetAtt SnapshotBucket.Arn
                 - !Sub ${SnapshotBucket.Arn}/snapshots/*
+              # Only this account's bucket, even if the name were re-created
+              # elsewhere (the code also passes ExpectedBucketOwner).
+              Condition:
+                StringEquals:
+                  aws:ResourceAccount: !Ref AWS::AccountId
             - Sid: SnapshotEncryptionKeyOnly
               Effect: Allow
               Action:
@@ -358,3 +380,6 @@ Outputs:
     Value: !GetAtt McpInvokeRole.Arn
   FunctionArn:
     Value: !GetAtt IamDriftDiffFunction.Arn
+  FunctionLogGroupName:
+    Description: CloudWatch log group with the per-call audit lines.
+    Value: !Ref FunctionLogGroup

@@ -29,7 +29,8 @@ import sys
 import boto3
 from fastmcp import FastMCP
 
-from iam_drift.aws import MIN_RETAIN, InvalidSnapshotId, SnapshotStore, validate_snapshot_id
+from iam_drift.aws import (MIN_RETAIN, BaselinePointerUnreadable, InvalidSnapshotId, SnapshotStore,
+                           validate_snapshot_id)
 from iam_drift.ops import run_capture, run_diff
 
 
@@ -80,13 +81,18 @@ if not _audit.handlers:
 
 
 def _caller() -> dict:
+    """Caller identity for the audit line. Never raises: a missing or malformed
+    request-context header (any level not a JSON object) yields None fields, so
+    a tool that already did its work still returns its result and logs."""
+    def _obj(v) -> dict:
+        return v if isinstance(v, dict) else {}
     try:
         from fastmcp.server.dependencies import get_http_headers
         raw = get_http_headers(include_all=True).get("x-amzn-request-context")
-        ctx = json.loads(raw) if raw else {}
+        ctx = _obj(json.loads(raw)) if raw else {}
     except Exception:
         ctx = {}
-    iam = (ctx.get("authorizer") or {}).get("iam") or {}
+    iam = _obj(_obj(ctx.get("authorizer")).get("iam"))
     return {
         "request_id": ctx.get("requestId"),
         "caller_account": iam.get("accountId"),
@@ -99,6 +105,16 @@ def _log(tool: str, **fields) -> None:
     _audit.info(json.dumps(rec, default=str, separators=(",", ":")))
 
 
+def _guard(tool: str) -> str:
+    """_guard_account() for a tool, writing an audit line (with caller) if it
+    refuses or fails, then re-raising. Returns the account id."""
+    try:
+        return _guard_account()
+    except Exception as exc:
+        _log(tool, error="account_guard_failed", error_type=type(exc).__name__)
+        raise
+
+
 def _guard_account() -> str:
     """Confirm the live account is allowlisted. Returns the account id."""
     acct = boto3.client("sts").get_caller_identity()["Account"]
@@ -109,8 +125,18 @@ def _guard_account() -> str:
     return acct
 
 
-def _store() -> SnapshotStore:
-    return SnapshotStore(bucket=SNAPSHOT_BUCKET)
+def _store(owner: str) -> SnapshotStore:
+    """The snapshot store for this account. `owner` is the account id returned
+    by _guard_account(); every S3 call is pinned to it (ExpectedBucketOwner)."""
+    return SnapshotStore(bucket=SNAPSHOT_BUCKET, expected_owner=owner)
+
+
+_POINTER_UNREADABLE = {
+    "error": "baseline pointer could not be read (permissions, throttling or a service "
+             "error); nothing was written, pruned or compared. Retry later; do not report "
+             "this run as 'no drift'.",
+    "retryable": True,
+}
 
 
 def _not_found(exc: Exception) -> bool:
@@ -136,9 +162,16 @@ def iam_snapshot_capture() -> dict:
     do not treat a later empty diff as "no drift." This tool never claims
     completeness it did not achieve.
     """
-    _guard_account()
-    result = run_capture(_store(), boto3.client("iam"), retain=RETAIN,
-                         min_interval_seconds=MIN_CAPTURE_INTERVAL)
+    acct = _guard("iam_snapshot_capture")
+    try:
+        result = run_capture(_store(acct), boto3.client("iam"), retain=RETAIN,
+                             min_interval_seconds=MIN_CAPTURE_INTERVAL)
+    except BaselinePointerUnreadable:
+        _log("iam_snapshot_capture", error="baseline_pointer_unreadable")
+        return dict(_POINTER_UNREADABLE)
+    except Exception as exc:
+        _log("iam_snapshot_capture", error="unexpected", error_type=type(exc).__name__)
+        raise
     _log("iam_snapshot_capture", snapshot_id=result["snapshot_id"],
          throttled=result["throttled"], pruned_count=len(result["pruned"]),
          complete=result["coverage"].get("complete"))
@@ -169,17 +202,21 @@ def iam_snapshot_diff(before_id: str | None = None, after_id: str | None = None,
     artifact of a partial read, not real stability -- say so, do not report
     "no drift."
     """
-    _guard_account()
+    acct = _guard("iam_snapshot_diff")
     try:
-        result = run_diff(_store(), before_id, after_id,
+        result = run_diff(_store(acct), before_id, after_id,
                           record_baseline=record_baseline is True)
     except InvalidSnapshotId as exc:
         _log("iam_snapshot_diff", error="invalid_snapshot_id")
         return {"error": str(exc)}
+    except BaselinePointerUnreadable:
+        _log("iam_snapshot_diff", error="baseline_pointer_unreadable")
+        return dict(_POINTER_UNREADABLE)
     except Exception as exc:
         if _not_found(exc):
             _log("iam_snapshot_diff", error="snapshot_not_found")
             return {"error": "snapshot not found"}
+        _log("iam_snapshot_diff", error="unexpected", error_type=type(exc).__name__)
         raise
     _log("iam_snapshot_diff", before_id=result.get("before_id"),
          after_id=result.get("after_id"), baseline_source=result.get("baseline_source"),
@@ -196,13 +233,13 @@ def iam_snapshot_list(limit: int = 20) -> dict:
     `limit` is clamped to 1..50. Lets the caller (and a human) see snapshot
     history and pick ids to diff.
     """
-    _guard_account()
+    acct = _guard("iam_snapshot_list")
     try:
         limit = int(limit)
     except (TypeError, ValueError):
         limit = 20
     limit = min(max(1, limit), LIST_LIMIT_MAX)
-    store = _store()
+    store = _store(acct)
     ids = store.list_ids(limit=limit)
     out = []
     for item in ids:
@@ -214,8 +251,15 @@ def iam_snapshot_list(limit: int = 20) -> dict:
             })
         except Exception:
             out.append({"snapshot_id": item["snapshot_id"], "coverage": None})
-    _log("iam_snapshot_list", limit=limit, returned=len(out))
-    return {"snapshots": out, "baseline": store.get_baseline()}
+    resp: dict = {"snapshots": out}
+    try:
+        resp["baseline"] = store.get_baseline()
+    except BaselinePointerUnreadable:
+        resp["baseline"], resp["baseline_error"] = None, "unreadable"
+    except ValueError:  # BaselinePointerInvalid
+        resp["baseline"], resp["baseline_error"] = None, "invalid"
+    _log("iam_snapshot_list", limit=limit, returned=len(out), baseline_error=resp.get("baseline_error"))
+    return resp
 
 
 @mcp.tool()
@@ -225,10 +269,10 @@ def iam_snapshot_get_entity(snapshot_id: str, arn: str) -> dict:
     For drill-down (e.g. to show exactly what a flagged role looked like at a
     point in time) without re-reading the whole account.
     """
-    _guard_account()
+    acct = _guard("iam_snapshot_get_entity")
     try:
         validate_snapshot_id(snapshot_id)
-        snap = _store().get(snapshot_id)
+        snap = _store(acct).get(snapshot_id)
     except InvalidSnapshotId as exc:
         _log("iam_snapshot_get_entity", error="invalid_snapshot_id")
         return {"error": str(exc)}
@@ -236,6 +280,8 @@ def iam_snapshot_get_entity(snapshot_id: str, arn: str) -> dict:
         if _not_found(exc):
             _log("iam_snapshot_get_entity", snapshot_id=snapshot_id, error="snapshot_not_found")
             return {"error": "snapshot not found", "snapshot_id": snapshot_id}
+        _log("iam_snapshot_get_entity", snapshot_id=snapshot_id, error="unexpected",
+             error_type=type(exc).__name__)
         raise
     entity = snap.get("entities", {}).get(arn) if isinstance(arn, str) else None
     _log("iam_snapshot_get_entity", snapshot_id=snapshot_id, found=entity is not None)

@@ -13,7 +13,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from iam_drift.aws import MIN_RETAIN, InvalidSnapshotId, SnapshotStore, validate_snapshot_id
+from iam_drift.aws import (MIN_RETAIN, BaselinePointerUnreadable, InvalidSnapshotId, SnapshotStore,
+                           validate_snapshot_id)
 from iam_drift.ops import run_capture, run_diff
 
 ACCT = "111122223333"
@@ -28,22 +29,35 @@ class _NoSuchKey(Exception):
         self.response = {"Error": {"Code": "NoSuchKey"}}
 
 
+class _ClientError(Exception):
+    def __init__(self, code):
+        super().__init__(code)
+        self.response = {"Error": {"Code": code}}
+
+
 class FakeS3:
     def __init__(self):
         self.objects: dict[str, bytes] = {}
         self.calls: list[tuple[str, str]] = []
+        self.fail_keys: dict[str, Exception] = {}
+        self.owners: list[tuple[str, str | None]] = []  # (call, ExpectedBucketOwner)
 
-    def put_object(self, Bucket, Key, Body, **_):
+    def put_object(self, Bucket, Key, Body, **kw):
+        self.owners.append(("put", kw.get("ExpectedBucketOwner")))
         self.calls.append(("put", Key))
         self.objects[Key] = Body if isinstance(Body, bytes) else Body.encode()
 
-    def get_object(self, Bucket, Key):
+    def get_object(self, Bucket, Key, **kw):
+        self.owners.append(("get", kw.get("ExpectedBucketOwner")))
         self.calls.append(("get", Key))
+        if Key in self.fail_keys:
+            raise self.fail_keys[Key]
         if Key not in self.objects:
             raise _NoSuchKey(Key)
         return {"Body": io.BytesIO(self.objects[Key])}
 
-    def delete_object(self, Bucket, Key):
+    def delete_object(self, Bucket, Key, **kw):
+        self.owners.append(("delete", kw.get("ExpectedBucketOwner")))
         self.calls.append(("delete", Key))
         self.objects.pop(Key, None)
 
@@ -52,7 +66,8 @@ class FakeS3:
         fake = self
 
         class _P:
-            def paginate(self, Bucket, Prefix):
+            def paginate(self, Bucket, Prefix, **kw):
+                fake.owners.append(("list", kw.get("ExpectedBucketOwner")))
                 yield {"Contents": [{"Key": k} for k in sorted(fake.objects) if k.startswith(Prefix)]}
         return _P()
 
@@ -299,7 +314,8 @@ def test_tampered_baseline_pointer_falls_back_to_previous():
         _seed(s3, sid)
     s3.objects["snapshots/_baseline.json"] = json.dumps({"before": "../x", "after": "zzz"}).encode()
     out = run_diff(store)
-    assert out["before_id"] == "20261101T000000Z" and out["baseline_source"] == "previous"
+    assert out["before_id"] == "20261101T000000Z"
+    assert out["baseline_source"] == "baseline_pointer_invalid"
 
 
 def test_missing_baseline_snapshot_is_reported():
@@ -332,7 +348,7 @@ def server(monkeypatch):
     import server as srv
     srv = importlib.reload(srv)
     store, s3 = _store()
-    monkeypatch.setattr(srv, "_store", lambda: store)
+    monkeypatch.setattr(srv, "_store", lambda owner=None: store)
     monkeypatch.setattr(srv, "_guard_account", lambda: ACCT)
     return srv, store, s3
 
@@ -389,3 +405,234 @@ def test_server_audit_line_has_no_policy_content(server):
     assert rec["tool"] == "iam_snapshot_diff"
     assert rec["before_id"] == "20261101T000000Z" and rec["after_id"] == "20261102T000000Z"
     assert "entities" not in line and "Statement" not in line
+
+
+# ---- baseline pointer read errors fail closed ----------------------------
+POINTER = "snapshots/_baseline.json"
+DAYS = ["20261027T000000Z", "20261028T000000Z", "20261029T000000Z", "20261030T000000Z",
+        "20261031T000000Z", "20261101T000000Z"]  # all before the fake clock (START)
+
+
+@pytest.mark.parametrize("code", ["AccessDenied", "KMS.ThrottlingException", "InternalError",
+                                  "SlowDown"])
+def test_pointer_read_error_fails_closed_on_diff(code):
+    store, s3 = _store()
+    for sid in DAYS:
+        _seed(s3, sid)
+    store.set_baseline(DAYS[0], DAYS[1])  # changes in DAYS[2..4] are unreported
+    s3.fail_keys[POINTER] = _ClientError(code)
+    s3.calls.clear()
+    with pytest.raises(BaselinePointerUnreadable):
+        run_diff(store, record_baseline=True)
+    assert not [c for c in s3.calls if c[0] in ("put", "delete")]
+    del s3.fail_keys[POINTER]
+    assert store.get_baseline() == {"before": DAYS[0], "after": DAYS[1]}
+
+
+def test_pointer_read_error_capture_writes_and_prunes_nothing():
+    clock = Clock(START)
+    store, s3 = _store(clock)
+    for sid in DAYS:
+        _seed(s3, sid)
+    store.set_baseline(DAYS[0], DAYS[1])
+    s3.fail_keys[POINTER] = _ClientError("AccessDenied")
+    iam = FakeIAM([_role("app")])
+    s3.calls.clear()
+    with pytest.raises(BaselinePointerUnreadable):
+        run_capture(store, iam, retain=MIN_RETAIN, min_interval_seconds=0)
+    assert iam.calls == 0
+    assert not [c for c in s3.calls if c[0] in ("put", "delete")]
+
+
+def test_missing_pointer_is_still_a_first_run():
+    store, s3 = _store()
+    for sid in DAYS[:2]:
+        _seed(s3, sid)
+    out = run_diff(store, record_baseline=True)
+    assert out["baseline_source"] == "previous" and out["baseline_advanced"] is True
+
+
+def test_invalid_pointer_diffs_from_oldest_and_capture_skips_prune():
+    clock = Clock(START)
+    store, s3 = _store(clock)
+    for sid in DAYS:
+        _seed(s3, sid)
+    s3.objects[POINTER] = b"not json"
+    out = run_diff(store, record_baseline=True)
+    assert out["baseline_source"] == "baseline_pointer_invalid"
+    assert out["before_id"] == DAYS[0] and out["after_id"] == DAYS[-1]
+    assert out["intervening_snapshots"] == len(DAYS) - 2
+    s3.objects[POINTER] = b"not json"
+    cap = run_capture(store, FakeIAM([_role("app")]), retain=MIN_RETAIN, min_interval_seconds=0)
+    assert cap["pruned"] == [] and "note" in cap
+    assert all(f"snapshots/{sid}.json" in s3.objects for sid in DAYS)
+
+
+def test_server_pointer_unreadable_returns_retryable_error(server):
+    srv, store, s3 = server
+    for sid in DAYS[:2]:
+        _seed(s3, sid)
+    s3.fail_keys[POINTER] = _ClientError("AccessDenied")
+    for out in (srv.iam_snapshot_diff(record_baseline=True), srv.iam_snapshot_capture()):
+        assert out["retryable"] is True and "no drift" in out["error"]
+    assert srv.iam_snapshot_list()["baseline_error"] == "unreadable"
+
+
+def test_missing_pointer_snapshots_diff_from_oldest_retained():
+    store, s3 = _store()
+    for sid in DAYS:
+        _seed(s3, sid)
+    store.set_baseline("20261001T000000Z", "20261002T000000Z")  # both deleted out of band
+    out = run_diff(store, record_baseline=True)
+    assert out["baseline_source"] == "previous_baseline_missing"
+    assert out["before_id"] == DAYS[0] and out["after_id"] == DAYS[-1]
+    assert out["intervening_snapshots"] == len(DAYS) - 2
+
+
+# ---- every S3 call is pinned to the server's own account --------------------
+def test_every_s3_call_pins_expected_bucket_owner():
+    s3 = FakeS3()
+    store = SnapshotStore(BUCKET, s3_client=s3, clock=Clock(START), expected_owner=ACCT)
+    for sid in DAYS:
+        _seed(s3, sid)
+    store.set_baseline(DAYS[0], DAYS[1])
+    run_diff(store, record_baseline=True)
+    run_capture(store, FakeIAM([_role("app")]), retain=MIN_RETAIN, min_interval_seconds=0)
+    kinds = {k for k, _ in s3.owners}
+    assert {"put", "get", "list", "delete"} <= kinds
+    assert all(owner == ACCT for _, owner in s3.owners)
+
+
+def test_server_store_is_pinned_to_guarded_account(monkeypatch):
+    monkeypatch.setenv("ALLOWED_ACCOUNTS", ACCT)
+    monkeypatch.setenv("SNAPSHOT_BUCKET", BUCKET)
+    import importlib
+    import server as srv
+    srv = importlib.reload(srv)
+    seen = {}
+    monkeypatch.setattr(srv, "SnapshotStore", lambda **kw: seen.update(kw) or kw)
+    srv._store(ACCT)
+    assert seen == {"bucket": BUCKET, "expected_owner": ACCT}
+
+
+# ---- malformed request-context header never breaks a tool -------------------
+@pytest.mark.parametrize("raw", ["[1, 2]", '"x"', "7", "not json", '{"authorizer": "x"}',
+                                 '{"authorizer": {"iam": 5}}', '{"authorizer": null}'])
+def test_caller_tolerates_malformed_request_context(server, monkeypatch, raw):
+    import fastmcp.server.dependencies as deps
+    srv, store, s3 = server
+    monkeypatch.setattr(deps, "get_http_headers",
+                        lambda include_all=True: {"x-amzn-request-context": raw})
+    assert srv._caller() == {"request_id": None, "caller_account": None, "caller_arn": None}
+    for sid in DAYS[:2]:
+        _seed(s3, sid)
+    out = srv.iam_snapshot_diff(record_baseline=True)
+    assert "error" not in out and out["baseline_advanced"] is True
+
+
+# ---- capture errors return the AWS error code only (threat model M20) -------
+class _FailingIAM:
+    def get_account_authorization_details(self, **_):
+        err = _ClientError("AccessDenied")
+        err.args = ("User: arn:aws:iam::111122223333:role/x is not authorized to perform "
+                    "iam:GetAccountAuthorizationDetails",)
+        raise err
+
+
+def test_capture_error_returns_code_not_message():
+    store, s3 = _store(Clock(START))
+    out = run_capture(store, _FailingIAM(), retain=MIN_RETAIN, min_interval_seconds=0)
+    assert out["coverage"]["denied_calls"] == ["get_account_authorization_details: AccessDenied"]
+    assert out["coverage"]["complete"] is False
+
+
+# ---- per-call account gate and its audit line (M25, M26) --------------------
+def _collect_audit(srv):
+    import logging
+    lines: list[dict] = []
+    class _H(logging.Handler):
+        def emit(self, record):
+            lines.append(json.loads(record.getMessage()))
+    h = _H()
+    srv._audit.addHandler(h)
+    return lines, h
+
+
+def test_every_tool_refuses_a_foreign_account_and_logs_it(monkeypatch):
+    monkeypatch.setenv("ALLOWED_ACCOUNTS", ACCT)
+    monkeypatch.setenv("SNAPSHOT_BUCKET", BUCKET)
+    import importlib
+    import server as srv
+    srv = importlib.reload(srv)
+    touched = []
+    class _STS:
+        def get_caller_identity(self):
+            return {"Account": "444455556666"}
+    def _client(name, *a, **k):
+        touched.append(name)
+        if name != "sts":
+            raise AssertionError(f"{name} must not be called when the gate refuses")
+        return _STS()
+    monkeypatch.setattr(srv.boto3, "client", _client)
+    monkeypatch.setattr(srv, "_store", lambda owner=None: (_ for _ in ()).throw(
+        AssertionError("store must not be built when the gate refuses")))
+    lines, h = _collect_audit(srv)
+    try:
+        calls = [lambda: srv.iam_snapshot_capture(), lambda: srv.iam_snapshot_diff(),
+                 lambda: srv.iam_snapshot_list(),
+                 lambda: srv.iam_snapshot_get_entity("20261101T000000Z", "arn:aws:iam::111122223333:role/x")]
+        for call in calls:
+            with pytest.raises(RuntimeError, match="not in ALLOWED_ACCOUNTS"):
+                call()
+    finally:
+        srv._audit.removeHandler(h)
+    assert set(touched) == {"sts"}
+    assert [l["tool"] for l in lines] == ["iam_snapshot_capture", "iam_snapshot_diff",
+                                          "iam_snapshot_list", "iam_snapshot_get_entity"]
+    assert all(l["error"] == "account_guard_failed" for l in lines)
+
+
+def test_unexpected_error_still_writes_an_audit_line(server):
+    srv, store, s3 = server
+    for sid in DAYS[:2]:
+        _seed(s3, sid)
+    s3.fail_keys[f"snapshots/{DAYS[0]}.json"] = _ClientError("InternalError")
+    lines, h = _collect_audit(srv)
+    try:
+        with pytest.raises(_ClientError):
+            srv.iam_snapshot_diff(before_id=DAYS[0], after_id=DAYS[1])
+    finally:
+        srv._audit.removeHandler(h)
+    assert lines[-1]["tool"] == "iam_snapshot_diff" and lines[-1]["error"] == "unexpected"
+
+
+# ---- execution-role scope cannot widen unnoticed (M23) ----------------------
+def _load_template():
+    import pathlib
+    import yaml
+    class _Loader(yaml.SafeLoader):
+        pass
+    def _any_tag(loader, suffix, node):
+        if isinstance(node, yaml.ScalarNode):
+            return {suffix: loader.construct_scalar(node)}
+        if isinstance(node, yaml.SequenceNode):
+            return {suffix: loader.construct_sequence(node, deep=True)}
+        return {suffix: loader.construct_mapping(node, deep=True)}
+    _Loader.add_multi_constructor("!", _any_tag)
+    path = pathlib.Path(__file__).resolve().parents[1] / "template.yaml"
+    return yaml.load(path.read_text(), Loader=_Loader)
+
+
+def test_execution_role_stays_read_only_and_scoped():
+    tpl = _load_template()
+    stmts = [s for p in tpl["Resources"]["IamDriftDiffFunction"]["Properties"]["Policies"]
+             for s in p["Statement"]]
+    actions = {a for s in stmts for a in (s["Action"] if isinstance(s["Action"], list) else [s["Action"]])}
+    assert {a for a in actions if a.startswith("iam:")} == {"iam:GetAccountAuthorizationDetails"}
+    assert actions <= {"iam:GetAccountAuthorizationDetails", "s3:GetObject", "s3:PutObject",
+                       "s3:DeleteObject", "s3:ListBucket", "kms:GenerateDataKey", "kms:Decrypt"}
+    assert not any("*" in a for a in actions)
+    for s in stmts:
+        if s.get("Resource") == "*":
+            assert s["Action"] == ["iam:GetAccountAuthorizationDetails"], s
+    assert all(s["Effect"] == "Allow" for s in stmts)

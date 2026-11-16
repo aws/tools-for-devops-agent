@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from typing import Any
 
@@ -28,6 +29,24 @@ MIN_RETAIN = 4
 
 class InvalidSnapshotId(ValueError):
     """Raised when a snapshot id is not a well-formed capture timestamp."""
+
+
+class BaselinePointerUnreadable(RuntimeError):
+    """The baseline pointer exists or may exist but could not be read
+    (AccessDenied, KMS or S3 throttling, 5xx). Callers must fail closed: write
+    nothing, prune nothing, and never treat this as "no baseline"."""
+
+
+class BaselinePointerInvalid(ValueError):
+    """The baseline pointer was read but its content is not a valid pair."""
+
+
+_NOT_FOUND_CODES = ("NoSuchKey", "404", "NotFound")
+
+
+def _is_not_found(exc: Exception) -> bool:
+    code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+    return code in _NOT_FOUND_CODES
 
 
 def validate_snapshot_id(snapshot_id: Any) -> str:
@@ -108,8 +127,14 @@ def capture_authorization_details(iam_client) -> dict[str, Any]:
             else:
                 break
     except Exception as exc:  # boto3 ClientError and friends
-        # Record the failure honestly; do not pretend the read completed.
-        denied.append(f"get_account_authorization_details: {type(exc).__name__}: {exc}")
+        # Record the failure honestly; do not pretend the read completed. The
+        # caller gets only the error code (e.g. AccessDenied, Throttling), not
+        # AWS's message text, which can name ARNs and account structure. The
+        # full text goes to the function log only.
+        code = (getattr(exc, "response", {}) or {}).get("Error", {}).get("Code") or type(exc).__name__
+        denied.append(f"get_account_authorization_details: {code}")
+        print(f"capture_authorization_details failed: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
         truncated = True
 
     return {
@@ -136,6 +161,9 @@ class SnapshotStore:
     - A baseline pointer records the (before, after) pair of the last complete
       default diff. Default diffs compare against its `after` (not merely the
       previous capture), and pruning never deletes either side.
+    - Every S3 call passes ExpectedBucketOwner (the account the server runs in),
+      so if the bucket were deleted and its predictable name claimed by another
+      account, reads and writes fail instead of reaching that bucket.
     """
 
     # Not a valid snapshot id, so list_ids() never treats it as a snapshot.
@@ -144,8 +172,9 @@ class SnapshotStore:
     FUTURE_SKEW_SECONDS = 300
 
     def __init__(self, bucket: str, prefix: str = "snapshots/", s3_client=None,
-                 clock=None):
+                 clock=None, expected_owner: str | None = None):
         self._bucket = bucket
+        self._owner = {"ExpectedBucketOwner": expected_owner} if expected_owner else {}
         self._prefix = prefix.rstrip("/") + "/"
         self._s3 = s3_client or boto3.client("s3")
         self._now = clock or (lambda: datetime.now(timezone.utc))
@@ -164,6 +193,7 @@ class SnapshotStore:
         body = dict(snapshot)
         body["snapshot_id"] = snapshot_id  # lets get() detect a moved/copied object
         self._s3.put_object(
+            **self._owner,
             Bucket=self._bucket,
             Key=self._key(snapshot_id),
             Body=json.dumps(body, separators=(",", ":")).encode("utf-8"),
@@ -175,7 +205,7 @@ class SnapshotStore:
     def get(self, snapshot_id: str) -> dict[str, Any]:
         """Read one snapshot. Raises InvalidSnapshotId / ValueError if the id is
         malformed or the stored object is not a well-formed snapshot for it."""
-        obj = self._s3.get_object(Bucket=self._bucket, Key=self._key(snapshot_id))
+        obj = self._s3.get_object(**self._owner, Bucket=self._bucket, Key=self._key(snapshot_id))
         snap = json.loads(obj["Body"].read())
         if (not isinstance(snap, dict) or not isinstance(snap.get("entities"), dict)
                 or not isinstance(snap.get("coverage"), dict)):
@@ -192,7 +222,7 @@ class SnapshotStore:
         latest_allowed = self._now().timestamp() + self.FUTURE_SKEW_SECONDS
         paginator = self._s3.get_paginator("list_objects_v2")
         ids: list[str] = []
-        for page in paginator.paginate(Bucket=self._bucket, Prefix=self._prefix):
+        for page in paginator.paginate(**self._owner, Bucket=self._bucket, Prefix=self._prefix):
             for obj in page.get("Contents", []):
                 k = obj["Key"]
                 if not k.endswith(".json"):
@@ -220,21 +250,31 @@ class SnapshotStore:
     def get_baseline(self) -> dict[str, str] | None:
         """The (before, after) pair of the last complete default diff, or None.
 
-        Returns None if the pointer is absent or malformed, so a tampered
-        pointer degrades to the plain latest-vs-previous behavior instead of
-        steering the diff."""
+        Returns None ONLY when the pointer object does not exist (first run).
+        Any other read failure raises BaselinePointerUnreadable, so a transient
+        AccessDenied / throttle / 5xx can never look like "no baseline" and let
+        a scheduled run skip unreported snapshots or prune the reported pair.
+        Content that is not a valid pair raises BaselinePointerInvalid."""
         try:
-            obj = self._s3.get_object(Bucket=self._bucket, Key=self._baseline_key())
-            data = json.loads(obj["Body"].read())
+            obj = self._s3.get_object(**self._owner, Bucket=self._bucket, Key=self._baseline_key())
+            raw = obj["Body"].read()
+        except Exception as exc:
+            if _is_not_found(exc):
+                return None
+            raise BaselinePointerUnreadable(
+                f"baseline pointer could not be read: {type(exc).__name__}") from exc
+        try:
+            data = json.loads(raw)
             return {"before": validate_snapshot_id(data.get("before")),
                     "after": validate_snapshot_id(data.get("after"))}
-        except Exception:
-            return None
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise BaselinePointerInvalid("baseline pointer content is not a valid pair") from exc
 
     def set_baseline(self, before_id: str, after_id: str) -> None:
         body = {"before": validate_snapshot_id(before_id),
                 "after": validate_snapshot_id(after_id)}
         self._s3.put_object(
+            **self._owner,
             Bucket=self._bucket,
             Key=self._baseline_key(),
             Body=json.dumps(body).encode("utf-8"),
@@ -253,5 +293,5 @@ class SnapshotStore:
         ids = [x["snapshot_id"] for x in self.list_ids(limit=10_000)]
         to_delete = [sid for sid in ids[keep:] if sid not in protected]
         for sid in to_delete:
-            self._s3.delete_object(Bucket=self._bucket, Key=self._key(sid))
+            self._s3.delete_object(**self._owner, Bucket=self._bucket, Key=self._key(sid))
         return to_delete

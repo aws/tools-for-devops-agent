@@ -15,6 +15,13 @@ that:
    between. Only a diff that asks for it (`record_baseline=True`, which the
    scheduled drift run passes) moves that pointer, so ad-hoc diffs have no side
    effects. Pruning never deletes the reported pair.
+
+Baseline pointer reads fail closed: if the pointer cannot be read (anything but
+"not found"), capture writes and prunes nothing and diff returns nothing, so a
+transient error can never look like a first run. If the pointer is readable
+but not a valid pair, the diff falls back to the OLDEST retained snapshot (so
+no retained change is skipped), labels it `baseline_pointer_invalid`, and
+capture skips pruning.
 """
 
 from __future__ import annotations
@@ -23,6 +30,8 @@ import math
 from typing import Any
 
 from .aws import (
+    BaselinePointerInvalid,
+    BaselinePointerUnreadable,
     InvalidSnapshotId,
     SnapshotStore,
     capture_authorization_details,
@@ -51,6 +60,14 @@ def run_capture(store: SnapshotStore, iam_client, *, retain: int,
                          "or pruned."),
             }
 
+    # Read the pointer BEFORE writing: BaselinePointerUnreadable propagates and
+    # nothing is captured, written or pruned.
+    try:
+        pointer = store.get_baseline()
+        pointer_valid = True
+    except BaselinePointerInvalid:
+        pointer, pointer_valid = None, False
+
     raw = capture_authorization_details(iam_client)
     snap = build_snapshot(
         raw["auth_details"],
@@ -59,15 +76,22 @@ def run_capture(store: SnapshotStore, iam_client, *, retain: int,
         denied=raw["denied"],
     )
     snapshot_id = store.put(snap)
-    pointer = store.get_baseline()
-    deleted = store.prune(keep=retain,
-                          protect=((pointer or {}).get("before"), (pointer or {}).get("after")))
-    return {
+    if pointer_valid:
+        deleted = store.prune(keep=retain,
+                              protect=((pointer or {}).get("before"), (pointer or {}).get("after")))
+    else:
+        deleted = []  # cannot tell which pair is protected; keep everything
+    out = {
         "throttled": False,
         "snapshot_id": snapshot_id,
         "coverage": snap["coverage"],
         "pruned": deleted,
     }
+    if not pointer_valid:
+        out["note"] = ("Baseline pointer is not a valid pair; pruning was skipped. The next "
+                       "scheduled diff compares against the oldest retained snapshot and "
+                       "rewrites the pointer.")
+    return out
 
 
 def run_diff(store: SnapshotStore, before_id: str | None = None,
@@ -88,7 +112,13 @@ def run_diff(store: SnapshotStore, before_id: str | None = None,
 
     after_id = after_id or latest
     baseline_source = "explicit" if before_id else None
-    pointer = store.get_baseline() if before_id is None else None
+    pointer_invalid = False
+    pointer = None
+    if before_id is None:
+        try:
+            pointer = store.get_baseline()  # BaselinePointerUnreadable propagates
+        except BaselinePointerInvalid:
+            pointer_invalid = True
 
     if before_id is None:
         p_before = (pointer or {}).get("before")
@@ -99,13 +129,26 @@ def run_diff(store: SnapshotStore, before_id: str | None = None,
             before_id, baseline_source = p_before, "repeat_of_last_report"
         elif p_after in present and after_id and p_after < after_id:
             before_id, baseline_source = p_after, "last_reported"
+        elif pointer_invalid:
+            # Unknown last report: compare against the oldest retained snapshot
+            # so no retained change is skipped.
+            older = [i for i in ids if after_id and i < after_id]
+            before_id = older[-1] if older else None
+            baseline_source = "baseline_pointer_invalid"
+        elif pointer:
+            # The pointer is valid but its snapshots are gone (deleted outside
+            # the tool): like an invalid pointer, compare against the oldest
+            # retained snapshot so no retained change is skipped.
+            older = [i for i in ids if after_id and i < after_id]
+            before_id = older[-1] if older else None
+            baseline_source = "previous_baseline_missing"
         else:
             if after_id == latest:
                 before_id = previous
             else:
                 older = [i for i in ids if after_id and i < after_id]
                 before_id = older[0] if older else None
-            baseline_source = "previous_baseline_missing" if pointer else "previous"
+            baseline_source = "previous"
 
     if before_id is None or after_id is None:
         return {
@@ -129,4 +172,4 @@ def run_diff(store: SnapshotStore, before_id: str | None = None,
     return result
 
 
-__all__ = ["run_capture", "run_diff", "InvalidSnapshotId"]
+__all__ = ["run_capture", "run_diff", "InvalidSnapshotId", "BaselinePointerUnreadable"]

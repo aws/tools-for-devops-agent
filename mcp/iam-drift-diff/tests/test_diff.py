@@ -353,3 +353,141 @@ def test_mixed_body_counted_once():
                        _snap(_auth(roles=[_role("r", inline={"p": a})])))
     s = d["summary"]
     assert s["mixed"] == 1 and s["up"] == 0 and s["down"] == 0
+
+
+# ---- /service-role/ is a customer path ----------------------------------
+_OUTSIDE = "arn:aws:iam::444455556666:root"
+
+
+def test_service_role_path_role_is_fully_diffed():
+    before_role = _role("svc", path="/service-role/")
+    after_role = _role("svc", attached=[ADMIN], inline={"all": {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}]}},
+        path="/service-role/")
+    after_role["AssumeRolePolicyDocument"]["Statement"].append(
+        {"Effect": "Allow", "Principal": {"AWS": _OUTSIDE}, "Action": "sts:AssumeRole"})
+    before = _snap(_auth(roles=[before_role]))
+    after = _snap(_auth(roles=[after_role]))
+    ent = after["entities"][f"arn:aws:iam::{ACCT}:role/svc"]
+    assert ent["aws_managed"] is False and ent["attached"] == [ADMIN]
+    d = diff_snapshots(before, after)
+    assert d["summary"]["changed"] == 1 and d["comparison_complete"] is True
+    c = d["changed_principals"][0]
+    assert c["direction"] == "up"
+    assert c["changes"]["attached_added"] == [ADMIN]
+    assert c["changes"]["trust_changed"]["high_risk"] is True
+
+
+def test_new_service_role_path_role_is_up_not_info():
+    before = _snap(_auth(roles=[]))
+    after = _snap(_auth(roles=[_role("svc", attached=[ADMIN], path="/service-role/")]))
+    d = diff_snapshots(before, after)
+    assert d["added_principals"][0]["direction"] == "up"
+    assert d["summary"]["up"] == 1 and d["summary"]["info"] == 0
+
+
+def test_upgrade_from_presence_only_service_role_is_info_once():
+    """A schema-1 snapshot recorded /service-role/ roles by presence only. The
+    first diff after upgrade reports a scope change (info), not false grants."""
+    arn = f"arn:aws:iam::{ACCT}:role/svc"
+    after = _snap(_auth(roles=[_role("svc", attached=[ADMIN], path="/service-role/")]))
+    before = copy.deepcopy(after)
+    before["schema"] = 1
+    before["entities"][arn] = {k: v for k, v in after["entities"][arn].items()
+                               if k in ("type", "name", "arn", "path", "created")}
+    before["entities"][arn]["aws_managed"] = True
+    d = diff_snapshots(before, after)
+    c = d["changed_principals"][0]
+    assert c["direction"] == "info" and "fingerprint_scope_changed" in c["changes"]
+    assert d["summary"]["up"] == 0 and d["summary"]["info"] == 1
+    assert diff_snapshots(after, copy.deepcopy(after))["summary"]["changed"] == 0
+
+
+# ---- trust: per-principal conditions, federated principals, Deny -----------
+_EXT = "arn:aws:iam::444455556666:root"
+_EXT_GUARDED = {"Effect": "Allow", "Principal": {"AWS": _EXT}, "Action": "sts:AssumeRole",
+                "Condition": {"StringEquals": {"sts:ExternalId": "example-id"}}}
+_OIDC = f"arn:aws:iam::{ACCT}:oidc-provider/token.actions.githubusercontent.com"
+
+
+def _trust_change(before_stmts, after_stmts):
+    d = diff_snapshots(_snap(_auth(roles=[_role_trust(before_stmts)])),
+                       _snap(_auth(roles=[_role_trust(after_stmts)])))
+    c = d["changed_principals"][0]
+    return c, c["changes"]["trust_changed"]
+
+
+def test_condition_moved_off_external_principal_is_high_risk():
+    """Same number of conditioned statements, but the outside principal lost
+    its ExternalId guard (it moved to the self statement)."""
+    self_conditioned = dict(_SELF, Condition={"Bool": {"aws:MultiFactorAuthPresent": "true"}})
+    ext_open = {"Effect": "Allow", "Principal": {"AWS": _EXT}, "Action": "sts:AssumeRole"}
+    c, t = _trust_change([_SELF, _EXT_GUARDED], [self_conditioned, ext_open])
+    assert t["principal_conditions_lost"] == {f"AWS:{_EXT}": ["StringEquals:sts:externalid"]}
+    assert t["high_risk"] is True and c["direction"] in ("up", "mixed")
+
+
+def test_external_id_swapped_for_weaker_key_is_high_risk():
+    weaker = dict(_EXT_GUARDED, Condition={"Bool": {"aws:SecureTransport": "true"}})
+    _, t = _trust_change([_SELF, _EXT_GUARDED], [_SELF, weaker])
+    assert "StringEquals:sts:externalid" in t["principal_conditions_lost"][f"AWS:{_EXT}"]
+    assert t["high_risk"] is True
+
+
+def test_unconditioned_federated_principal_added_is_high_risk():
+    oidc = {"Effect": "Allow", "Principal": {"Federated": _OIDC},
+            "Action": "sts:AssumeRoleWithWebIdentity"}
+    _, t = _trust_change([_SELF], [_SELF, oidc])
+    assert t["unguarded_federated_principals_added"] == [f"Federated:{_OIDC}"]
+    assert t["high_risk"] is True
+
+
+def test_guarded_federated_principal_added_is_up_not_high_risk():
+    oidc = {"Effect": "Allow", "Principal": {"Federated": _OIDC},
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {"StringEquals": {"token.actions.githubusercontent.com:sub": "repo:example/x:ref:refs/heads/main"}}}
+    c, t = _trust_change([_SELF], [_SELF, oidc])
+    assert t["unguarded_federated_principals_added"] == [] and t["high_risk"] is False
+    assert c["direction"] == "up"
+
+
+def test_trust_deny_removed_is_high_risk():
+    org_deny = {"Effect": "Deny", "Principal": "*", "Action": "sts:AssumeRole",
+                "Condition": {"StringNotEquals": {"aws:PrincipalOrgID": "o-example"}}}
+    c, t = _trust_change([_SELF, org_deny], [_SELF])
+    assert t["deny_statements_removed"] == 1 and t["high_risk"] is True
+    assert c["direction"] == "up"
+
+
+# ---- policy bodies: NotAction / NotResource / Deny ------------------------
+def _body_change(b, a):
+    d = diff_snapshots(_snap(_auth(roles=[_role("r", inline={"p": b})])),
+                       _snap(_auth(roles=[_role("r", inline={"p": a})])))
+    c = d["changed_principals"][0]
+    return c, c["changes"]["inline_body_changed"][0]
+
+
+def test_allow_notaction_is_reported_as_a_grant():
+    base = _doc({"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"})
+    broad = _doc({"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"},
+                 {"Effect": "Allow", "NotAction": ["organizations:*", "iam:*"], "Resource": "*"})
+    c, body = _body_change(base, broad)
+    assert body["grants_added"] == ["NOT[iam:*,organizations:*] @ *"]
+    assert c["direction"] == "up"
+
+
+def test_policy_deny_removed_is_up_and_added_is_down():
+    allow = {"Effect": "Allow", "Action": "s3:*", "Resource": "*"}
+    guard = {"Effect": "Deny", "Action": "s3:DeleteBucket", "Resource": "*"}
+    c, body = _body_change(_doc(allow, guard), _doc(allow))
+    assert body["denies_removed"] == ["s3:DeleteBucket @ *"] and body["grants_added"] == []
+    assert c["direction"] == "up"
+    c, body = _body_change(_doc(allow), _doc(allow, guard))
+    assert body["denies_added"] == ["s3:DeleteBucket @ *"] and c["direction"] == "down"
+
+
+def test_notresource_is_explicit():
+    a = _doc({"Effect": "Allow", "Action": "s3:GetObject", "NotResource": "arn:aws:s3:::secret/*"})
+    c, body = _body_change(_doc({"Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::pub/*"}), a)
+    assert "s3:GetObject @ NOT[arn:aws:s3:::secret/*]" in body["grants_added"]
