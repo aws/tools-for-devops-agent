@@ -620,6 +620,13 @@ def _block_scalar_problems(
     header, line_break, content = text[start:end].partition("\n")
     indicators = BLOCK_SCALAR_INDICATORS_PATTERN.match(header).group()
     line = token.start_mark.line + first_line
+    # PyYAML reads a | or > at its key's column, on the line after the key, as the key's value; others refuse it.
+    if token.start_mark.column <= parent_indentation:
+        message = (
+            f"{subject} has a block scalar whose | or > isn't indented past its key or list item, which YAML "
+            "parsers read differently; indent it with more spaces"
+        )
+        return [(line, message)]
     if any(character.isdigit() for character in indicators):
         message = (
             f"{subject} has a block scalar indentation indicator, which YAML parsers read differently; "
