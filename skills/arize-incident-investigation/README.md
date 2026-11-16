@@ -5,6 +5,7 @@ Teaches DevOps Agent how to investigate incidents in LLM applications and AI age
 ## Prerequisites
 
 - The Arize AX connector is added to the Agent Space, with its read tools enabled.
+- Install the recommended `arize-incident-investigation` skill after associating the connector. In the Agent Space, confirm the skill is **Active** and available to Incident Triage, Incident RCA and On-demand (CHAT). Connecting the MCP server alone does not confirm that the skill is installed or active.
 - The connector uses an Arize AX key with read access to the projects you want investigated. A read-only service key is recommended.
 
 ## Sample prompts

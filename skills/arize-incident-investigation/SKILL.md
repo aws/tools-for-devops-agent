@@ -29,7 +29,8 @@ Arize AX holds traces of LLM applications and agents in OpenInference format: on
 - `list_spans` returns individual spans across the project, at most 100 per call, and allows only 10 calls per minute. It takes `project_id`, `start_time`, `end_time` (ISO 8601), `filter`, and `truncate_string_length`, `included_columns` or `excluded_columns` to keep responses small. Use it first, to find failing or slow spans across the incident window.
 - `list_spans` has no trace ID argument. To get one trace's spans, pass `filter` `context.trace_id = '<id>'` (not `trace_id`) with a time window that covers the whole trace.
 - Filter on span kind with `attributes.openinference.span.kind = 'LLM'` (or `'TOOL'`, `'AGENT'`, `'RETRIEVER'`). `span_kind` is rejected as an unknown column.
-- `list_traces` returns whole traces with every span's full attributes and cannot truncate them. Even `limit` 5 can return tens of thousands of characters. Use it with `limit` 1 to 3 when you need a complete trace, or use `list_spans` with `context.trace_id`.
+- `list_traces` returns full attributes for the spans it includes and cannot truncate attribute strings. Even `limit` 5 can return tens of thousands of characters. Keep `limit` at 1 to 3, or use `list_spans` with `context.trace_id` for smaller responses.
+- `list_traces` can return incomplete traces: each trace is capped at 1,000 spans, traces share a page fetch allowance, and time-window boundaries can exclude spans. Even `spans_truncated = false` does not prove completeness. A trace whose root starts outside the window is omitted entirely.
 - A `list_traces` filter matches a trace when any of its spans matches. `status_code = 'ERROR'` returns traces with at least one failed span, usually a child, not the root.
 - Neither tool returns a total count. Compare samples, not totals.
 - A trace that crosses the edge of the time window comes back without the spans outside it. Start the window a few minutes early.
@@ -58,7 +59,7 @@ Run the same call for an equal window before the incident as a baseline. If the 
 
 ### Step 4: Read the spans in two or three traces
 
-Pick two or three representative trace IDs from Step 3 and get each trace's spans with `list_spans` and `context.trace_id`. Rebuild the tree from each span's `parent_id`. Look for:
+Pick two or three representative trace IDs from Step 3 and get each trace's spans with `list_spans` and `context.trace_id` over a window covering the full trace. Follow `pagination.next_cursor` with the same project, filter, time window and column selection until `pagination.has_more` is false before claiming the whole tree was checked. Widen the window if the root or parents are missing. If the scan must stop early, report incomplete coverage and do not rule out failures in unseen spans. Rebuild the tree from each span's `parent_id`. Look for:
 
 - The span with `status_code` `ERROR`, its `status_message`, and its exception events. Provider errors (rate limits, authentication, context length, content filter) show up on LLM spans.
 - The span whose duration accounts for most of the trace. A slow LLM span points to the provider or model; a slow tool or retriever span points to the downstream service it calls, which other tools can then examine.

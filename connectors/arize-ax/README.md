@@ -31,10 +31,20 @@ A user key from **Settings** > **Account Settings** > **API Keys** also works, b
 
 The server exposes read tools and tools that create, update or delete Arize AX data. Annotations mark each one, and the server does not enforce them: with a key that has write access, a destructive call runs as soon as it is sent.
 
-For investigations, enable the read tools (`get_*`, `list_*`, `search_*` and `server_info`). If you enable any `update_*`, `delete_*`, `annotate_*`, `assign_*`, `trigger_task_run`, `cancel_task_run` or prompt label tool, require operator approval for it.
+For investigations, enable only the read tools (`get_*`, `list_*`, `search_*` and `server_info`), including `get_prompt_label`. Leave all non-read tools disabled. If you separately enable any non-read tool, require explicit operator approval for each call; this includes `create_*`, `insert_*`, `update_*`, `delete_*`, `annotate_*`, `assign_*`, task-run actions and prompt-label changes. A tool can change data even when its `destructiveHint` is false.
+
+## Install and activate the investigation skill
+
+After associating the connector with your Agent Space, install the recommended `arize-incident-investigation` skill. Confirm it is **Active** and available to Incident Triage, Incident RCA and On-demand (CHAT). A connected MCP server does not by itself confirm skill installation or activation.
+
+For the AWS skill import and activation steps, see [Managing Skills](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#managing-skills).
 
 ## Limits
 
 Calls count against your Arize AX REST rate limits, shared by all keys of the same user: 100 requests per minute per endpoint by default, and 10 per minute for span listing. Each call times out after 30 seconds.
 
 For more detail, see the [Arize AX MCP server docs](https://arize.com/docs/api-clients/mcp/overview).
+
+## Support
+
+For technical help, use your existing Arize support channel or email [support@arize.com](mailto:support@arize.com). See the [API support contacts](https://arize.com/docs/ax/rest-reference/overview#support).
