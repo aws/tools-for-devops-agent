@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.3] - 2026-10-30
+- Fixed the throttle rate formula: `Invocations` excludes throttled requests, so the rate is now `InvocationThrottles / (Invocations + InvocationThrottles)`. Thresholds are unchanged.
+
 ## [1.0.2] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

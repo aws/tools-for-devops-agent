@@ -10,7 +10,7 @@ description: Comprehensive Amazon Bedrock review aligned with the AWS
   optimization review", or "ORR for Bedrock".
 metadata:
   author: smnixon
-  version: "1.0.2"
+  version: "1.0.3"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock"
   aws-devops-agent-skills.technical-domains: "Machine Learning, GenAI"
@@ -201,8 +201,9 @@ Ref: [Security in Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/use
 Ref: [Monitoring Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring.html)
 
 - **Latency and throttling**: `InvocationLatency` p95, `TimeToFirstToken` p95,
-  throttle rate (`InvocationThrottles / Invocations`), and server error rate. High
-  throttle rate → HIGH (add retries with exponential backoff + jitter, request quota
+  throttle rate (`InvocationThrottles / (Invocations + InvocationThrottles)`;
+  `Invocations` excludes throttled requests, and SDK retries count as attempts), and
+  server error rate. High throttle rate → HIGH (add retries with exponential backoff + jitter, request quota
   increase, spread load, use CRIS). Prefer smaller models and streaming for
   latency-sensitive apps.
   [Improve Bedrock performance](https://repost.aws/knowledge-center/bedrock-improve-performance-latency)
