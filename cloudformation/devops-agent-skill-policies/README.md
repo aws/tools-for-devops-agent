@@ -51,6 +51,7 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableDmsOperationReview` | `database-migration-service-expertise` | `dms:TestConnection` |
 | `EnableEcsOperationReview` | `ecs-operation-review` | `compute-optimizer:GetECSServiceRecommendations` |
 | `EnableAwsBackupCoverageReview` | `aws-backup-coverage-review` | `backup:GetSupportedResourceTypes`, `config:SelectResourceConfig`, `dsql:ListClusters`, `storagegateway:ListFileShares`, `storagegateway:ListGateways`, `storagegateway:ListVolumes` |
+| `EnableAuroraIncidentBusinessContext` | `aurora-incident-business-context` | `config:GetResourceConfigHistory` |
 | `EnableAgentCoreObservabilitySetup` | `agentcore-observability-setup` | `bedrock-agentcore:GetAgentRuntime`, `bedrock-agentcore:ListAgentRuntimes`, `xray:GetTraceSegmentDestination`, `logs:DescribeDeliveries`, `logs:DescribeDeliverySources`, `logs:DescribeDeliveryDestinations`, `logs:DescribeResourcePolicies`, `lambda:GetFunctionConfiguration`, `ecs:DescribeTaskDefinition`, `ecs:DescribeServices`, `ecs:ListTasks`, `eks:DescribeCluster` |
 | `EnableAgentCoreOpsReview` | `agentcore-ops-review` | `bedrock-agentcore` read-only List/Get for runtimes, memories, gateways, browsers, code interpreters and workload identities; `bedrock-agentcore:ListMemoryRecords`; `ec2:DescribeSubnets` |
 | `EnableSageMakerAIOpsReview` | `sagemaker-ai-ops-review` | `savingsplans:DescribeSavingsPlans` |
