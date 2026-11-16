@@ -1,0 +1,74 @@
+{
+  "version": "v4",
+  "iteration": 1,
+  "eval_id": "cloudwan-overlapping-supernet",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-routing' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all the core expected points: (1) it explains LPM behavior correctly - noting that VPC /16s win over the /8 for specific destinations within the same segment due to longest prefix match, (2) it identifies the real issue scenarios where overlap causes problems (unused address space, segment-sharing gaps, unreachable/shadowed addresses), (3) it recommends non-overlapping address planning / not advertising the raw /8 as the cleanest fix, (4) it explicitly states Cloud WAN Routing Policies can drop the inbound supernet on the DX attachment via prefix matching, and (5) it explicitly states that BGP communities cannot be matched on Direct Connect attachments ('Cloud WAN Routing Policies can't match or set BGP communities on Direct Connect attachments, only prefix/CIDR matching'). While the agent's framing is slightly more nuanced (noting that within a correctly-shared segment VPCs stay reachable, with the main risk being edge cases), it still captures the essential technical substance: LPM determines winner, non-overlapping planning is the clean fix, routing policies can drop/filter the supernet inbound, and BGP communities don't work on DX. This aligns substantively with the expected output even if the 'shadowing' framing differs slightly in emphasis from the expected output's more absolute statement that VPC /16s 'win' and on-prem hosts are 'shadowed/unreachable' \u2014 the agent actually gives a more technically accurate nuance but still conveys the same core fix guidance and risk areas.",
+      "evidence": "\"Because LPM comes first, a packet destined for 10.1.5.10 will match the VPC-propagated 10.1.0.0/16 over the DX-advertised 10.0.0.0/8... Stop advertising the raw /8 if possible... Cloud WAN Routing Policies can't match or set BGP communities on Direct Connect attachments, only prefix/CIDR matching... Match 10.1.0.0/16 and 10.2.0.0/16 (via prefix-in-cidr or a prefix list) on the inbound DX routing policy and set action drop... Make sure the VPC /16s are still advertised outbound to on-prem (don't summarize them away)\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "explains longest-prefix-match shadows on-prem hosts inside a VPC CIDR",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Any address in that range that isn't yet covered by a specific VPC-propagated route (new VPC not yet attached, a CIDR you haven't carved out, a segment where the VPC attachment isn't shared) is silently claimed by the DX /8 catch-all. Traffic meant for a soon-to-exist resource routes to on-prem instead and gets dropped there\" and \"If the DX attachment lives in a segment that shares routes into other segments, but a given segment doesn't have the 10.1.0.0/16 or 10.2.0.0/16 VPC attachment propagating into it, that segment's table only has the /8 \u2014 all of 10.0.0.0/8, including the VPC ranges, goes to on-prem there.\"",
+          "reasoning": "The output explains that LPM means specific VPC-propagated routes win over the /8 within the same segment, but also explicitly describes the scenario where a host inside the VPC CIDR that isn't yet covered by a specific route (e.g., new VPC, unshared segment) gets shadowed by the DX /8 catch-all and routed to on-prem instead, causing a black hole.",
+          "confidence": "high"
+        },
+        {
+          "text": "recommends non-overlapping address planning as the best fix",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"1. Stop advertising the raw `/8` if possible. Have on-prem advertise only the specific prefixes it actually owns, or carve the `10.1.0.0/16` and `10.2.0.0/16` ranges out of what's sent toward AWS. This is the cleanest fix and removes the ambiguity entirely rather than relying on LPM to paper over it.\"",
+          "reasoning": "The output lists 'Stop advertising the raw /8 if possible... carve the 10.1.0.0/16 and 10.2.0.0/16 ranges out' as fix #1 and explicitly calls it the cleanest fix, placing it first and ahead of the policy-filtering alternative, which satisfies the assertion that non-overlapping address planning is recommended as the best fix.",
+          "confidence": "high"
+        },
+        {
+          "text": "mentions Cloud WAN Routing Policies can filter (drop) prefixes on the Direct Connect attachment",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"If the aggregate must stay... filter it with a Cloud WAN routing policy on the DX attachment... Match 10.1.0.0/16 and 10.2.0.0/16 (via prefix-in-cidr or a prefix list) on the inbound DX routing policy and set action drop\"",
+          "reasoning": "The output explicitly describes using Cloud WAN routing policy to filter/drop the overlapping prefixes on the DX attachment.",
+          "confidence": "high"
+        },
+        {
+          "text": "does not contain 'error'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No instance of the word 'error' appears anywhere in the agent's response.",
+          "reasoning": "A text search of the output for the literal substring 'error' shows no occurrence.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m39s",
+    "cost": "$0.83",
+    "context_window": {
+      "utilization": "5.4%",
+      "compaction_count": 0
+    }
+  }
+}
