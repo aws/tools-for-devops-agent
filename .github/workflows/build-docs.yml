@@ -7,7 +7,8 @@ name: Build docs
 #
 # It installs the same hash-pinned dependencies as deploy-docs.yml, from
 # .github/scripts/docs/requirements.txt, so a new release of one of them can't
-# change a build until that file changes.
+# change a build until that file changes. nh3, one of them, sanitises the
+# connector pages (docs/hooks/connectors_catalog.py).
 #
 # NOTE: advisory until an admin adds "build-docs" to the required status checks
 # for `main`. Use "Require branches to be up to date before merging" with it
@@ -37,6 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          # Full history: docs/hooks/connectors_catalog.py reads a released
+          # connector from the commit that carries its production version.
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -45,6 +49,14 @@ jobs:
 
       - name: Install mkdocs
         run: python3 -I -m pip install --require-hashes -r .github/scripts/docs/requirements.txt
+
+      # The connector page sanitiser's tests render READMEs with the site's
+      # Markdown settings, so they need what was just installed. validate-skills
+      # runs the rest of the suite without it and skips them; here they must run.
+      - name: Test the connectors catalog hook
+        env:
+          CONNECTORS_TESTS_REQUIRE_DOCS_DEPS: "1"
+        run: python3 -I -m unittest discover -s tests -p test_connectors_catalog.py -v
 
       - name: Build the site
         run: mkdocs build --strict
