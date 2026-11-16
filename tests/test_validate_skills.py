@@ -367,34 +367,59 @@ class HistoryIntegrationTests(RepoTestCase):
         code, out = self.run_check("--base-ref", base)
         self.assertEqual(code, 0, out)
 
-    def test_a_connector_yaml_that_cannot_be_read_is_a_warning_not_a_crash(self):
+    def test_a_connector_yaml_that_breaks_the_yaml_rules_fails_and_an_odd_shape_warns(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
         base = self.commit("base")
         cases = {
-            "skills: [alpha\n": "can't be read as YAML",
-            "skills: " + "[" * 2000 + "]" * 2000 + "\n": "can't be read as YAML",
-            "name: acme\nreleased: 2024-13-45\nskills: [alpha]\n": None,
-            "port: !!int abc\nskills: [alpha]\n": None,
-            "name: acme\nskills: alpha\n": "has a skills: value that isn't a list",
-            "- alpha\n": "isn't a YAML mapping",
+            "skills: [alpha\n": "FAIL  connectors/acme/connector.yaml:2: connector.yaml is not valid YAML",
+            "skills: " + "[" * 2000 + "]" * 2000 + "\n": "FAIL  connectors/acme/connector.yaml:1: connector.yaml is nested too deeply",
+            "name: acme\nreleased: 2024-13-45\nskills: [alpha]\n": "FAIL  connectors/acme/connector.yaml:2: connector.yaml has the unquoted value 2024-13-45",
+            "port: !!int abc\nskills: [alpha]\n": "FAIL  connectors/acme/connector.yaml:1: connector.yaml uses tags",
+            "name: acme\nskills: alpha\n": "WARN  connectors/acme/connector.yaml: has a skills: value that isn't a list",
+            "- alpha\n": "WARN  connectors/acme/connector.yaml: isn't a YAML mapping",
         }
-        for text, warning in cases.items():
+        for text, expected in cases.items():
             with self.subTest(text=text[:24]):
                 self.write("connectors/acme/connector.yaml", text)
                 self.commit("an odd connector")
                 code, out = self.run_check("--base-ref", base)
-                self.assertEqual(code, 0, out)
-                if warning:
-                    self.assertIn(f"WARN  connectors/acme/connector.yaml: {warning}", out)
-                else:
-                    self.assertNotIn("connectors/acme", out)
+                self.assertEqual(code, 1 if expected.startswith("FAIL") else 0, out)
+                self.assertIn(expected, out)
+
+    def test_a_connector_yaml_over_32_kib_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        text = "name: acme\n# " + "x" * 32_768 + "\n"
+        self.write("connectors/acme/connector.yaml", text)
+        self.commit("a large connector")
+        code, out = self.run_check()
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"FAIL  connectors/acme/connector.yaml: connector.yaml is {len(text):,} bytes; the limit is 32,768", out)
+
+    def test_a_connector_yaml_that_is_not_utf8_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        (self.repo / "connectors" / "acme").mkdir(parents=True)
+        (self.repo / "connectors" / "acme" / "connector.yaml").write_bytes(b"name: acme\ntitle: \xff\n")
+        self.commit("a connector that isn't UTF-8")
+        code, out = self.run_check()
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  connectors/acme/connector.yaml:2: connector.yaml is not valid UTF-8", out)
+
+    def test_a_releases_file_that_breaks_the_yaml_rules_fails(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("connectors/releases.yaml", "schema_version: 1\nconnectors: []\n")
+        self.commit("base")
+        code, out = self.run_check()
+        self.assertEqual(code, 0, out)
+        self.write("connectors/releases.yaml", "schema_version: 1\nconnectors: [acme,\n  bronto]\n")
+        self.commit("a flow list over two lines")
+        code, out = self.run_check()
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL  connectors/releases.yaml:2: releases.yaml has a flow collection", out)
 
     def test_odd_connector_lists_still_find_the_skill(self):
         cases = {
             "name: acme\nskills: [alpha, null]\n": "has a skills: entry that isn't a skill name",
-            "defaults: &d\n  skills: [alpha]\nname: acme\n<<: *d\n": None,
-            "skills: []\nname: acme\nskills: [alpha]\n": "has more than one skills: key",
-            "defaults: &d\n  skills: []\nname: acme\nskills: [alpha]\n<<: *d\n": None,
+            "name: acme\nskills:\n  - 'alpha'\n": None,
         }
         for text, warning in cases.items():
             with self.subTest(text=text[:24]):
@@ -410,16 +435,6 @@ class HistoryIntegrationTests(RepoTestCase):
                     self.assertIn(f"WARN  connectors/acme/connector.yaml: {warning}", out)
                 else:
                     self.assertNotIn("WARN  connectors/", out)
-
-    def test_values_pyyaml_cannot_build_still_find_the_skill(self):
-        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
-        self.write("connectors/acme/connector.yaml", "name: acme\nreleased: 2024-13-45\nskills: [alpha]\n")
-        base = self.commit("base")
-        self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1", extra='  deprecated: "true"\n'))
-        self.commit("deprecate alpha")
-        code, out = self.run_check("--base-ref", base)
-        self.assertEqual(code, 1, out)
-        self.assertIn("connectors/acme/connector.yaml still recommends it", out)
 
     def test_a_skill_removed_through_a_merge_commit_is_retired(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
