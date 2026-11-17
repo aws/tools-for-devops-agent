@@ -153,6 +153,19 @@ class CheckConnectorTests(unittest.TestCase):
                 self.assertIsNone(findings[0].path)
         self.assertEqual(cc.check_connector("a" * 64, folder(text=CONNECTOR.replace("name: acme", f"name: {'a' * 64}"))), [])
 
+    def test_deprecated_is_a_boolean_not_text(self):
+        """The catalog publisher's schema refuses any other value, as its skill check does for metadata.deprecated."""
+        for value in ("true", "false"):
+            with self.subTest(value=value):
+                self.assertEqual(cc.check_connector("acme", folder(text=CONNECTOR + f"deprecated: {value}\n")), [])
+        message = '"deprecated" must be true or false, without quotes, because the catalog reads it as a boolean'
+        quoted = (('"true"', "; write deprecated: true"), ('"False"', "; write deprecated: false"))
+        for value, hint in quoted + (('"yes"', ""), ("1", ""), ("", "")):
+            with self.subTest(value=value):
+                findings = cc.check_connector("acme", folder(text=CONNECTOR + f"deprecated: {value}\n"))
+                self.assertEqual(messages(findings), [message + hint])
+                self.assertEqual((findings[0].path, findings[0].line), ("connector.yaml", CONNECTOR.count("\n") + 1))
+
     def test_index_is_reserved_for_the_catalog(self):
         findings = cc.check_connector("index", folder(text=CONNECTOR.replace("name: acme", "name: index")))
         self.assertEqual(

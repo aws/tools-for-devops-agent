@@ -1153,12 +1153,21 @@ def _check_deprecated(items: dict, lines: dict, report: _Report) -> bool:
     value_node = items["deprecated"][1]
     if isinstance(value_node, ScalarNode) and value_node.tag == BOOL_TAG:
         return value_node.value == "true"
-    message = '"metadata.deprecated" must be true or false, without quotes, because the catalog reads it as a boolean'
-    text = value_node.value if isinstance(value_node, ScalarNode) and value_node.tag == STR_TAG else ""
-    if text.lower() in ("true", "false"):
-        message += f"; write deprecated: {text.lower()}"
-    report.error(message, line=lines["deprecated"])
+    text = value_node.value if isinstance(value_node, ScalarNode) and value_node.tag == STR_TAG else None
+    report.error(deprecated_problem("metadata.deprecated", text), line=lines["deprecated"])
     return False
+
+
+def deprecated_problem(key: str, text: str | None) -> str:
+    """The error for a skill's or a connector's deprecated value that isn't a plain true or false.
+
+    `text` is the value when it is text, so a quoted "true" or "True" gets the
+    unquoted spelling to use.
+    """
+    message = f'"{key}" must be true or false, without quotes, because the catalog reads it as a boolean'
+    if text is not None and text.lower() in ("true", "false"):
+        message += f"; write deprecated: {text.lower()}"
+    return message
 
 
 def _check_tier(metadata: dict, lines: dict, report: _Report) -> None:

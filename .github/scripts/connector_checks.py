@@ -120,8 +120,9 @@ def _hash(folder: sc.SkillTree) -> str:
 def check_connector(name: str, folder: sc.SkillTree) -> list[sc.Finding]:
     """The rules that need only this copy: connector.yaml is there, names its folder, and has a version to compare.
 
-    YAML problems in connector.yaml are left out: validate_skills.py reports
-    them for every file under connectors/.
+    deprecated, when there is one, must be a plain true or false, as in a
+    skill's metadata. YAML problems in connector.yaml are left out:
+    validate_skills.py reports them for every file under connectors/.
     """
     findings = []
     if not sc.NAME_PATTERN.fullmatch(name) or len(name) > sc.MAX_NAME_LENGTH:
@@ -155,6 +156,10 @@ def check_connector(name: str, folder: sc.SkillTree) -> list[sc.Finding]:
             "folder is its identity"
         )
         findings.append(sc.Finding("error", message, CONNECTOR_FILE, document.lines.get("name")))
+    deprecated = document.get("deprecated")
+    if deprecated is not ABSENT and not isinstance(deprecated, bool):
+        message = sc.deprecated_problem("deprecated", deprecated if isinstance(deprecated, str) else None)
+        findings.append(sc.Finding("error", message, CONNECTOR_FILE, document.lines.get("deprecated")))
     if _version(document) is not None:
         return findings
     version = document.get("version")
