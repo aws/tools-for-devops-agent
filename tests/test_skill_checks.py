@@ -691,6 +691,7 @@ class PublishedSetTests(unittest.TestCase):
         )
 
     def test_repository_published_set_matches_the_catalog(self):
+        """The catalog publisher has its own copy of this list, so the two change together."""
         gitignore = (ROOT / "skills" / ".gitignore").read_text(encoding="utf-8")
         rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules", gitignore)
         self.assertEqual(rules.published_excludes, ("evals/", ".skilleval.yaml", "CHANGELOG.md"))
