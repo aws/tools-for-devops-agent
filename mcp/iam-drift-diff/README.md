@@ -199,6 +199,21 @@ classification policy treats any write, including the snapshot write, as
 mutative, classify `iam_snapshot_capture` and `iam_snapshot_diff` accordingly and
 approve them in chat; the other two remain read-only.
 
+## Maintenance and dependency updates
+
+This is sample code that you deploy into your own account, so you own its updates. What to watch and how to update:
+
+| Component | Where it is pinned | How to update |
+|---|---|---|
+| `fastmcp`, `boto3` | `requirements.in` (direct pins), `requirements.txt` (local dev and tests) | Edit the version in both files, then regenerate the lock (below) |
+| All transitive Python packages | `layers/dependencies/requirements.txt` (SHA-256 hashes) | From `layers/dependencies`: `uv pip compile requirements.in --generate-hashes --python-platform x86_64-manylinux_2_17 --python-version 3.12 -o requirements.txt`. Run in place, this keeps every pinned version and only changes what a new direct pin requires. To pick up a fix in one transitive package add `--upgrade-package <name>`; to refresh everything add `--upgrade`. Review the diff, run the tests, then `sam build` (the layer build uses `pip --require-hashes`) |
+| AWS Lambda Web Adapter layer | `template.yaml` (layer ARN, version 24) | Pick a newer published version of the public layer from the Lambda Web Adapter project, change the version number, redeploy |
+| Python runtime | `template.yaml` (`python3.12`) and the layer `Makefile` | Change both together, regenerate the lock for the new Python version, redeploy |
+
+Suggested cadence: check for updates monthly and within a week of any security advisory for `fastmcp`, `boto3` or a package in the lock (for example with `pip-audit -r layers/dependencies/requirements.txt` or your organization's scanner). After any update, run `PYTHONPATH=src python3 -m pytest tests/ -q`, `sam validate --lint`, and redeploy; the first scheduled drift run afterwards confirms the server still captures and diffs. Repository-wide automation (for example Dependabot for `pip` and the Lambda layer) is up to the repository maintainers; this directory does not enable it.
+
+The packages come from PyPI, not an AWS-controlled mirror (see Accepted risks above). The hash lock protects against a package changing after it was locked, not against a malicious release that is locked in the first place, so review the lock diff when you update.
+
 ## Non-production disclaimer
 
 This server is sample code, not intended for production use without additional
