@@ -54,8 +54,7 @@ Rules:
   delegated sub-agent output: account IDs in ARNs, plus source IPs and principal/session names
   taken from CloudTrail. Mask before the text is emitted, never as a raw value followed by
   "masked".
-- Nothing - no interim output, timeline, or sub-agent text - may appear before the
-  AI-generated banner above.
+- Findings, timelines and evidence appear only in the report, after the banner.
 - Never include document or chunk content.
 - State the region used and why (named vs current).
 - Every "Fix" is a command/console step for the operator - the skill never executes it.

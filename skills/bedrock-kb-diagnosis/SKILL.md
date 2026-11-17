@@ -54,8 +54,11 @@ The report is the deliverable. Conversation around it is not.
   Execute the step and move on.
 - **Do not echo raw API responses.** Process them silently. Ingestion-job and policy
   documents are long; pasting them displaces the diagnosis.
-- **Keep interstitial messages to one line.** Speak between steps only at real milestones:
-  starting, asking the user something, delivering, or erroring.
+- **Interim messages are one line and carry no findings.** Speak between steps only at real
+  milestones: starting, asking the user something, delivering, or erroring. No identifiers,
+  timelines or evidence outside the report.
+- **Run every read yourself.** Do not hand any part of this diagnosis, CloudTrail lookups
+  included, to a sub-agent: its results reach the user before your report.
 - **Do not summarize after delivering.** The report already contains the summary; restating
   it invites a shortened paraphrase to be read instead of the report.
 - **Never assess your own performance.** Do not append a paragraph saying the diagnosis
@@ -275,7 +278,7 @@ mark the affected layer, and continue.
   in any quoted ARN, and mask source IPs and principal/session names taken from CloudTrail,
   BEFORE the text is emitted - not in a later pass, and never as a raw value followed by
   "masked". This applies to interim summaries, timelines, and anything a delegated sub-agent
-  prints; none of it may precede the AI-generated banner. Never echo credential material;
+  prints. Never echo credential material;
   reference secrets by ARN or alias only, never their value.
 - **IAM and resource-policy denials hand off, and the handoff is REQUIRED, not optional.** An
   `AccessDenied` on ingestion or retrieval - including an S3 bucket-policy or KMS key-policy
