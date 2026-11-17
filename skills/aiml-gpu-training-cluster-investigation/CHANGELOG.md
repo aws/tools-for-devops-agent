@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.7
+- `technical-domains` uses `AI/ML` instead of `Machine Learning` and `GenAI`, so catalogs list every AI skill under one domain.
+
 ## 1.0.6
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

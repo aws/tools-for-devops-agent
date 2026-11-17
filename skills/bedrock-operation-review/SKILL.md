@@ -13,7 +13,7 @@ metadata:
   version: "1.0.3"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock"
-  aws-devops-agent-skills.technical-domains: "Machine Learning, GenAI"
+  aws-devops-agent-skills.technical-domains: "AI/ML"
 ---
 
 # Amazon Bedrock Operational Review

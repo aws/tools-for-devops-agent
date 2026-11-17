@@ -14,10 +14,10 @@ description: Use this skill for GPU training or inference clusters on SageMaker 
   or Pending, nodes terminating at once, or "is my cluster ready for a multi-day run".
 metadata:
   author: nzuresh
-  version: "1.0.6"
+  version: "1.0.7"
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "Amazon SageMaker HyperPod, AWS ParallelCluster, Amazon EC2, Amazon FSx for Lustre, Elastic Fabric Adapter, Amazon EKS, AWS Health"
-  aws-devops-agent-skills.technical-domains: "Machine Learning, GenAI, High Performance Computing"
+  aws-devops-agent-skills.technical-domains: "AI/ML, High Performance Computing"
 ---
 
 # GPU Cluster Evidence, Readiness, and Fault Verdicts

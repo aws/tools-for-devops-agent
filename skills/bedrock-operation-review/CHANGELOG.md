@@ -1,6 +1,7 @@
 # Changelog
 
 ## [1.0.3] - 2026-11-10
+- `technical-domains` uses `AI/ML` instead of `Machine Learning` and `GenAI`, so catalogs list every AI skill under one domain.
 - `metadata.author` is the contributor's GitHub username, `sean-nixon`, so catalogs link to their profile.
 
 ## [1.0.2] - 2026-10-21
