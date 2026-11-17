@@ -4,9 +4,10 @@ description: PromQL fundamentals and metric discovery/query workflow. Load when 
 metadata:
   summary: "Discover Coralogix metrics and write PromQL queries for custom and infrastructure investigations."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Metrics Skill - Analyzing metrics via Coralogix/PromQL

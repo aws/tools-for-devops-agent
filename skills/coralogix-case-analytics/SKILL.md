@@ -4,9 +4,10 @@ description: Fleet/aggregate analytics across many cases via the `system/labs.ca
 metadata:
   summary: "Analyze case counts, trends, distributions, and lifecycle metrics across a Coralogix case fleet."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability, Operations"
 ---
 
 # Case Analytics Skill — Fleet-level DataPrime queries over cases

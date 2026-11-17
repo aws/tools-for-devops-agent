@@ -4,9 +4,10 @@ description: Create and change Coralogix Cases — open a case, comment, re-prio
 metadata:
   summary: "Create and manage Coralogix Cases, including assignment, acknowledgement, resolution, muting, and links."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_MITIGATION,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability, Operations"
 ---
 
 # Case Management Skill — open, triage, resolve and link cases

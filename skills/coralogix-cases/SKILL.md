@@ -4,9 +4,10 @@ description: Triage and manage Coralogix Cases. Load when a user wants to inspec
 metadata:
   summary: "Inspect and manage Coralogix Cases, including events, notifications, comments, assignments, and status."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability, Operations"
 ---
 
 # Cases Management

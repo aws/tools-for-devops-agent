@@ -5,10 +5,11 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Find a LaunchDarkly flag by name or key, tell similar flags apart and summarize its state."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT"
+  aws-devops-agent-skills.technical-domains: "Operations"
 ---
 
 # LaunchDarkly Flag Command Router

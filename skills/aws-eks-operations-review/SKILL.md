@@ -14,8 +14,10 @@ description: >
   incident investigation.
 metadata:
   author: shyamkulkarni
-  version: "1.9.6"
+  version: "1.9.7"
   aws-devops-agent-skills.agent-types: "CHAT"
+  aws-devops-agent-skills.technical-domains: "Containers, Operations"
+  aws-devops-agent-skills.aws-services: "Amazon EKS"
 ---
 # EKS Operations Review
 ## Scope boundary

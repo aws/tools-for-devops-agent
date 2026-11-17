@@ -17,10 +17,11 @@ compatibility: >
   Elasticsearch ML APIs. Read-only.
 metadata:
   author: "Udayel"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   summary: "Triage a degraded service in Elastic from SLOs, alerts, golden signals, dependencies and logs."
   aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # SRE Service Triage

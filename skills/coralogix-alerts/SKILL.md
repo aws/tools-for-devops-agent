@@ -4,9 +4,10 @@ description: Alert and case terminology, alert definitions, alert events, cases,
 metadata:
   summary: "Shared Coralogix alert and case terminology, IDs, alert types, and routing guidance."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability, Operations"
 ---
 
 # Alerts & Cases Guidance

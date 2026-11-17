@@ -4,9 +4,10 @@ description: Use when the user asks to "query RUM", "cx_rum", "real user monitor
 metadata:
   summary: "Query and troubleshoot Coralogix RUM telemetry, frontend performance, errors, sessions, and SDK setup."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Coralogix RUM (`rum.events`)

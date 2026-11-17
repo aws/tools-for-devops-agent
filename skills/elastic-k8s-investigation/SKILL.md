@@ -15,10 +15,11 @@ compatibility: >
   Alert-state lookups access the Kibana Alerting API.
 metadata:
   author: "Udayel"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   summary: "Diagnose Kubernetes workload, node, and cluster issues."
   aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
+  aws-devops-agent-skills.technical-domains: "Containers, Observability"
 ---
 
 # Kubernetes Investigation

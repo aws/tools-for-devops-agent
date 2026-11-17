@@ -2,6 +2,9 @@
 
 All notable changes to the `analytics-opensearch-expertise` skill are documented here.
 
+## [2.6.3] - 2026-11-17
+- Added `aws-devops-agent-skills.technical-domains` and `aws-devops-agent-skills.aws-services` to the metadata so catalogs can filter the skill.
+
 ## [2.6.2] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

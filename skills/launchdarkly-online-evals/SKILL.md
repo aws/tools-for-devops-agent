@@ -4,10 +4,11 @@ description: Attach judges to config variations for automatic LLM-as-a-judge eva
 compatibility: Requires the remotely hosted LaunchDarkly MCP server. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Attach LLM-as-a-judge evaluators to AgentControl config variations, set sampling rates and track quality scores."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT"
+  aws-devops-agent-skills.technical-domains: "GenAI"
 ---
 
 # Config Online Evaluations

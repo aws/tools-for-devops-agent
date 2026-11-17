@@ -4,9 +4,10 @@ description: Manage Coralogix saved views and saved-view folders. Load when the 
 metadata:
   summary: "Create, inspect, update, organize, and delete Coralogix saved log views and folders."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Saved Views

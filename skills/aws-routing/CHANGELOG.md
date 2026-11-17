@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.2.7] - 2026-11-17
+- Added `aws-devops-agent-skills.technical-domains` and `aws-devops-agent-skills.aws-services` to the metadata so catalogs can filter the skill.
+
 ## [1.2.6] - 2026-11-03
 ### Changed
 - All files: adopted the two-lookup model. Every construct that owns a route table does its own lookup; the DXGW is a distributed set of BGP route reflectors outside the data path, so the TGW/CNE sees it as (usually) one next hop and traffic goes straight to the selected VIF.

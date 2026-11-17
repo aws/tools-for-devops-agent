@@ -4,9 +4,10 @@ description: Span-specific concepts, fields, duration handling, and investigatio
 metadata:
   summary: "Investigate individual Coralogix spans and traces using span attributes, timing, and DataPrime queries."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Spans Skill - Analyzing spans via Coralogix

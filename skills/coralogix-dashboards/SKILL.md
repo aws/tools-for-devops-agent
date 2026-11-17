@@ -4,9 +4,10 @@ description: Dashboard analysis and editing workflow and rules for using dashboa
 metadata:
   summary: "Analyze, create, and edit Coralogix dashboards, including dashboard JSON, filters, variables, and time ranges."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Dashboards Skill - Analyzing and building Coralogix dashboards

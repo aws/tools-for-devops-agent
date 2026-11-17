@@ -4,9 +4,10 @@ description: The fast, authoritative path for APM/RED data — error rate, laten
 metadata:
   summary: "Analyze service health, RED metrics, saturation, dependencies, and inventory through Coralogix Service Catalog."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Service Catalog Skill

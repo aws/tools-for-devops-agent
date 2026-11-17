@@ -1,5 +1,8 @@
 # Changelog
 
+## [2.5.4] - 2026-11-17
+- Added `aws-devops-agent-skills.technical-domains` to the metadata so catalogs can filter the skill.
+
 ## [2.5.3] - 2026-10-22
 - Updated the link to the skill IAM policies template, which moved to `cloudformation/devops-agent-skill-policies/`.
 

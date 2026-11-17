@@ -5,10 +5,11 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server. SDK examples use `launchdarkly-ai-server` 0.3.0+ (Python) or `@launchdarkly/ai-node` 0.3.0+ (Node.js).
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Define custom business metrics for AgentControl configs, check that their events arrive and read the results."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT"
+  aws-devops-agent-skills.technical-domains: "GenAI, Observability"
 ---
 
 # Custom Metrics for Configs

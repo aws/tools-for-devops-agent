@@ -4,9 +4,10 @@ description: Data usage, billing units, plan consumption, quota metrics, anomaly
 metadata:
   summary: "Analyze Coralogix data usage, billing units, quotas, anomalies, and consumption trends."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT"
+  aws-devops-agent-skills.technical-domains: "Observability, Cost Optimization"
 ---
 
 # Data Usage Guidance

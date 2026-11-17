@@ -4,9 +4,10 @@ description: Log-specific concepts, fields, field discovery usage, and troublesh
 metadata:
   summary: "Investigate Coralogix logs with log-specific fields, discovery guidance, and troubleshooting patterns."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Logs Skill - Analyzing logs via Coralogix

@@ -5,10 +5,11 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server. Operates on a flag that already exists; does not create flags or edit code.
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Record an automated, policy-aware rollout for the LaunchDarkly flag that guards a pull request's change."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT"
+  aws-devops-agent-skills.technical-domains: "Operations"
 ---
 
 # Record a Flag's Automated Release

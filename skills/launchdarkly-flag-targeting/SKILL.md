@@ -5,10 +5,11 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Turn LaunchDarkly flags on or off, change rollouts, rules and individual targets, or copy targeting between environments."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "INCIDENT_MITIGATION, CHAT"
+  aws-devops-agent-skills.technical-domains: "Operations"
 ---
 
 # LaunchDarkly Flag Targeting & Rollout

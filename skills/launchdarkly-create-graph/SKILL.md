@@ -5,10 +5,11 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Chart LaunchDarkly logs, traces, errors, sessions and metrics, preview the graphs and save them to a dashboard."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Create graphs and dashboards

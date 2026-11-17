@@ -4,9 +4,10 @@ description: 'Find and inspect infrastructure resources: monitored resource type
 metadata:
   summary: "Find and inspect Coralogix infrastructure resources, health history, source data, and configuration changes."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Infrastructure Resources Skill

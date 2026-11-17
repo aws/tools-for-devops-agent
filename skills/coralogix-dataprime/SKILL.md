@@ -4,9 +4,10 @@ description: DataPrime query language for logs/spans/custom datasets (shared syn
 metadata:
   summary: "Write and troubleshoot DataPrime queries for Coralogix logs, spans, and custom datasets."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # DataPrime Skill - Shared Query Language

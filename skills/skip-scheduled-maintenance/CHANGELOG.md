@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.3] - 2026-11-17
+- Added `aws-devops-agent-skills.technical-domains` to the metadata so catalogs can filter the skill.
+
 ## 1.0.2
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

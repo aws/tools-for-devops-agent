@@ -5,10 +5,11 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Change, retire or delete a LaunchDarkly AgentControl config or variation, such as its model, parameters or prompts."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "INCIDENT_MITIGATION, CHAT"
+  aws-devops-agent-skills.technical-domains: "GenAI, Operations"
 ---
 
 # Config Update & Lifecycle

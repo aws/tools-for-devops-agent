@@ -4,9 +4,10 @@ description: Dataset discovery and source-selection guidance for DataPrime syste
 metadata:
   summary: "Discover Coralogix system and user-defined datasets and select sources for DataPrime queries."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Datasets Skill - Discovering system and user-defined datasets

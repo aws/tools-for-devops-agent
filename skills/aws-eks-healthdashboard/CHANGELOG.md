@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.1] - 2026-11-17
+- Added `aws-devops-agent-skills.technical-domains` and `aws-devops-agent-skills.aws-services` to the metadata so catalogs can filter the skill.
+
 ## 1.0.0
 
 Close the metric-coverage gaps against the AWS [EKS essential metrics guide](https://aws-observability.github.io/observability-best-practices/guides/containers/oss/eks/best-practices-metrics-collection/),

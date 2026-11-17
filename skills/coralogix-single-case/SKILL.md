@@ -4,9 +4,10 @@ description: Deep single-case investigation. Load when the user asks about one s
 metadata:
   summary: "Investigate one Coralogix Case in depth, including its lifecycle, comments, events, and notification deliveries."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability, Operations"
 ---
 
 # Case Investigation Skill — Drill into a single Case

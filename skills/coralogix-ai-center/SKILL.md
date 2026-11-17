@@ -4,9 +4,10 @@ description: Coralogix AI Center — observe, evaluate, and guard GenAI/LLM appl
 metadata:
   summary: "Investigate, evaluate, and manage Coralogix AI Center applications, models, and GenAI telemetry."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability, GenAI"
 ---
 
 # AI Center — analyzing GenAI interactions, quality & platform health

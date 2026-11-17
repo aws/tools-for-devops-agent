@@ -5,10 +5,11 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Audit LaunchDarkly flags for stale, launched or unused ones and check whether each is ready to remove."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "PREVENTION, CHAT"
+  aws-devops-agent-skills.technical-domains: "Operations"
 ---
 
 # LaunchDarkly Flag Discovery

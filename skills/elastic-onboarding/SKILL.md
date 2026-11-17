@@ -14,10 +14,11 @@ compatibility: >
   later. Covers Java, Python, .NET, and PHP runtimes.
 metadata:
   author: "Udayel"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   summary: "Guide onboarding for new applications and services."
   aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Observability Onboarding

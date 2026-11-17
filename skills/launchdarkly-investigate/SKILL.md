@@ -5,10 +5,11 @@ license: Apache-2.0
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Find the root cause of a bug or anomaly in LaunchDarkly logs, traces, errors, sessions and metrics."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "INCIDENT_RCA, CHAT"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Investigate

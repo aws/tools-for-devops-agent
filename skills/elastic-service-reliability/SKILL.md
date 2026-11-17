@@ -17,10 +17,11 @@ compatibility: >
   configured monitor location.
 metadata:
   author: "Udayel"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   summary: "Define and tune SLOs, burn-rate rules, and alert thresholds."
   aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
+  aws-devops-agent-skills.technical-domains: "Observability, Operations"
 ---
 
 # Service Reliability

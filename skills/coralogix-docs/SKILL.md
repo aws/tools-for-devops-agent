@@ -4,9 +4,10 @@ description: Search and read official Coralogix platform documentation using **`
 metadata:
   summary: "Find and read official Coralogix documentation for platform features, setup, and integrations."
   author: "coralogix"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT,INCIDENT_TRIAGE,INCIDENT_RCA,INCIDENT_MITIGATION,INCIDENT_UI"
+  aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Coralogix docs (`search_docs`, `fetch_doc`)

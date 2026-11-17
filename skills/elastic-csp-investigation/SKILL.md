@@ -16,10 +16,12 @@ compatibility: >
   Alert-state and SLO lookups access the Kibana Alerting and SLO APIs. Read-only.
 metadata:
   author: "Udayel"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "partner-managed"
   summary: "Investigate AWS service issues (RDS, Lambda, SQS, ALB, EC2) from OpenTelemetry cloud metrics in Elastic."
   aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE, INCIDENT_RCA, CHAT"
+  aws-devops-agent-skills.technical-domains: "Observability"
+  aws-devops-agent-skills.aws-services: "Amazon RDS, AWS Lambda, Amazon EC2, Amazon CloudWatch"
 ---
 
 # Cloud Provider (CSP) Investigation

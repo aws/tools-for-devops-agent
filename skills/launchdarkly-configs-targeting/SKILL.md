@@ -4,10 +4,11 @@ description: Configure AgentControl config targeting to control which variation 
 compatibility: Requires the remotely hosted LaunchDarkly MCP server
 metadata:
   author: "nieblara"
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Choose which AgentControl config variation each context gets: default rule, percentage split, rules and individual targets."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "INCIDENT_MITIGATION, CHAT"
+  aws-devops-agent-skills.technical-domains: "GenAI, Operations"
 ---
 
 # Config Targeting
