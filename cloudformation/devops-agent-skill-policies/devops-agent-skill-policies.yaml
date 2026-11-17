@@ -39,6 +39,7 @@ Metadata:
           default: Optional Resource Scoping
         Parameters:
           - AllowedRegions
+          - BedrockKbSourceBucketArns
       - Label:
           default: Optional Add-On Permissions
         Parameters:
@@ -205,9 +206,16 @@ Parameters:
 
   EnableBedrockKbDiagnosis:
     Type: String
-    Description: Bedrock Knowledge Base Diagnosis skill (adds bedrock:GetIngestionJob and s3:ListBucket/GetBucketLocation for source checks).
+    Description: Bedrock Knowledge Base Diagnosis skill (adds bedrock:GetIngestionJob on this account's knowledge bases; optional s3:ListBucket on BedrockKbSourceBucketArns).
     AllowedValues: ['true', 'false']
     Default: 'true'
+
+  BedrockKbSourceBucketArns:
+    Type: CommaDelimitedList
+    Description: >
+      (Optional) For bedrock-kb-diagnosis: the S3 data source bucket ARNs the skill may
+      list for staleness and file checks. Leave empty to omit the s3:ListBucket grant.
+    Default: ''
 
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
@@ -227,6 +235,7 @@ Conditions:
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
   SkillBedrockKbDiagnosis: !Equals [!Ref EnableBedrockKbDiagnosis, 'true']
+  HasBedrockKbSourceBuckets: !Not [!Equals [!Join ['', !Ref BedrockKbSourceBucketArns], '']]
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -734,9 +743,10 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
-  # bedrock-kb-diagnosis: adds bedrock:GetIngestionJob (the only call that names a file dropped
-  # at intake) and s3:ListBucket/GetBucketLocation for source-bucket staleness and file checks.
-  # The managed policy allows s3:ListBucket only for the AWSLogs/* prefix.
+  # bedrock-kb-diagnosis: adds bedrock:GetIngestionJob (names an unsupported dropped file and
+  # returns job-level failureReasons) scoped to this account's knowledge bases, and optionally
+  # s3:ListBucket on the data source buckets in BedrockKbSourceBucketArns for staleness and
+  # file checks. s3:GetBucketLocation is already granted by the managed policy.
   PolicyBedrockKbDiagnosis:
     Type: AWS::IAM::Policy
     Condition: SkillBedrockKbDiagnosis
@@ -751,13 +761,15 @@ Resources:
             Effect: Allow
             Action:
               - bedrock:GetIngestionJob
-            Resource: '*'
-          - Sid: SourceBucketListing
-            Effect: Allow
-            Action:
-              - s3:ListBucket
-              - s3:GetBucketLocation
-            Resource: '*'
+            Resource: !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:knowledge-base/*'
+          - !If
+            - HasBedrockKbSourceBuckets
+            - Sid: SourceBucketListing
+              Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !Ref BedrockKbSourceBucketArns
+            - !Ref AWS::NoValue
 
 Outputs:
   DevOpsAgentRoleArn:
@@ -791,6 +803,7 @@ Outputs:
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
+        - bedrock-kb-diagnosis: ${EnableBedrockKbDiagnosis} (bedrock:GetIngestionJob on this account's knowledge bases; s3:ListBucket on the buckets in BedrockKbSourceBucketArns, if set)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
