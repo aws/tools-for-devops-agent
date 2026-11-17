@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.7] - 2026-11-17
+### Changed
+- `SKILL.md`: added `aws-services` (`AWS Cloud WAN, AWS Direct Connect, AWS Transit Gateway, Amazon VPC`) and `technical-domains` (`Networking`), so catalogs list the skill under the services whose routing it explains and under Networking.
+
 ## [1.2.6] - 2026-11-03
 ### Changed
 - All files: adopted the two-lookup model. Every construct that owns a route table does its own lookup; the DXGW is a distributed set of BGP route reflectors outside the data path, so the TGW/CNE sees it as (usually) one next hop and traffic goes straight to the selected VIF.

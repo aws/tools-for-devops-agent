@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.3
+- Added `aws-services` (`AWS Lambda, Amazon SQS, Amazon Aurora DSQL`) and `technical-domains` (`Operations, Observability`), so catalogs list the skill under the services its description names and under those domains.
+
 ## 1.0.2
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

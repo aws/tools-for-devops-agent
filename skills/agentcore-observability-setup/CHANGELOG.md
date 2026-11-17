@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.0.3
+- Added `Amazon Bedrock` to `aws-services`, so a filter for Bedrock lists the skill as well as one for AgentCore.
 - `metadata.author` is the contributor's GitHub username, `vipulg1993`, so catalogs link to their profile.
 
 ## 1.0.2
