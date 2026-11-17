@@ -14,8 +14,6 @@ Available tools and data depend on the scopes and permissions configured in Celo
 
 Use the tenant and realm from your Celonis sign-in URL. For example, `https://my-team.eu-1.celonis.cloud` has tenant `my-team` and realm `eu-1`. Enter the tenant name without the URL prefix or domain suffix.
 
-For the try environment, `https://my-team.try.celonis.cloud` has tenant `my-team` and realm `try`.
-
 See [Realm cloud providers and regions](https://docs.celonis.com/en/realm-cloud-providers-and-regions.html) for the realm list (Celonis sign-in required).
 
 ## Connect
