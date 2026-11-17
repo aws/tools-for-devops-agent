@@ -1,35 +1,46 @@
 # Opt-in policy grant
 
-Two reads this skill needs are not in the default `AIDevOpsAgentAccessPolicy` (v15). They are
-bundled as one opt-in parameter in the shared
-`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml` template, added
-following the same convention as the other skills' opt-in parameters in that file.
+Detecting a dropped file needs no extra permission: the skill compares the latest `COMPLETE`
+job's `numberOfDocumentsScanned` with the count of documents `ListKnowledgeBaseDocuments`
+returns (all statuses, all pages), both already granted by `AIDevOpsAgentAccessPolicy` (v15).
+Two capabilities beyond the managed policy are opt-in, added as one parameter in the shared
+`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml` template.
 
 ## What the grant adds
 
-| Action | Why it is needed | Behavior without it |
-| --- | --- | --- |
-| `bedrock:GetIngestionJob` | The only call that returns `failureReasons`, and the only way to name a file dropped at intake (an oversized or unsupported file is absent from both `ListKnowledgeBaseDocuments` and the ingestion logs) | Drops inferred from job `statistics` (`scanned - indexed - failed - skipped`); file identities reported **Not checked** |
-| `s3:ListBucket`, `s3:GetBucketLocation` (scoped to the source buckets) | Staleness and file checks over the data source inclusion prefix | Staleness and file checks reported **Not checked** |
+| Action | Scope | Why it is needed | Behavior without it |
+| --- | --- | --- | --- |
+| `bedrock:GetIngestionJob` | this account's knowledge bases | Names an unsupported dropped file and returns job-level `failureReasons` | An unsupported drop is detected but not named |
+| `s3:ListBucket` | the buckets in `BedrockKbSourceBucketArns` | Source staleness and file checks; sizing an oversized dropped file to name it | Staleness/file checks reported **Not checked**; an oversized drop is detected but not named |
 
-The default managed policy already allows `s3:ListBucket` only for the `AWSLogs/*` prefix,
-which is why listing a data source bucket needs this grant.
+`s3:GetBucketLocation` is already in the managed policy, so it is not added here. The managed
+policy allows `s3:ListBucket` only for the `AWSLogs/*` prefix, which is why listing a source
+bucket needs this grant.
 
-## Statements to add (scope to your data source buckets)
+## Template wiring (matches the deployed pattern)
+
+- Parameter `BedrockKbSourceBucketArns` (`CommaDelimitedList`, default `''`) and condition
+  `HasBedrockKbSourceBuckets: !Not [!Equals [!Join ['', !Ref BedrockKbSourceBucketArns], '']]`,
+  mirroring `AllowedRegions` / `HasRegionRestriction`.
+- `GetIngestionJob` scoped to `arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:knowledge-base/*`.
+- The `s3:ListBucket` statement sits behind `!If [HasBedrockKbSourceBuckets, {...}, !Ref AWS::NoValue]`
+  with `Resource: !Ref BedrockKbSourceBucketArns`, so with no bucket set the statement is omitted
+  and the stack still deploys; with buckets set, only those are listable.
 
 ```yaml
-- Effect: Allow
+- Sid: BedrockGetIngestionJob
+  Effect: Allow
   Action:
     - bedrock:GetIngestionJob
-  Resource: "*"   # scope to your knowledge base / ingestion-job ARNs
-- Effect: Allow
-  Action:
-    - s3:ListBucket
-    - s3:GetBucketLocation
-  Resource:
-    - arn:aws:s3:::<your-data-source-bucket>
+  Resource: !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:knowledge-base/*'
+- !If
+  - HasBedrockKbSourceBuckets
+  - Sid: SourceBucketListing
+    Effect: Allow
+    Action:
+      - s3:ListBucket
+    Resource: !Ref BedrockKbSourceBucketArns
+  - !Ref AWS::NoValue
 ```
 
-Place these behind the template's opt-in parameter (a `Condition` that gates the statements on
-the parameter being enabled), matching how the existing opt-in parameters are structured in
-`devops-agent-skill-policies.yaml`. All actions are read-only.
+All actions are read-only.

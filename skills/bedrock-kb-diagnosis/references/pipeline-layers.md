@@ -8,15 +8,16 @@ All APIs are read-only. No `Create*`/`Update*`/`Delete*`/`Start*`, no
 - **bedrock / bedrock-agent:** `ListKnowledgeBases`, `GetKnowledgeBase`, `ListDataSources`,
   `GetDataSource`, `ListIngestionJobs`, `ListKnowledgeBaseDocuments`, `GetFoundationModel`
   (embedding model lifecycle), `ListAgents`, `ListAgentVersions`, `ListAgentKnowledgeBases`,
-  `GetAgentKnowledgeBase`. Opt-in (not in the default managed policy): `GetIngestionJob` - the
-  only call that names a file dropped at intake.
+  `GetAgentKnowledgeBase`. Opt-in (not in the default managed policy): `GetIngestionJob` - names
+  an unsupported dropped file and returns job-level `failureReasons`; an oversized dropped file
+  is only counted, named via the S3 listing.
 - **logs:** `DescribeDeliverySources` (match a delivery source's `resourceArns` against the KB
   ARN), then `DescribeDeliveries`, `DescribeDeliveryDestinations` to resolve the KB's
   `APPLICATION_LOGS` destination; `StartQuery`, `GetQueryResults`. An empty match is
   **Not checked**, never "no logging configured".
-- **s3 (opt-in, not in the default managed policy for source buckets):** `ListBucket`,
-  `GetBucketLocation`, scoped to the source buckets. The default policy allows `s3:ListBucket`
-  only for the `AWSLogs/*` prefix, so a source listing needs the opt-in grant.
+- **s3:** `ListBucket` is opt-in (scoped to the buckets in `BedrockKbSourceBucketArns`); the
+  default policy allows `s3:ListBucket` only for the `AWSLogs/*` prefix, so a source listing
+  needs the grant. `GetBucketLocation` is already in the managed policy.
 - **aoss:** `BatchGetCollection`, `GetSecurityPolicy`, `ListSecurityPolicies`,
   `GetAccessPolicy`, `ListAccessPolicies`, `ListVpcEndpoints`.
 - **rds:** `DescribeDBClusters`. **secretsmanager:** `DescribeSecret` (existence only, never
@@ -57,9 +58,10 @@ indexed > 0 docs, cited by job ID) and **did the last sync succeed**.
   for `IGNORED`.
 - `EMBEDDING_FAILED` / `INDEXING_FAILED` reasons: KB `APPLICATION_LOGS` `status_reasons`
   (CloudWatch Logs only). A file dropped at intake is absent from both
-  `ListKnowledgeBaseDocuments` and the logs; `GetIngestionJob.failureReasons` (opt-in) is the
-  only call that names it. Without the grant, infer drops from `statistics`
-  (`scanned - indexed - failed - skipped > 0`) and list the files as Not checked.
+  `ListKnowledgeBaseDocuments` and the logs. Detect drops by comparing the latest `COMPLETE`
+  job's `numberOfDocumentsScanned` with the `ListKnowledgeBaseDocuments` count (all statuses,
+  all pages) - managed policy only. Name an unsupported type via `GetIngestionJob.failureReasons`
+  (opt-in); an oversized file is only counted there, so name it via the S3 listing.
 - Finding the logs: `logs:DescribeDeliverySources` / `DescribeDeliveries`. Disclose
   S3/Firehose destinations as not queryable. Log delivery is not supported for structured
   stores or Kendra GenAI indexes.

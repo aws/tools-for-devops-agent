@@ -30,18 +30,20 @@ only the reads for the branch the symptom points to.
 
 The DevOps Agent role needs read-only access. Most APIs the skill uses are covered by the
 [AIDevOpsAgentAccessPolicy](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html)
-managed policy (verified against **v15**). Two capabilities are NOT covered by default and
-ship together as an opt-in parameter in the shared `cloudformation/devops-agent-skill-policies`
-template (see `references/opt-in-policy.md` for the exact grant and snippet):
+managed policy (verified against **v15**), including `s3:GetBucketLocation`. Two capabilities
+need the opt-in parameter in the shared `cloudformation/devops-agent-skill-policies` template
+(see `references/opt-in-policy.md`):
 
-- **Source-bucket reads** - `s3:ListBucket` and `s3:GetBucketLocation`, scoped to the data
-  source buckets. The managed policy allows `s3:ListBucket` only for the `AWSLogs/*` prefix, so
-  without this grant the staleness and file checks cannot run and are reported as **Not checked**.
-- **`bedrock:GetIngestionJob`** - the only call that returns `failureReasons`, and the only way
-  to name a file dropped at intake (an oversized or unsupported file is absent from both
-  `ListKnowledgeBaseDocuments` and the ingestion logs). Without this grant, the skill infers a
-  drop from the job `statistics` (`scanned - indexed - failed - skipped`) and reports the file
-  identities as **Not checked**.
+- **`bedrock:GetIngestionJob`** (scoped to this account's knowledge bases) - names an
+  unsupported dropped file and returns job-level `failureReasons`. Without it, the skill still
+  detects that files were dropped (see below) but cannot name an unsupported one.
+- **`s3:ListBucket`** scoped to the buckets in `BedrockKbSourceBucketArns` - source staleness
+  and file checks, and sizing an oversized dropped file to name it. Without it, those checks are
+  reported as **Not checked**.
+
+Detecting a dropped file needs no opt-in: the skill compares the latest `COMPLETE` job's
+`numberOfDocumentsScanned` with the count of documents `ListKnowledgeBaseDocuments` returns
+(all statuses, all pages), which the managed policy already allows.
 
 **Not in the managed policy, disclosed rather than skipped silently:**
 - `s3vectors:*` reads - S3 Vectors stores are reported as **Not checked**.
@@ -93,8 +95,9 @@ IDs in quoted ARNs.
 ## Limitations
 
 - Does not measure retrieval quality, run evaluation jobs, or judge answer correctness.
-- Naming a file dropped at intake needs the opt-in `bedrock:GetIngestionJob`; without it the
-  skill reports a drop count from job statistics but not the file identities.
+- Detecting a dropped file uses the managed policy (scanned count vs the document list). Naming
+  an unsupported dropped file needs the opt-in `bedrock:GetIngestionJob`; naming an oversized one
+  needs the opt-in `s3:ListBucket`. Without those, drops are reported as a count, Not checked.
 - AOSS index engine and Aurora table columns are data-plane facts - reported as Inspect.
 - S3 Vectors stores and third-party stores (Pinecone, Redis Enterprise Cloud, MongoDB Atlas)
   are not checkable from AWS APIs.

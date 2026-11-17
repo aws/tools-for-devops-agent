@@ -132,7 +132,7 @@ Route to the first layer to check. Full table with evidence in `references/sympt
 | Answers miss recent docs | Source vs last sync | Newest S3 `LastModified` under the inclusion prefix is later than the last `COMPLETE` job's `updatedAt` |
 | Cites removed content | Data source lifecycle | Data source deleted/replaced with `dataDeletionPolicy: RETAIN` (vectors left in store) |
 | Sync failed or partial | Ingestion, per-document | Job `status`/`statistics`; `ListKnowledgeBaseDocuments` `FAILED`/`IGNORED`; log `status_reasons` |
-| One document never shows up | Source | Unsupported extension; file > 50 MB (images > 3.75 MB); `.metadata.json` name mismatch; object outside `inclusionPrefixes`. A file dropped at intake is named only by `GetIngestionJob.failureReasons` (see Step 5) |
+| One document never shows up | Source | Unsupported extension; file > 50 MB (images > 3.75 MB); `.metadata.json` name mismatch; object outside `inclusionPrefixes`. Detect a drop via scanned-vs-document-list count (Step 5); an unsupported type is named by `GetIngestionJob`, an oversized file by the S3 listing |
 | Indexing fails | Vector store | AOSS collection not `ACTIVE` / policy gaps; Aurora not available / Data API off / secret missing |
 | Sync rejected at start (`ValidationException ... storage configuration provided is invalid`) | Vector store | `StartIngestionJob` fails immediately and creates no job; the empty job list is NOT "never synced" (see finding-logic.md) |
 | Ingestion slow or throttled | Embedding | `AWS/Bedrock` `InvocationThrottles` for the embedding `ModelId` during the job window |
@@ -147,26 +147,31 @@ Run only the branch Step 4 selected. Decision trees and exact reads per layer ar
 `references/pipeline-layers.md`; vector-store-specific checks in `references/vector-stores.md`.
 Key rules:
 - **Failure reasons and dropped files:** `ListKnowledgeBaseDocuments` returns `statusReason`
-  only for `IGNORED`, and a file the service drops before document tracking (over the 50 MB /
-  3.75 MB image size limit, or an unsupported type such as `.zip`) may not appear in it at all,
-  nor produce an `APPLICATION_LOGS` event. `EMBEDDING_FAILED` / `INDEXING_FAILED` reasons live
-  in the KB's `APPLICATION_LOGS` (`status_reasons`), queryable only when delivery is to
-  CloudWatch Logs. `bedrock:GetIngestionJob.failureReasons` is the ONLY call that names a
-  dropped file. It is not in the default managed policy, so it is a required opt-in to diagnose
-  a dropped file (see README, opt-in CFN parameter). When the grant is absent, use the Pass 1
-  job `statistics` arithmetic `scanned - indexed - failed - skipped > 0` as the signal that
-  files were dropped, and report their identities as **Not checked** (grant `GetIngestionJob`).
+  only for `IGNORED`, and a file the service drops at intake (over the 50 MB / 3.75 MB image
+  size limit, or an unsupported type such as `.zip`) may not appear in it at all, nor produce
+  an `APPLICATION_LOGS` event. `EMBEDDING_FAILED` / `INDEXING_FAILED` reasons live in the KB's
+  `APPLICATION_LOGS` (`status_reasons`), queryable only when delivery is to CloudWatch Logs.
+  To **detect** dropped files with only the managed policy, compare the latest `COMPLETE` job's
+  `numberOfDocumentsScanned` with the count of documents `ListKnowledgeBaseDocuments` returns
+  for that data source (all statuses, all pages): a positive difference is files scanned but
+  missing from the document list. (`numberOfDocumentsScanned` also counts unchanged documents,
+  so the older `scanned - indexed - failed - skipped` formula is wrong on any re-sync, and
+  `numberOfDocumentsFailed` is not a drop count - it caught an unsupported `.zip` but not an
+  oversized file.) To **name** a dropped file: an unsupported type is named by
+  `bedrock:GetIngestionJob.failureReasons` (opt-in grant); an oversized file is only counted
+  there, so naming it needs the S3 source listing (compare object sizes under the prefix).
 - **Logs:** find the destination via `logs:DescribeDeliverySources` (match the delivery
   source's `resourceArns` against the KB ARN), then `DescribeDeliveries` /
   `DescribeDeliveryDestinations`. Only a CloudWatch Logs destination is queryable; disclose
   S3/Firehose as not queryable. An empty result means the filter did not match, NOT that no
   delivery is configured - report it as **Not checked**, never "no logging configured".
-- **Source staleness / file checks:** S3 `ListBucket` + `GetBucketLocation` (keys, sizes,
-  `LastModified` only). The default managed policy allows `s3:ListBucket` only for the
-  `AWSLogs/*` prefix, so listing a *source* bucket requires the opt-in grant (`s3:ListBucket` /
-  `s3:GetBucketLocation` scoped to the source buckets - see README). If that grant is absent,
-  or the bucket is cross-account (`bucketOwnerAccountId`) and the listing is denied, report the
-  staleness/file checks as **Not checked**, not passed.
+- **Source staleness / file checks:** S3 `ListBucket` (keys, sizes, `LastModified` only);
+  `GetBucketLocation` is already in the managed policy. The default policy allows `s3:ListBucket`
+  only for the `AWSLogs/*` prefix, so listing a *source* bucket requires the opt-in grant
+  (`s3:ListBucket` scoped to the buckets in `BedrockKbSourceBucketArns` - see README). If that
+  grant is absent, or the bucket is cross-account (`bucketOwnerAccountId`) and the listing is
+  denied, report the staleness/file checks as **Not checked**, not passed. Sizing an oversized
+  dropped file (to name it) relies on this listing.
 
 ## Step 6 - Rule out a service event
 
@@ -223,7 +228,7 @@ mark the affected layer, and continue.
 | --- | --- |
 | A list call returns a pagination token | Keep paginating to the end before stating any count. A partial page is never "the data sources" or "the jobs" |
 | `AccessDenied` on a read | Mark the affected layer `Not checked`, naming the operation. Continue with the reads that remain. Never infer a configuration you could not read |
-| Ingestion-log delivery not to CloudWatch Logs (S3/Firehose) | Job-level failure reasons are not queryable from logs; say so. Use `GetIngestionJob.failureReasons` if the opt-in grant is present, else infer drops from job `statistics` (`scanned - indexed - failed - skipped`) and mark file identities Not checked |
+| Ingestion-log delivery not to CloudWatch Logs (S3/Firehose) | Job-level failure reasons are not queryable from logs; say so. Detect drops from the latest `COMPLETE` job's `numberOfDocumentsScanned` minus the `ListKnowledgeBaseDocuments` count (managed policy only); name an unsupported type via `GetIngestionJob` and an oversized file via the S3 listing |
 | Cross-account source bucket, listing denied | Staleness and file checks are `Not checked`, not passed |
 | No ingestion job exists for a data source | That is itself a finding (nothing was ever indexed), not a missing read |
 | Vector store is third-party or S3 Vectors | Store-scoped checks are `Not checked`; name the store and the reason |

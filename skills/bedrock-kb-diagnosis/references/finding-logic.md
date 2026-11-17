@@ -34,10 +34,14 @@ Every finding is exactly one of:
   only for the `AWSLogs/*` prefix). Without the opt-in grant, staleness and file checks are
   **Not checked**, not passed.
 - A file dropped at intake (over the size limit, or an unsupported type such as `.zip`) may be
-  absent from `ListKnowledgeBaseDocuments` AND from `APPLICATION_LOGS`. Its reason is only in
-  `GetIngestionJob.failureReasons` (opt-in). Without that grant, detect drops from the job
-  `statistics` (`scanned - indexed - failed - skipped > 0`) and report the file identities as
-  **Not checked**.
+  absent from `ListKnowledgeBaseDocuments` AND from `APPLICATION_LOGS`. Detect drops by
+  comparing the latest `COMPLETE` job's `numberOfDocumentsScanned` with the document count
+  `ListKnowledgeBaseDocuments` returns for that data source (all statuses, all pages); a
+  positive difference is files scanned but missing from the list. This uses only `bedrock:List*`
+  (managed policy). `numberOfDocumentsScanned` counts unchanged documents too, so the old
+  `scanned - indexed - failed - skipped` formula is wrong on a re-sync, and `numberOfDocumentsFailed`
+  is not a drop count. Name an unsupported type via `GetIngestionJob.failureReasons` (opt-in);
+  an oversized file is only counted there, so name it via the S3 source listing.
 - A sync **rejected at start** (`StartIngestionJob` -> `ValidationException ... storage
   configuration provided is invalid`) creates no ingestion job. Do not read the resulting empty
   job list as "never synced"; route it to the vector store layer.
