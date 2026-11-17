@@ -63,11 +63,11 @@ Skills on `main` are published automatically, so a pull request check ([`.github
 | `description` | Required. 1 to 1,024 characters, counted as Unicode code points. |
 | `title` | Optional display name. Non-empty, one line, at most 100 characters. |
 | `license`, `compatibility`, `allowed-tools` | Optional. When present, non-empty text; `compatibility` is at most 500 characters. |
-| `metadata` | Required. A mapping whose values are all text. Quote any value YAML would otherwise read as a number or true/false, such as `deprecated: "true"`. A key that isn't listed below is a warning, with the nearest known key when there is one. |
+| `metadata` | Required. A mapping whose values are all text, except `deprecated`. Quote any other value YAML would otherwise read as a number, a date or true/false. A key that isn't listed below is a warning, with the nearest known key when there is one. |
 | `metadata.author` | Required. One or more GitHub usernames or teams (`org/team`, such as `octo-org/octo-team`) separated by commas, without a leading `@`. |
 | `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix, suffix or leading zeros, at most 32 characters and at most 10 digits in each part. |
 | `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing or empty summary is a warning for now; it becomes required once every skill has one. |
-| `metadata.deprecated` | Optional. `"true"` or `"false"`. |
+| `metadata.deprecated` | Optional. `true` or `false`, without quotes. It is the one metadata value that isn't text, because the catalog reads it as a boolean and refuses text. |
 | `metadata.tier` | Optional. `"aws-managed"`, `"aws-support-managed"` or `"partner-managed"`: who maintains the skill. Use `aws-support-managed` only for a skill whose named owner or team has accepted ongoing AWS Support maintenance. The check can't verify that, so before merge a maintainer confirms it through AWS Support's internal ownership process, then adds the `aws-support-managed-verified` label or a comment saying it was verified. Who opened the pull request isn't the test. Skills only: connector tiers are separate. |
 | `metadata.aws-devops-agent-skills.agent-types` | The agents that load the skill, as comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json), such as `"INCIDENT_RCA"`. An unknown value is an error, because this key decides which agents load the skill rather than only how catalogs filter it. `GENERIC` loads the skill for every agent, so it is an error to combine it with another value. Without the key the skill installs as `GENERIC` and loads for every agent, which is a warning. |
 | `metadata.aws-devops-agent-skills.*` | Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. Any other key under this prefix, or a misspelling of the prefix, is an error, so a typo can't drop the skill from a filter. For `aws-services` and `technical-domains`, a value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is a warning, with the approved spelling when there is one. |
@@ -97,7 +97,7 @@ Outside `skills/`: skills are published from GitHub's archive of the whole repos
 
 Identity and versions, compared with the base branch:
 
-- A skill folder is never removed or renamed, because installed copies point at its path. To retire a skill, set `metadata.deprecated: "true"` and bump its version. To rename one, deprecate the old folder and add a new one.
+- A skill folder is never removed or renamed, because installed copies point at its path. To retire a skill, set `metadata.deprecated: true` and bump its version. To rename one, deprecate the old folder and add a new one.
 - There's no exception, even in an emergency such as malicious content: deprecate the skill; the DevOps Agent team can hide it from the catalog while the change publishes. Deleting the folder wouldn't remove the versions already published.
 - A path that belonged to a skill removed earlier can't be reused.
 - A published version is immutable. A change to any published file, `README.md` and `images/` included, needs a higher `metadata.version`. Changes only to `evals/`, `.skilleval.yaml` or `CHANGELOG.md` need no bump.

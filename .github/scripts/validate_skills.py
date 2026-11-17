@@ -346,7 +346,7 @@ def check_repository(
         findings, info = sc.check_skill(head_trees[name], rules)
         if base is not None:
             findings += sc.check_added_content(base_trees.get(name), head_trees[name], rules)
-        if info is not None and info.metadata.get("deprecated") == "true":
+        if info is not None and info.deprecated:
             for connector in recommended.get(name, []):
                 findings.append(
                     sc.Finding(
