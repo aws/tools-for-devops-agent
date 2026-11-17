@@ -1,4 +1,31 @@
 # Changelog
+## [1.10.0] - 2026-11-18
+Optional overlays, contributed from the `eks-guardian` proposal (PR #85) instead of adding a
+fourth EKS review skill. Overlays are opt-in derived views: they add no check, discovery area,
+or report section, and never change membership, verdicts, severity, or gates.
+- New `references/runtime/overlays.md`: activation triggers and rules for historical delta and
+  comparison/drift/fleet. It is loaded in S5/S8 only when the user requests an overlay; otherwise
+  the ledger records `overlays: none`. Requested overlays are part of the transient ledger.
+- Historical delta matches by the existing finding fingerprint (fallback `check_id` +
+  `canonical_resource_id`, never fuzzy titles). Classes are New / Regressed / Persisting /
+  Resolved / Unverified, and FAIL→N/A is never Resolved. The prior report must be supplied in
+  conversation; nothing is persisted.
+- Comparison/drift/fleet compares reports: at most one cluster is reviewed live, and every other
+  cluster comes from a report the user supplies. It emits a separate `# EKS Fleet Comparison`
+  with drift classes (Production-only gap, Lower-environment gap, Systemic, Consistent, Not
+  comparable) over parity IDs.
+- New grading guard FP13 (AX5, Op7, N2, S38, Op29): version lag is a version gap; a CVE, CVSS
+  score, or vulnerable version is cited only from a retrieved Inspector finding or AWS security
+  bulletin; customer Inspector findings do not cover AWS-hosted add-on images.
+- `router.md` overlay routing, `report-contract.md` placement (§1 subsection for the delta), and
+  `qa-checklist.md` §8a overlay gate. The router states that this review does not map findings
+  to compliance frameworks.
+- `SKILL.md`: description mentions the overlays, the ledger records requested overlays, and S5
+  points at the router. Redundant wording was trimmed; the CP19–CP25 just-in-time bullet was
+  removed because Step 7's Control Plane sub-state already states it.
+- Evals: overlay functional cases, including a live-cluster delta case; a compliance-mapping
+  query is `should_trigger: false`. See `evals/TESTING.md`. Payload is 75 files.
+
 ## [1.9.7] - 2026-11-10
 - Added `aws-services` (`Amazon EKS`) and `technical-domains` (`Containers, Operations`), so catalogs list the skill under EKS and those domains.
 
