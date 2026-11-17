@@ -35,7 +35,7 @@ INTERNAL_NAMES_FILE = "internal-names.json"
 
 NAME_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAX_NAME_LENGTH = 64
-# A skill catalog keeps an index file beside the skill folders, so no skill may take its name.
+# A catalog keeps an index file beside the skill or connector folders, so no skill or connector may take its name.
 RESERVED_NAMES = frozenset({"index"})
 MAX_DESCRIPTION_LENGTH = 1024
 MAX_TITLE_LENGTH = 100

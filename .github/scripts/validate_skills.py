@@ -253,35 +253,52 @@ def retired_skills(repo_root: Path, base: str, present: set[str]) -> frozenset[s
     return frozenset(names - present)
 
 
-def read_connectors(repo_root: Path, rev: str) -> dict[str, sc.SkillTree]:
-    """Every connectors/<name>/ folder at `rev`.
+def read_connectors(repo_root: Path, rev: str) -> tuple[dict[str, sc.SkillTree], list[SkillResult]]:
+    """Every connectors/<name>/ folder at `rev`, plus an error for a connector.yaml in connectors/schema/.
 
     Files directly in connectors/, such as releases.yaml, belong to no folder,
-    and connectors/schema/ holds the schemas, not a connector.
+    and connectors/schema/ holds the schemas, not a connector, so the catalog
+    publisher refuses a connector.yaml there.
     """
     blobs: list[tuple[str, str, str, str]] = []  # (connector, path in its folder, mode, oid)
+    loose: list[SkillResult] = []
     for mode, kind, oid, path in _ls_tree(repo_root, rev, f"{CONNECTORS_DIR}/"):
         parts = path.split("/", 2)
-        if kind == "blob" and len(parts) == 3 and parts[1] != cc.SCHEMA_FOLDER:
+        if kind != "blob" or len(parts) != 3:
+            continue
+        if parts[1] != cc.SCHEMA_FOLDER:
             blobs.append((parts[1], parts[2], mode, oid))
+        elif parts[2] == CONNECTOR_FILE:
+            message = (
+                f"{CONNECTORS_DIR}/{cc.SCHEMA_FOLDER}/ holds the JSON Schemas, not a connector, so it can't have a "
+                f"{CONNECTOR_FILE}; give the connector a folder with another name"
+            )
+            findings = [sc.Finding("error", message, CONNECTOR_FILE)]
+            loose.append(SkillResult(f"{CONNECTORS_DIR}/{parts[1]}", findings, is_skill=False, always_visible=True))
     folders: dict[str, sc.SkillTree] = {}
     for (name, inner, mode, _), data in zip(blobs, _read_blobs(repo_root, [blob[3] for blob in blobs])):
         folders.setdefault(name, sc.SkillTree(name)).entries[inner] = sc.Entry(inner, mode, data)
-    return folders
+    return folders, loose
 
 
-def connector_results(repo_root: Path, base: str | None, head_ref: str) -> list[SkillResult]:
+def connector_results(
+    repo_root: Path, base: str | None, head_ref: str, skill_names: set[str]
+) -> list[SkillResult]:
     """The connector_checks.py rules for every connector folder, compared with the merge base when there is one.
 
-    Every finding shows, as for the connector YAML: a warning can only come from
-    a folder that differs from its merge-base copy.
+    `skill_names` are the skill folders at `head_ref`, which a connector's
+    skills: list may name. A connector.yaml in connectors/schema/ is an error
+    too. Every finding shows, as for the connector YAML: a warning can only
+    come from a folder that differs from its merge-base copy.
     """
-    head_folders = read_connectors(repo_root, head_ref)
-    base_folders = read_connectors(repo_root, base) if base is not None else {}
-    results: list[SkillResult] = []
-    for name in sorted(set(head_folders) | set(base_folders)):
+    head_folders, results = read_connectors(repo_root, head_ref)
+    base_folders = read_connectors(repo_root, base)[0] if base is not None else {}
+    connector_names = set(head_folders)
+    for name in sorted(connector_names | set(base_folders)):
         head = head_folders.get(name)
-        findings = cc.check_connector(name, head) if head is not None else []
+        findings = []
+        if head is not None:
+            findings += cc.check_connector(name, head) + cc.check_references(head, connector_names, skill_names)
         if base is not None:
             findings += cc.check_history(name, base_folders.get(name), head)
         if findings:
@@ -296,7 +313,7 @@ def connector_skill_references(repo_root: Path, rev: str) -> tuple[dict[str, lis
     that isn't UTF-8 or that breaks the YAML rules of sc.read_yaml, since the
     connectors are published from the same files. A connector.yaml whose skills:
     value isn't a list of skill names gets a warning, so a broken file doesn't
-    silently skip the check; the connector version rules report one that isn't a
+    silently skip the check; the connector rules report one that isn't a
     mapping.
     """
     files: list[tuple[str, str]] = []
@@ -337,8 +354,8 @@ def _read_connector_yaml(path: str, data: bytes) -> tuple[yaml.Node | None, list
 def _recommended_skills(root: yaml.Node | None) -> tuple[str | None, list[str]]:
     """The skill names under a connector.yaml's skills: key, and what kept any of it from being checked.
 
-    A root that isn't a mapping has no skills: key, and the connector version
-    rules already report it as an error.
+    A root that isn't a mapping has no skills: key, and the connector rules
+    already report it as an error.
     """
     if not isinstance(root, yaml.MappingNode):
         return None, []
@@ -385,7 +402,7 @@ def check_repository(
             results.append(SkillResult(f"{SKILLS_DIR}/{name}", history[name], is_skill=False))
     recommended, connector_yaml_results = connector_skill_references(repo_root, head_ref)
     results += connector_yaml_results
-    results += connector_results(repo_root, base, head_ref)
+    results += connector_results(repo_root, base, head_ref, set(head_trees))
     for name in sorted(head_trees):
         findings, info = sc.check_skill(head_trees[name], rules)
         if base is not None:

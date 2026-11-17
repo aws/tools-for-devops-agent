@@ -133,6 +133,57 @@ class CheckConnectorTests(unittest.TestCase):
     def test_yaml_problems_are_left_to_the_yaml_check(self):
         self.assertEqual(cc.check_connector("acme", tree({"connector.yaml": b"name: [acme\n"})), [])
 
+    def test_the_name_is_the_folder_name(self):
+        findings = cc.check_connector("acme", folder(text=CONNECTOR.replace("name: acme", "name: acme-cloud")))
+        self.assertEqual(
+            messages(findings),
+            ['"name" is "acme-cloud" but the folder is "acme"; they must match, because a connector\'s folder is its identity'],
+        )
+        self.assertEqual(findings[0].line, 2)
+        findings = cc.check_connector("acme", folder(text=CONNECTOR.replace("name: acme\n", "")))
+        self.assertEqual(messages(findings), ['"name" is required, and it must be the folder name: name: acme'])
+        self.assertEqual(cc.check_connector("acme", folder(text=CONNECTOR.replace("name: acme", 'name: "acme"'))), [])
+
+    def test_the_folder_name_is_a_capability_name(self):
+        for name in ("Acme", "acme_cloud", "acme--cloud", "-acme", "a" * 65):
+            with self.subTest(name=name):
+                findings = cc.check_connector(name, folder(text=CONNECTOR.replace("name: acme", f"name: {name}")))
+                self.assertEqual(len(messages(findings)), 1, findings)
+                self.assertIn("must be lowercase letters, digits and single hyphens, at most 64", findings[0].message)
+                self.assertIsNone(findings[0].path)
+        self.assertEqual(cc.check_connector("a" * 64, folder(text=CONNECTOR.replace("name: acme", f"name: {'a' * 64}"))), [])
+
+    def test_index_is_reserved_for_the_catalog(self):
+        findings = cc.check_connector("index", folder(text=CONNECTOR.replace("name: acme", "name: index")))
+        self.assertEqual(
+            messages(findings), ["the folder name connectors/index is reserved for the connector catalog's index; use another name"]
+        )
+        self.assertIsNone(findings[0].path)
+
+
+class ReferencesTests(unittest.TestCase):
+    def references(self, extra: str, connectors=("acme", "bravo"), skills=("alpha",)) -> list[sc.Finding]:
+        return cc.check_references(folder(text=CONNECTOR + extra), set(connectors), set(skills))
+
+    def test_each_skill_is_a_skill_folder(self):
+        findings = self.references("skills: [alpha, ghost, alpha, ghost, 3]\n")
+        self.assertEqual(messages(findings), ['"skills" lists "ghost", which isn\'t a skill folder in skills/'])
+        self.assertEqual((findings[0].path, findings[0].line), ("connector.yaml", CONNECTOR.count("\n") + 1))
+        self.assertEqual(self.references("skills: [alpha]\n"), [])
+        self.assertEqual(self.references("skills: alpha\n"), [])  # Not a list: validate_skills.py warns.
+
+    def test_the_replacement_is_a_connector_folder(self):
+        findings = self.references("deprecated: true\nreplacement: charlie\n")
+        self.assertEqual(messages(findings), ['"replacement" is "charlie", which isn\'t a connector folder in connectors/'])
+        self.assertEqual(findings[0].line, CONNECTOR.count("\n") + 2)
+        self.assertEqual(self.references("deprecated: true\nreplacement: bravo\n"), [])
+
+    def test_a_connector_yaml_that_cannot_be_read_is_left_to_the_other_rules(self):
+        for data in (b"skills: [ghost\n", b"- ghost\n"):
+            with self.subTest(data=data):
+                self.assertEqual(cc.check_references(tree({"connector.yaml": data}), {"acme"}, set()), [])
+        self.assertEqual(cc.check_references(tree({"README.md": b"# Acme\n"}), {"acme"}, set()), [])
+
 
 class HistoryTests(unittest.TestCase):
     def test_an_unchanged_connector_passes(self):

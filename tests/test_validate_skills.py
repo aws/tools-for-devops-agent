@@ -376,6 +376,7 @@ class HistoryIntegrationTests(RepoTestCase):
 
     def test_a_deprecated_skill_cannot_stay_recommended_by_a_connector(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write("skills/beta/SKILL.md", skill_md("beta"))
         self.write("connectors/acme/connector.yaml", "name: acme\nversion: 1.0.0\nskills: [alpha, beta]\n")
         base = self.commit("base")
         deprecated = skill_md("alpha", version="1.0.1", extra="  deprecated: true\n")
@@ -392,6 +393,23 @@ class HistoryIntegrationTests(RepoTestCase):
         code, out = self.run_check("--base-ref", base)
         self.assertEqual(code, 0, out)
 
+    def test_a_connector_names_only_skills_and_connectors_that_exist(self):
+        self.write("skills/alpha/SKILL.md", skill_md("alpha"))
+        self.write(
+            "connectors/acme/connector.yaml",
+            "name: acme\nversion: 1.0.0\ndeprecated: true\nreplacement: bravo\nskills: [alpha, ghost]\n",
+        )
+        self.commit("a connector that names a skill and a connector that don't exist")
+        code, out = self.run_check()
+        self.assertEqual(code, 1, out)
+        self.assertIn('FAIL  connectors/acme/connector.yaml:5: "skills" lists "ghost", which isn\'t a skill folder', out)
+        self.assertIn('FAIL  connectors/acme/connector.yaml:4: "replacement" is "bravo", which isn\'t a connector', out)
+        self.write("skills/ghost/SKILL.md", skill_md("ghost"))
+        self.write("connectors/bravo/connector.yaml", "name: bravo\nversion: 1.0.0\n")
+        self.commit("add them")
+        code, out = self.run_check()
+        self.assertEqual(code, 0, out)
+
     def test_a_connector_yaml_that_breaks_the_yaml_rules_fails_and_an_odd_shape_warns(self):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
         base = self.commit("base")
@@ -401,7 +419,7 @@ class HistoryIntegrationTests(RepoTestCase):
             "name: acme\nreleased: 2024-13-45\nskills: [alpha]\n": "FAIL  connectors/acme/connector.yaml:2: connector.yaml has the unquoted value 2024-13-45",
             "port: !!int abc\nskills: [alpha]\n": "FAIL  connectors/acme/connector.yaml:1: connector.yaml uses tags",
             "name: acme\nversion: 1.0.0\nskills: alpha\n": "WARN  connectors/acme/connector.yaml: has a skills: value that isn't a list",
-            # Not a mapping, so it has no version either, which the connector version rules need.
+            # Not a mapping, so it has no version either, which the connector rules need.
             "- alpha\n": "FAIL  connectors/acme/connector.yaml:1: connector.yaml must be a mapping of keys to values",
             # An empty file, or one of only comments, holds no document, which isn't a mapping either.
             "": "FAIL  connectors/acme/connector.yaml:1: connector.yaml must be a mapping of keys to values",
@@ -636,6 +654,20 @@ class ConnectorVersionTests(RepoTestCase):
         code, out = self.run_check("--base-ref", self.base)
         self.assertEqual(code, 0, out)
         self.assertNotIn("connectors/schema", out)
+
+    def test_a_connector_yaml_in_the_schema_folder_fails(self):
+        """The catalog publisher refuses connectors/schema/connector.yaml, since schema/ holds the JSON Schemas."""
+        self.write("connectors/schema/connector.yaml", connector_yaml(name="schema"))
+        self.commit("a connector named schema")
+        for argv in ((), ("--base-ref", self.base)):
+            with self.subTest(argv=argv):
+                code, out = self.run_check(*argv)
+                self.assertEqual(code, 1, out)
+                self.assertIn(
+                    "FAIL  connectors/schema/connector.yaml: connectors/schema/ holds the JSON Schemas, not a connector",
+                    out,
+                )
+                self.assertIn("1 skill(s) checked: 0 with errors. 1 other problem(s) in the repository.", out)
 
     def test_a_new_connector_not_at_1_0_0_warns(self):
         self.write("connectors/bravo/connector.yaml", connector_yaml("2.0.0", name="bravo"))

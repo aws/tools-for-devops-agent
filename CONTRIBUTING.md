@@ -106,7 +106,7 @@ Identity and versions, compared with the base branch:
 - A new skill starts at `1.0.0`.
 - When the version goes up, add a `CHANGELOG.md` entry for it. A bump without one is a warning.
 
-Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list, which, like any change to a connector's files, needs a higher connector `version`. Each `connector.yaml`, at most 32 KiB, and `connectors/releases.yaml` must be UTF-8 YAML that every parser reads the same way, by the frontmatter's rules, except that a flow collection on one line, a `---` line at the start, `---` inside a value, and a tab inside a quoted value, block scalar or comment are allowed. A flow collection can't span lines, and an unquoted entry in one can't start with `?` or `:`, hold a `?`, or be a lone `-` that no `:` follows. [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json) has a case for each rule. A `connector.yaml` that isn't a mapping is an error, because it has no version to check; one whose `skills:` isn't a list of skill names is a warning.
+Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list, which, like any change to a connector's files, needs a higher connector `version`. Each `connector.yaml`, at most 32 KiB, and `connectors/releases.yaml` must be UTF-8 YAML that every parser reads the same way, by the frontmatter's rules, except that a flow collection on one line, a `---` line at the start, `---` inside a value, and a tab inside a quoted value, block scalar or comment are allowed. A flow collection can't span lines, and an unquoted entry in one can't start with `?` or `:`, hold a `?`, or be a lone `-` that no `:` follows. [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json) has a case for each rule. A `connector.yaml` that isn't a mapping is an error, because it has no version to check; one whose `skills:` isn't a list of skill names is a warning. As in the catalog, a connector's folder name is lowercase letters, digits and single hyphens, at most 64 characters, but not `index` or `schema`, which the catalog reserves, and its `name` is the folder name; each name in `skills:` is a skill folder in `skills/`, and a `replacement` names a connector folder in `connectors/`. Each of these is an error otherwise.
 
 Connector versions, compared with the base branch as the catalog publisher compares them with the published version ([`connector_checks.py`](.github/scripts/connector_checks.py)):
 
@@ -134,7 +134,7 @@ git fetch upstream main
 python3 .github/scripts/validate_skills.py --base-ref upstream/main
 ```
 
-Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request; the YAML rules also have cases in [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json), which the unit tests run, and the connector version rules in [`connector-conformance-cases.json`](.github/scripts/skill-rules/connector-conformance-cases.json), which the script runs with the skill cases. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
+Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request; the YAML rules also have cases in [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json), which the unit tests run, and the connector rules in [`connector-conformance-cases.json`](.github/scripts/skill-rules/connector-conformance-cases.json), which the script runs with the skill cases. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
 
 #### Test Your Skill
 
@@ -613,8 +613,9 @@ every later contribution from that partner, connector and skills alike. A
 connector is a definition, not a tool, so no other checklist item applies unless
 the pull request also changes a skill.
 
-The `validate-skills` check holds every connector to the connector versions in
-[Skill Publishing Rules](#skill-publishing-rules): a change to any of its files
+The `validate-skills` check holds every connector to the connector rules in
+[Skill Publishing Rules](#skill-publishing-rules): its `name` is its folder name,
+the skills it lists and its `replacement` exist, a change to any of its files
 needs a higher `version`, and a connector is never removed, only deprecated.
 
 **Revising the terms (maintainers).** AWS Legal approves the new text and updates

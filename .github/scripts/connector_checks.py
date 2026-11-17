@@ -1,7 +1,7 @@
-"""The connector version rules: each connectors/<name>/ folder compared with its merge-base copy.
+"""The connector rules: each connectors/<name>/ folder, its references, and its versions against its merge-base copy.
 
-The rules and their reasons are under "Connector versions" in the "Skill Publishing
-Rules" section of CONTRIBUTING.md. Like skill_checks.py, every function works on an
+The rules and their reasons are under "Connectors" and "Connector versions" in the
+"Skill Publishing Rules" section of CONTRIBUTING.md. Like skill_checks.py, every function works on an
 in-memory folder (sc.SkillTree), so the same rules run on Git objects in
 validate_skills.py and on the cases in skill-rules/connector-conformance-cases.json.
 """
@@ -9,6 +9,7 @@ validate_skills.py and on the cases in skill-rules/connector-conformance-cases.j
 from __future__ import annotations
 
 import json
+from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
@@ -17,7 +18,7 @@ import skill_checks as sc
 
 CONNECTORS_DIR = "connectors"
 CONNECTOR_FILE = "connector.yaml"
-# connectors/schema/ holds the JSON Schemas, not a connector.
+# connectors/schema/ holds the JSON Schemas, not a connector, so the catalog refuses a connector.yaml there.
 SCHEMA_FOLDER = "schema"
 CONFORMANCE_FILE = "connector-conformance-cases.json"
 
@@ -117,32 +118,80 @@ def _hash(folder: sc.SkillTree) -> str:
 
 
 def check_connector(name: str, folder: sc.SkillTree) -> list[sc.Finding]:
-    """The rules that need only this copy: connector.yaml is there and has a version the other rules can compare.
+    """The rules that need only this copy: connector.yaml is there, names its folder, and has a version to compare.
 
     YAML problems in connector.yaml are left out: validate_skills.py reports
     them for every file under connectors/.
     """
+    findings = []
+    if not sc.NAME_PATTERN.fullmatch(name) or len(name) > sc.MAX_NAME_LENGTH:
+        message = (
+            f"the folder name {CONNECTORS_DIR}/{name} must be lowercase letters, digits and single hyphens, at most "
+            f"{sc.MAX_NAME_LENGTH} characters, such as {CONNECTORS_DIR}/acme-cloud"
+        )
+        findings.append(sc.Finding("error", message))
+    elif name in sc.RESERVED_NAMES:
+        message = (
+            f"the folder name {CONNECTORS_DIR}/{name} is reserved for the connector catalog's index; use another name"
+        )
+        findings.append(sc.Finding("error", message))
     data = _data(folder, CONNECTOR_FILE)
     if data is None:
         message = f"{CONNECTORS_DIR}/{name}/ has no {CONNECTOR_FILE}; every connector folder needs one"
-        return [sc.Finding("error", message)]
+        return findings + [sc.Finding("error", message)]
     document = read_document(data)
     if document is None:
-        return []
+        return findings
     if not isinstance(document.value, dict):
         message = f"{CONNECTOR_FILE} must be a mapping of keys to values, such as name: {name}"
-        return [sc.Finding("error", message, CONNECTOR_FILE, 1)]
+        return findings + [sc.Finding("error", message, CONNECTOR_FILE, 1)]
+    declared = document.get("name")
+    if declared is ABSENT:
+        message = f'"name" is required, and it must be the folder name: name: {name}'
+        findings.append(sc.Finding("error", message, CONNECTOR_FILE))
+    elif not same(declared, name):
+        message = (
+            f'"name" is {_show(declared)[:80]} but the folder is "{name}"; they must match, because a connector\'s '
+            "folder is its identity"
+        )
+        findings.append(sc.Finding("error", message, CONNECTOR_FILE, document.lines.get("name")))
     if _version(document) is not None:
-        return []
+        return findings
     version = document.get("version")
     if version is ABSENT:
-        return [sc.Finding("error", '"version" is required, such as version: 1.0.0', CONNECTOR_FILE)]
+        return findings + [sc.Finding("error", '"version" is required, such as version: 1.0.0', CONNECTOR_FILE)]
     shown = _show(version[:40]) if isinstance(version, str) else _show(version)[:40]
     message = (
         f'"version" is {shown}; it must be MAJOR.MINOR.PATCH, such as version: 1.0.0, with at most '
         f"{sc.MAX_VERSION_PART_DIGITS} digits in each part"
     )
-    return [sc.Finding("error", message, CONNECTOR_FILE, document.lines.get("version"))]
+    return findings + [sc.Finding("error", message, CONNECTOR_FILE, document.lines.get("version"))]
+
+
+def check_references(
+    folder: sc.SkillTree, connector_names: Collection[str], skill_names: Collection[str]
+) -> list[sc.Finding]:
+    """The rules that look beyond this folder: each name in skills: is a skill folder, and replacement is a connector.
+
+    `connector_names` and `skill_names` are the connectors/ and skills/ folders
+    of the same commit. A skills: entry that isn't text is left to the warning
+    validate_skills.py gives for it.
+    """
+    document = read_document(_data(folder, CONNECTOR_FILE))
+    if document is None or not isinstance(document.value, dict):
+        return []  # check_connector reports why.
+    findings = []
+    skills = document.get("skills")
+    names = [skill for skill in skills if isinstance(skill, str)] if isinstance(skills, list) else []
+    for skill in dict.fromkeys(names):
+        if skill not in skill_names:
+            message = f'"skills" lists {_show(skill)[:80]}, which isn\'t a skill folder in skills/'
+            findings.append(sc.Finding("error", message, CONNECTOR_FILE, document.lines.get("skills")))
+    replacement = document.get("replacement")
+    if isinstance(replacement, str) and replacement not in connector_names:
+        message = f'"replacement" is {_show(replacement)[:80]}, which isn\'t a connector folder in {CONNECTORS_DIR}/'
+        findings.append(sc.Finding("error", message, CONNECTOR_FILE, document.lines.get("replacement")))
+    return findings
 
 
 def check_history(name: str, base: sc.SkillTree | None, head: sc.SkillTree | None) -> list[sc.Finding]:
