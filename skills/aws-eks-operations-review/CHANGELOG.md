@@ -20,8 +20,6 @@ or report section, and never change membership, verdicts, severity, or gates.
 - `router.md` overlay routing, `report-contract.md` placement (subsections of §1/§2), and
   `qa-checklist.md` §8a overlay gate. The router states that this review does not map findings
   to compliance frameworks.
-- Compliance framework mapping (CIS EKS, NIST 800-53, PCI DSS, SOC 2, HIPAA) was drafted here
-  during review and then moved out to a dedicated compliance skill, at the maintainers' request.
 - `SKILL.md`: description mentions the overlays, and S5 points at the router. Redundant wording
   was trimmed to stay within the 12 KiB bound; the CP19–CP25 just-in-time bullet was removed
   because Step 7's Control Plane sub-state already states it.

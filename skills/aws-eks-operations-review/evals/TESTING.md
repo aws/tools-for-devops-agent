@@ -76,7 +76,6 @@ How to read this:
 
 - **Activation is the weak point, not overlay behaviour.** In every iteration where the skill loaded, the case met its expected output. The misses are the parallel-run activation race described below; `vuln-no-invented-cve` loaded 3/3 in the earlier 1.10.0 run with the same prompt. In two misses the agent loaded a skill named `eks-operations-review` instead, which is not part of this package.
 - **`delta-identity-mismatch` barely separates the two sides.** Any model refuses a diff across mismatched cluster identities, so it passes without the skill too.
-- **The compliance cases were removed** with the compliance overlay. Framework mapping now belongs to the separate `aws-eks-compliance-review` skill, and a CIS/PCI audit prompt is a `should_trigger: false` query here.
 - **Before trusting a full-suite number, re-run serially.** These cases were added to `evals.json` by hand, so port them into `convert-evals.py` before its next regeneration, or they will be dropped.
 - Real account identifiers in the recorded agent output were redacted to `123456789012`.
 
