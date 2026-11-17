@@ -1,0 +1,76 @@
+{
+  "version": "v10",
+  "iteration": 2,
+  "eval_id": "inv-deploy-correlated-regression",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected root cause is that the customer's 14:15 deploy caused the client error spike at 14:20, and a correct investigation should confirm this causal link (or explicitly state telemetry doesn't support it) while not attributing unrelated seeded-fault workload errors to this incident. The investigation instead explicitly failed to confirm or rule out the 14:15 deploy (noted as a gap: \"CloudTrail... was only partly checked, so a 14:15 deploy today is neither confirmed nor ruled out\"), and had no CI/CD/repo access to check the deploy at all. Its two main hypotheses are: (1) a mix of per-app IAM/validation misconfigurations across 9 llmops-lf-* roles explicitly flagged as 'may not be the reported incident' and 'not confirmed' (looks like unrelated seeded-fault noise), and (2) an unattributed periodic caller with no ModelId, whose caller and error codes were never looked up, leaving the actual root cause unresolved. Neither hypothesis identifies the deploy as the cause; the investigation never connects the 14:15 deploy timing to the error spike, and in fact flags its own inability to confirm this link. This is a failure to identify the expected root cause - it neither confirms the deploy-caused-errors narrative nor clearly states that telemetry doesn't support the premise definitively; instead it leaves the question open and explores tangential causes that may represent unrelated seeded faults rather than the reported incident.",
+      "evidence": "\"CloudTrail for today's spike window was only partly checked, so a 14:15 deploy today is neither confirmed nor ruled out.\" / \"Context only: this may not be the reported incident... Not confirmed.\" / \"The caller and error codes were not looked up.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reaches a customer-side verdict and says so explicitly",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'Context only: this may not be the reported incident. ... Not confirmed.' and 'Of the 99 client errors ... 80 are the steady 3 per 5 minutes with no ModelId and do not appear in the invocation log... The caller and error codes were not looked up.' No explicit final verdict statement is given.",
+          "reasoning": "The investigation explicitly states multiple hypotheses are 'Not confirmed' and presents gaps rather than reaching a definitive customer-side verdict. The first hypothesis explicitly says 'Context only: this may not be the reported incident' and 'Not confirmed.' The second hypothesis says 'The caller and error codes were not looked up.' There is no explicit statement like 'this is confirmed to be a customer-side issue.'"
+        },
+        {
+          "text": "The response uses the distinction between client errors and server errors as decisive evidence",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'No active AWS Health issue for Bedrock... There is no open operational issue, which argues against a service-side cause.' and 'No server errors or throttles' appears in the symptom description and findings.",
+          "reasoning": "The summary explicitly notes 'No server errors or throttles' and uses the fact that all errors are client-side (AccessDeniedException, ValidationException) and that AWS Health shows no service-side issue, arguing against a service-side cause, using the client/server distinction as evidence pointing toward customer-side misconfiguration."
+        },
+        {
+          "text": "The response uses the deploy time correlation rather than treating it as coincidence",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'Many roles failing at once on many models suggests a test run rather than a single bad deploy. Not confirmed.' and 'CloudTrail for today's spike window was only partly checked, so a 14:15 deploy today is neither confirmed nor ruled out.'",
+          "reasoning": "The investigation does not confirm or use the 14:15 deploy correlation as decisive evidence. Instead it treats the deploy as unconfirmed and notes CloudTrail wasn't checked for it, and separately suggests the errors look like 'a test run rather than a single bad deploy,' which argues against deploy correlation rather than using it."
+        },
+        {
+          "text": "The response prescribes examining or rolling back the customer's own change",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of rollback or reviewing the deploy appears anywhere in the findings; instead the gaps section states 'No code repository or CI/CD system is connected to this agent space, so the reported 14:15 deploy could not be checked against a pipeline,' which is a limitation, not a prescription to roll back.",
+          "reasoning": "The output does not prescribe rolling back or examining the customer's deploy/change specifically. It points to gaps in IAM permissions, request validation issues, and an unattributed periodic caller, but does not direct the user to examine or roll back their 14:15 deployment."
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.2
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m15s",
+    "cost": "$1.62",
+    "context_window": {
+      "utilization": "9.2%",
+      "compaction_count": 0
+    }
+  }
+}

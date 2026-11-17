@@ -1,0 +1,81 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "kb-retrieval-throttling-quota",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a specific LLM-KB-012 runbook execution: actually calling servicequotas:GetServiceQuota for Bedrock quotas, correlating CloudWatch metrics (InvocationThrottles, EstimatedQuotaConsumption) over a defined window, checking health:DescribeEvents to rule out an active AWS service event before prescribing customer-side fixes, and providing the exact 'request-service-quota-increase' CLI command as a read-only recommendation.\n\nThe agent's response is largely a knowledge-based/advisory answer. It states general facts about Retrieve (600 RPM, 25 burst) and ingestion (50 concurrent jobs) quotas 'from the docs' rather than clearly demonstrating it queried actual account-specific values via GetServiceQuota for the embedding model and Retrieve quotas (it says Service Quotas didn't list a Retrieve/ingestion quota for Bedrock, and that embedding-model listing was partial). It does not mention checking AWS Health / DescribeEvents to rule out an active service-side event, which is a required step for the service-vs-customer verdict. It does not give the specific request-service-quota-increase CLI command \u2014 it only vaguely says 'Request increases for whichever limit you're hitting' without the actual command syntax. It does not mention CloudWatch metrics like InvocationThrottles or EstimatedQuotaConsumption by name, nor OpenSearch Serverless specific metrics in a structured correlation. It ends by asking the user for more info rather than completing the correlation itself, which falls short of actively running the check.\n\nWhile the response correctly treats this as a quota/throttling problem and gives reasonable general advice (backoff, adaptive retries, caching, quota increase requests, checking embedding model quotas vs CloudWatch Invocations/InputTokenCount), it misses several specific required elements: the exact GetServiceQuota invocation evidence, the health event check, and the specific CLI command. This represents a partial but not full match to the detailed expected behavior.</reasoning>\n<parameter name=\"evidence\">\"Service Quotas in this account doesn't list a Retrieve or ingestion quota for Bedrock in us-east-1... though the listing looked partial, so I can't rule them out.\" and \"Request increases for whichever limit you're hitting. For Retrieve, ask for a higher rate on the knowledge base.\" (no specific CLI command, no mention of health:DescribeEvents)",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response identifies a quota/throttling/limit root cause and reads Bedrock quotas via servicequotas:GetServiceQuota correlated with CloudWatch throttle/usage signals over a window",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Look in Service Quotas (Amazon Bedrock) for the Titan Embeddings v2 requests-per-minute and tokens-per-minute quotas. Compare them with your peak usage in CloudWatch, using the Invocations and InputTokenCount metrics for that model at 1-minute granularity.\" Also states 'Service Quotas in this account doesn't list a Retrieve or ingestion quota for Bedrock in us-east-1.' indicating it checked quotas.",
+          "reasoning": "The agent explicitly discusses reading Service Quotas and correlating with CloudWatch usage signals over a window.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response marks any threshold with no AWS-published number as workload-specific and reports it at INFO rather than inventing a number",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"A sustained rate above about 10 requests per second, or a burst above 25, would throttle.\" This 10 rps figure is derived/invented from the 600/min average, not explicitly marked as workload-specific or INFO-level, and is stated as a hard threshold.",
+          "reasoning": "The agent does state published numbers (600 RPM, 25 RPS burst, 50 concurrent ingestion jobs) which appear to be AWS-published, but it also states 'A sustained rate above about 10 requests per second, or a burst above 25, would throttle' - the 10 requests per second figure is not an AWS-published number and is presented as a specific threshold rather than marked as workload-specific/INFO. It also doesn't explicitly label any threshold as 'workload-specific' or 'INFO'.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response recommends requesting an increase for the specific quota (and/or backoff/batching) and gives the command rather than requesting the increase itself, consistent with being read-only",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Request increases for whichever limit you're hitting. For Retrieve, ask for a higher rate on the knowledge base.\" and \"Retry throttled calls with exponential backoff and jitter. Set the SDK retry mode to adaptive.\" and \"Don't run large re-syncs during peak query hours. Use incremental syncs, and spread large loads across several data sources.\"",
+          "reasoning": "The agent recommends requesting increases and gives specific guidance (where to look, what to compare) without actually performing the increase, consistent with read-only behavior. It also recommends backoff/jitter and batching-adjacent strategies (incremental syncs, spreading loads).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response applies the service-vs-customer transient verdict (checks health:DescribeEvents for an active service event) before prescribing a customer-side fix",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of health:DescribeEvents, AWS Health Dashboard, or any check for an active AWS service event/outage in the entire response.",
+          "reasoning": "The agent does not mention checking AWS Health Dashboard or health:DescribeEvents for an active service event before prescribing customer-side fixes. It jumps straight to quota/throttling causes and customer-side remediation without ruling out a service-side issue.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries an LLM-KB check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "31s",
+    "cost": "$0.26",
+    "context_window": {
+      "utilization": "5.8%",
+      "compaction_count": 0
+    }
+  }
+}

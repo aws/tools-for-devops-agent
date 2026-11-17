@@ -1,0 +1,92 @@
+{
+  "version": "v10",
+  "iteration": 3,
+  "eval_id": "client-timeout-config-verdict",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies the hypothesis that this is a client-side SDK read timeout issue caused by the customer's own release moving to longer prompts, not an AWS service incident. It explicitly notes: AWS Health shows no active issues (only planned future events), account-wide Bedrock metrics show no server errors or throttles, and the pattern fits a client read timeout (60s default) being exceeded by longer generation times due to longer prompts from the release. It also correctly suggests the fix (raising read_timeout, host/Lambda timeout, considering streaming APIs, capping max_tokens) which aligns with the expected root cause's guidance.\n\nCritically, the investigation also behaves exactly as the expected root cause demands for a \"correct\" investigation: it does NOT confirm the premise falsely by fabricating matching telemetry. Instead, it transparently reports that no Bedrock traffic exists in the visible account on the reported date (2026-11-15), that the catalog-summarizer Lambda found in the account doesn't match the symptom (it has 0 errors, short durations, ran on different days), and flags this as a gap - stating the affected service was not found in the visible account and that the reported time/workload doesn't match available telemetry. This matches the expected behavior: \"A correct investigation reports the cause the telemetry actually shows for the workload in question, does not attribute unrelated workloads' errors to it, and, where the telemetry does not show the claimed symptom at all, says so rather than confirming the premise.\"\n\nThe hypothesis section explicitly reasons through why the read-timeout explanation fits the reported pattern (one service, one model, release-correlated, others fine) while being honest that it's unconfirmed due to lack of matching account telemetry. This is precisely the expected root cause: the customer's own release caused longer generation times to exceed the client-side read timeout, not an AWS-side incident.",
+      "evidence": "\"ReadTimeoutError comes from botocore on the client side; it waits 60s by default for response bytes. A non-streaming InvokeModel returns nothing until generation finishes, so longer prompts and longer outputs can push generation past 60s... This fits the pattern (one service, one model, right after a longer-prompt release, other callers fine)... AWS Health shows only upcoming Bedrock planned lifecycle events... with no active issues.\" and \"The failing summarizer was not found in account <account>... It most likely runs in another account or region... The reported window (2026-11-15 afternoon) matches no telemetry, so the reported time or workload may be off.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reaches a APPLICATION verdict rather than PROVIDER, and says so explicitly",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The hypothesis section explicitly frames the issue as 'Client-side SDK read timeout (60s) on long non-streaming InvokeModel calls' and the findings conclude AWS Health shows only upcoming planned lifecycle events with no active issues, implicitly placing the verdict on the application side. However, there's no explicit single-line verdict statement like 'Verdict: APPLICATION'.",
+          "reasoning": "The report leans toward an application-side explanation and explicitly states AWS Health shows no active issues, but it never explicitly states a formal 'verdict' label such as APPLICATION vs PROVIDER. The hypothesis is framed as unconfirmed, and the summary doesn't give a clean final verdict statement.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response contradicts the user's premise that AWS is having an incident, instead of accepting the premise and looking only for provider-side confirmation",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The report states 'AWS Health shows only upcoming Bedrock planned lifecycle events (from 2026-11-26), with no active issues' and frames the client-side timeout hypothesis as the explanation fitting the pattern, rather than confirming an AWS incident.",
+          "reasoning": "The investigation does not accept the premise of an AWS incident; it looks for and reports the absence of provider-side issues, and leans toward a client-side cause, directly countering the user's suggestion of an AWS incident.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response cites the narrow blast radius (a single service and a single model within one account) as evidence against a provider-side cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The hypothesis description states 'This fits the pattern (one service, one model, right after a longer-prompt release, other callers fine), but no matching traffic exists in this account.' and the account-wide Bedrock metrics observation notes 'client errors ~10\u201340%, no server errors or throttles' at the account level.",
+          "reasoning": "The narrow blast radius (single service/model affected while other callers are fine) is explicitly cited as supporting a non-provider-wide cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites the correlation between the error onset and the customer's own release as evidence for a customer-side cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The hypothesis states the timeout pattern 'fits the pattern (one service, one model, right after a longer-prompt release, other callers fine)' directly tying the release (longer prompts) to the client-side timeout cause.",
+          "reasoning": "The correlation between the release that increased prompt length and the timeout issue is explicitly used as supporting evidence for a customer-side (client SDK timeout) explanation.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response prescribes a concrete customer-side remediation such as raising the client read timeout, reducing prompt or output size, or switching to streaming",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The hypothesis description explicitly recommends: 'set read_timeout well above the longest generation (e.g. 600s with adaptive retries), raise the host/Lambda timeout above it, consider InvokeModelWithResponseStream/ConverseStream, and cap max_tokens.'",
+          "reasoning": "This is a clear, concrete, multi-part customer-side remediation covering timeout increase, streaming API switch, and token capping \u2014 directly matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not recommend waiting for AWS to resolve a service incident as the primary action",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The report never suggests waiting for AWS; instead it says AWS Health shows no active incidents and recommends client-side fixes (timeout changes, streaming, max_tokens cap) as the suggested fix.",
+          "reasoning": "There is no language suggesting waiting on AWS resolution; the only prescribed remediation is on the client/service side, and the AWS Health check is used to rule out an active incident rather than to wait on one.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.8571
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m24s",
+    "cost": "$1.70",
+    "context_window": {
+      "utilization": "6.7%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "version": "v10",
+  "iteration": 3,
+  "eval_id": "model-available-but-unreachable",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response addresses the three required distinct causes with the same symptom: (1) model access/availability mismatch - explicitly states 'listed as available' doesn't prove the account can invoke the model, discusses Marketplace subscription issues, use-case forms, and model access not being fully granted despite console listing; (2) inference-profile/cross-region routing mismatch - explicitly calls out the need to use inference profile IDs (e.g., 'us.\u2026') instead of bare model IDs, and discusses inference profile ARNs needing to be in the IAM policy Resource field, plus cross-region routing implications for SCPs; (3) provider-side degradation - mentions checking AWS Health events for Bedrock in the region, and CloudWatch InvocationServerErrors/latency metrics, which is the provider-side check. The response also gives an ordered sequence: first get the exact error (which layer), then checks likely causes (access/marketplace/SCP/inference profile), then timeout-specific ordered steps (DNS/network, client timeout vs actual latency, CloudWatch metrics, AWS Health events), with each step stating what it would rule in/out (e.g., 'This is not an IAM problem' for timeouts, the error table mapping symptoms to causes). This structure directly mirrors the expected output's requirement of checking model access/availability before trusting console listing, checking inference profile need, and only then considering provider-side issues, in an ordered, diagnostic fashion.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"'listed as available' doesn't prove your account can invoke the model\" ... \"You need to call through an inference profile ID such as us.\u2026, not the bare model ID\" ... \"Any AWS Health events for Bedrock in your Region\" ... \"InvocationClientErrors, InvocationServerErrors and InvocationLatency for the model in the AWS/Bedrock namespace\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response treats the console listing as unverified and checks the model's actual availability or access status for this account and region",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"'listed as available' doesn't prove your account can invoke the model\" and the table identifies specific errors like AccessDeniedException mentioning aws-marketplace:Subscribe, Marketplace subscription issues, and the use-case form being missing \u2014 all of which are checks on actual access status beyond console listing.",
+          "reasoning": "The agent explicitly states the console listing does not prove invocation capability and lays out specific checks (Marketplace subscription, IAM policy resource ARN, use-case form) to verify actual access/availability for the account, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response offers more than one candidate cause for the same symptom and gives a check that discriminates between them",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The error table lists five distinct candidate causes for similar symptoms (AccessDeniedException variants, ValidationException, timeout) each mapped to a 'Likely layer', and section 2 lists five separate likely causes (inference profile ARN, Marketplace subscription, org-level SCP, caller mismatch, VPC endpoint policy) with specific checks like 'Check whether the SCP denies bedrock:InvokeModel' to discriminate between them.",
+          "reasoning": "Multiple candidate causes are given for the same general symptom set (timeouts/access errors), each with a distinguishing check (e.g., error text mentioning aws-marketplace:Subscribe vs explicit deny vs ValidationException), which lets the user discriminate between root causes.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response considers whether the invocation needs to go through an inference profile or a cross-region route",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"ValidationException, 'on-demand throughput isn't supported', or a model ID complaint | You need to call through an inference profile ID such as us.\u2026, not the bare model ID.\" and later: \"Your IAM policy may allow bedrock:InvokeModel only on arn:aws:bedrock:*::foundation-model/.... A call through an inference profile also needs the inference-profile ARN in Resource... Cross-Region profiles can also route to other Regions, so the policy and any SCP region restrictions must allow those.\"",
+          "reasoning": "The response explicitly discusses inference profiles and cross-region routing as a potential cause, including the ARN/policy implications.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives an ordered sequence of checks rather than a flat list, and states what each check rules in or out",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Section 3 'If it's timeouts' is explicitly numbered 1-4: '1. DNS resolution and the egress path... 2. Your client read timeout against the real InvocationLatency... 3. InvocationClientErrors, InvocationServerErrors and InvocationLatency... 4. Any AWS Health events for Bedrock in your Region.' Each step states what it checks (DNS/egress, client timeout vs real latency, metrics, Health events).",
+          "reasoning": "The response does provide an ordered numbered sequence (1-4) for the timeout branch, and each item specifies what is being checked and implicitly what it rules in/out (e.g., DNS/egress issue vs timeout config vs service-side errors vs AWS-wide outage). However, the overall structure of the response (sections 1,2,3) is more flat/categorical for the access-error branch (table + bullet list), though the timeout branch is ordered. Since at least one part provides a genuine ordered, discriminating sequence, this satisfies the assertion.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not conclude a provider-side outage without first ruling out model access and routing",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Point 4 in the timeout ordered list, 'Any AWS Health events for Bedrock in your Region,' comes last, after checks on DNS/egress (1), client timeout vs real latency (2), and CloudWatch metrics (3), and the response never asserts a provider-side outage as the conclusion at all \u2014 it ends by asking for more details to run read-only checks.",
+          "reasoning": "The response places the Health-events (provider-side outage) check last in the ordered timeout checklist, after ruling out routing/access issues via DNS, timeout config, and metrics, and it never concludes a provider-side outage anywhere in the response \u2014 it defers to gathering more info.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.8333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "36s",
+    "cost": "$0.30",
+    "context_window": {
+      "utilization": "5.8%",
+      "compaction_count": 0
+    }
+  }
+}

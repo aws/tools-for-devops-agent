@@ -1,0 +1,75 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "guardrail-latency-streaming",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response correctly covers several core points: synchronous mode buffers and scans before sending (causing delay), asynchronous mode removes delay but lets chunks through before scan completes and disables sensitive info masking, and it correctly advises against async mode for this PII-handling app. These match the expected output well.\n\nHowever, the response misses several specific required elements from the expected output:\n1. It does NOT mention evaluating less input with the specific caveat that AWS states a performance/cost benefit only for input tags on InvokeModel* APIs, and that unmarked content may not be evaluated (with guardrailCoverage in the trace showing what was guarded). The agent's suggestion #1 (trim policies) is a different recommendation and doesn't include this specific caveat about input tagging and coverage visibility.\n2. The expected output specifies measuring with precise metrics: the trace's guardrailProcessingLatency, the guardrail InvocationLatency metric (request to last token, not only the guardrail's share), and TimeToFirstToken for streaming calls. The agent's response mentions \"guardrail trace,\" \"time-to-first-token,\" and \"CloudWatch latency metrics\" but does not name these specific metric names (guardrailProcessingLatency, InvocationLatency) or clarify the nuance that InvocationLatency covers the full request-to-last-token rather than just the guardrail's share. This is a notable gap in specificity that the expected output calls out explicitly.\n3. The expected output requires that if suggesting turning off a policy, it must state that side becomes unprotected. The agent does suggest trimming policies (\"Remove any that duplicate controls you already have\") without explicitly stating that doing so leaves that side unprotected - this is a specific requirement that seems unmet, as the agent frames it more as \"not pulling their weight\" / redundant rather than explicitly flagging the protection trade-off.\n4. No raw 12-digit account ID is printed - this is satisfied (trivially, no account ID appears).\n\nGiven the response is missing the specific input-tagging caveat entirely, lacks the named metrics (guardrailProcessingLatency, InvocationLatency with request-to-last-token nuance), and doesn't explicitly caveat the policy-trimming advice with an \"unprotected\" warning, this falls short of the detailed expected output despite getting the main synchronous/asynchronous mode guidance correct.</reasoning>\n<parameter name=\"evidence\">Agent says: \"Turn on the guardrail trace in your requests and compare time-to-first-token with and without the guardrail. Look at the guardrail latency metrics in CloudWatch as well.\" \u2014 this lacks the specific metric names (guardrailProcessingLatency, InvocationLatency) and the nuance that InvocationLatency measures request-to-last-token, not just the guardrail's share. Also missing entirely: any mention of input tagging benefits/limits on InvokeModel* APIs or guardrailCoverage in the trace.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response explains that synchronous mode buffers and scans chunks before sending, and that asynchronous mode sends chunks before the scan finishes",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'By default, guardrails run in synchronous mode. They buffer response chunks and scan them before releasing anything to the user.' and 'In ASYNCHRONOUS mode, chunks go to the user immediately and are scanned in the background.' and 'Chunks can contain inappropriate content until the scan completes.'",
+          "reasoning": "The response explicitly describes synchronous mode as buffering and scanning before sending, and asynchronous mode as sending chunks before the scan completes, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says asynchronous mode does not support masking of sensitive information and advises against it for an application that handles sensitive data",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Sensitive information masking isn't supported in asynchronous mode. If you use PII filters to anonymize account details, async mode would stop that from working.' followed by 'For your use case, I'd keep synchronous mode.' and later 'Don't use async for any flow that depends on PII masking.'",
+          "reasoning": "The response clearly states masking is unsupported in async mode and advises against using async mode for this sensitive-data application.",
+          "confidence": "high"
+        },
+        {
+          "text": "If the response suggests evaluating less input, it says AWS states the benefit only for input tags on InvokeModel*, and that unmarked content may not be evaluated",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not mention input tags, InvokeModel*, or the specific AWS documentation caveat about unmarked content not being evaluated. The closest related point is suggestion #5: 'Keep input and output checks separate... make sure you aren't running the same checks twice per turn' and suggestion #1 about trimming unused policies, but neither addresses input tagging or unmarked content evaluation.",
+          "reasoning": "The assertion requires a specific claim about AWS's documented caveat regarding input tags scoping evaluation only to tagged content on InvokeModel* calls, and that unmarked content may not be evaluated. This specific nuance is entirely absent from the response.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response recommends measuring latency before changing anything and does not present the guardrail InvocationLatency metric as only the guardrail's share",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Check where the delay actually comes from. Turn on the guardrail trace in your requests and compare time-to-first-token with and without the guardrail. Look at the guardrail latency metrics in CloudWatch as well. Then you'll know whether the guardrail or the model is the bottleneck.'",
+          "reasoning": "The response explicitly recommends measuring latency (comparing with/without guardrail, using trace and CloudWatch metrics) before making changes, and frames the guardrail latency metric as something to compare against overall time-to-first-token rather than presenting it as the sole determinant of guardrail's share \u2014 it explicitly says to determine 'whether the guardrail or the model is the bottleneck', implying the metric alone doesn't tell the whole story and must be contextualized.",
+          "confidence": "medium"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "13s",
+    "cost": "$0.11",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

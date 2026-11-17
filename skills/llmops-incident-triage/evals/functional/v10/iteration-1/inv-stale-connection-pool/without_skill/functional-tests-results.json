@@ -1,0 +1,67 @@
+{
+  "version": "v10",
+  "iteration": 1,
+  "eval_id": "inv-stale-connection-pool",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause is a stale client connection pool (idle connections going bad, reused until timeout, cleared by restart), with the key requirement that the investigation should NOT confirm the premise falsely or attribute unrelated workload errors to it, but should honestly report what the telemetry actually shows (or doesn't show).\n\nThe investigation summary does exactly this: it explicitly states \"No matching read-timeout signal was found in account <account>\" and that \"the service wasn't found in account <account>.\" It presents the stale/idle connection pool hypothesis as the primary, best-fitting explanation for the reported symptom pattern (\"The symptoms (read timeouts on a long-running service, cleared by a restart) fit a client-side stale connection pool... The next call hangs on the dead connection until the read timeout. A restart rebuilds the pool\"), explicitly labeling it \"unconfirmed\" due to lack of data for the actual service.\n\nCritically, it does NOT falsely attribute the symptom to unrelated workloads as the definitive cause \u2014 instead it presents additional hypotheses (slow claude-sonnet-5 responses, private Lambda VPC routing issues) as alternative possibilities found in the eval account's sample workloads, explicitly flagging gaps like \"Affected long-running service not found\" repeatedly. This matches the expected behavior: \"A correct investigation reports the cause the telemetry actually shows for the workload in question, does not attribute unrelated workloads' errors to it, and, where the telemetry does not show the claimed symptom at all, says so rather than confirming the premise.\"\n\nThe investigation's top hypothesis aligns with the expected root cause (stale connection pool causing read timeouts cleared by restart), and it appropriately caveats that this is unconfirmed due to the eval account's nature, while still being transparent about what was and wasn't found. This is a strong match to the expected output's intent.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response uses the fact that a restart clears the problem as evidence for client-side state",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The symptoms (read timeouts on a long-running service, cleared by a restart) fit a client-side stale connection pool... A restart rebuilds the pool.\"",
+          "reasoning": "The response explicitly uses the restart-clears-it symptom as supporting evidence for a client-side stale connection/stale state hypothesis, reasoning that a restart rebuilds the connection pool while idle connections get dropped over time.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response identifies a stale connection pool or long-lived client as the cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The hypothesis 'Idle SDK connections silently dropped on the network path (unconfirmed)' is explicitly labeled unconfirmed, and the Gaps section states 'Affected long-running service not found' and 'This can't be confirmed: the service wasn't found in account <account>, so there are no logs, client settings or network data for it.' Other hypotheses point to slow model latency and private Lambda network configuration as more concrete causes.",
+          "reasoning": "While the response raises a stale connection pool as one hypothesis, it does not identify it as THE cause - it explicitly marks it unconfirmed and presents two other competing/more substantiated hypotheses (slow Bedrock responses exceeding read timeout, and private Lambdas with no network route) with more supporting evidence. The investigation ultimately could not confirm the stale-connection hypothesis due to the affected service not being found.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response prescribes a concrete client-side fix",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The Gaps sections list only further investigation needs ('No client settings or timeout timestamps', 'Network path and idle timeout unknown', 'No code repository connected') rather than any prescribed fix. No section recommends specific actions like increasing client read_timeout, enabling TCP keepalive, reducing idle connection time, or implementing retry/backoff logic.",
+          "reasoning": "The output is an investigation summary that identifies hypotheses, supporting observations, and gaps, but it does not prescribe any concrete client-side fix (e.g., specific SDK configuration changes, timeout values, keep-alive settings, or connection pool management code). It only states what information is missing to confirm the hypotheses.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.25
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m52s",
+    "cost": "$2.93",
+    "context_window": {
+      "utilization": "12.7%",
+      "compaction_count": 0
+    }
+  }
+}

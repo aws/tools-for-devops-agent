@@ -1,0 +1,50 @@
+{
+  "skill_name": "llmops-quality-evaluation",
+  "evals": [
+    {
+      "id": "evaluation-coverage-assessment",
+      "task_type": "chat",
+      "prompt": "Are we actually measuring model quality for our Bedrock workload in us-east-1, or are we just running it in production and hoping?",
+      "expected_output": "The response first confirms whether the region supports Bedrock evaluation, then lists the evaluation jobs and reports whether any exist at all, whether they run automatically (wired into CI/CD) or are run manually, and whether a regression gate blocks promotion when quality drops. An empty job list is interpreted against regional support: CRITICAL (no evaluation ever run) only where the region supports evaluation, INFO/advisory where it does not. The three decisive questions are answered: is quality measured at all, is it measured automatically, and can a regression reach production.",
+      "should_trigger": true,
+      "assertions": [
+        "The response explains the consequence of the current evaluation state for production safety — specifically whether a model or prompt change could regress quality and reach production without being detected",
+        "The response distinguishes 'no evaluation configured' from 'the region does not support Bedrock evaluation' rather than treating an empty list as an automatic failure",
+        "The response separates what it verified from AWS APIs from what it cannot verify, naming CI/CD pipeline wiring as something it cannot confirm from AWS APIs alone rather than asserting or ignoring it",
+        "The response addresses whether a quality regression can reach production (whether a regression gate blocks promotion)",
+        "At least one finding cites a check id",
+        {
+          "text": "An evaluation check-id is cited",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "finish-reason-truncation-drift",
+      "task_type": "chat",
+      "prompt": "Our model's outputs seem to be getting cut off more often lately. How do I confirm whether that's really happening?",
+      "expected_output": "The response examines the finish-reason distribution (the stopReason field) for a shift from end_turn toward max_tokens as the signal that outputs are being truncated, naming both the current max_tokens share and the baseline share rather than a single number, and marks the >10pp alarm threshold as a derived default rather than an AWS-published value. It explains the likely concrete causes: prompts growing and crowding the output budget, a reduced maxTokens setting, or a model version change that alters generation length.",
+      "should_trigger": true,
+      "assertions": [
+        "The response states that measuring the finish-reason distribution requires Bedrock model invocation logging to be enabled, and reports whether it is currently enabled",
+        "The response marks the truncation-shift threshold as derived or workload-specific rather than presenting it as an AWS-published figure",
+        "The response gives both a current figure and a baseline figure for the finish-reason share rather than a single number",
+        "The response marks the finish-reason shift threshold as derived rather than an AWS-published threshold",
+        "The response explains at least one concrete cause (prompt growth crowding the output budget, a reduced maxTokens, or a model version change)"
+      ]
+    },
+    {
+      "id": "quality-regression-triage",
+      "task_type": "chat",
+      "prompt": "We changed the Bedrock model version last week and quality seems worse. Check whether any evaluation job scored the new version against the previous one, and tell me the single highest-impact gate to add. Keep it brief.",
+      "expected_output": "The response checks evaluation job history and scores against a baseline, asks whether an A/B comparison between the old and new model versions was run before the new version was adopted, and correlates the suspected regression with finish-reason and output-token signals. It recommends a specific gate — a regression gate on model promotion wired into CI/CD — so a future version change cannot ship a quality drop unmeasured.",
+      "should_trigger": true,
+      "assertions": [
+        "The response compares current quality against a baseline (prior evaluation scores) rather than judging quality in isolation",
+        "The response addresses whether an A/B comparison between the model versions was run before the change was adopted",
+        "The response recommends a specific gate (a regression gate blocking model promotion) rather than generic 'test more' advice"
+      ]
+    }
+  ]
+}

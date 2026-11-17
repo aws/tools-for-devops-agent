@@ -1,0 +1,87 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "kb-retrieval-throttling-quota",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-rag-knowledge' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'llmops-rag-knowledge' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to actually complete the quota check workflow: reading specific Bedrock quotas via servicequotas:GetServiceQuota (embedding-model invocation and knowledge-base/Retrieve request-rate quotas), correlating CloudWatch throttling metrics, marking undocumented thresholds as workload-specific/INFO, and ultimately recommending a specific quota increase (with the service-quotas CLI command) and/or batching/backoff as mitigation, while ruling out an active Bedrock health event first.\n\nThe agent's response only partially addresses this. It does correctly check AWS Health (no open events) and begins to inspect the knowledge base configuration, which aligns with ruling out a service-side incident. However, the response is incomplete \u2014 it explicitly states it is 'now pulling the embedding-model quotas, throttle metrics, and recent ingestion job history' but does not actually report any quota values, CloudWatch metrics, correlation, or conclusions. It never answers whether a quota is being hit, never recommends a specific remediation (e.g., requesting a quota increase for a named quota, or batching/backoff), and never gives the service-quotas request-service-quota-increase command. The response is essentially a status update/placeholder rather than a completed diagnosis with recommendations.\n\nSince the core deliverables (actual quota values, throttling correlation, the INFO-level marking for undocumented thresholds, and the concrete remediation recommendation) are all missing, this does not meet the expected output.",
+      "evidence": "\"I'm now pulling the embedding-model quotas, throttle metrics, and recent ingestion job history. Then I can tell you whether a quota is actually being hit or the throttling is just burst pressure.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response identifies a quota/throttling/limit root cause and reads Bedrock quotas via servicequotas:GetServiceQuota correlated with CloudWatch throttle/usage signals over a window",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent states: 'I'm now pulling the embedding-model quotas, throttle metrics, and recent ingestion job history. Then I can tell you whether a quota is actually being hit or the throttling is just burst pressure.' No actual quota values, GetServiceQuota results, or CloudWatch throttle/usage metrics are reported in the output.",
+          "reasoning": "The response explicitly says it is still pulling the quota and metric data and has not yet completed or reported any correlation between quota numbers and CloudWatch throttle signals. No root cause is identified.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response marks any threshold with no AWS-published number as workload-specific and reports it at INFO rather than inventing a number",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No thresholds, workload-specific limits, or INFO-level annotations appear anywhere in the response.",
+          "reasoning": "Since the agent has not yet reported any quota numbers or thresholds at all, it cannot have marked any threshold as workload-specific or reported it at INFO level. This assertion is unmet because the relevant content is absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response recommends requesting an increase for the specific quota (and/or backoff/batching) and gives the command rather than requesting the increase itself, consistent with being read-only",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response contains no recommendation to request a quota increase, no mention of backoff/batching, and no command such as aws service-quotas request-service-quota-increase.",
+          "reasoning": "The final response ends with the agent saying it is still gathering data; it does not provide any remediation recommendation or increase-request command.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response applies the service-vs-customer transient verdict (checks health:DescribeEvents for an active service event) before prescribing a customer-side fix",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'No open AWS Health events for Bedrock in us-east-1, so this doesn't look like a service-side incident.'",
+          "reasoning": "The agent explicitly checked AWS Health (health:DescribeEvents equivalent) for active service events before proceeding to investigate customer-side causes (quotas), which matches the service-vs-customer transient verdict check described in the assertion. It did this prior to prescribing any customer-side fix (though no fix was yet prescribed, the ordering of checking health first is satisfied).",
+          "confidence": "medium"
+        },
+        {
+          "text": "At least one finding carries an LLM-KB check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m49s",
+    "cost": "$2.40",
+    "context_window": {
+      "utilization": "8.1%",
+      "compaction_count": 0
+    }
+  }
+}

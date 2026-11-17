@@ -1,0 +1,94 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "agentcore-runtime-cannot-invoke",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-agent-runtime' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a specific structured review: actually simulating the runtime execution role for required actions (bedrock:InvokeModel, S3 read, CloudWatch Logs write), flagging denied actions with a check-id LLM-AC-001, correlating against SCPs with LLM-AC-002, checking VPC endpoints (bedrock-runtime, bedrock-agent-runtime, S3, logs, monitoring) and flagging absence with LLM-AC-003, disclosing the AgentCore read permission gap, and masking account segments in role ARNs with check-ids and severities attached to findings.\n\nThe agent's response is instead a general troubleshooting guide/checklist explaining what to look for (network, IAM, SCP, quotas) and offers to run checks if given runtime name/region/account - but does not actually perform the simulation or review. There are no check-ids (LLM-AC-001/002/003) anywhere in the response, no severities, no actual findings, and no masked ARNs (since no real ARNs were returned). It does mention the AgentCore permission gap caveat at the end, which partially aligns ('If a read comes back denied, I'll report it as a permissions gap rather than a missing resource') - this is the one piece that matches the expected output's intent.\n\nHowever, the core requirement of actually executing the review (policy simulation, endpoint checks, SCP correlation) with structured check-ids and severities is entirely absent. The agent only describes what it would do without any runtime identifiers being requested-and-then-used; it stops at asking for inputs rather than demonstrating the structured, check-id-driven review format. This does not meet the specific structured output criteria expected (check-ids, severities, masked ARNs, actual simulated findings).\"",
+      "evidence": "\"I can run these checks read-only against your account... To do that I need the runtime name or ID, the Region, and the account if it isn't this one.\" \u2014 no LLM-AC-001/002/003 check-ids, no severities, no actual simulation output, no masked ARNs present anywhere in the response.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response simulates or inspects the runtime execution role permissions for the specific actions the runtime needs (model invoke, source read, logs write) rather than guessing at the cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says 'The runtime's execution role needs bedrock:InvokeModel...' and 'You can confirm this by simulating the role's policies against those actions.' This is advice to do a simulation, not the agent actually simulating/inspecting the role. At the end it offers 'I can run these checks read-only against your account: ... a policy simulation' but asks for runtime name/ID/Region first - no actual inspection was performed.",
+          "reasoning": "The agent describes what the execution role needs and mentions policy simulation as an offer, but does not actually perform a simulation or inspection in this response - it's a general guide, not an actual check against a real role.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response checks for the required VPC endpoints for a VPC-deployed runtime and treats an absent endpoint as a concrete finding",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says 'Check that these exist in the runtime's VPC: Interface endpoints: com.amazonaws.<region>.bedrock-runtime, bedrock-agent-runtime, logs, and monitoring. A gateway endpoint for S3.' This is instructive guidance, not an actual inspection yielding a concrete finding of presence or absence.",
+          "reasoning": "The response lists required VPC endpoints (bedrock-runtime, bedrock-agent-runtime, logs, monitoring, S3 gateway) as things to check, but does not actually check for their presence/absence in this account - it's general guidance, not a concrete finding of an absent endpoint.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response considers an explicit SCP deny as a cause when a required action is denied despite an otherwise-correct role",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'An SCP with an explicit Deny on bedrock:* overrides a correct role. This can include deny rules based on Region or on inference profile use.'",
+          "reasoning": "The response explicitly considers SCP explicit deny as a cause overriding a correct role.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response discloses that AgentCore reads may be denied under the default AIDevOpsAgentAccessPolicy and treats that denial as a permission gap, not as an absent resource",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'One caveat is that this space's default access may not cover the AgentCore APIs. If a read comes back denied, I'll report it as a permissions gap rather than a missing resource.'",
+          "reasoning": "The response explicitly discloses that default access may not cover AgentCore APIs and that a denied read will be reported as a permissions gap rather than a missing resource.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any role or resource ARN shown has its account segment masked and no raw 12-digit account id appears",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response contains no ARNs at all - e.g., no 'arn:aws:...' string appears anywhere in the output. Since no ARNs are shown, the assertion that 'any ARN shown has its account segment masked' cannot be confirmed as satisfied, though no raw account id leak occurred either.",
+          "reasoning": "No role or resource ARNs are shown in the response at all, so there's nothing to mask or any raw account id to check against. The assertion cannot be verified since no ARNs are present - but also no violation occurred. Since the assertion presupposes ARNs are shown, and none are, this should be considered as not applicable/failed since the condition (ARNs shown with masked account) is not demonstrated.",
+          "confidence": "low"
+        },
+        {
+          "text": "At least one finding carries an AGT or AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 7,
+        "pass_rate": 0.4286
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "21s",
+    "cost": "$0.18",
+    "context_window": {
+      "utilization": "5.3%",
+      "compaction_count": 0
+    }
+  }
+}

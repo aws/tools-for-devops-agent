@@ -1,0 +1,141 @@
+{
+  "skill_name": "llmops-incident-triage",
+  "evals": [
+    {
+      "id": "transient-vs-config-verdict",
+      "task_type": "chat",
+      "prompt": "Our Bedrock calls are returning InternalServerError across several different models in us-east-1 over the last 30 minutes. Is this an AWS service issue or something misconfigured on our side?",
+      "expected_output": "An explicit TRIAGE line carrying binding, locus (PROVIDER, INFRASTRUCTURE, APPLICATION or UNDETERMINED) and transience (TRANSIENT, PERSISTENT or UNKNOWN) rendered only after checking regional service health, the cross-model 5xx (InvocationServerErrors) rate, the blast radius across models and accounts, and whether the error onset correlates with a customer deploy or config change. When the evidence points service-side (active AWS Health event, broad 5xx across multiple unrelated models, many-account blast radius, onset uncorrelated with any customer change), the response names a PROVIDER locus and prescribes retry with backoff or cross-region failover rather than any customer configuration fix.",
+      "should_trigger": true,
+      "assertions": [
+        "The response names an explicit locus (PROVIDER, INFRASTRUCTURE, APPLICATION, or UNDETERMINED) rather than leaving the classification implicit",
+        "The response presents the classification as a structured ruling with the evidence that decided it, rather than hedging between both causes without committing",
+        "The response reports the server-error rate across multiple models, not just the one the user mentioned, as the basis for judging blast radius",
+        "The response states what it actually observed for each signal it checked, including explicitly saying when a signal returned no data rather than omitting it",
+        "If the locus is service-side (PROVIDER), the response prescribes no customer configuration change and recommends only retry, backoff, or regional failover",
+        {
+          "text": "At least one finding carries a catalog check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-(?:TEL|INV|AC)-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "incident-signature-match",
+      "task_type": "chat",
+      "prompt": "We're seeing intermittent Bedrock throttling but our quota and retry config all look correct. What's going on?",
+      "expected_output": "The response matches the throttling symptom to a known incident signature, names the first concrete signal to check (the InvocationThrottles metric relative to the provisioned quota and the climb rate versus the workload's own traffic growth), and distinguishes quota-driven throttling (a customer-side under-provisioning or missing-backoff problem) from service-side capacity constraints. It gives an ordered next step rather than generic throttling advice.",
+      "should_trigger": true,
+      "assertions": [
+        "The response names a specific metric to examine (for example InvocationThrottles) rather than describing throttling in general terms",
+        "The response gives an ordered, concrete next step (what to check first, then what to conclude) rather than a flat list of generic tips",
+        "The response distinguishes quota-driven throttling on the customer side from service-side capacity, instead of assuming one cause"
+      ]
+    },
+    {
+      "id": "telemetry-readiness-gap",
+      "task_type": "chat",
+      "prompt": "Bedrock latency has gotten worse and I can't tell why. Do we even have enough telemetry to diagnose this?",
+      "expected_output": "The response verifies telemetry readiness before attempting diagnosis: whether stage-level telemetry exists across retrieval, inference, tool, and response-generation stages (LLM-TEL-001); whether trace-context propagation links a request end-to-end (LLM-TEL-003); and whether invocation logging and a finish-reason/stopReason metric filter (LLM-TEL-002) are configured. It reports the specific gaps found and explains that those gaps are themselves why the latency incident is hard to diagnose, rather than guessing at a cause.",
+      "should_trigger": true,
+      "assertions": [
+        "The response identifies specific missing telemetry (for example stage-level telemetry, trace propagation, invocation logging, or a finish-reason metric filter) rather than a vague 'add more monitoring'",
+        "The response explains why each identified gap blocks diagnosis (for example, without stage-level telemetry the slowness cannot be isolated to a stage)",
+        "The response cites at least one LLM-TEL check id for a telemetry finding",
+        {
+          "text": "A telemetry check-id is cited",
+          "evaluator": "regex",
+          "pattern": "LLM-TEL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "workload-not-identified-no-premature-binding",
+      "task_type": "chat",
+      "prompt": "My agent on the production website is not responding. Customers are complaining.",
+      "expected_output": "The skill is not loaded. No model call is named in the failing path, so the load condition is unmet; the agent localizes the failing component first rather than assuming the agent runs on Bedrock AgentCore.",
+      "should_trigger": false,
+      "assertions": []
+    },
+    {
+      "id": "agent-loop-on-lambda-binding",
+      "task_type": "chat",
+      "prompt": "Our investigation found the failing component: an agent loop running in a Lambda function that calls Bedrock Converse. The Lambda is returning errors to the ALB in front of it. Region us-east-1, last 2 hours.",
+      "expected_output": "The response binds the model stage to the bedrock binding and the loop/compute stage to self-hosted-lambda, states both, and keeps the two separate. It reads AWS/Bedrock slots for the model call. For the Lambda stage it notes that AWS/Lambda Errors cannot split client from server errors without the function emitting its own taxonomy, so R1 cannot fire on that slot, and it hands the Lambda and ALB stages to the host investigation rather than inventing a check for them. The TRIAGE line names the binding.",
+      "should_trigger": true,
+      "assertions": [
+        "The response states the hosting binding explicitly and does not treat the agent loop as AgentCore",
+        "The response distinguishes the model-call stage from the Lambda compute stage",
+        "The response notes that the Lambda platform error metric cannot separate client from server errors, or otherwise declines to rule R1 on it",
+        "The response treats the Lambda compute and the ALB ingress as stages outside the model-path checks, rather than applying Bedrock metrics to them",
+        {
+          "text": "The response names the hosting binding",
+          "evaluator": "regex",
+          "pattern": "(?i)\\bbinding\\b|self-hosted-lambda"
+        }
+      ]
+    },
+    {
+      "id": "self-hosted-model-locus-not-provider",
+      "task_type": "chat",
+      "prompt": "We self-host a vLLM server on EKS behind an ALB for inference. It started returning 503s an hour ago across all our services. Is this AWS or us?",
+      "expected_output": "The response reports locus=INFRASTRUCTURE, not PROVIDER, because on a self-hosted binding the customer is the provider and PROVIDER has no referent. It records provider health as not-applicable rather than no-datapoints, binds the error slots to AWS/ApplicationELB HTTPCode_Target_4XX_Count and HTTPCode_Target_5XX_Count, and does not look for an AWS Health event for a model service or suggest a cross-region inference profile. The serving layer is handed to the host investigation.",
+      "should_trigger": true,
+      "assertions": [
+        "The locus is INFRASTRUCTURE and not PROVIDER",
+        "Provider health is recorded as not-applicable rather than as a missing or zero signal",
+        "The response does not propose a cross-region inference profile or any Bedrock-specific failover",
+        "The error signals are bound to load balancer or application metrics rather than AWS/Bedrock",
+        {
+          "text": "No Bedrock namespace is asserted for a self-hosted model",
+          "evaluator": "regex",
+          "match": "absent",
+          "pattern": "AWS/Bedrock"
+        }
+      ]
+    },
+    {
+      "id": "third-party-model-boundary-disclosed",
+      "task_type": "chat",
+      "prompt": "Our agent calls the OpenAI API directly for inference, not Bedrock. Since this morning about a third of calls fail. Our own metrics look normal. What is going on?",
+      "expected_output": "The response binds to third-party, states that no AWS read can confirm or refute a vendor-side incident, and returns the boundary as its own finding row naming the stage beyond visibility, the slots with no AWS signal, and who holds the missing evidence. If it reports locus=PROVIDER it says explicitly that this rests on the absence of a customer-side signal rather than on a measured provider-side one, and sets transience=UNKNOWN. It names the vendor status page as the next step.",
+      "should_trigger": true,
+      "assertions": [
+        "The response states that the model path is outside AWS visibility and names that as a finding, not an aside",
+        "Any PROVIDER locus is explicitly qualified as resting on absence of customer-side signal",
+        "transience is UNKNOWN rather than TRANSIENT",
+        "The response names the vendor's own status page or support as the evidence it cannot read",
+        {
+          "text": "The boundary is disclosed in the findings",
+          "evaluator": "regex",
+          "pattern": "(?i)(boundary|outside AWS|cannot (see|read)|not-visible)"
+        }
+      ]
+    },
+    {
+      "id": "non-llm-outage-must-not-trigger",
+      "task_type": "chat",
+      "prompt": "Our production website is down. The investigation traced it to the Postgres RDS instance refusing connections after a failover. What should we do?",
+      "expected_output": "This skill does not apply and says so briefly. No LLM or agent loop is in the failing path, so the load condition is unmet. The response does not render a TRIAGE line, does not cite an LLM check-id, does not run the classifier, and does not search for an LLM component in order to find something to say. It hands the question back to the host investigation.",
+      "should_trigger": false,
+      "assertions": [
+        "The response declines to apply LLM-path triage and says why in one or two sentences",
+        "No TRIAGE line is rendered",
+        "No LLM check-id is cited",
+        "The response does not go looking for an LLM component to justify engaging",
+        {
+          "text": "No triage line is emitted",
+          "evaluator": "regex",
+          "match": "absent",
+          "pattern": "TRIAGE:\\s+binding="
+        },
+        {
+          "text": "No LLM check-id is cited",
+          "evaluator": "regex",
+          "match": "absent",
+          "pattern": "LLM-(TEL|INV|AGT|KB|GRD|EVAL|SM)-\\d{3}"
+        }
+      ]
+    }
+  ]
+}

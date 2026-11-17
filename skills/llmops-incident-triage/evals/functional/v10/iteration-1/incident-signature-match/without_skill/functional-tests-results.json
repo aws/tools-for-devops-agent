@@ -1,0 +1,61 @@
+{
+  "version": "v10",
+  "iteration": 1,
+  "eval_id": "incident-signature-match",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause description is somewhat generic/meta, describing the methodology for correctly diagnosing this type of incident: distinguishing real throttling from quota/retry issues by comparing InvocationThrottles against applied quotas and workload traffic, recognizing that the eval account has seeded faults unrelated to the prompt, and reporting what telemetry actually shows rather than confirming the premise of \"Bedrock throttling.\"\n\nThe investigation does exactly this: it found that despite the premise of \"Bedrock throttling,\" there was no actual Bedrock-side throttling (InvocationThrottles had no datapoints in the relevant broad check, CloudTrail showed no throttling events). It correctly identified that the real issue was a size-limit error (ThrottlingException mislabeling an input-size violation for ApplyGuardrail) for one workload (gr-bigdoc-app), distinguished this from the original broad \"InvocationClientErrors\" symptom affecting multiple models, and explicitly did not attribute unrelated workloads' pattern matches (eval-shipment-status, synthetic-traffic, gr-billing, gr-insurance, rag-s3vfilter) to the cause. It also noted the issue was chronic since guardrail creation, unrelated to quota/retry config, matching the expected finding that this isn't a quota problem.\n\nThis matches the expected methodology and conclusion: it correctly rejects the \"quota/retry\" framing, correctly attributes the symptom to a specific, non-quota-related cause that telemetry actually supports, and avoids conflating unrelated noise with the real root cause.</reasoning>\n<parameter name=\"evidence\">\"Rate quotas and retry settings cannot fix it... It is unrelated to the Lambda update... failures date back to the guardrail's creation on 2026-11-05.\" and \"No CloudTrail bedrock.amazonaws.com events mention throttling... Bedrock InvocationThrottles has no datapoints... do not indicate throttling.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names a specific metric to examine (for example InvocationThrottles) rather than describing throttling in general terms",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output repeatedly names the specific metric 'AWS/Bedrock/Guardrails InvocationThrottles' and 'Bedrock InvocationClientErrors', e.g. 'In AWS/Bedrock/Guardrails, slxtt9h3y7i9 v1 is one of only two guardrails emitting InvocationThrottles' and 'AWS/Bedrock/Guardrails InvocationThrottles for slxtt9h3y7i9 v1, summed per 5 min'.",
+          "reasoning": "The response names concrete CloudWatch metrics (InvocationThrottles, InvocationClientErrors) rather than describing throttling generically, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives an ordered, concrete next step (what to check first, then what to conclude) rather than a flat list of generic tips",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The document is structured as Symptoms/Findings/Root Cause/Supporting Observations/Gaps, with statements like 'the fix is to chunk the input or move to a tier with a larger limit' but no explicit ordered sequence such as 'first check X, then check Y, then conclude Z'.",
+          "reasoning": "While the investigation narrative implicitly follows an investigative order (symptom -> finding -> root cause -> fix), it is not presented as an explicit ordered 'what to check first, then conclude' set of steps for the reader to follow going forward. It reads as a completed analysis rather than a prescriptive ordered next-steps list, so it does not clearly satisfy the 'ordered, concrete next step' requirement distinct from a general narrative.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response distinguishes quota-driven throttling on the customer side from provider-side capacity, instead of assuming one cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response explicitly separates causes: 'Raising a rate quota will not help; the fix is to chunk the input or move to a tier with a larger limit.' and 'Little sign of Bedrock throttling: No CloudTrail bedrock.amazonaws.com events mention throttling... Bedrock InvocationThrottles has no datapoints.' It also notes 'The message says the input text size (1760 text units) exceeds the maximum allowed... Bedrock reports this per-request size limit as a ThrottlingException, so it looks like rate throttling. Rate quotas and retry settings cannot fix it.'",
+          "reasoning": "The response clearly distinguishes a customer-side input-size misconfiguration (not a quota issue) from genuine rate-based throttling, explicitly ruling out quota/capacity causes and identifying the real cause as a per-request size limit rather than assuming provider capacity issues or customer quota issues without investigation.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m48s",
+    "cost": "$2.89",
+    "context_window": {
+      "utilization": "9.5%",
+      "compaction_count": 0
+    }
+  }
+}

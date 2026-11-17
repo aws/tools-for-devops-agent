@@ -1,0 +1,53 @@
+{
+    "skill_name": "llmops-bedrock-configuration",
+    "evals": [
+        {
+            "id": "invocation-logging-disabled-critical",
+            "task_type": "chat",
+            "prompt": "Can you check whether my Amazon Bedrock setup is configured correctly? In particular I want to know if model invocation logging is on. When I call GetModelInvocationLoggingConfiguration it comes back basically empty.",
+            "expected_output": "The response reads an empty GetModelInvocationLoggingConfiguration as logging being DISABLED, not healthy, and raises it as a CRITICAL finding under check-id LLM-INV-001. It cites the concrete observation (no loggingConfig / no CloudWatch or S3 destination) rather than inferring health, prescribes enabling invocation logging via PutModelInvocationLoggingConfiguration with a CloudWatch and/or S3 destination as a change the user runs themselves (the review is read-only), and refers to the account only as the account under review without echoing any raw 12-digit account ID.",
+            "should_trigger": true,
+            "assertions": [
+                "The response interprets an empty GetModelInvocationLoggingConfiguration as logging DISABLED rather than as a healthy or passing state",
+                "The response classifies the missing invocation logging as CRITICAL severity",
+                "The response states the fix as a change the user applies themselves and does not claim to have enabled logging, consistent with a read-only review",
+                "The response reports what it actually observed as evidence rather than inferring the state",
+                {
+                    "text": "The invocation-logging finding carries its catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "access-denied-iam-vs-scp",
+            "task_type": "chat",
+            "prompt": "Our application gets AccessDeniedException when it calls InvokeModel on Bedrock. Is this something we can fix in our IAM policy, or is it coming from somewhere else?",
+            "expected_output": "The response distinguishes an IAM implicitDeny (which the customer fixes by adding the missing Allow, check-id LLM-INV-013) from an SCP explicit deny (which no account-level IAM change can override and which must be escalated to the AWS Organizations administrator with the specific policy name and deny statement, check-id LLM-INV-015), and from model access not being granted or a marketplace subscription never accepted (LLM-INV-014). It describes using iam:SimulatePrincipalPolicy and an Organizations policy read to tell them apart, and does NOT prescribe an IAM fix for an SCP deny. The account is referred to only as the account under review with no raw 12-digit account ID.",
+            "should_trigger": true,
+            "assertions": [
+                "The response distinguishes an IAM deny from an SCP explicit deny instead of assuming the cause is IAM",
+                "The response states that an SCP explicit deny cannot be overridden by account-level IAM and must be escalated to the Organizations administrator",
+                "The response names a concrete way to tell them apart, such as iam:SimulatePrincipalPolicy plus an Organizations policy read",
+                "The response also considers model access not being granted or a marketplace subscription not accepted as a possible cause",
+                {
+                    "text": "At least one access finding carries its catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        }
+    ]
+}

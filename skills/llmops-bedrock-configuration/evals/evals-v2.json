@@ -1,0 +1,798 @@
+{
+    "skill_name": "llmops-bedrock-configuration",
+    "evals": [
+        {
+            "id": "bc-iam-missing",
+            "task_type": "chat",
+            "prompt": "Our Lambda llmops-lf-app-noinvoke in us-east-1 gets AccessDeniedException when it calls InvokeModel on us.amazon.nova-lite-v1:0. Nothing else changed. Why, and what exactly should we add to its role?",
+            "should_trigger": true,
+            "expected_output": "The role is missing bedrock:InvokeModel. The answer identifies the identity-based permission gap on that specific execution role and gives the exact policy statement to add, scoped to the model rather than a blanket grant.",
+            "assertions": [
+                "The response names the missing IAM action explicitly rather than describing the problem generically",
+                "The response supplies a concrete policy statement or snippet to add",
+                "The response scopes the suggested permission to the model or resource rather than recommending a wildcard grant",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-noinvoke"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-iam-region-scope",
+            "task_type": "chat",
+            "prompt": "Calls from Lambda llmops-lf-app-onereg through the US cross-Region inference profile us.amazon.nova-lite-v1:0 fail with AccessDenied, but the same role can call the model directly in us-east-1. Our policy allows InvokeModel. What is wrong?",
+            "should_trigger": true,
+            "expected_output": "The policy allows the model but not the cross-Region inference profile, or its condition scopes the ARN/Region so the profile's constituent Regions are excluded. The answer explains that invoking through a cross-Region profile requires permission on the profile ARN and on the foundation model in every Region the profile can route to.",
+            "assertions": [
+                "The response explains that a cross-Region inference profile needs permission on the profile ARN as well as the underlying model",
+                "The response identifies the Region or ARN scoping in the policy condition as the cause",
+                "The response does not conclude the model itself is unavailable",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-onereg"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-iam-boundary",
+            "task_type": "chat",
+            "prompt": "Lambda llmops-lf-app-boundary has AmazonBedrockFullAccess on its role, yet InvokeModel in us-east-1 returns AccessDenied. Where is the deny coming from?",
+            "should_trigger": true,
+            "expected_output": "A permissions boundary (or an explicit deny in an attached/SCP-style policy) overrides the AmazonBedrockFullAccess grant. The answer locates the deny rather than concluding the managed policy is insufficient.",
+            "assertions": [
+                "The response identifies a permissions boundary or explicit deny as the source, not a missing allow",
+                "The response explains that an explicit deny or boundary overrides a managed allow policy",
+                "The response says where to look to confirm the deny",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-boundary"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-iam-kms",
+            "task_type": "chat",
+            "prompt": "We are setting up model customization. Training data and output go to bucket llmops-lf-custom-<suffix> (encrypted with KMS key alias/llmops-lf-custom) and the service role is llmops-lf-custom-svc. Jobs fail with a KMS access error. What is missing?",
+            "should_trigger": true,
+            "expected_output": "The customization service role lacks kms:Decrypt / GenerateDataKey (or a grant) on the CMK protecting the training and output buckets. The answer names the KMS actions and the key policy or grant that must allow the service role.",
+            "assertions": [
+                "The response names the specific KMS actions required",
+                "The response addresses both the key policy and the role policy rather than only one side",
+                "The response ties the failure to the encrypted training or output location",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-custom\\-svc"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-iam-trust",
+            "task_type": "chat",
+            "prompt": "Creating a Bedrock model customization job with service role llmops-lf-custom-badtrust fails: 'Bedrock could not assume the role'. What should we fix?",
+            "should_trigger": true,
+            "expected_output": "The service role's trust policy does not let bedrock.amazonaws.com assume it. The answer gives the corrected trust relationship and ideally the confused-deputy conditions.",
+            "assertions": [
+                "The response identifies the trust policy, not the permission policy, as the problem",
+                "The response names bedrock.amazonaws.com as the principal that must be allowed to assume the role",
+                "The response supplies a corrected trust policy",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-custom\\-badtrust"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-iam-governance",
+            "task_type": "chat",
+            "prompt": "Which of our roles named llmops-lf-dev-* can call bedrock:InvokeModel today, and on which models? We want to restrict developers to two approved models (Nova Lite and Nova Micro).",
+            "should_trigger": true,
+            "expected_output": "An enumeration of which matching roles can currently call InvokeModel and on what, followed by a concrete restriction mechanism scoped to the two approved models. The answer reports what it actually found per role rather than describing how one could look.",
+            "assertions": [
+                "The response reports findings per role rather than only explaining how to investigate",
+                "The response proposes a concrete mechanism to restrict access to the two approved models",
+                "The response distinguishes what it verified from what it could not enumerate",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-dev"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-req-schema",
+            "task_type": "chat",
+            "prompt": "Our Lambda llmops-lf-app-schema calls InvokeModel on us.amazon.nova-lite-v1:0 and gets ValidationException 'Malformed input request'. The code is in the function. What is wrong?",
+            "should_trigger": true,
+            "expected_output": "The request body does not match the model's expected schema for the API being called, typically native InvokeModel body shape versus Converse. The answer names the specific malformed field or wrong body shape and gives the correct form.",
+            "assertions": [
+                "The response identifies the specific field or body shape that is malformed",
+                "The response gives the corrected request shape",
+                "The response does not attribute the failure to permissions or model availability",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-schema"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-req-feature",
+            "task_type": "chat",
+            "prompt": "Adding a tool definition to our Converse call in Lambda llmops-lf-app-tools breaks it with ValidationException. The same code works with another model. Why?",
+            "should_trigger": true,
+            "expected_output": "The model does not support the requested feature (tool use) on that API path. The answer states the feature is unsupported for this model rather than treating it as a malformed request, and names a model or approach that does support it.",
+            "assertions": [
+                "The response identifies the feature as unsupported by that specific model",
+                "The response explains why the same code works against a different model",
+                "The response names a supported alternative or the condition under which it works",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-tools"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-req-tokens",
+            "task_type": "chat",
+            "prompt": "Requests from Lambda llmops-lf-app-maxtokens fail with ValidationException about maximum tokens on us.amazon.nova-lite-v1:0. What limit are we hitting and what should we change?",
+            "should_trigger": true,
+            "expected_output": "A token or payload-size limit is being exceeded for the model. The answer names which limit (input context, maxTokens ceiling, or payload bytes) and what value is valid.",
+            "assertions": [
+                "The response identifies which specific limit is being hit",
+                "The response states the applicable bound or where to read it rather than guessing a number",
+                "The response gives a concrete change to the request",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-maxtokens"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-req-beta",
+            "task_type": "chat",
+            "prompt": "After a model update our requests from Lambda llmops-lf-app-beta with anthropic_beta flags fail with ValidationException. What changed and how do we fix it?",
+            "should_trigger": true,
+            "expected_output": "Beta headers or beta feature flags are no longer accepted after the model update. The answer explains that the beta flag must be dropped or replaced with the now-GA parameter.",
+            "assertions": [
+                "The response ties the failure to the beta header or flag rather than to credentials or quota",
+                "The response explains what to change now the feature is no longer behind a beta flag",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-beta"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-req-oldsdk",
+            "task_type": "chat",
+            "prompt": "Our Lambda llmops-lf-app-oldsdk fails with \"'BedrockRuntime' object has no attribute 'converse'\". The same code works on my laptop. Why?",
+            "should_trigger": true,
+            "expected_output": "The deployed SDK predates the Converse API. The answer identifies the SDK/botocore version in the function as the cause and gives the upgrade path, explaining why the laptop works.",
+            "assertions": [
+                "The response identifies an outdated SDK or botocore version as the cause",
+                "The response explains the local-versus-deployed difference",
+                "The response gives a concrete remediation such as bundling a newer SDK or updating the layer or runtime",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-oldsdk"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-ip-required",
+            "task_type": "chat",
+            "prompt": "Lambda llmops-lf-app-ondemand gets 'Invocation of model ID amazon.nova-2-lite-v1:0 with on-demand throughput isn't supported'. What ID should we use?",
+            "should_trigger": true,
+            "expected_output": "The model is not offered with on-demand throughput and must be called through an inference profile. The answer supplies the correct inference-profile identifier form.",
+            "assertions": [
+                "The response explains that the model requires an inference profile rather than on-demand invocation",
+                "The response gives the correct identifier form to use",
+                "The response does not suggest requesting a quota increase as the fix",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-ondemand"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-ip-badarn",
+            "task_type": "chat",
+            "prompt": "Our Lambda llmops-lf-app-badarn passes an inference profile ARN from its MODEL_ARN environment variable and Bedrock says the model identifier is invalid. What is wrong with the ARN?",
+            "should_trigger": true,
+            "expected_output": "The inference-profile ARN is malformed. The answer identifies the specific wrong segment and gives the correct ARN structure.",
+            "assertions": [
+                "The response identifies which part of the ARN is wrong",
+                "The response gives the correct ARN structure",
+                "The response does not conclude the profile does not exist",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-badarn"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-eol",
+            "task_type": "chat",
+            "prompt": "Our Lambda llmops-lf-app-eol started failing with 'This model version has reached the end of its life'. Which model is it calling and what should we move to?",
+            "should_trigger": true,
+            "expected_output": "The model version has reached end of life. The answer names the model the function calls, confirms its EOL/LEGACY status, and names a concrete successor to migrate to.",
+            "assertions": [
+                "The response names the specific model the function is calling",
+                "The response confirms the lifecycle status rather than only repeating the error text",
+                "The response names a concrete successor model",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-eol"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-region-model",
+            "task_type": "chat",
+            "prompt": "Lambda llmops-lf-app-deepseek calling deepseek.v3-v1:0 in us-east-1 returns 'The provided model identifier is invalid', but a colleague says the model exists. Why?",
+            "should_trigger": true,
+            "expected_output": "The model is not offered in this Region even though it exists elsewhere. The answer distinguishes regional availability from a bad identifier and says how to confirm availability.",
+            "assertions": [
+                "The response distinguishes regional non-availability from an invalid identifier",
+                "The response names how to verify the model's availability for this account and Region",
+                "The response gives a concrete option such as another Region or a cross-Region profile",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-deepseek"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-id-typo",
+            "task_type": "chat",
+            "prompt": "Lambda llmops-lf-app-typo gets 'The provided model identifier is invalid'. The model ID is in its environment variables. What is wrong?",
+            "should_trigger": true,
+            "expected_output": "The model identifier in the environment variable is wrong. The answer reports the actual configured value, identifies the error in it, and gives the correct id.",
+            "assertions": [
+                "The response reports the actual model identifier it found configured",
+                "The response identifies precisely what is wrong with that identifier",
+                "The response gives the corrected identifier",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-typo"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-id-arn",
+            "task_type": "chat",
+            "prompt": "Lambda llmops-lf-app-fmarn passes a foundation-model ARN from MODEL_ARN and gets a validation error. Which part of the ARN is wrong?",
+            "should_trigger": true,
+            "expected_output": "The foundation-model ARN is malformed. The answer names the incorrect ARN segment and gives the correct form.",
+            "assertions": [
+                "The response identifies the specific incorrect ARN segment",
+                "The response gives the correct ARN form",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-fmarn"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-id-region",
+            "task_type": "chat",
+            "prompt": "Our code works locally but the deployed Lambda llmops-lf-app-wrongregion says the model identifier meta.llama3-8b-instruct-v1:0 is invalid. Why?",
+            "should_trigger": true,
+            "expected_output": "The model identifier is not valid in the deployed Region, or a Region-prefixed profile id is required. The answer explains the local-versus-deployed Region difference.",
+            "assertions": [
+                "The response ties the failure to the Region the function runs in",
+                "The response explains why the same identifier works locally",
+                "The response gives the correct identifier or Region to use",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-wrongregion"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-id-base",
+            "task_type": "chat",
+            "prompt": "Our agent framework Lambda llmops-lf-agent-ondemand fails with 'on-demand throughput isn't supported' from the Converse API. We passed the model ID amazon.nova-2-lite-v1:0. What should we pass instead?",
+            "should_trigger": true,
+            "expected_output": "A base model id was passed where a cross-Region inference profile id is required. The answer gives the profile id to pass instead.",
+            "assertions": [
+                "The response explains that a base model id cannot be used for on-demand invocation of this model",
+                "The response gives the inference profile identifier to pass instead",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-agent\\-ondemand"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-ip-app-profile",
+            "task_type": "chat",
+            "prompt": "We created application inference profile llmops-lf-aip-team-a to track Bedrock cost for team A, but Cost Explorer shows nothing for it. Team A's app is Lambda llmops-lf-aip-app. What is wrong?",
+            "should_trigger": true,
+            "expected_output": "Cost attribution requires invoking through the application inference profile ARN; the app is not using it, or the profile's tags/limitations prevent the attribution expected. The answer explains why Cost Explorer shows nothing and what to change.",
+            "assertions": [
+                "The response explains that cost attribution requires the application inference profile to actually be used on the invocation path",
+                "The response states what the app must pass for its usage to be attributed",
+                "The response addresses the Cost Explorer visibility question specifically",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-aip\\-team\\-a"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-cred-chain",
+            "task_type": "chat",
+            "prompt": "Our Lambda llmops-lf-app-otherid gets AccessDenied from Bedrock and CloudTrail shows a different role than the function's execution role making the call. Why?",
+            "should_trigger": true,
+            "expected_output": "The function resolves credentials from somewhere other than its execution role, so a different principal makes the call. The answer explains the credential-chain precedence and names what to remove or change.",
+            "assertions": [
+                "The response explains that a different principal is being used because of credential chain precedence",
+                "The response names the likely source overriding the execution role, such as static keys or an explicit profile or assumed role",
+                "The response uses the CloudTrail observation as evidence rather than ignoring it",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-otherid"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-cred-token",
+            "task_type": "chat",
+            "prompt": "Calls from our batch Lambda llmops-lf-app-badtoken fail with 'The security token included in the request is invalid'. What causes this and how do we fix it?",
+            "should_trigger": true,
+            "expected_output": "An invalid or expired session token, typically stale static credentials or a cached session. The answer explains why a token is present but invalid and gives the fix.",
+            "assertions": [
+                "The response identifies the credential or session token as the problem rather than IAM permissions",
+                "The response gives a concrete fix such as removing static credentials and relying on the execution role",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-badtoken"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-cred-sig",
+            "task_type": "chat",
+            "prompt": "Our custom HTTP client in Lambda llmops-lf-app-sigv4 gets a signature error calling Bedrock Runtime. What is wrong in how it signs requests?",
+            "should_trigger": true,
+            "expected_output": "SigV4 signing is wrong for Bedrock Runtime: wrong service name, Region, host, or an unsigned payload. The answer names the specific signing defect.",
+            "assertions": [
+                "The response identifies the specific signing error such as service name, Region, host or payload hash",
+                "The response states the correct signing parameters for Bedrock Runtime",
+                "The response does not attribute the failure to missing IAM permissions alone",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-sigv4"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-cred-apikey",
+            "task_type": "chat",
+            "prompt": "We created a long-term Bedrock API key for IAM user llmops-lf-apikey-user, but calls with it get AccessDenied. What permissions does the key have, and what should we change?",
+            "should_trigger": true,
+            "expected_output": "The API key inherits the IAM user's permissions, which do not allow the needed Bedrock actions. The answer reports what the key can actually do and what to change.",
+            "assertions": [
+                "The response explains that the key's effective permissions come from the underlying IAM identity",
+                "The response reports the permissions it actually found rather than only describing how keys work",
+                "The response gives a concrete permission change",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-apikey\\-user"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-trail-data",
+            "task_type": "chat",
+            "prompt": "Can we see who called InvokeModel in this account and when, per caller, for the last week? Which source would show it?",
+            "should_trigger": true,
+            "expected_output": "InvokeModel is a data event, not a management event, so it is absent from the default trail. The answer names CloudTrail data events for Bedrock (or invocation logging) as the source and says what to enable.",
+            "assertions": [
+                "The response explains that InvokeModel is a data event and not captured by a default management-event trail",
+                "The response names the specific source to enable or query",
+                "The response reports whether that source is currently enabled in this account",
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-vpc-noep",
+            "task_type": "chat",
+            "prompt": "Lambda llmops-lf-app-private in a private subnet (no NAT, on purpose) times out calling Bedrock. What is missing?",
+            "should_trigger": true,
+            "expected_output": "No route to Bedrock from a private subnet with no NAT: an interface VPC endpoint for Bedrock Runtime is missing. The answer names the endpoint to create.",
+            "assertions": [
+                "The response identifies the missing interface VPC endpoint for Bedrock Runtime",
+                "The response explains why a private subnet without NAT cannot otherwise reach the service",
+                "The response does not attribute the timeout to model latency or throttling",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-private"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-vpc-dns",
+            "task_type": "chat",
+            "prompt": "We added a Bedrock Runtime VPC endpoint for Lambda llmops-lf-app-private-ep, but its calls still time out. Why?",
+            "should_trigger": true,
+            "expected_output": "The endpoint exists but private DNS, the security group, or the Region does not line up, so traffic still cannot reach it. The answer names which of those is wrong.",
+            "assertions": [
+                "The response identifies private DNS, security group rules, or Region mismatch as the remaining cause",
+                "The response explains why merely creating the endpoint was not sufficient",
+                "The response gives a concrete check or fix",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-private\\-ep"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-eol-plan",
+            "task_type": "chat",
+            "prompt": "Which models do our catalog Lambdas (llmops-lf-catalog-summarizer and llmops-lf-catalog-tagger) call, are any of them LEGACY or approaching end of life, and what should we plan?",
+            "should_trigger": true,
+            "expected_output": "An inventory of the models those functions call, each one's lifecycle status, and a migration plan for any LEGACY or near-EOL model. The answer reports actual findings per function.",
+            "assertions": [
+                "The response reports the models actually configured per function rather than describing how to look",
+                "The response states the lifecycle status of each model it found",
+                "The response gives a concrete migration plan or successor for anything LEGACY or approaching EOL",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-catalog\\-summarizer"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "neg-guardrail-filter-tuning",
+            "task_type": "chat",
+            "prompt": "Our guardrail blocks normal clinical questions because the hate and violence content filters are set to HIGH. Which strength should we use for a healthcare assistant?",
+            "should_trigger": false
+        },
+        {
+            "id": "neg-kb-chunking-strategy",
+            "task_type": "chat",
+            "prompt": "Our knowledge base ingestion reports failed documents for a long handbook because chunking is disabled. What chunking strategy should we use for the embedding model?",
+            "should_trigger": false
+        },
+        {
+            "id": "neg-provisioned-throughput-cost",
+            "task_type": "chat",
+            "prompt": "For a steady 400 requests per minute Bedrock workload, is provisioned throughput cheaper than on-demand, and how many model units would we need?",
+            "should_trigger": false
+        }
+    ]
+}

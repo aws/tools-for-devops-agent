@@ -1,0 +1,75 @@
+{
+  "version": "v10",
+  "iteration": 3,
+  "eval_id": "inv-capacity-regional-constraint",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected root cause explicitly calls for the investigation to conclude that this is a provider-side (AWS) regional capacity/service condition (or at least to recommend retry-with-backoff/cross-region inference), and crucially to recognize that the eval account contains seeded-fault sample workloads whose errors should NOT be attributed to the reported intermittent symptom. It also expects the investigation to state clearly when telemetry does not show the claimed symptom, rather than substituting unrelated errors as the cause.\n\nThe actual investigation's second major finding (\"Misconfigured callers' client errors explain the failures\") does the opposite of what is expected: it takes the various misconfigured llmops-lf-* Lambda errors (bad model IDs, missing permissions, validation errors) and presents them as an explanation for the reported intermittent failures, cascading them to the symptom node. This attributes unrelated seeded-fault workload errors to the reported issue, which is precisely the failure mode the expected root cause warns against (\"does not attribute unrelated workloads' errors to it\").\n\nWhile the investigation did do good work correctly ruling out AWS-side throttling/server-side issues and noting gaps (client-side failures not visible, caller/model not identified), it did not conclude \"this is likely AWS-side regional capacity/condition, use retry with backoff or cross-region inference.\" Instead, it leans toward attributing the problem to customer misconfiguration (two competing hypotheses, with the misconfiguration one getting more detailed support), without clearly recommending retry/backoff or cross-region as the main mitigation, and without clearly flagging that the client-error findings are from unrelated eval workloads rather than the actual reported caller.\n\nThus the investigation does not match the expected root cause framing and conclusion.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names an explicit locus rather than leaving the classification implicit",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The findings section explicitly attributes the issue to a non-AWS cause: 'Every error traces to a specific misconfigured scenario caller. None are service-side.' and the hypothesis section is titled 'Misconfigured callers' client errors explain the failures' with detailed per-Lambda-role attribution (e.g. 'AccessDeniedException on us.amazon.nova-lite-v1:0: llmops-lf-gr-xregion-app-role'). The AWS-side hypothesis is explicitly ruled out: 'AWS Health: no open Bedrock issue... it is not related.'",
+          "reasoning": "The response does not just vaguely say 'it's probably us' - it names specific Lambda functions, roles, and misconfiguration types as the locus, and explicitly rules out the AWS-side hypothesis with evidence. This constitutes an explicit, non-implicit classification.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports what each signal it checked actually returned, including when a signal returned nothing",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "E.g. 'No InvocationThrottles or InvocationServerErrors metrics exist in the namespace at all (list_metrics is empty)' and 'No CloudTrail log group exists in CloudWatch Logs' and 'There was no sonnet-5 data from 13:37 to 14:20Z' and 'claude-sonnet-5: 0 errors, p99 14-23s, no request over 60s'.",
+          "reasoning": "The response consistently reports results for each signal checked, explicitly noting when metrics/logs were empty or absent, not just when they showed something.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the retry-succeeds observation as evidence rather than ignoring it",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The retry-succeeds observation from the user's prompt ('Retries mostly succeed') is not mentioned or referenced anywhere in the Investigation Summary. The summary only restates 'Retries mostly succeed' in the Symptoms description but never uses it as evidence in the Findings or hypotheses sections.",
+          "reasoning": "While the symptom description echoes 'Retries mostly succeed', the findings never explicitly use this fact as corroborating evidence (e.g., explaining why retries succeed given transient misconfiguration vs. persistent one, or distinguishing client vs provider-side timeouts). It's mentioned only as part of the original report, not analyzed or leveraged as evidence in the investigation body.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not prescribe a customer configuration change if it concludes the cause is provider-side",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response concludes the cause is customer-side (misconfigured Lambda roles, invalid model IDs, bad ARNs) rather than provider-side, so there is no scenario where it would need to avoid prescribing a customer-side fix for a provider-side cause. The findings explicitly state 'None are service-side,' confirming the conclusion is customer-side.",
+          "reasoning": "Since the investigation concludes the issue is NOT AWS's fault, the assertion's conditional (if cause is provider-side, don't prescribe customer config change) is vacuously satisfied -- there is no contradiction, as the response never claims provider-side causation while recommending customer changes.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m7s",
+    "cost": "$2.05",
+    "context_window": {
+      "utilization": "9.2%",
+      "compaction_count": 0
+    }
+  }
+}

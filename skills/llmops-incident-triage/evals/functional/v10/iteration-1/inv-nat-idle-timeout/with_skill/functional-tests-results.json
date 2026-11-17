@@ -1,0 +1,72 @@
+{
+  "version": "v10",
+  "iteration": 1,
+  "eval_id": "inv-nat-idle-timeout",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "failed",
+      "message": "Skill 'llmops-incident-triage' was NOT triggered (no skills were loaded)",
+      "skill_loads_found": 0
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly identifies the NAT gateway's 350-second idle connection timeout as the root cause, explains that the client's connection pool holds a connection that the NAT has already dropped (resulting in TCP RST on reuse), and prescribes concrete fixes: TCP keepalive set well below 350s, connection pool max idle/lifetime below the threshold (connection recycling), retries, and application heartbeats. It also mentions CloudWatch IdleTimeoutCount for confirmation. The only minor gap vs the expected output is it doesn't explicitly mention VPC endpoints as an alternative to remove NAT from the path, but the expected output lists that as one of several possible fixes ('such as... or a VPC endpoint'), and the response covers the other core fixes (keepalive, recycling) thoroughly, satisfying the substance of the expectation.",
+      "evidence": "\"A NAT gateway drops any connection that has been idle for 350 seconds or more... If your workload later tries to reuse that connection, it gets a TCP RST... Turn on TCP keepalive on the client with an interval well under 350 seconds... Set your connection pool's max idle or lifetime below 350s.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response identifies the NAT gateway idle timeout as the cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"This is almost certainly the NAT gateway's idle connection timeout.\" and \"A NAT gateway drops any connection that has been idle for 350 seconds or more.\"",
+          "reasoning": "The response explicitly and directly identifies the NAT gateway idle timeout as the cause of the connection closed errors.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains why the error appears specifically after a period of inactivity",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"A NAT gateway drops any connection that has been idle for 350 seconds or more. If your workload later tries to reuse that connection, it gets a TCP RST, not a FIN. Clients usually report that as 'connection closed', 'connection reset', or 'broken pipe'. This fits 'errors after periods of inactivity'. Pooled connections, such as HTTP keep-alive, database, or Redis connections, are the usual victims.\"",
+          "reasoning": "The response explains the mechanism: the NAT gateway silently drops idle connections after 350s, and the error surfaces when the client later tries to reuse that now-dead connection, which directly explains why errors appear specifically after inactivity rather than during active use.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response prescribes a concrete fix such as keepalive, connection recycling, or a VPC endpoint",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Turn on TCP keepalive on the client with an interval well under 350 seconds... Set your connection pool's max idle or lifetime below 350s... Add retries on connection reset... Send application-level heartbeats over long-lived connections\"",
+          "reasoning": "The response prescribes multiple concrete fixes including TCP keepalive settings with specific values, connection pool max idle/lifetime configuration (e.g., HikariCP maxIdleTime), retries, and application heartbeats \u2014 satisfying the requirement for a concrete fix such as keepalive or connection recycling.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.75
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "8s",
+    "cost": "$0.07",
+    "context_window": {
+      "utilization": "4.5%",
+      "compaction_count": 0
+    }
+  }
+}

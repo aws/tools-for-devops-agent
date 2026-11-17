@@ -1,0 +1,75 @@
+{
+  "version": "v10",
+  "iteration": 1,
+  "eval_id": "inv-client-error-surge",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected root cause describes a scenario where the investigation should distinguish a single shared customer-side cause from a collection of unrelated seeded faults in the eval account, correctly attributing only the telemetry-supported cause to the actual workload in question, and flagging where the premise (broad simultaneous 4xx surge \"across several services\") doesn't hold up.\n\nThe investigation instead attributes the 4xx surge to a laundry list of unrelated, independent misconfigurations: an invalid model ID on one agent, a missing IAM permission on another, several different Lambda apps each with their own distinct errors (missing guardrail permission, missing messages key, wrong ARN format, incompatible beta header, etc.). These are explicitly described as separate issues affecting unrelated workloads (support agent, billing agent, several llmops-lf-* Lambdas each with different causes), rather than a single shared cause (expired/rotated credential, quota change, model/profile invalidation, or central config change) explaining the broad surge.\n\nThe investigation does not identify one unifying root cause - it essentially confirms \"yes there are many real latent bugs causing 4xx\" without recognizing that these are likely unrelated seeded faults in the eval account that happen to coincide, and it does not identify any single shared cause (credential rotation, quota/throttle, central config change) as expected. It conflates multiple unrelated workloads' errors into one incident narrative, which is the opposite of what the expected root cause calls for. There's no clear statement that the broad \"surge across several services\" is actually not a single incident, nor evidence of a shared trigger like a rotated secret or central policy change.\n\nTherefore, the investigation's findings do not match the expected root cause: it fails to identify a shared customer-side cause and instead attributes the symptom to multiple disparate, unrelated misconfigurations without recognizing the seeded-fault nature of the environment or performing the differentiating checks described in the expectation.</reasoning>\n<parameter name=\"confidence\">medium",
+      "evidence": "\"Cause: llmops-eval AgentCore agents use an invalid model ID or lack IAM permissions\" and separately \"Cause: llmops-lf Lambda apps send invalid requests or lack Bedrock permissions\" list many distinct, unrelated per-app issues (invalid model ID, missing IAM permission, missing guardrail permission, malformed request body, wrong ARN, incompatible beta header) rather than one shared customer-side cause such as a rotated credential, quota change, or central config change."
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response treats 4xx as a client-rejected request and does not classify it as a service outage",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The report explicitly separates client vs server errors: 'InvocationThrottles and InvocationServerErrors returned no datapoints from 2026-11-13 to 2026-11-16, so the failures are client-side (4xx) only' and 'No throttles or server errors' hypothesis section with 'Only planned Bedrock lifecycle events in AWS Health... There are no open operational issues for Bedrock.' This frames the 4xx surge as client-caused, not a service outage.",
+          "reasoning": "The investigation explicitly rules out server-side causes (throttles, server errors, AWS Health issues, alarms) and attributes the 4xx surge to specific client misconfigurations (invalid model IDs, missing IAM permissions, malformed requests). It never classifies the issue as a Bedrock service outage.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response either names candidate shared causes with a check that tells them apart, or identifies the actual shared cause from evidence",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Three parallel causes/hypotheses are presented: 'Cause: llmops-eval AgentCore agents use an invalid model ID or lack IAM permissions', 'Cause: llmops-lf Lambda apps send invalid requests or lack Bedrock permissions', and 'Hypothesis: Bedrock service-side problem'. Each is checked against evidence (CloudTrail errors, IAM policy checks, Health Dashboard, alarms) and the actual shared causes (multiple independent misconfigurations) are identified with supporting CloudTrail evidence.",
+          "reasoning": "The response names multiple candidate causes (eval agent misconfig, Lambda app misconfig, Bedrock service issue) and discriminates between them using CloudTrail events, IAM policy inspection, and service health/metrics data, ultimately identifying the actual causes with evidence.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response names a discriminating check for each candidate",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "For eval agents: 'CloudTrail Converse events... show AgentCore runtime sessions... failing' with specific error messages (ValidationException, AccessDenied) distinguishing invalid model ID vs IAM denial. For Lambda apps: specific CloudTrail/invocation log error codes per app (AccessDenied for guardrail, ValidationException for schema, etc.) discriminate among causes. For the service-side hypothesis: 'InvocationThrottles and InvocationServerErrors returned no datapoints', 'AWS Health shows... no open operational issues', 'No CloudWatch alarms in ALARM state' serve as discriminating checks ruling out AWS-side problems.",
+          "reasoning": "Each candidate cause has an associated discriminating check: CloudTrail error codes/messages for the agent and Lambda causes, and metrics/Health Dashboard/alarms for the service-side hypothesis. While not perfectly one-to-one formalized, each major candidate has a distinct check that differentiates it from alternatives.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response considers shared credentials or central configuration as a cause of correlated failure across services",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The report attributes failures to per-service distinct misconfigurations (different invalid model IDs, different missing IAM permissions on different roles, different malformed request bodies) rather than a single shared credential or central config. It states 'The billing agent... its role, which has only llmops-eval-runtime-base (v1, unchanged since 2026-10-26), is denied bedrock:InvokeModel' and separately 'llmops-lf-gr-xregion-app: AccessDenied, no bedrock:ApplyGuardrail...Its role has only the inline policy 'app' plus AWSLambdaBasicExecutionRole' - these are treated as independent per-app/per-role issues, not a shared/central cause.",
+          "reasoning": "The investigation does not explicitly consider or test the hypothesis that a shared credential, shared IAM role, or central configuration change (e.g., a common policy update) is causing the correlated failures across multiple services. Instead it treats each app/agent's misconfiguration as independent and pre-existing ('latent misconfigurations that surface whenever the eval traffic runs'). There's no explicit statement examining whether a single shared role, policy, or config was changed that could explain the correlation across services simultaneously.",
+          "confidence": "medium"
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "9m28s",
+    "cost": "$4.72",
+    "context_window": {
+      "utilization": "10.8%",
+      "compaction_count": 0
+    }
+  }
+}

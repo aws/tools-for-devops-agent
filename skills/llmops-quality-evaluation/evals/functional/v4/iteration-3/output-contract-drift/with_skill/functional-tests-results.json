@@ -1,0 +1,96 @@
+{
+  "version": "v4",
+  "iteration": 3,
+  "eval_id": "output-contract-drift",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-quality-evaluation' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The response treats JSON conformance as a measurable quality dimension: it proposes logging raw responses, classifying outcomes (valid, valid-after-fence-strip, invalid, schema-fail), emitting metrics (fence rate, schema-failure rate) to CloudWatch with dimensions for model ID/prompt version, and comparing against a baseline/start time to distinguish a real shift from normal variability. It explicitly discusses distributional shift (model version/alias change, routing/inference profile, provider-side update) vs inherent probabilistic non-determinism (\"It was always probabilistic... may have been rare before and gotten more frequent\"). It identifies plausible causes matching the expected list: floating alias/latest ID/cross-region inference profile change, provider-side model update, and inherent generation variability. It recommends enforcement independent of model behavior: structured output/schema enforcement via Bedrock structured outputs, consumer-side schema validation, parse-failure/fence-failure metrics with alarms, and a regression gate that scores format-conformance rate before promoting a model change, blocking promotion if conformance drops below baseline. This covers essentially every element of the expected output in substance, even though organized slightly differently. It aligns closely with the expected criteria.",
+      "evidence": "\"3. Emit the outcomes as metrics... fence rate, schema-failure rate, and a graph of when it started. Compare that start time with deployments, model changes and traffic changes.\" and \"5. Build a regression set... Run it in CI and before any model or prompt change, and block promotion if conformance drops below your baseline.\" and \"1. Enforce the schema at generation time. Bedrock supports structured outputs...\" and \"6. Alarm on the rate. Alarm on the fence and schema-failure rates, not only on hard parse failures.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response gives a concrete way to quantify the parse-failure or schema-deviation rate rather than only advising prompt changes",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response proposes a classifier that records per-response outcomes (valid JSON, valid after stripping fences, valid after other repair, invalid JSON, valid JSON failing schema validation) and says to 'Emit the outcomes as metrics... Then you get fence rate, schema-failure rate, and a graph of when it started.' This is a concrete quantification method, not just a prompt-change suggestion.",
+          "reasoning": "The agent gives explicit classification categories and metric emission guidance (CloudWatch EMF, dimensions for model ID, prompt version, endpoint), which is a concrete measurement approach.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response requires a baseline from before the change so that a genuine shift can be told apart from normal model non-determinism",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The 'Build a regression set' step says to 'Replay them against the current model and any candidate, 5\u201310 times each because of non-determinism. Track format-conformance rate and field-level correctness... block promotion if conformance drops below your baseline.' However, there is no explicit instruction to establish a baseline measurement from before the change occurred (i.e., from historical logs prior to the suspected shift) to compare against the current failure rate.",
+          "reasoning": "The response mentions comparing conformance against 'your baseline' for future gating, and suggests comparing start time of failures with deployments/model changes, but it does not explicitly instruct the user to measure a historical baseline rate from before last week to distinguish a genuine shift from normal non-determinism. It implies looking at 'when it started' via graphing, which is close but doesn't explicitly call out establishing a pre-change baseline rate for comparison against current rate to rule out noise. This is a partial match with some evidence but missing the explicit comparison requirement for telling genuine shift apart from normal non-determinism on the historical traffic side (separate from the regression suite baseline).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response notes that measuring this from historical traffic depends on Bedrock model invocation logging being enabled, and reports whether it is",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'If you're on Bedrock, turn on model invocation logging.' And later: 'On Bedrock this is only visible in the invocation logs, not in default CloudWatch metrics.' Also at the end: 'I can check which model ID or alias you're calling and whether invocation logging is on.'",
+          "reasoning": "The response explicitly notes the dependency on Bedrock invocation logging for measuring historical traffic (raw responses, stop reasons) and offers to check whether it is enabled, though it does not report the actual current status since the agent states it hasn't looked at the account yet.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response recommends an enforcement mechanism that does not rely on the model voluntarily complying, such as structured output or schema validation at the boundary",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response recommends 'Enforce the schema at generation time... Bedrock supports structured outputs... The response then follows the schema, with no fences or prose' and 'Validate on the consumer side. Parse with a schema validator (Pydantic, jsonschema, Zod) and never treat raw text as trusted.'",
+          "reasoning": "These are both enforcement mechanisms that do not rely on voluntary model compliance: structured output generation and consumer-side schema validation at the boundary.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response recommends a durable detection mechanism (a parse-failure metric, an alarm, or a conformance gate) rather than a one-off fix",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response recommends 'Alarm on the rate... Alarm on the fence and schema-failure rates, not only on hard parse failures' and a 'regression set... Run it in CI and before any model or prompt change, and block promotion if conformance drops below your baseline.'",
+          "reasoning": "These are durable detection mechanisms (alarms and a CI-based conformance gate), not a one-off fix.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response considers an undocumented model update or version change as a candidate cause, given the prompt was unchanged",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'The model changed underneath you. Check whether you call a floating alias, a \"latest\" ID, or a cross-region inference profile instead of a pinned model version. Also check for a provider-side update or a migration to a newer model. Fence-wrapping and field-order changes are typical symptoms of this.'",
+          "reasoning": "This directly considers an undocumented model update or version change as a candidate cause, consistent with the prompt being unchanged.",
+          "confidence": "high"
+        },
+        {
+          "text": "An evaluation or telemetry check-id is cited",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.7143
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "29s",
+    "cost": "$0.25",
+    "context_window": {
+      "utilization": "5.1%",
+      "compaction_count": 0
+    }
+  }
+}

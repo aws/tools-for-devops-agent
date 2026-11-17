@@ -1,0 +1,82 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "serverless-async-silent-failures",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires an actual read-only review of the SageMaker async endpoint configuration: reading DescribeEndpointConfig's AsyncInferenceConfig, checking SNS success/error notification topics, checking Application Auto Scaling policy on ApproximateBacklogSizePerInstance, reading CloudWatch backlog/oldest-request-age metrics (with correct no-datapoints interpretation), citing specific check-ids (LLM-SM-SERVE-003, LLM-SM-SERVE-004), providing remediation as runnable commands, and redacting the account id.\n\nThe agent's response instead reports that it could not find any SageMaker endpoint at all and asks the user for more information. No actual configuration was reviewed, no SNS notification check was performed, no auto scaling check was performed, no CloudWatch metrics were read, no check-ids were cited, no remediation commands were given, and critically the account id (123456789012) was exposed in plain text rather than redacted \u2014 directly violating the redaction requirement.\n\nWhile the agent's general knowledge of what could be wrong (missing SNS notifications, missing autoscaling) is directionally consistent with the expected failure modes, this is speculative general knowledge, not a review of actual data, and none of the specific required elements (check-ids, actual SNS topic check, actual autoscaling policy check, CloudWatch datapoint interpretation, redacted account id, remediation commands) are present. This clearly fails the expected output criteria.",
+      "evidence": "\"I couldn't find a SageMaker endpoint, so I haven't reviewed anything yet.\" ... \"All five returned zero endpoints in account 123456789012.\" ... no mention of LLM-SM-SERVE-003/004 check-ids, no SNS topic check, no CloudWatch backlog metric reading, no remediation commands provided.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reads the AsyncInferenceConfig and checks for NotificationConfig SNS success and error topics rather than assuming notifications exist",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent states: 'I couldn't find a SageMaker endpoint, so I haven't reviewed anything yet.' and lists 'SNS success and error notifications' only under 'What I'll review once I can see it' -- it never actually read or checked NotificationConfig.",
+          "reasoning": "The agent never found an endpoint, so it could not read AsyncInferenceConfig or check NotificationConfig. It only lists this as something it 'will review once I can see it', and speculates generically that 'silent drops most likely come from missing failure notifications' without actually reading any config.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response checks whether scaling tracks ApproximateBacklogSizePerInstance and treats a missing scaling policy as a backlog risk",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent lists under 'What I'll review once I can see it': 'Whether the endpoint has an auto scaling policy on ApproximateBacklogSizePerInstance, and whether it can scale to zero.' This is prospective, not an actual check performed.",
+          "reasoning": "Similarly, the agent never checked any scaling policy because no endpoint was found. It only mentions checking for auto scaling on ApproximateBacklogSizePerInstance as a future action, and makes a generic claim that 'Queue buildup is usually missing or poorly tuned auto scaling' without actual evidence from a real policy check.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes CloudWatch no-datapoints from a measured zero when reading the backlog and oldest-request-age signals",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response only says: 'CloudWatch metrics and alarms for backlog size, failed invocations and queue time.' under future review items; no discussion of no-datapoints vs zero appears anywhere.",
+          "reasoning": "The response does not discuss CloudWatch metrics data at all in terms of no-datapoints vs measured zero. It only lists 'CloudWatch metrics and alarms for backlog size, failed invocations and queue time' as a future review item, with no discussion of no-datapoints vs zero distinction.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every remediation is a recommendation with the command for the operator to run and the response does not call or claim to have called any mutating API",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response contains no commands or API calls at all, mutating or otherwise. It states 'What I checked: SageMaker endpoints in...' indicating only read/list actions were performed, consistent with no mutating calls being made or claimed.",
+          "reasoning": "The agent did not perform any mutating actions; it only reported findings (no endpoints found) and asked for more information. It did not issue any remediation commands, but it also did not claim or perform any mutating API calls. Since no remediation was given (as no endpoint was found), the assertion about every remediation being a recommendation with a command is vacuously true, and no mutating API call is claimed.",
+          "confidence": "medium"
+        },
+        {
+          "text": "At least one finding carries an LLM-SM serverless/async check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 1 match(es), first: '123456789012'"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 5,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.1667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "20s",
+    "cost": "$0.17",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

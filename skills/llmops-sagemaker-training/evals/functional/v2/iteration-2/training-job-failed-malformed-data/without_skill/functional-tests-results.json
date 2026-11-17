@@ -1,0 +1,82 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "training-job-failed-malformed-data",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response does not meet several key criteria from the expected output. \n\n1. No check-id citation: The response never cites an LLM-SM-TRAIN check-id (e.g., LLM-SM-TRAIN-001 or LLM-SM-TRAIN-007), which is explicitly required.\n\n2. Account ID not redacted: The response includes the full, unredacted bucket name 'devops-user-g-nova-sft-123456789012', which contains what appears to be an AWS account ID (123456789012). This is a direct violation of the redaction requirement.\n\n3. No data-validation command: The expected output requires that if the FailureReason indicates malformed/corrupt training data (JSONL parse errors, missing keys, tolerance exceeded), the agent should classify it as a data problem and recommend a specific command to validate/fix the JSONL offline before resubmitting. The agent's response speculates about a recipe/config issue (LoRA vs full-rank) and dataset validity, but never identifies the actual FailureReason text, never confirms whether it's a data problem specifically, and never provides a concrete command for validating the JSONL.\n\n4. While the agent does correctly describe checking TrainingJobStatus and SecondaryStatus (noting the job failed after pending ~15 hours, distinguishing capacity wait from actual failure), it does not quote or reference the actual FailureReason field from DescribeTrainingJob - it only describes generic container log messages. The expected behavior is to read the FailureReason field specifically and use it to classify the failure type (capacity vs data vs config), which the agent didn't clearly do.\n\n5. The response speculates on multiple possible causes (recipe config, LoRA settings, dataset format) rather than definitively classifying based on an actual FailureReason value, and does not provide the offline validation command for JSONL that is explicitly required by the rubric.\n\nGiven the missing check-id citation, the unredacted account ID, and the absence of a concrete data-validation command when data issues are a candidate root cause, this response fails the expected output criteria.",
+      "evidence": "\"devops-user-g-nova-sft-123456789012\" appears without redaction, and no LLM-SM-TRAIN-xxx check-id is cited anywhere in the response, nor is a specific offline JSONL validation command provided.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reads DescribeTrainingJob status, SecondaryStatus, and FailureReason rather than guessing from the word failed",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Your job is `devops-user-g-nova-micro-sft-lora-20261020-125042`. It failed on ml.g5.12xlarge with `AlgorithmError: Algorithm container exited with error`.\" and \"The job's own metrics show 0 seconds of setup and training time.\"",
+          "reasoning": "The response references specific training job details that would come from DescribeTrainingJob: job name, instance type, FailureReason text ('AlgorithmError: Algorithm container exited with error'), SecondaryStatus-like phase breakdown (Pending ~15h, image download ~8.5min, container crash timing), and training/setup metrics (0 seconds setup/training time). This level of detail indicates the agent actually read the job's status/secondary status/failure reason fields rather than guessing from the word 'failed'.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response distinguishes a data-validation failure (malformed or corrupt training data) from a capacity failure, and does not conflate the two",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"**Pending phase:** The job waited about 15 hours for g5.12xlarge capacity. That wasn't the failure.\" followed by discussion of the container crash and recipe/data validation issues as the actual failure cause, which are clearly distinguished.",
+          "reasoning": "The agent explicitly separates the pending/capacity wait phase from the actual container crash/failure, stating clearly that the capacity wait was not the cause of failure, and then attributes the failure to a likely data/recipe validation issue distinct from capacity.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not prescribe a config or data change if the job is actually InProgress/Pending waiting on capacity, recognizing Pending-on-capacity is not Failed",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Container crash: The container started at 22:31:15 UTC and crashed 9 seconds later with `Error running pipeline`... Training never started.\" This shows the job did progress past Pending into a Failed state, and the recommended fixes are for this failed state, not for a job still pending on capacity.",
+          "reasoning": "The job in question is explicitly described as Failed (not Pending/InProgress waiting on capacity) \u2014 the agent clarifies that the Pending phase for capacity was not the failure cause, and the actual failure was a container crash after the pending phase ended. The agent does not prescribe config changes for a job that is still pending; it only prescribes fixes for the failed job after confirming it actually crashed.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response cites a training sub-family check-id and recommends the fix as a command for the operator to run rather than mutating any resource",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response discusses 'AlgorithmError: Algorithm container exited with error' and references a template file name 'nova_micro_1_0_g5_g6_12x_gpu_lora_sft.yaml' but never cites any check-id, and the recommended fixes are described as things to compare/check manually ('Compare your recipe.yaml against...') rather than as a specific runnable command for the operator.",
+          "reasoning": "The response does not cite any formal 'check-id' (e.g., a specific AWS doc reference, error code, or named check such as a Trusted Advisor or SageMaker-specific check identifier) for the training sub-family capacity or validation issue. It does provide command-like next steps (compare recipe, check files) but no explicit check-id is mentioned anywhere in the response.",
+          "confidence": "medium"
+        },
+        {
+          "text": "At least one finding carries an LLM-SM training check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 1 match(es), first: '123456789012'"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "35s",
+    "cost": "$0.30",
+    "context_window": {
+      "utilization": "5.3%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "version": "v10",
+  "iteration": 1,
+  "eval_id": "client-timeout-config-verdict",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause requires the investigation to: (1) rule out an AWS-side incident with evidence (Health events, error rates), (2) correctly identify this as the customer's own release issue with longer prompts causing client-side read timeouts, (3) not falsely attribute unrelated errors to this workload, and (4) honestly report when telemetry doesn't show the claimed symptom rather than confirming the premise.\n\nThe investigation does exactly this: it explicitly rules out an AWS Bedrock incident (no open Health events, no InvocationServerErrors/Throttles datapoints, normal latency ~1.2s). It raises the plausible hypothesis that \"Longer non-streaming prompts exceed the SDK read timeout\" as the client-side mechanism matching the expected root cause (longer prompts raising generation time past the client's read timeout). Critically, it does NOT falsely confirm the premise - it honestly states that the only summarizer function visible in the account shows no ReadTimeoutError and no matching release, and flags this as a gap rather than fabricating a match. This aligns precisely with the expected behavior: \"where the telemetry does not show the claimed symptom at all, says so rather than confirming the premise\" and \"does not attribute unrelated workloads' errors to it.\"\n\nThe investigation correctly avoids declaring an AWS incident, correctly identifies the plausible client-timeout mechanism as the technical root cause, and correctly refrains from fabricating evidence of a deployment that doesn't appear in the telemetry - exactly matching the nuanced expected root cause guidance.",
+      "evidence": "\"AWS Health shows no open Bedrock issue in us-east-1... InvocationServerErrors and InvocationThrottles have no datapoints account-wide\" combined with \"ReadTimeoutError is raised by the AWS SDK on the client side when no reply arrives within its read timeout... Longer prompts make non-streaming replies slower, which can cross that limit\" and \"The only summarization service... has no ReadTimeoutError and no release on Nov 14\u201315... The failing release most likely runs in another account, another region, or on a different build.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reaches a APPLICATION verdict rather than PROVIDER, and says so explicitly",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No section or sentence explicitly declares 'APPLICATION' or 'PROVIDER' verdict. The summary ends with gaps unresolved across all three hypotheses, including the AWS-incident hypothesis which finds no evidence of an outage but doesn't conclude the issue is customer-side.",
+          "reasoning": "The output never states an explicit verdict of APPLICATION vs PROVIDER. It discusses three competing hypotheses without concluding definitively that the issue is application-side. The closest statement is 'The failing release most likely runs in another account, another region, or on a different build' which is a hedge, not an explicit verdict label."
+        },
+        {
+          "text": "The response contradicts the user's premise that AWS is having an incident, instead of accepting the premise and looking only for provider-side confirmation",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The 'AWS-side Bedrock incident' hypothesis section states findings (no open Bedrock issue, no datapoints for errors/throttles) but does not explicitly conclude 'AWS is not having an incident' as a clear contradicting statement; it's presented neutrally alongside other hypotheses.",
+          "reasoning": "The response does not clearly contradict the premise. It investigates the AWS-incident hypothesis and finds no evidence of an AWS outage (no Health issues, no InvocationServerErrors/Throttles), but it does not explicitly state 'this is not an AWS incident' or directly refute the user's premise in a clear verdict statement. It presents this as one of three parallel hypotheses rather than a decisive contradiction."
+        },
+        {
+          "text": "The response cites the narrow blast radius (a single service and a single model within one account) as evidence against a provider-side cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The only summarization service in <account>/us-east-1, llmops-lf-catalog-summarizer, has no ReadTimeoutError...' and 'InvocationServerErrors and InvocationThrottles have no datapoints account-wide (account <account>) from 2026-11-14 to 2026-11-16.' This supports narrow blast radius as evidence against a provider-wide incident, though it's not explicitly framed as 'because only one service/model affected, this rules out AWS incident.'",
+          "reasoning": "The response explicitly notes the narrow blast radius - only one service, one function, and ties it to account-level findings showing no broader issue. The Hypothesis section states 'The only summarization service in <account>/us-east-1... has no ReadTimeoutError' and the AWS-incident hypothesis notes 'InvocationServerErrors and InvocationThrottles have no datapoints account-wide' implying the narrow scope is evidence against provider-side cause."
+        },
+        {
+          "text": "The response cites the correlation between the error onset and the customer's own release as evidence for a customer-side cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'has no release on Nov 14\u201315... Its two Nov 16 calls used Converse with 19 input tokens, which doesn't match the longer-prompt InvokeModel release that was reported. The failing release most likely runs in another account, another region, or on a different build.' This explicitly says the correlation could NOT be confirmed in this account, undermining rather than citing the release correlation as supporting evidence.",
+          "reasoning": "The response notes the release timing issue but actually contradicts the correlation - it states the summarizer's only change (CreateFunction) occurred on Nov 16, not matching the reported Nov 14-15 release, and that its calls used Converse with short prompts, not matching the longer-prompt InvokeModel release. Rather than citing correlation as evidence FOR customer-side cause, it finds the correlation doesn't hold up in the visible telemetry, suggesting the failing release is elsewhere."
+        },
+        {
+          "text": "The response prescribes a concrete customer-side remediation such as raising the client read timeout, reducing prompt or output size, or switching to streaming",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'This is plausible but could not be verified, because the client config and code were not readable.' No remediation recommendations appear anywhere in the output; it only lists gaps like 'No code repository connected' and 'lambda:GetFunction denied'.",
+          "reasoning": "The response does not prescribe any concrete remediation. The 'Longer non-streaming prompts exceed SDK read timeout' hypothesis is raised as plausible but immediately noted as unverifiable, and no actionable recommendation (e.g., raise timeout, reduce prompt size, use streaming) is given as a remediation step."
+        },
+        {
+          "text": "The response does not recommend waiting for AWS to resolve a service incident as the primary action",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'AWS Health shows no open Bedrock issue in us-east-1, only 5 upcoming planned lifecycle events' - no recommendation to wait is given anywhere in the summary; the focus is on gaps and missing telemetry, not on waiting for AWS action.",
+          "reasoning": "The response does not recommend waiting for AWS to resolve an incident. In fact it presents evidence that no AWS incident exists (AWS Health shows no open Bedrock issue) and focuses on gaps in visibility rather than suggesting to wait on AWS."
+        },
+        {
+          "text": "At least one finding carries a catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 5,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.2857
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m35s",
+    "cost": "$2.28",
+    "context_window": {
+      "utilization": "11.1%",
+      "compaction_count": 0
+    }
+  }
+}

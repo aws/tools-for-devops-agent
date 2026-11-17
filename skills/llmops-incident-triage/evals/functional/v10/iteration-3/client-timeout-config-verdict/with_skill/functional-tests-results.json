@@ -1,0 +1,95 @@
+{
+  "version": "v10",
+  "iteration": 3,
+  "eval_id": "client-timeout-config-verdict",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's primary hypothesis correctly identifies that the release moving to longer prompts pushed model latency past the client's 60s read timeout, causing the ReadTimeoutError - matching the expected root cause of \"longer prompts raise generation time past the client's read timeout.\" It also explicitly ruled out an AWS-side incident by checking AWS Health (no Bedrock events), InvocationServerErrors/Throttles (no datapoints), and confirmed ReadTimeoutError is client-side, not server-returned - matching the expected finding of \"no regional Health event is active, provider-side error rates are normal.\" \n\nCritically, the investigation also correctly avoided misattributing unrelated errors: it explicitly notes \"the account's 207 client errors do not come from this model\" (claude-sonnet-4-5) and that the catalog Lambda's Bedrock calls are healthy with tiny inputs, correctly distinguishing the seeded-fault unrelated errors (ValidationException, AccessDeniedException) from the summarizer's actual issue. It also honestly reports the gap that failing calls aren't visible in telemetry rather than fabricating confirmation, which aligns with the expected behavior of \"where the telemetry does not show the claimed symptom at all, says so rather than confirming the premise.\"\n\nThe investigation correctly converges on: customer's own release caused longer prompts to exceed timeout, not an AWS incident - matching the expected root cause closely, while also noting the hypothesis is inferred rather than directly observed (appropriately flagged as a gap).",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reaches a APPLICATION verdict rather than PROVIDER, and says so explicitly",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The second hypothesis header 'AWS/Bedrock service incident' is examined and refuted: 'AWS Health shows no Bedrock issue events in us-east-1 since 2026-11-14... ReadTimeoutError is raised by the client SDK, never returned by Bedrock.' The leading hypothesis is explicitly 'Longer prompts push model latency past the 60s SDK read timeout' and is labeled 'Leading hypothesis', indicating an application-side verdict rather than a provider-side one.",
+          "reasoning": "The output explicitly frames the AWS incident hypothesis as checked-and-refuted and names the client-side cause as the leading hypothesis, satisfying an application verdict stated explicitly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response contradicts the user's premise that AWS is having an incident, instead of accepting the premise and looking only for provider-side confirmation",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'AWS Health shows no Bedrock issue events in us-east-1 since 2026-11-14 (only 5 upcoming planned lifecycle notices).' and 'ReadTimeoutError is raised by the client SDK, never returned by Bedrock.'",
+          "reasoning": "The response actively investigates and refutes the AWS-incident premise with AWS Health and CloudWatch evidence, rather than accepting it as true or merely searching for confirmation; it concludes the opposite of the user's framing.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites the narrow blast radius (a single service and a single model within one account) as evidence against a provider-side cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'claude-sonnet-4-5: no errors, tiny inputs (max 19 tokens)... So the account's 207 client errors do not come from this model, and the catalog Lambdas' Bedrock calls are healthy.' Also: '0 InvocationClientErrors, 0 InvocationServerErrors, 0 InvocationThrottles' for the specific model used by the summarizer, contrasted against account-wide error counts.",
+          "reasoning": "The response explicitly narrows the scope to one model/one service and uses this narrow blast radius (versus broader account errors unrelated to this model) as evidence that supports a non-provider-wide (i.e., application-specific) explanation.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites the correlation between the error onset and the customer's own release as evidence for a customer-side cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'last changed 2026-11-16 13:55 UTC' is mentioned as supporting observation; and the hypothesis states 'after the release to longer prompts, Claude Sonnet 4.5 takes longer than botocore's default 60s read_timeout to respond,' directly tying the release (longer prompts) to the timeout onset.",
+          "reasoning": "While the response notes a discrepancy in exact Lambda modification timestamp (2026-11-16 vs operator's 2026-11-15), it still explicitly links the customer's release (longer prompts) as the causal correlation for the ReadTimeoutError, satisfying the assertion's substance even though exact dates differ slightly in the retrieved config metadata.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response prescribes a concrete customer-side remediation such as raising the client read timeout, reducing prompt or output size, or switching to streaming",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The hypothesis text states: 'raising only the SDK timeout would not help' and recommends nothing further concrete; no explicit remediation like 'increase read_timeout to X seconds', 'reduce prompt size', or 'use streaming' is given as an action item.",
+          "reasoning": "The output diagnoses the root cause (longer prompts exceeding 60s SDK/Lambda timeout) but stops short of prescribing a specific remediation step such as raising the timeout value, trimming prompt/output size, or switching to streaming responses. It only notes that raising the SDK timeout alone wouldn't suffice due to the Lambda function timeout, but does not then prescribe raising both or switching to streaming as a concrete next step.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not recommend waiting for AWS to resolve a service incident as the primary action",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "There is no statement suggesting waiting for AWS to resolve an incident; instead the output states 'ReadTimeoutError is raised by the client SDK, never returned by Bedrock' and focuses recommendations/gaps on client-side invariants (code inspection, X-Ray tracing, CloudTrail) rather than waiting for AWS.",
+          "reasoning": "The response's only recommendations are to investigate client-side code, tracing, and logs further \u2014 it never suggests waiting on AWS to fix anything, consistent with concluding this is not a provider-side incident.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.7143
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m13s",
+    "cost": "$3.10",
+    "context_window": {
+      "utilization": "14.3%",
+      "compaction_count": 0
+    }
+  }
+}

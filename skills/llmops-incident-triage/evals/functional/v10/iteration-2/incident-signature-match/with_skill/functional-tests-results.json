@@ -1,0 +1,66 @@
+{
+  "version": "v10",
+  "iteration": 2,
+  "eval_id": "incident-signature-match",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-incident-triage' was triggered as expected",
+      "skill_loads_found": 4,
+      "warning": "Skill 'llmops-incident-triage' was triggered 4 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause description is fairly generic/meta, essentially asking the investigation to correctly diagnose the actual telemetry-based cause of throttling rather than blindly confirming the \"quota and retry config look correct\" premise, distinguishing provider-side capacity vs customer-side quota pressure, and not misattributing unrelated workload errors. The investigation does exactly this: it traces the ThrottlingException on ApplyGuardrail to a specific, concrete cause found in logs - the Classic-tier content filter's 1000 text-unit limit being exceeded by 1760-text-unit documents sent by llmops-lf-gr-bigdoc-app. It correctly identifies this as a size limit, not a rate/quota limit, explaining why retries never succeed and why the quota/retry config \"looks correct\" (because the real issue isn't quota exhaustion at all). It also correctly distinguishes guardrail-layer throttling from model-level InvocationThrottles (which showed no series), supporting the blast-radius distinction between provider capacity and customer quota pressure. It ties this to the specific guardrail (slxtt9h3y7i9) and workload (llmops-lf-gr-bigdoc-app), avoiding misattribution to unrelated workloads, and explicitly notes guardrail llmops-lf-gr-bigdoc accounts for the vast majority of the throttles while separately noting ej450jeydh6e's minor contribution. This matches the spirit and substance of the expected root cause: grounding the throttling cause in actual telemetry (logs + metrics) specific to the workload, rather than confirming the premise that quota/retry is misconfigured.</reasoning>\n<parameter name=\"evidence\">\"ThrottlingException when calling the ApplyGuardrail operation (reached max retries: 4): Input text size (1760 text units) exceeds the maximum allowed (1000 text units) for the content filter policy (Classic tier).\" ... \"It is a size limit, not a rate limit, so retries always fail.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names a specific metric to examine (for example InvocationThrottles) rather than describing throttling in general terms",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly discusses 'AWS/Bedrock InvocationThrottles metric' and 'Guardrails InvocationThrottles series present' sections, naming the specific metric name InvocationThrottles multiple times, e.g., 'No AWS/Bedrock InvocationThrottles metric published' and 'Guardrail throttles: 160 over 14 days'.",
+          "reasoning": "The response names the specific CloudWatch metric InvocationThrottles repeatedly and ties it to concrete data points (160 over 14 days, per-guardrail breakdown), satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives an ordered, concrete next step (what to check first, then what to conclude) rather than a flat list of generic tips",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The document is organized as 'Symptoms', 'Findings', 'Cause', 'Root Cause' with supporting observations and gaps, but there is no explicit numbered or ordered 'first check this, then conclude that' remediation step list. The closest is the Gaps section stating 'To confirm, test the 1760-text-unit input against a new guardrail version first' but this is a single suggestion embedded in a gap, not an ordered sequence of next steps.",
+          "reasoning": "While the investigation is structured and traces a causal chain, it does not present an explicit ordered action plan (step 1, step 2, etc.) telling the user what to check first and then what to conclude. It's more a diagnostic narrative with embedded findings and gaps rather than a prescriptive ordered next-steps list.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response distinguishes quota-driven throttling on the customer side from provider-side capacity, instead of assuming one cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly separates model-level (provider capacity) metrics from guardrail-level metrics: 'No model-level InvocationThrottles exists... This suggests the throttled calls are hitting a guardrail quota, not model capacity.' and further concludes 'It is a size limit, not a rate limit, so retries always fail.'",
+          "reasoning": "The response explicitly distinguishes between provider-side model capacity throttling (which it rules out via clean model metrics) and a guardrail-side size/quota limit, and even further refines this to a size limit rather than a rate limit, directly satisfying the assertion's requirement to distinguish causes rather than assume one plus.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m51s",
+    "cost": "$2.42",
+    "context_window": {
+      "utilization": "10.0%",
+      "compaction_count": 0
+    }
+  }
+}

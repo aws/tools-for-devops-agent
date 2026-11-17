@@ -1,0 +1,67 @@
+{
+  "version": "v10",
+  "iteration": 2,
+  "eval_id": "inv-streaming-timeout",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause explicitly requires the investigation to: (1) identify a timeout at some layer (client/proxy/LB/gateway) as the cause, with tool-call round trips widening gaps between tokens causing idle/total timeout to trip; (2) explicitly note that it's the timeout, not model latency, that is at fault; (3) avoid attributing unrelated eval-account errors (seeded faults) to this symptom; and (4) honestly report when telemetry doesn't show the claimed symptom, rather than falsely confirming the premise.\n\nThe investigation's leading hypothesis matches almost exactly: \"Client-side idle read timeout during long tool-call/thinking gaps\" \u2014 explicitly stating long tool-call arguments arrive in large buffered chunks, adaptive thinking adds silent periods, leaving stretches with no bytes long enough to trip an idle-read limit (botocore read_timeout or proxy limits), while short answers and long plain-text keep bytes flowing and never trip it. This is precisely the \"timeout cuts long streams because tool-call round trips widen gaps between tokens\" causal mechanism described in the expected root cause.\n\nThe investigation also explicitly states in its symptom description: \"No timeout, error code or abandoned stream appears in Bedrock telemetry for the last 30 days, so the failure is not visible on the service side\" \u2014 correctly reporting that telemetry does not confirm the premise rather than falsely asserting it did.\n\nIt also correctly separates unrelated errors: it notes the 28 bodiless Opus streams turned out to be a logging gap (not actual failures) after investigation, and the Lambda errors (llmops-eval-shipment-status etc.) are attributed to other workloads/lab functions, explicitly not conflated with the reported ConverseStream timeout symptom. This matches the expected guidance about not attributing unrelated eval-account errors to the symptom in question.\n\nThe investigation is appropriately honest about gaps (client logs/timeout settings unavailable) and does not overclaim confirmation, labeling the client-timeout explanation as \"unconfirmed\" \u2014 which aligns with the expected emphasis on accurate reporting rather than confirming premises without evidence.\n\nOverall, the hypothesis and supporting reasoning align closely with the expected root cause's content, mechanism, and epistemic caveats.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"Long tool-call arguments arrive in large buffered chunks, and adaptive thinking at effort xhigh adds silent periods. This leaves stretches with no bytes on the connection, long enough to trip an idle-read limit (botocore read_timeout defaults to 60s; proxies have their own limits). Short answers and long plain-text streams keep bytes flowing and never trip it.\" and \"No timeout, error code or abandoned stream appears in Bedrock telemetry for the last 30 days, so the failure is not visible on the service side.\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response distinguishes time-to-first-token from total stream duration",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output discusses output tokens, latency, and idle-read gaps, but never explicitly distinguishes 'time-to-first-token' from 'total stream duration' as separate metrics. It mentions 'avg latency' and 'max latency' figures (e.g., 'avg latency 7.0s, max 41.3s') but these appear to be overall call latencies, not a TTFT vs total-duration breakdown.",
+          "reasoning": "No explicit mention or metric comparing time-to-first-token against total stream duration is present anywhere in the text.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response names specific timeout layers on the path such as the client, proxy, or gateway",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly discusses 'botocore read_timeout defaults to 60s; proxies have their own limits' and states 'Account <account> (us-east-1) has no API Gateway HTTP/WebSocket APIs, no REST APIs, and no ELBv2 load balancers, so no proxy layer can be timing out streaming responses.' It also notes 'llmops-lf-gh-chat-app is configured with Timeout=180s' (a client/Lambda-level timeout).",
+          "reasoning": "The response names specific timeout layers: client-side read timeout (botocore), proxy limits, API Gateway, and load balancer, explicitly checking each as a potential cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response connects the tool-call pattern to longer gaps between tokens",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The hypothesis section states: 'Long tool-call arguments arrive in large buffered chunks, and adaptive thinking at effort xhigh adds silent periods. This leaves stretches with no bytes on the connection, long enough to trip an idle-read limit... Short answers and long plain-text streams keep bytes flowing and never trip it.'",
+          "reasoning": "The response directly connects tool-call patterns (and buffered arguments/thinking silence) to longer gaps between tokens/bytes on the connection, which is the core mechanism proposed for the timeout.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "11m43s",
+    "cost": "$5.84",
+    "context_window": {
+      "utilization": "14.7%",
+      "compaction_count": 0
+    }
+  }
+}

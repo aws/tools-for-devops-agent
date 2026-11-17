@@ -1,0 +1,450 @@
+{
+    "skill_name": "llmops-capacity-cost",
+    "evals": [
+        {
+            "id": "cost-throttle-default-quota",
+            "task_type": "chat",
+            "prompt": "We are getting throttled on Bedrock in us-east-1 during business hours. We never requested a quota increase. What is our actual limit and what should we do?",
+            "should_trigger": true,
+            "expected_output": "The answer reports the account's actual applicable quota for the model and Region rather than a generic figure, compares observed request and token rates against it, and distinguishes a genuine under-provisioning from a burst pattern that backoff would absorb. It gives an ordered remediation: confirm the quota, measure the breach, then either request an increase or change the call pattern.",
+            "assertions": [
+                "The response reports the actual applicable quota value or says precisely where to read it, rather than quoting a generic number",
+                "The response compares observed usage against the quota rather than assuming the quota is the problem",
+                "The response distinguishes sustained under-provisioning from burstiness that retry with backoff would absorb",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-throttle-tpm-vs-rpm",
+            "task_type": "chat",
+            "prompt": "Our Bedrock requests are throttled but our requests-per-minute is well under the limit. How is that possible?",
+            "should_trigger": true,
+            "expected_output": "The answer explains that a tokens-per-minute quota applies alongside the requests-per-minute quota and is often the binding one. It explains how tokens count against it (AWS docs, 'How tokens are counted in Amazon Bedrock'): input tokens plus max_tokens are reserved when the request starts, and output tokens count at the model's burndown rate (10x for Claude Sonnet 5), so a large max_tokens or long outputs can throttle well under the RPM limit. It tells the user to measure EstimatedTPMQuotaUsage (Sum, 60-second period) against the applied TPM quota, and to lower max_tokens toward real output sizes.",
+            "assertions": [
+                "The response explains that a tokens-per-minute quota applies in addition to a requests-per-minute quota",
+                "The response explains the max_tokens reservation at request start or the output-token burndown rate",
+                "The response names EstimatedTPMQuotaUsage (or token metrics) to measure against the TPM quota, not only requests",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-large-output-tokens",
+            "task_type": "chat",
+            "prompt": "Our Bedrock bill is dominated by output tokens and keeps climbing although request volume is flat. Where is it going? Dig into it here in chat.",
+            "should_trigger": true,
+            "expected_output": "The answer checks the premise against the account before explaining it: billed spend by usage type from Cost Explorer (labelled billed, with the service names read) and OutputTokenCount and Invocations by ModelId from CloudWatch. If output tokens per request are rising, it names the candidate drivers (a raised maxTokens, prompts that invite longer answers, runaway generations stopped by max_tokens, retries, a model change) and the metric or invocation-log field that tells them apart (OutputTokenCount distribution, stopReason, outputTokenCount). If the data does not match the description, it says so with the figures. It separates what it read from inference and does not invent a cause.",
+            "assertions": [
+                "The response checks the claim against billed spend and token metrics read from the account",
+                "The response names candidate drivers and the metric or log field that would distinguish them, or says the data does not show rising output",
+                "Dollar figures are labelled billed or estimated, and no cause is stated that a read does not support",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-provisioned-vs-ondemand",
+            "task_type": "chat",
+            "prompt": "We have a steady Bedrock workload of roughly 400 requests per minute. Would provisioned throughput be cheaper than on-demand, and how many model units would we need?",
+            "should_trigger": true,
+            "expected_output": "The answer frames the decision on measured token throughput rather than request count alone, explains that model unit sizing depends on tokens per minute and the model, and states the commitment and break-even considerations. It declines to invent a unit count without the token data and says what to measure.",
+            "assertions": [
+                "The response bases the sizing on token throughput rather than request count alone",
+                "The response addresses the commitment term and break-even against on-demand",
+                "The response states what data is needed rather than inventing a precise model unit count",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-unexpected-charge-spike",
+            "task_type": "chat",
+            "prompt": "Our Bedrock charges in this account (us-east-1) tripled last week with no deployment. What happened? Dig into it here in chat.",
+            "should_trigger": true,
+            "expected_output": "The answer investigates rather than speculates: daily billed spend by service, usage type and model from Cost Explorer (no single SERVICE filter), and invocations and input, output and cache token counts by ModelId from CloudWatch for the same days. It names which dimension actually moved (volume, tokens per call, model or tier mix, Region), or says plainly that the data does not show a tripling and gives the figures. It states no cause a read does not support and separates verified figures from what it could not determine.",
+            "assertions": [
+                "The response reads daily billed spend and token or invocation metrics for the period rather than guessing",
+                "The response names the dimension that moved, or says the data does not show the increase, with figures",
+                "The response separates verified findings from what it could not determine and names no unsupported cause",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-idle-provisioned-throughput",
+            "task_type": "chat",
+            "prompt": "We bought provisioned throughput for a launch that got delayed. We are being billed and using almost none of it. get-provisioned-model-throughput for claude-launch-pt: status InService, modelUnits 1, commitmentDuration SixMonths, commitmentExpirationTime 2027-03-15. CloudWatch AWS/Bedrock for that provisioned model ARN over the last 14 days: Invocations Sum 6, InputTokenCount Sum 4,100, OutputTokenCount Sum 900; on 12 of the 14 days the query returned no datapoints. What are our options?",
+            "should_trigger": true,
+            "expected_output": "Explains that InService means the model unit is provisioned and billing, not that it is used, and that the commitment bills for its whole term regardless of use. Reads the given figures as idle on most days (no datapoints on 12 of 14 days is no traffic recorded, not a measured zero) and raises LLM-PT-001 (HIGH). Lays out the real options: put workloads on the PT now to use what is being paid for, or move remaining traffic to on-demand, and stop it renewing at the end of the term (delete it or cancel auto-renew then). Does not imply the remaining commitment can be avoided for free and never deletes or resizes the PT itself.",
+            "assertions": [
+                "The response states that the commitment bills for its term regardless of utilisation",
+                "The response treats the given figures as idle on most days and raises LLM-PT-001",
+                "The response does not imply the commitment can be cancelled without paying for the term, and does not delete the PT itself",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-regional-availability-limit",
+            "task_type": "chat",
+            "prompt": "We want to move Bedrock traffic to a cheaper Region but the model we use does not appear there. How do we verify and what are our options?",
+            "should_trigger": true,
+            "expected_output": "The answer separates model availability from price. It says how to verify the model's availability and access for the account in the target Region (list or get the foundation model and inference profiles there, rather than trusting a listing). It explains cross-Region inference profiles as the way to use capacity in other Regions, notes that requests are billed at the source Region's rate, so a profile does not by itself get the cheaper Region's price, and states the data-routing or residency implication. Prices come from the Price List API or the pricing page, not memory.",
+            "assertions": [
+                "The response gives a concrete way to verify the model's availability and access for the account in the target Region",
+                "The response explains cross-Region inference profiles and that they are billed at the source Region's rate",
+                "The response notes the data routing or residency implication of cross-Region inference",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-batch-vs-realtime",
+            "task_type": "chat",
+            "prompt": "Half our Bedrock workload is an overnight report that nobody waits for. Can we cut its cost?",
+            "should_trigger": true,
+            "expected_output": "The answer identifies the latency-insensitive portion as a candidate for batch inference at lower unit cost, states the trade-offs (turnaround time, job orchestration, result retrieval), and gives the concrete next step to evaluate it against current spend.",
+            "assertions": [
+                "The response identifies batch inference as the cost lever for latency-insensitive work",
+                "The response states the trade-offs rather than presenting it as a free saving",
+                "The response gives a concrete way to compare it against current spend",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "per-model-cost-breakdown",
+            "task_type": "chat",
+            "prompt": "Our Amazon Bedrock bill jumped this month. Can you break it down by model and tell me which one is driving the cost in us-east-1?",
+            "expected_output": "A per-model cost breakdown read from Cost Explorer as billed spend: ce:GetCostAndUsage grouped by PRODUCT_ATTRIBUTE model (or by USAGE_TYPE), with no single SERVICE = 'Amazon Bedrock' filter because Bedrock costs appear under more than one service name. Billed figures are labelled (billed). A token model (InputTokenCount, OutputTokenCount and both cache token types, by ModelId, priced from pricing:GetProducts or the pricing page) is used only as a labelled (estimated) cross-check, never as the billed figure, and per-caller splits are estimates unless CUR principal attribution or tagged application inference profiles exist. No price is fabricated; forward-looking projections go to the AWS Pricing Calculator. Any finding raised carries a catalog check-id such as LLM-COST-001; a breakdown with no finding needs none.",
+            "should_trigger": true,
+            "assertions": [
+                "The response does not filter Cost Explorer to the single service name 'Amazon Bedrock', or says Bedrock costs can appear under more than one service name",
+                "The response labels billed figures as billed and any token-model figure as estimated, and never presents one as the other",
+                "The response does not fabricate a price and routes forward-looking projections to the AWS Pricing Calculator or Bedrock pricing page",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "billed-at-zero-cost-unexplained",
+            "task_type": "chat",
+            "prompt": "Cost Explorer DAILY, USAGE_TYPE, service 'Amazon Bedrock Service', for USE1-anthropic.claude-sonnet-5-mantle-input-tokens-standard: 2026-10-18 qty 6,100.19 (thousand tokens) cost $32.87 (input+output lines together); 2026-10-28 qty 196.43 cost $0.000; 2026-11-04 qty 7,007.31 cost $0.000; 2026-11-05 qty 2,538.79 cost $0.000; 2026-11-06 qty 417.02 cost $0.000. CloudWatch InputTokenCount for us.anthropic.claude-sonnet-5 on the same UTC days matches those quantities exactly. Earlier days were charged. What's going on?",
+            "expected_output": "Reports the days as billed at $0: the quantities match the metered tokens but the cost is $0.000, and the reason is not visible from these reads. Reads or asks for RECORD_TYPE for those days (Credit, Refund, DiscountedUsage) and names no cause unless a RECORD_TYPE line shows one, not even as a hypothesis or 'most likely'. Does not re-price the tokens as spend that is owed, not yet rated or 'should have cost'. Points the user to the billing console or AWS Billing support. Names 'Amazon Bedrock Service' as the service the lines are billed under.",
+            "should_trigger": true,
+            "assertions": [
+                "The response says the token quantities are billed and match the metered tokens, but the cost is $0 and the reason is not visible from the data",
+                "The response checks or asks for RECORD_TYPE (credits, refunds, discounts) before naming any cause",
+                "The response does not name a cause for the $0 cost (promotion, private pricing, rating delay, pipeline gap, bug), even as a likely explanation",
+                "The response does not compute what the tokens 'should' have cost or call it spend that is owed",
+                "The response points the user to AWS Billing support or the billing console",
+                {
+                    "text": "No 'should have cost' or owed dollar figure",
+                    "evaluator": "regex",
+                    "pattern": "(?i)(should (land|have cost|cost)( around| about)?\\s*~?\\$\\d|~?\\$[\\d,.]+\\s*(\\(estimated\\)\\s*)?(of|in)\\s+(unbilled|unrated|owed|unpriced))",
+                    "match": "absent"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "burndown-sum-not-maximum",
+            "task_type": "chat",
+            "prompt": "Is the output-token burndown visible in our numbers for Claude Sonnet 5? Over the last 14 days, the minutes with traffic (412 of them) add up to: InputTokenCount 29,079,194, OutputTokenCount 7,506,288, and EstimatedTPMQuotaUsage 20,141,182 (GetMetricData, Period 60, Statistic Maximum). That is lower than the tokens we send, so it looks like there is no burndown at all.",
+            "expected_output": "Says the conclusion does not follow: with Statistic Maximum, each minute's value is the largest single request, not the minute's quota use, so it understates EstimatedTPMQuotaUsage. Per-minute quota use is the Sum at 60 s; the observed output weight is (Sum(EstimatedTPMQuotaUsage) - InputTokenCount - CacheWriteInputTokenCount) / OutputTokenCount over the same window (input and cache writes at 1x). Because the pasted figures use Maximum, the value it needs is missing, so with the account connected it re-reads the series once with Sum (a 1-day period gives the same totals) and reports the weight (in this account about 10x). It says burndown applies to quota accounting, not billing, and does not state other models' rates as facts.",
+            "should_trigger": true,
+            "assertions": [
+                "The response says the Maximum statistic is the largest single request and understates per-minute quota use",
+                "The response says per-minute quota use must be read as Sum at a 60-second period",
+                "The response does not conclude from these numbers that there is no burndown",
+                "The response re-reads the series with Sum and reports the observed output weight (about 10x in this account)",
+                "The response says burndown applies to quota accounting, not the bill",
+                {
+                    "text": "Names the Sum statistic",
+                    "evaluator": "regex",
+                    "pattern": "(?i)\\bSum\\b"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "mantle-usage-type-is-not-mantle-endpoint",
+            "task_type": "chat",
+            "prompt": "Our Cost Explorer lines for Claude Sonnet 5 are named USE1-anthropic.claude-sonnet-5-mantle-input-tokens-standard. Does that mean our traffic goes through the bedrock-mantle endpoint, so the '[bedrock-mantle endpoint] Input tokens per minute' quota is the one that applies to us?",
+            "expected_output": "No: a '-mantle-' usage-type name does not show which endpoint served the calls, and '-mantle-…-standard' lines bill at the model's Standard rate. Decide the endpoint from the metrics: calls through bedrock-runtime publish to AWS/Bedrock (InputTokenCount by ModelId), calls through the bedrock-mantle endpoint publish to AWS/BedrockMantle (TotalInputTokens). If the traffic is in AWS/Bedrock under a us. profile, the cross-Region tokens-per-minute quota applies, not the bedrock-mantle quota.",
+            "should_trigger": true,
+            "assertions": [
+                "The response says the -mantle- usage-type name does not prove the bedrock-mantle endpoint was used",
+                "The response decides the endpoint from which CloudWatch namespace has the traffic (AWS/Bedrock vs AWS/BedrockMantle)",
+                "The response says the cross-Region quota applies when the traffic is in AWS/Bedrock through a us. profile",
+                {
+                    "text": "Names the namespace that tells the endpoint apart",
+                    "evaluator": "regex",
+                    "pattern": "AWS/BedrockMantle"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "quota-lookup-by-code",
+            "task_type": "chat",
+            "prompt": "How do you find the applied tokens-per-minute quota for our Claude Sonnet 5 calls through the us. inference profile without paging through every Bedrock quota? Last time this took forever.",
+            "expected_output": "Resolves the form (us. profile = 'Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5'), takes its code from the skill's code table and reads it with one GetServiceQuota call, checking the returned name, then reports the code, name and applied value (L-D4FBCF4E, 6,000,000, read live on 2026-11-11). Explains that ListServiceQuotas cannot filter by name, so the fast path is a known code, and gives the CLI command for a quick repeat. Does not page through the whole quota list.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the quota live with GetServiceQuota on a code and checks the returned name",
+                "The response chooses the cross-Region quota form for the us. profile",
+                "The response does not page through the whole quota list",
+                "The response shows the quota in a table with the quota name, code, applied value and whether it is adjustable",
+                {
+                    "text": "Cites the code",
+                    "evaluator": "regex",
+                    "pattern": "L-D4FBCF4E"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "quota-headroom",
+            "task_type": "chat",
+            "prompt": "We call Claude Sonnet 5 through the us. inference profile from us-east-1. What is our applied tokens-per-minute quota for it, and how much headroom did we have at our peak over the last 15 days?",
+            "expected_output": "Takes the code for 'Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5' from the skill's code table, reads it with GetServiceQuota and checks the name: applied value 6,000,000. Reads the peak EstimatedTPMQuotaUsage (Sum, 60-second period) for us.anthropic.claude-sonnet-5 over the trailing 15 days with its timestamp and reports headroom as peak divided by 6,000,000. Does not use the Claude Sonnet 5.5, Global cross-region or bedrock-mantle quotas and does not page through the whole quota list.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the cross-Region Claude Sonnet 5 tokens-per-minute quota live and reports its applied value",
+                "The response computes headroom as the 15-day peak EstimatedTPMQuotaUsage (Sum, 60-second period) divided by the applied value, with the peak's time",
+                "The response does not page through the whole quota list",
+                "The response shows the quota in a table with the quota name, code, applied value and whether it is adjustable",
+                {
+                    "text": "Reports the applied value",
+                    "evaluator": "regex",
+                    "pattern": "(?i)(6,000,000|6000000|6\\.0 ?M\\b|6 ?M\\b|6 million)"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "tokens-per-day-quota",
+            "task_type": "chat",
+            "prompt": "Is there a tokens-per-day quota for Claude Sonnet 5 in us-east-1? If there is, what is our applied value?",
+            "expected_output": "The skill's code table has no tokens-per-day row for Claude Sonnet 5, and a missing row is not proof. Does not guess and does not apply another model's tokens-per-day value (for example Claude Sonnet 4.5). Either it has read the full list (only if the user asked) and says there is no tokens-per-day quota specific to Claude Sonnet 5 (the account-wide 'Cross-Model Max Tokens Per Day' applies to all models), or it says the quota was not read, does not page through the list unasked, and gives a CLI command that filters the list by name or asks for the code.",
+            "should_trigger": true,
+            "assertions": [
+                "The response does not conclude the quota is absent from a partial list",
+                "The response does not apply a tokens-per-day value from another model, such as Claude Sonnet 4.5 or Claude Sonnet 5.5",
+                "The response gives a command or console path to check, or reports a full-list result, rather than guessing",
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "invocation-log-retention",
+            "task_type": "chat",
+            "prompt": "Our Bedrock invocation logging has been on since mid-October. Is it costing us storage that grows forever? Check this account in us-east-1.",
+            "expected_output": "Reads the model invocation logging configuration and its destination: the CloudWatch Logs group /llmops-demo/bedrock-invocations, no S3 destination. Reads the group with DescribeLogGroups: no retention policy, so logs never expire (about 60 MB stored when read on 2026-11-12; storedBytes can lag). Raises LLM-COST-006 (MEDIUM) and gives the command for the user to run, aws logs put-retention-policy --log-group-name /llmops-demo/bedrock-invocations --retention-in-days <N>, with N workload-specific. Does not change the retention itself.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the invocation logging destination and the log group's retention setting from the account",
+                "The response reports that the log group has no retention policy and raises LLM-COST-006",
+                "The response gives the retention command for the user to run and does not change the setting itself",
+                {
+                    "text": "Gives the retention command",
+                    "evaluator": "regex",
+                    "pattern": "(?i)put-retention-policy"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "prompt-cache-payoff",
+            "task_type": "chat",
+            "prompt": "Is prompt caching paying off for us? Look at the last 14 days in us-east-1.",
+            "expected_output": "Reads CacheWriteInputTokenCount and CacheReadInputTokenCount (Sum) by ModelId for the trailing 14 days, with the window stated. Finds that us.openai.gpt-5.6-terra writes to the cache but does not read from it (about 1.4M cache-write tokens and 0 cache-read tokens for 2026-10-29 to 2026-11-11, read on 2026-11-12; the figures move with the window) and raises LLM-COST-002 (MEDIUM): caching in use but not read back. For us.anthropic.claude-sonnet-5, the heaviest model (about 44M input tokens, no cache writes or reads), says caching is not used and raises LLM-COST-002 above INFO (unconfirmed) only with a confirming signal, such as a repeated prefix or a high input floor in the invocation logs.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads cache write and cache read token metrics by model for the window",
+                "The response identifies GPT-5.6 Terra as writing to the cache without reading it back and raises LLM-COST-002",
+                "A no-caching finding for Claude Sonnet 5 is either INFO (unconfirmed) or backed by a confirming signal from the logs",
+                {
+                    "text": "Names the model with unread cache writes",
+                    "evaluator": "regex",
+                    "pattern": "(?i)gpt-5\\.6[- ]?terra"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "direct-model-id-vs-profile",
+            "task_type": "chat",
+            "prompt": "Are any of our Bedrock calls in us-east-1 using a direct model ID where we should be using an inference profile? Check the last 14 days.",
+            "expected_output": "Lists the ModelId values with traffic in AWS/Bedrock for the trailing 14 days, treats an ID that GetInferenceProfile rejects as a direct call, and checks ListInferenceProfiles for a profile for that model. Raises LLM-INV-002 (HIGH) for amazon.nova-lite-v1:0 (about 25 direct invocations in the window read on 2026-11-12, while the us.amazon.nova-lite-v1:0 profile exists and carries most Nova Lite traffic). Does not raise LLM-INV-002 for direct IDs whose model has no inference profile (for example the Titan embedding models, Jamba, Kimi, MiniMax, Nemotron, Qwen, Palmyra Vision).",
+            "should_trigger": true,
+            "assertions": [
+                "The response identifies amazon.nova-lite-v1:0 as called directly while a us. profile exists, and raises LLM-INV-002",
+                "The response does not raise LLM-INV-002 for a model that has no inference profile",
+                "The response bases the answer on the account's metrics or inference profiles, not on general advice alone",
+                {
+                    "text": "Names the direct model",
+                    "evaluator": "regex",
+                    "pattern": "(?i)nova-lite"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "delete-pt-stays-read-only",
+            "task_type": "chat",
+            "prompt": "Delete our provisioned throughput claude-launch-pt right now, we don't need it anymore.",
+            "expected_output": "Does not delete or modify anything; the skill is read-only. Checks whether the provisioned throughput exists in the account (there is none named claude-launch-pt in us-east-1 when read on 2026-11-12) and says what it found. Gives the user the command to run themselves (aws bedrock delete-provisioned-model-throughput --provisioned-model-id <id>) and the caveats: move traffic off it first, and a commitment bills for its whole term and renews unless auto-renew is cancelled.",
+            "should_trigger": true,
+            "assertions": [
+                "The response says it will not delete the provisioned throughput itself and leaves the action to the user",
+                "The response checks whether the provisioned throughput exists in the account and reports what it found",
+                "The response mentions moving traffic first or that a commitment bills until its term ends",
+                {
+                    "text": "Gives the delete command for the user",
+                    "evaluator": "regex",
+                    "pattern": "(?i)delete-provisioned-model-throughput"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-token-context-overflow",
+            "task_type": "chat",
+            "prompt": "Our calls started failing with a validation error about input length after we added conversation history. What is the limit and how should we manage it?",
+            "should_trigger": false,
+            "assertions": []
+        },
+        {
+            "id": "neg-guardrail-false-positive",
+            "task_type": "chat",
+            "prompt": "Our guardrail masks internal ticket IDs like ABC-1234 as if they were PII. How do we stop that?",
+            "should_trigger": false
+        },
+        {
+            "id": "neg-vpc-endpoint-timeout",
+            "task_type": "chat",
+            "prompt": "Our Lambda in a private subnet with no NAT times out calling Bedrock. What networking do we need to add?",
+            "should_trigger": false
+        },
+        {
+            "id": "neg-kb-embedding-dimension",
+            "task_type": "chat",
+            "prompt": "Our knowledge base ingestion fails after we changed embedding model. What is wrong with the index?",
+            "should_trigger": false
+        },
+        {
+            "id": "neg-live-outage-503",
+            "task_type": "chat",
+            "prompt": "Every Bedrock call from our app started failing with 503 ServiceUnavailableException ten minutes ago. Is AWS down or is it us?",
+            "should_trigger": false,
+            "assertions": []
+        }
+    ]
+}

@@ -1,0 +1,71 @@
+{
+  "version": "v10",
+  "iteration": 2,
+  "eval_id": "inv-stale-connection-pool",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's primary (most-likely) hypothesis explicitly identifies stale pooled SDK connections silently dropped by an idle-timeout middlebox, where botocore keeps idle connections open, they go stale/dead, and the next call on the dead socket hangs until the read timeout - exactly matching the expected root cause of a stale connection pool causing long-lived connections to go bad and be reused until timeout. It correctly notes this explains why a restart clears the issue (restart creates fresh connections). The investigation also appropriately avoids over-confirming the premise: it explicitly states that 0 Bedrock read-timeout records were found in the 13 log groups searched, that the affected service's logs weren't located, and labels this as a hypothesis 'not confirmed in telemetry' rather than asserting it as a certain fact. It also correctly distinguishes and rules out unrelated workload errors (e.g., the private Lambda VPC issues and syntax errors) as likely being separate seeded fault scenarios rather than conflating them with the reported symptom, and separately notes the long-generation-time hypothesis doesn't fit because a restart wouldn't fix it. This aligns well with the expected root cause's emphasis on correctly identifying the stale-connection-pool cause while not falsely attributing unrelated workload errors and being honest about telemetry limitations.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response uses the fact that a restart clears the problem as evidence for client-side state",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The description states: 'This fits the empty Bedrock-side telemetry and explains why a restart helps for a while.' This directly uses the restart-clears-it symptom as supporting evidence for the stale-connection (client-side state) hypothesis.",
+          "reasoning": "The output explicitly ties the restart behavior to the hypothesis that client-side pooled connections become stale, treating the restart-clears-it fact as corroborating evidence.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response identifies a stale connection pool or long-lived client as the cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Hypothesis title: 'Stale pooled SDK connections silently dropped by an idle-timeout middlebox' with description 'botocore keeps idle connections open, a NAT, firewall or proxy on the egress path silently drops them after an idle timeout ... and the next call on a dead socket waits out the full 60 s read timeout without reaching Bedrock.'",
+          "reasoning": "The response clearly identifies stale pooled SDK connections (long-lived client holding dead sockets) as the most likely cause, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response prescribes a concrete client-side fix",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No remediation section or explicit fix (e.g., enabling TCP keepalive, setting max_pool_connections, periodic client recycling, Config(retries=...) or connection pool refresh) is given anywhere in the output. The closest statement is a gap: 'Confirmation requires the service's own logs: ReadTimeoutError after exactly the read timeout...' which is about further investigation, not a fix.",
+          "reasoning": "The output is purely diagnostic/investigative, listing hypotheses, gaps, and supporting observations, but never prescribes a concrete client-side remediation such as enabling keepalive, reducing idle connection lifetime, or recreating the Boto3/botocore client periodically.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'LLM-TEL-001'"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.75
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "8m32s",
+    "cost": "$4.25",
+    "context_window": {
+      "utilization": "14.2%",
+      "compaction_count": 0
+    }
+  }
+}

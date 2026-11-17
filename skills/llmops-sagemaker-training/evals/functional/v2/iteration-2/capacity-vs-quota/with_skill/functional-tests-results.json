@@ -1,0 +1,85 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "capacity-vs-quota",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-sagemaker-training' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent could not find the specific job (no job name/region provided), but it still delivered a thorough, correct, read-only diagnostic framework that matches the expected methodology: it explains checking DescribeTrainingJob FailureReason and SecondaryStatus, and checking service-quotas for the instance type, before determining whether the issue is capacity (InsufficientInstanceCapacity) or quota (ResourceLimitExceeded / quota value of 0). It correctly distinguishes the two cases: capacity problem -> retry with backoff, different instance type/region, explicitly states a quota increase won't help; quota problem -> request quota increase, explicitly states retrying won't help. It provides the exact AWS CLI commands for describe-training-job, list-service-quotas, and request-service-quota-increase, and explicitly says it only reads the account and doesn't change anything (read-only), asking the user to run the quota request themselves. This matches the expected output's requirement of citing observed service-quota value as evidence and prescribing the correct one of the two remediations without claiming both. While the agent didn't have an actual job to analyze (due to no matching job found), it still presented the complete diagnostic framework exactly as expected, including the conditional logic for distinguishing the two failure modes.</reasoning>\n<parameter name=\"confidence\">medium",
+      "evidence": "\"Failed with InsufficientInstanceCapacity ... Capacity problem... Retry with backoff... A quota increase won't help.\" vs \"Failed with ResourceLimitExceeded, or the quota value is 0 ... Quota problem... Request a quota increase. Retrying won't help.\" Also: \"I only read your account and never change anything, so you'd run the quota request yourself.\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response distinguishes InsufficientInstanceCapacity (AWS-side capacity) from an instance-type service quota of zero (customer quota) as two different root causes with opposite remediations",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Table rows: 'Failed with InsufficientInstanceCapacity ... Capacity problem. AWS has no GPUs of that type available right now. ... A quota increase won't help.' vs 'Failed with ResourceLimitExceeded, or the quota value is 0 ... Quota problem. Your account's limit for that instance type is too low. ... Request a quota increase. Retrying won't help.'",
+          "reasoning": "The response explicitly distinguishes the two causes with opposite remediation advice in a clear table format, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reads a service-quotas value as evidence rather than assuming the cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Step 2: 'Check your quota for that instance type... aws service-quotas list-service-quotas --service-code sagemaker --region <region> --query \"Quotas[?contains(QuotaName,'training job usage')...\"' followed by 'If the quota value is 0, or lower than your instance count, request an increase.'",
+          "reasoning": "The agent instructs the user to read the actual quota value via CLI command as evidence before concluding it's a quota problem, rather than assuming. This satisfies the assertion, though it is prescriptive guidance rather than the agent itself executing and showing a read value, since no job was found.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response prescribes retry/alternate-instance for a capacity shortfall and a quota-increase request only for a zero quota, not both",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Retry with backoff, use a different GPU instance type, or try another region. A quota increase won't help.' for capacity vs 'Request a quota increase. Retrying won't help.' for quota=0",
+          "reasoning": "The response clearly separates the two remediation paths and explicitly states each one is NOT the other, satisfying the assertion that only one remedy applies per case.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites the relevant training sub-family check-id and gives the remediation as a command for the operator to run",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response provides no mention of any AWS Trusted Advisor or Service Quotas 'check-id' for a training sub-family; it only references quota names like 'ml.p4d.24xlarge for training job usage' and provides describe-training-job and list-service-quotas commands.",
+          "reasoning": "The assertion requires citing a specific check-id for the training sub-family quota check, which is absent. The response gives commands for remediation but never references a 'check-id' concept at all, so this assertion fails.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries an LLM-SM training check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "14s",
+    "cost": "$0.12",
+    "context_window": {
+      "utilization": "6.0%",
+      "compaction_count": 0
+    }
+  }
+}

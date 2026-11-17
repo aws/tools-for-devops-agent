@@ -1,0 +1,75 @@
+{
+  "version": "v10",
+  "iteration": 3,
+  "eval_id": "latency-regression-investigation",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation explicitly rules out a Bedrock service-side latency regression (CloudWatch InvocationLatency metrics actually show stable or improved per-token latency), and instead focuses on client-side mechanisms that would not be captured by InvocationLatency: hidden SDK retries on ApplyGuardrail throttling (added client-side latency not reflected in the metric), synchronous guardrail stream processing adding ~2.3s to time-to-first-chunk (client-observed, measurement-boundary gap), and Lambda cold starts doubling duration with \"no Bedrock-side change.\" The summary explicitly notes \"Retried attempts do not appear in InvocationLatency\" and frames these as candidates explaining the client vs. CloudWatch metric discrepancy. This aligns with the expected root cause of a client-side (outside Bedrock's inference path) cause creating a measurement-boundary discrepancy. The investigation correctly identifies the general class of root cause (client-side effects not captured by server-side metric) even though it could not pin down which specific application was affected.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause explains the discrepancy between application-measured latency and the CloudWatch InvocationLatency metric rather than treating the two as interchangeable",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Retried attempts do not appear in InvocationLatency.' and the gh-chat-app finding distinguishes 'time-to-first-chunk' and 'total time' from the underlying Bedrock invocation metric, noting 'Bedrock invocation logs agree: guarded calls show latencyMs ~3,500\u20133,900... against ~1,500\u20132,000 ms unguarded' as a separate measure from client-observed TTFT/total.",
+          "reasoning": "The investigation explicitly addresses the discrepancy by proposing mechanisms where client-side latency (retries, synchronous guardrail processing) is not captured in InvocationLatency, treating the two as distinct rather than interchangeable.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The investigation states what CloudWatch InvocationLatency does and does not include, and uses that scope to localise the regression",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The only related statement is 'Retried attempts do not appear in InvocationLatency' \u2014 this is an inference about one mechanism, not a stated definition of the metric's full scope (e.g., it doesn't discuss whether InvocationLatency includes streaming TTFT, guardrail sync processing, etc.) used to localize the regression across hypotheses.",
+          "reasoning": "The investigation never explicitly states what InvocationLatency metric does or does not include (e.g., whether it covers streaming, guardrail calls, retries). It infers behavior (retries not appearing in the metric) but does not explicitly define the metric's scope/documentation-based boundaries to localize the regression systematically.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The root cause is distinguished from its symptoms rather than restating 'latency increased'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'ApplyGuardrail returns ThrottlingException... because the input is 1,760 text units against a 1,000-unit limit' and 'ConverseStream with a guardrail in sync mode delivers the first chunk after 2,672 ms versus 376 ms unguarded' are specific causal mechanisms, not restatements of the symptom.",
+          "reasoning": "The findings go beyond restating 'latency increased' by identifying specific mechanisms (ApplyGuardrail retries on oversized input, synchronous guardrail stream processing, cold starts after redeploy) distinct from the symptom description.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation names the specific evidence that led to its conclusion rather than asserting a cause without support",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "E.g., 'guarded_sync mode (n=16) averages 2,672 ms time-to-first-chunk and 3,653 ms total... unguarded mode (n=15) averages 376 ms time-to-first-chunk and 2,085 ms total' and 'Sonnet 5 InvocationLatency fell from 12\u201330 s (Nov 3\u201310) to 7.9\u20139.6 s (Nov 11\u201316) as its average output dropped from ~2,250 to ~900 tokens' provide named, quantified evidence for conclusions.",
+          "reasoning": "Each hypothesis is backed by specific supporting observations with concrete numbers, log group names, timestamps, and metric values.",
+          "confidence": "high"
+        },
+        {
+          "text": "A latency or invocation metric is named explicitly",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'InvocationLatency'"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m20s",
+    "cost": "$3.16",
+    "context_window": {
+      "utilization": "16.7%",
+      "compaction_count": 0
+    }
+  }
+}

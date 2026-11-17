@@ -1,0 +1,80 @@
+{
+  "version": "v12",
+  "iteration": 1,
+  "eval_id": "cost-throttle-default-quota",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-capacity-cost' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response reports account-specific, live-read quota values (not generic defaults stated as if fixed) for the relevant Bedrock models in us-east-1, explicitly noting that the Sonnet 5 applied value equals the AWS default and that no quota increase was ever requested. It compares observed peak token usage (e.g., Sonnet 5 peak ~1.62M tokens/min vs 6M limit, ~27% utilization) against the actual limit, and examines throttle and client error metrics to assess whether genuine throttling is occurring. It explicitly reasons that based on current usage being well below limits, a quota increase likely wouldn't fix the issue, pointing instead to other causes (large max_tokens reserving quota up front, a different unread quota, a different endpoint/region, or non-adjustable model limits) \u2014 effectively distinguishing a true under-provisioning situation from a scenario where backoff/call-pattern changes (or getting error specifics) would resolve the problem. The remediation steps are ordered: (1) get the exact error/confirm what's happening, (2) add retries with backoff and reduce max_tokens, (3) request an increase if the specific quota is confirmed to be the culprit, (4) find additional quota codes if needed. This matches the expected ordered approach of confirm the quota -> measure the breach -> then either request increase or change call pattern. The response is thorough, data-driven, and addresses the core asks (actual limit and what to do) with appropriate caveats about data limitations (e.g., no throttle datapoints found, metric estimates). This substantively meets the expected output criteria.",
+      "evidence": "\"For Claude Sonnet 5 the applied value (6,000,000) equals the AWS default, so you're on the defaults.\" ... \"Its peak was about 1.62M estimated tokens/min, roughly 27% of its 6M limit.\" ... \"So based on these reads, a quota increase wouldn't fix this, and I wouldn't file one yet.\" ... \"1. Get the exact error from one failing call... 2. Add retries with exponential backoff and jitter. Lower max_tokens... 3. If it is the Sonnet 5 token quota and the error confirms it, you can request an increase...\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reports the actual applicable quota value or says precisely where to read it, rather than quoting a generic number",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Table lists exact applied values per quota code, e.g. 'Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5 | L-D4FBCF4E | 6,000,000 | Yes' and explains 'For Claude Sonnet 5 the applied value (6,000,000) equals the AWS default, so you're on the defaults.' It also explains where to find the RPM quota: 'To find the request-per-minute quota code, search the quota name in the Service Quotas console under Amazon Bedrock. Or run aws service-quotas list-service-quotas...'",
+          "reasoning": "The agent gives concrete applied quota values read live from the account (not a generic textbook number) and also tells the user precisely where/how to find the quota it couldn't read (RPM quota), satisfying either branch of the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response compares observed usage against the quota rather than assuming the quota is the problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Peak usage: Claude Sonnet 5 is your only heavy model. Its peak was about 1.62M estimated tokens/min, roughly 27% of its 6M limit... So based on these reads, a quota increase wouldn't fix this, and I wouldn't file one yet.'",
+          "reasoning": "The agent explicitly compares observed peak usage against the quota limit (27% of 6M) and concludes that the quota is not the bottleneck, rather than assuming the quota itself is the problem.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes sustained under-provisioning from burstiness that retry with backoff would absorb",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response discusses 'Peak usage' as 60-second sums and notes 'This metric is an estimate and ignores the up-front reservation of input plus max_tokens' but does not explicitly analyze whether throttling is due to sustained under-provisioning versus short bursts that backoff/retry would resolve. It recommends 'Add retries with exponential backoff and jitter' as a blanket remediation without first establishing whether the throttling pattern is burst-driven or sustained.",
+          "reasoning": "While the agent mentions peak vs average usage, it does not explicitly distinguish between sustained under-provisioning (which would require a quota increase) and transient burstiness (which retries could absorb). The retry recommendation is given generically as one of several steps without this reasoning being surfaced.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response lists several 'findings' such as 'A large max_tokens', 'A different quota', 'Another region or endpoint', 'A model with a fixed limit' as possible causes, none of which carry any check-id (e.g., LLM-COST, LLM-PT, LLM-INV) or an assigned severity level.",
+          "reasoning": "The assertion requires every finding to carry a specific check-id format with severity. The response's findings are presented as narrative possibilities without any structured check-id or severity labeling, so this fails on format grounds. Even setting aside the ID requirement, the findings are speculative but explicitly flagged as uncertain, so they are not unsupported, but they still lack the required check-id/severity structure.",
+          "confidence": "high"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m16s",
+    "cost": "$0.64",
+    "context_window": {
+      "utilization": "8.8%",
+      "compaction_count": 0
+    }
+  }
+}

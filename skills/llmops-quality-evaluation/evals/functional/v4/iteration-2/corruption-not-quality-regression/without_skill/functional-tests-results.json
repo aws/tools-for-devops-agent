@@ -1,0 +1,86 @@
+{
+  "version": "v4",
+  "iteration": 2,
+  "eval_id": "corruption-not-quality-regression",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output calls for the investigation to explicitly reject the \"score prompt quality\" framing, explain that abrupt onset + partial traffic + no code/model/prompt change is the signature of a service-side/infrastructure fault, and route the user to incident triage/AWS support rather than prescribing prompt edits \u2014 while still being allowed to recommend telemetry.\n\nThe actual investigation does partially align: it does not score prompt quality, and two of its findings (maxTokens truncation, guardrail masking) are legitimate config-based explanations for two of the three symptoms. For the actual \"garbled\" symptom (repetition/off-topic answers), it offers only hypotheses (Lambda redeploy causing cross-request mixups, streaming chunk joining, cache key collision) rather than a firm root cause, and frames these as app-code/caching issues to investigate further \u2014 not explicitly reframed as a \"service-side or infrastructure fault distinct from a prompt quality regression.\" It does not explicitly state that evaluation scoring is the wrong instrument, nor does it explicitly recommend routing to incident triage/AWS support. Instead it treats this as an application-code investigation (Lambda redeploy, streaming, caching) to pursue with more telemetry (request IDs).\n\nWhile the investigation does avoid prescribing prompt edits and does identify plausible non-prompt causes, it stops short of the key expected framing: that this looks like a service-side/infra fault, that evaluation scoring is the wrong instrument, and that the user should be routed to incident triage/AWS support. The hypotheses offered (shared buffer, streaming replay, cache key error) are framed as app-code bugs rather than AWS service-side faults, which is a different causal attribution than what's expected. The expected root cause explicitly wants the response to decline the prompt-quality framing and explain abrupt onset/partial blast radius as evidence of service-side issues \u2014 this specific framing and the AWS support routing is largely missing from the actual summary.",
+      "evidence": "\"Hypothesis: Responses mixed up between concurrent requests in app code ... A shared global buffer/variable in a reused Lambda container could hand one request another's answer... Bedrock's logged output is clean, so the corruption would be after Bedrock returns.\" vs expected: \"route the user to incident triage and AWS support rather than prescribing prompt edits\" and \"evaluation scoring is the wrong instrument here\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response declines the user's framing and does not present prompt edits as the fix",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Cause: maxTokens set to 80 truncates answers... Affects every long answer, a setting rather than a prompt issue.' and 'Cause: Guardrail sensitive-info filter masks ticket IDs' \u2014 these are configuration/infra causes, not prompt suggestions.",
+          "reasoning": "The investigation summary reframes the problem away from prompt-edit fixes toward infrastructure causes (maxTokens config, guardrail config, redeploy-related code issues), not prompt wording.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response identifies a service-side or infrastructure fault as the likely cause rather than a model quality regression",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'A shared global buffer/variable in a reused Lambda container could hand one request another's answer... All llmops-lf-* Lambdas were redeployed on 11-16 13:46-14:11 UTC; check that redeploy for response-handling, streaming or caching changes.'",
+          "reasoning": "The findings point to infrastructure/config causes (maxTokens setting, guardrail policy, Lambda redeploy affecting response handling) rather than model quality regression.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives the reasoning that separates the two: abrupt onset, only part of the traffic affected, and no change to model, prompt, or code",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The summary notes timing ('redeployed on 11-16 13:46-14:11 UTC') and that 'Bedrock's logged output is clean, so the corruption would be after Bedrock returns,' but does not explicitly combine abrupt onset + partial traffic + no prompt/model/code change as reasoning for ruling out model quality issues.",
+          "reasoning": "The summary does not explicitly articulate the reasoning tying together abrupt onset, partial traffic, and no change to model/prompt/code as a combined argument for a service-side fault. It does mention the redeploy timing and that Bedrock's logged output is clean, but it doesn't explicitly state 'no change to model/prompt/code, only part of traffic affected, abrupt onset' as a unified diagnostic argument.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response states that running an evaluation job would not diagnose this, or otherwise explains why quality scoring is the wrong instrument here",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of evaluation jobs, quality scoring, or why that approach would fail to diagnose the issue anywhere in the provided summary.",
+          "reasoning": "The summary does not explicitly state that running an evaluation job would not diagnose this or explain why quality scoring is the wrong instrument. It focuses on root-cause investigation findings and gaps, not on critiquing the evaluation approach itself.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response recommends escalation to incident triage or AWS support rather than treating it as a self-service quality fix",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'Provide a few request IDs, app and region to close this.' and 'check that redeploy for response-handling, streaming or caching changes' \u2014 these are self-service investigative asks, not escalation recommendations to incident triage or AWS support.",
+          "reasoning": "The summary does not explicitly recommend escalating to incident triage or AWS support. It instead asks for more data (request IDs, timestamps) and suggests checking the Lambda redeploy, framing this as an internal investigation task rather than an escalation recommendation.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response still offers a way to quantify what share of traffic is affected",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'User reported that a small share of LLM responses loop or answer a different question. No garbled response was found in Bedrock invocation logs... no timestamps or request IDs of affected responses were provided.' No quantification method is offered for the garbled-response symptom specifically.",
+          "reasoning": "While the summary quantifies the truncation issue (234 of 871 calls, 27%), it does not provide a way to quantify the share of traffic affected by the garbled/off-topic response issue specifically, which is the main complaint. It states 'a small fraction' was reported but doesn't offer a method or data to measure this share.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m8s",
+    "cost": "$2.56",
+    "context_window": {
+      "utilization": "10.5%",
+      "compaction_count": 0
+    }
+  }
+}

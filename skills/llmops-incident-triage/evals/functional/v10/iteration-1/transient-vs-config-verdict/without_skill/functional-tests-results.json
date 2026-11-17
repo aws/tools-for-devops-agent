@@ -1,0 +1,82 @@
+{
+  "version": "v10",
+  "iteration": 1,
+  "eval_id": "transient-vs-config-verdict",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected root cause is that the reported symptom (broad Bedrock InternalServerError across several models in us-east-1) is actually a provider-side issue (or at minimum, the investigation should determine whether it's provider-side vs customer-side by checking AWS Health, blast radius, and correlation with deploys) - and should NOT attribute it to customer-side misconfigurations found in unrelated eval workloads. The investigation instead attributed the issue entirely to customer-side misconfigurations: (1) a missing IAM policy for bedrock:InvokeModel on the billing agent's exec role, (2) a MODEL_ID typo in the support agent, and (3) a missing DynamoDB table for the shipment-status tool. These are all configuration/application-level issues specific to the eval account's seeded-fault workloads, not a genuine Bedrock service-wide InternalServerError issue. The investigation did not check AWS Health Dashboard for Bedrock, did not assess whether the issue was correlated with a customer-side change, and conflated unrelated eval workload errors (AccessDeniedException, invalid model ID, DynamoDB table not found) with the reported symptom of Bedrock InternalServerError across multiple models. This matches the expected root cause's concern precisely: 'A correct investigation reports the cause the telemetry actually shows for the workload in question, does not attribute unrelated workloads' errors to it.' The investigation did exactly what the expected answer warns against - it attributed unrelated causes (AccessDenied, invalid model ID, missing DynamoDB table) to the reported Bedrock InternalServerError symptom, rather than correctly identifying this as a provider-side issue or correctly scoping the investigation to the actual workload bearing the symptom.</reasoning>\n<parameter name=\"evidence\">\"The llmops_eval_billing_agent runtime... gets AccessDeniedException on Converse\" and \"MODEL_ID=us.amazon.nova-micro-v9:0. That model ID doesn't exist... Every Converse call fails with 'The provided model identifier is invalid'\" and \"SHIPMENTS_TABLE=llmops-eval-shipments, but dynamodb list_tables in us-east-1 returns no llmops tables at all\" \u2014 none of these address the Bedrock InternalServerError across multiple models reported in the prompt; expected root cause requires checking AWS Health and confirming provider vs customer side, not attributing to unrelated seeded faults.</parameter>\n<parameter name=\"confidence\">high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names an explicit locus (PROVIDER, INFRASTRUCTURE, APPLICATION, or UNDETERMINED) rather than leaving the classification implicit",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output never uses or implies a PROVIDER/INFRASTRUCTURE/APPLICATION/UNDETERMINED classification label. It lists symptoms and findings (e.g., 'Cause: Billing agent exec role can't invoke nova-micro', 'Cause: Support agent MODEL_ID typo', 'Cause: shipment-status tool's DynamoDB table not found') but never states an overarching locus classification such as 'this is an APPLICATION issue' or similar explicit term.",
+          "reasoning": "The investigation summary is organized into Symptoms/Findings/Gaps without any explicit named locus classification matching the required vocabulary or an unmistakable equivalent.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response presents the classification as a structured ruling with the evidence that decided it, rather than hedging between both causes without committing",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The summary presents three separate 'Cause' findings (IAM permissions missing, model ID typo, missing DynamoDB table) each tied to different symptoms, but there is no overarching structured ruling statement like 'This is a misconfiguration issue, not an AWS service issue' that directly answers the user's PROVIDER vs APPLICATION question.",
+          "reasoning": "While each individual cause is evidenced, the response never commits to an overall ruling in response to the user's explicit question ('Is this an AWS service issue or something misconfigured on our side?'). It stops at listing per-symptom causes without a final verdict statement.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response reports the server-error rate across multiple models, not just the one the user mentioned, as the basis for judging blast radius",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The symptoms section states 'llmops_eval_billing_agent and llmops_eval_support_agent fail 3/3 every cycle, steady at 12\u201318 errors per 30 min... llmops_eval_orders_agent has 2\u20134 errors per 30 min. catalog/search agents are OK.' This covers multiple agents/models, not just one.",
+          "reasoning": "The response explicitly breaks down error rates across billing, support, orders, catalog, and search agents, satisfying the requirement to look at blast radius across multiple models.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states what it actually observed for each signal it checked, including explicitly saying when a signal returned no data rather than omitting it",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response explicitly notes a gap: 'Couldn't list the support agent's runtime versions: bedrock-agentcore:ListAgentRuntimeVersions was denied...' and another: 'Couldn't read the shipment-status tool's code: The agent role... was denied lambda:GetFunction...'. It also states concrete findings such as 'dynamodb list_tables in us-east-1 returns no llmops tables at all.'",
+          "reasoning": "The output explicitly calls out gaps/missing data for two different checks, and states concrete observed results (e.g., no tables found, role policy details), satisfying the requirement to report what was observed including no-data cases.",
+          "confidence": "high"
+        },
+        {
+          "text": "If the locus is provider-side (PROVIDER), the response prescribes no customer configuration change and recommends only retry, backoff, or regional failover",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not classify the issue as PROVIDER-side; in fact its findings point to APPLICATION-side misconfigurations (IAM permission gaps, a typo'd model ID, and a missing DynamoDB table), and it does not recommend retry/backoff/failover anywhere.",
+          "reasoning": "Since the locus assertion (index 0) was not satisfied and the actual content points to customer-side misconfiguration rather than provider-side issues, the conditional in assertion 4 is not met \u2014 there's no PROVIDER classification, and consequently no corresponding retry-only recommendation is given (nor would it be warranted).",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m34s",
+    "cost": "$3.77",
+    "context_window": {
+      "utilization": "12.5%",
+      "compaction_count": 0
+    }
+  }
+}

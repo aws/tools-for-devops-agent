@@ -1,0 +1,101 @@
+{
+    "skill_name": "llmops-rag-knowledge",
+    "evals": [
+        {
+            "id": "kb-active-but-empty",
+            "task_type": "chat",
+            "prompt": "Our Bedrock knowledge base shows status ACTIVE in the console but RAG queries against it come back empty with no sources. Is the knowledge base healthy?",
+            "expected_output": "The response explains that ACTIVE status does not mean the knowledge base is populated: ACTIVE only confirms the resource and vector-index wiring are valid. It checks ingestion-job history (ListIngestionJobs / GetIngestionJob) rather than KB status, and recognizes that an empty ingestion-job list means the data source was never synced, so the vector store is empty and retrieval silently returns nothing. It reports this as a CRITICAL-grade, never-synced condition (LLM-KB-001), and recommends running StartIngestionJob (giving the command) rather than calling it, confirming afterward that a COMPLETE job indexed a non-zero number of documents. It does not reproduce any retrieved chunk text and does not expose a raw account id.",
+            "should_trigger": true,
+            "assertions": [
+                "The response states that ACTIVE status does not mean the knowledge base is populated, and that it must verify ingestion-job history instead of KB status",
+                "The response identifies an empty ListIngestionJobs as 'never synced' and treats it as a CRITICAL-grade problem rather than a healthy or neutral state",
+                "The response recommends StartIngestionJob and gives the command rather than claiming to run it, consistent with being read-only",
+                "The response explains that a never-synced vector store silently returns nothing on retrieval, which is why queries come back empty",
+                {
+                    "text": "At least one finding carries an LLM-KB check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-KB-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "stale-rag-ingestion-and-chunking",
+            "task_type": "chat",
+            "prompt": "RAG answers from our knowledge base are out of date and retrieval quality is poor on exact part numbers. The last sync may have failed. What should we check?",
+            "expected_output": "The response reads the most recent ingestion job (GetIngestionJob) for status and statistics (documents scanned, indexed, failed) and failureReasons, flagging a FAILED job or a non-zero numberOfDocumentsFailed as stale/partial content (LLM-KB-002) with a recommendation to fix the source issue and re-run ingestion. For the exact-part-number retrieval problem it recognizes that semantic-only retrieval misses exact-match terms and recommends evaluating hybrid search (overrideSearchType = HYBRID) where the vector store supports it (LLM-KB-007), noting the threshold is workload-specific. It reports chunk counts, sources, and relevance scores only, never the content of retrieved chunks, and recommends rather than runs any ingestion job.",
+            "should_trigger": true,
+            "assertions": [
+                "The response inspects the latest ingestion job's status and statistics (documents scanned/indexed/failed) and failureReasons rather than only the knowledge base status",
+                "The response recommends evaluating hybrid search for the exact-match retrieval problem and notes that threshold is workload-specific rather than inventing a number",
+                "The response states it will report chunk counts, sources, and relevance scores but not reproduce the content of retrieved document chunks",
+                "The response gives ordered, concrete next steps and recommends re-running ingestion rather than claiming to start it",
+                {
+                    "text": "Findings cite LLM-KB check-ids",
+                    "evaluator": "regex",
+                    "pattern": "LLM-KB-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "kb-ingestion-access-denied",
+            "task_type": "chat",
+            "prompt": "Our Bedrock knowledge base ingestion job keeps failing with an access denied error, but the S3 data is definitely there and unchanged. What is actually wrong and exactly what do we need to fix?",
+            "expected_output": "The response recognizes this as a permissions problem, not a data problem, and runs the read-only authorization check (LLM-KB-011): it simulates the KB/data-source execution role with iam:SimulatePrincipalPolicy for s3:GetObject and s3:ListBucket on the data-source prefix and kms:Decrypt on the data-source/vector-store CMK, inspects the role trust policy for the bedrock.amazonaws.com principal, and checks for a cross-account S3 bucket-policy deny or an Organizations SCP explicit deny (organizations:ListPoliciesForTarget / DescribePolicy). It returns the specific missing permission or policy statement to add rather than a doc link, recommends the fix without attaching or putting any policy (read-only), and when quoting a policy as evidence it masks the account segment of every ARN and does not echo secret-shaped condition values. It applies the service-vs-customer transient verdict first, confirming there is no active Bedrock service event (health:DescribeEvents) before prescribing a customer-side fix.",
+            "should_trigger": true,
+            "assertions": [
+                "The response classifies the failure as an authorization/permissions problem rather than a data problem and runs a read-only authorization check",
+                "The response names a specific missing permission or policy statement to add (e.g. s3:GetObject/s3:ListBucket, kms:Decrypt, a trust-policy statement allowing bedrock.amazonaws.com, or a cross-account bucket-policy/SCP amendment) rather than only linking documentation",
+                "The response uses read-only detection (iam:SimulatePrincipalPolicy, trust-policy inspection, s3:GetBucketPolicy, organizations:ListPoliciesForTarget/DescribePolicy) and recommends rather than attaches/puts any policy",
+                "The response masks the account segment of any ARN or policy statement it quotes as evidence and does not echo secret-shaped condition values",
+                {
+                    "text": "At least one finding carries an LLM-KB check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-KB-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "kb-retrieval-throttling-quota",
+            "task_type": "chat",
+            "prompt": "Ingestion into our knowledge base is crawling and our Retrieve calls are getting ThrottlingException under load. Are we hitting a quota, and what should we do?",
+            "expected_output": "The response treats this as a quota/throttling/limit problem and runs the read-only quota check (LLM-KB-012): it reads the relevant Bedrock quotas with servicequotas:GetServiceQuota (service-code bedrock) for the embedding-model invocation and knowledge-base/Retrieve request-rate quotas, and correlates CloudWatch throttling/usage signals (InvocationThrottles, EstimatedQuotaConsumption, or retrieval-path throttling) over a window. Where AWS publishes no hard number it marks the threshold workload-specific and reports it at INFO rather than inventing a number. It recommends requesting an increase for the specific quota (giving the service-quotas request-service-quota-increase command) and/or batching/backing off, but does not request the increase itself (read-only). It applies the service-vs-customer transient verdict, ruling out an active Bedrock service event (health:DescribeEvents) before prescribing a customer-side fix, and reports chunk counts/sources/scores only.",
+            "should_trigger": true,
+            "assertions": [
+                "The response identifies a quota/throttling/limit root cause and reads Bedrock quotas via servicequotas:GetServiceQuota correlated with CloudWatch throttle/usage signals over a window",
+                "The response marks any threshold with no AWS-published number as workload-specific and reports it at INFO rather than inventing a number",
+                "The response recommends requesting an increase for the specific quota (and/or backoff/batching) and gives the command rather than requesting the increase itself, consistent with being read-only",
+                "The response applies the service-vs-customer transient verdict (checks health:DescribeEvents for an active service event) before prescribing a customer-side fix",
+                {
+                    "text": "At least one finding carries an LLM-KB check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-KB-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        }
+    ]
+}

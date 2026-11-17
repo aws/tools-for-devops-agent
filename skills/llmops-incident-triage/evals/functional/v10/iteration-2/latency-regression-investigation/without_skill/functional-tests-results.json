@@ -1,0 +1,75 @@
+{
+  "version": "v10",
+  "iteration": 2,
+  "eval_id": "latency-regression-investigation",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause centers on two things: (1) the app-vs-Bedrock latency discrepancy being explained by client-side factors (not Bedrock inference itself), and (2) the measurement-boundary discrepancy being used as decisive evidence that the regression lies outside Bedrock's own inference path.\n\nThe investigation's \"Bedrock service-side latency regression\" hypothesis explicitly rules out a service-side Bedrock regression: per-model InvocationLatency was flat/improved, zero throttles/server errors, and the application-used models (nova-lite, sonnet-4-5, gpt-5.6-terra) show no degradation. This directly supports \"the regression is outside Bedrock's own inference path.\"\n\nFor the app-vs-metric gap specifically (symptom-app-latency-above-metric), the investigation offers two client-side hypotheses: (a) synchronous guardrail streaming adding ~2s outside the model call (explicitly noted as \"the delay is added outside the model call... not confirmed\") and (b) calls exceeding the 60s SDK read timeout causing client-side retries, where \"the app records timeout plus retry time while Bedrock logs each attempt normally\" \u2014 this is exactly a client-side retry/timeout explanation matching the expected root cause description (\"client-side queuing or retries\").\n\nThe investigation does not definitively confirm which hypothesis is correct (due to gaps: user's app not identified, cannot read Lambda code), but it correctly frames both candidate causes as client-side phenomena outside Bedrock's measured latency, and explicitly used the measurement-boundary logic (\"Bedrock invocation logs show none of the app's model calls carry a guardrail setting, so the delay is added outside the model call\") as evidence. This aligns well with the expected root cause's core thrust: client-side causes, not Bedrock inference, explain the gap.\n\nThe account-wide doubling of InvocationLatency itself is attributed to a workload mix shift (new slow claude-sonnet-5 workload) rather than a regression \u2014 which is a separate symptom (symptom-bedrock-latency) correctly distinguished from the app-vs-metric gap (symptom-app-latency-above-metric). The expected root cause is specifically about the measurement-boundary discrepample, which the investigation addresses via the guardrail/timeout-retry hypotheses and explicitly asserts the application-side models show no regression, pointing the issue outside Bedrock's inference path.\n\nGiven the investigation does identify client-side mechanisms (guardrail streaming step, SDK timeout+retry) as candidate explanations for the app vs. metric gap, and frames the measurement boundary as key evidence, this substantially matches the expected root cause, albeit with some residual uncertainty (gaps) about final confirmation.</reasoning>\n",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause explains the discrepancy between application-measured latency and the CloudWatch InvocationLatency metric rather than treating the two as interchangeable",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The investigation presents two separate, unconfirmed hypotheses ('Synchronous guardrail streaming roughly doubles app-measured latency' and 'Calls over the 60s SDK read timeout may cause client-side retries') for the app-vs-metric discrepancy, but explicitly states 'User's application not identified' as a gap in both, and the guardrail hypothesis notes 'Whether this is the user's application is not confirmed.' No root cause is confirmed to explain the discrepancy; it remains an open hypothesis with gaps.",
+          "reasoning": "Assertion requires the root cause to explain the discrepancy, but the output never settles on a confirmed root cause for this symptom - it offers two competing unconfirmed hypotheses and explicitly flags that the user's application could not be identified, meaning the discrepancy itself is not actually resolved.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The investigation states what CloudWatch InvocationLatency does and does not include, and uses that scope to localise the regression",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output never explicitly states what InvocationLatency does or does not include (e.g., whether it includes network/client-side overhead, streaming first-token time, retries, etc.). It discusses InvocationLatency values and trends extensively but does not define its scope/composition.",
+          "reasoning": "No statement in the text defines the boundaries of what CloudWatch InvocationLatency measures (e.g., server-side only vs. end-to-end including client network time). The closest is listing metrics like TimeToFirstToken and discussing InvocationClientErrors/InvocationServerErrors, but no explicit scope definition of InvocationLatency itself is given to localize the regression.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The root cause is distinguished from its symptoms rather than restating 'latency increased'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The cause 'New claude-sonnet-5 workload inflated the account-wide latency average' identifies a specific mechanism (a new high-token-count model added to the mix) rather than just restating 'latency increased.' It further ties latency to output token count: 'Sonnet-5 latency tracks response length at a steady ~10.5\u201313 ms per output token.'",
+          "reasoning": "The root cause for the account-wide latency symptom is a distinct causal mechanism (workload mix change) rather than a restatement of the symptom, satisfying this assertion for at least one symptom (bedrock-latency). ",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation names the specific evidence that led to its conclusion rather than asserting a cause without support",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Specific evidence is cited throughout, e.g. 'claude-sonnet-5 is ~79% of logged invocations, averaging 14.8 s... Next largest: us.openai.gpt-5.6-terra with 1,415 calls at 1.0 s' and daily breakdowns like 'Nov 4: 1,957 / 19.6 s / 1,873' tokens, plus caller identities 'IAM user llmops-demo-admin (3,667 calls...)'.",
+          "reasoning": "The investigation extensively cites concrete data points (call counts, latencies, token counts, caller identities, timestamps) supporting its causal claims rather than asserting conclusions without support.",
+          "confidence": "high"
+        },
+        {
+          "text": "A latency or invocation metric is named explicitly",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'InvocationLatency'"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "12m48s",
+    "cost": "$6.38",
+    "context_window": {
+      "utilization": "19.1%",
+      "compaction_count": 0
+    }
+  }
+}

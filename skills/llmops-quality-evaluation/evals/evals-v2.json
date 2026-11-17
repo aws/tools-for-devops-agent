@@ -1,0 +1,279 @@
+{
+  "skill_name": "llmops-quality-evaluation",
+  "evals": [
+    {
+      "id": "evaluation-coverage-assessment",
+      "task_type": "chat",
+      "prompt": "Are we actually measuring model quality for our Bedrock workload in us-east-1, or are we just running it in production and hoping?",
+      "expected_output": "The response first confirms whether the region supports Bedrock evaluation, then lists the evaluation jobs and reports whether any exist at all, whether they run automatically (wired into CI/CD) or are run manually, and whether a regression gate blocks promotion when quality drops. An empty job list is interpreted against regional support: CRITICAL (no evaluation ever run) only where the region supports evaluation, INFO/advisory where it does not. The three decisive questions are answered: is quality measured at all, is it measured automatically, and can a regression reach production.",
+      "should_trigger": true,
+      "assertions": [
+        "The response explains the consequence of the current evaluation state for production safety — specifically whether a model or prompt change could regress quality and reach production without being detected",
+        "The response distinguishes 'no evaluation configured' from 'the region does not support Bedrock evaluation' rather than treating an empty list as an automatic failure",
+        "The response separates what it verified from AWS APIs from what it cannot verify, naming CI/CD pipeline wiring as something it cannot confirm from AWS APIs alone rather than asserting or ignoring it",
+        "The response addresses whether a quality regression can reach production (whether a regression gate blocks promotion)",
+        "At least one finding cites a check id",
+        {
+          "text": "An evaluation check-id is cited",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "finish-reason-truncation-drift",
+      "task_type": "chat",
+      "prompt": "Our model's outputs seem to be getting cut off more often lately. How do I confirm whether that's really happening?",
+      "expected_output": "The response examines the finish-reason distribution (the stopReason field) for a shift from end_turn toward max_tokens as the signal that outputs are being truncated, naming both the current max_tokens share and the baseline share rather than a single number, and marks the >10pp alarm threshold as a derived default rather than an AWS-published value. It explains the likely concrete causes: prompts growing and crowding the output budget, a reduced maxTokens setting, or a model version change that alters generation length.",
+      "should_trigger": true,
+      "assertions": [
+        "The response states that measuring the finish-reason distribution requires Bedrock model invocation logging to be enabled, and reports whether it is currently enabled",
+        "The response marks the truncation-shift threshold as derived or workload-specific rather than presenting it as an AWS-published figure",
+        "The response gives both a current figure and a baseline figure for the finish-reason share rather than a single number",
+        "The response explains at least one concrete cause (prompt growth crowding the output budget, a reduced maxTokens, or a model version change)"
+      ]
+    },
+    {
+      "id": "quality-regression-triage",
+      "task_type": "chat",
+      "prompt": "We changed the Bedrock model version last week and quality seems worse. Check whether any evaluation job scored the new version against the previous one, and tell me the single highest-impact gate to add. Keep it brief.",
+      "expected_output": "The response checks evaluation job history and scores against a baseline, asks whether an A/B comparison between the old and new model versions was run before the new version was adopted, and correlates the suspected regression with finish-reason and output-token signals. It recommends a specific gate — a regression gate on model promotion wired into CI/CD — so a future version change cannot ship a quality drop unmeasured.",
+      "should_trigger": true,
+      "assertions": [
+        "The response compares current quality against a baseline (prior evaluation scores) rather than judging quality in isolation",
+        "The response addresses whether an A/B comparison between the model versions was run before the change was adopted",
+        "The response recommends a specific gate (a regression gate blocking model promotion) rather than generic 'test more' advice",
+        "The response honours the request to stay brief rather than returning an exhaustive report"
+      ]
+    },
+    {
+      "id": "output-contract-drift",
+      "task_type": "chat",
+      "prompt": "Our downstream JSON parser started failing last week. The model is now wrapping its responses in markdown code fences some of the time, and occasionally the field order changes. We did not touch the prompt. How do we measure how often this happens and stop it breaking production?",
+      "expected_output": "The response treats conformance to an output contract as a measurable quality dimension rather than a prompt-engineering anecdote. It distinguishes a real distributional shift from normal model non-determinism, and says how to quantify the failure rate: sample invocation logs and compute the share of responses that fail to parse or deviate from the expected schema, against a baseline from before the change. It identifies plausible causes (an undocumented model update, a model version or routing change, or inherent generation variability) and recommends enforcement that does not depend on the model behaving: schema or structured-output enforcement, a parse-failure metric with an alarm, and a regression gate that scores output-format conformance before a model change is promoted.",
+      "should_trigger": true,
+      "assertions": [
+        "The response gives a concrete way to quantify the parse-failure or schema-deviation rate rather than only advising prompt changes",
+        "The response requires a baseline from before the change so that a genuine shift can be told apart from normal model non-determinism",
+        "The response notes that measuring this from historical traffic depends on Bedrock model invocation logging being enabled, and reports whether it is",
+        "The response recommends an enforcement mechanism that does not rely on the model voluntarily complying, such as structured output or schema validation at the boundary",
+        "The response recommends a durable detection mechanism (a parse-failure metric, an alarm, or a conformance gate) rather than a one-off fix",
+        "The response considers an undocumented model update or version change as a candidate cause, given the prompt was unchanged",
+        {
+          "text": "An evaluation or telemetry check-id is cited",
+          "evaluator": "regex",
+          "pattern": "LLM-(?:EVAL|TEL)-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "corruption-not-quality-regression",
+      "task_type": "investigation",
+      "prompt": "Since this morning a small fraction of our Bedrock responses come back garbled — repeated words, and sometimes text with no relationship to the input at all. The rest are perfect. Same model, same prompts, same code as last week. Score our output quality and tell us what to fix in our prompts.",
+      "expected_root_cause": "The response declines to treat this as a prompt-quality problem. Garbled output, token repetition, and responses unrelated to the input, appearing suddenly on a fraction of traffic with no change to model, prompt, or code, is the signature of an infrastructure or service-side fault rather than a quality regression a prompt change would fix. The response should say that evaluation scoring is the wrong instrument here, explain why the evidence points to a service-side cause (abrupt onset, partial traffic, nothing changed on the customer side), and route the user to incident triage and AWS support rather than prescribing prompt edits. It may still recommend telemetry to quantify the affected share. The eval account does not reproduce garbled output, so where the telemetry shows no such fault the investigation says so and still explains how to tell a serving fault from a quality regression (abrupt onset, partial blast radius, no model or prompt change) rather than prescribing an evaluation job.",
+      "should_trigger": true,
+      "assertions": [
+        "The response declines the user's framing and does not present prompt edits as the fix",
+        "The response identifies a service-side or infrastructure fault as the likely cause rather than a model quality regression",
+        "The response gives the reasoning that separates the two: abrupt onset, only part of the traffic affected, and no change to model, prompt, or code",
+        "The response states that running an evaluation job would not diagnose this, or otherwise explains why quality scoring is the wrong instrument here",
+        "The response recommends escalation to incident triage or AWS support rather than treating it as a self-service quality fix",
+        "The response still offers a way to quantify what share of traffic is affected"
+      ]
+    },
+    {
+      "id": "qe-hardware-corruption-garbled",
+      "task_type": "investigation",
+      "prompt": "Since this morning a small fraction of our Bedrock responses come back garbled, with repeated words and sometimes text unrelated to the input. The rest are perfect. Same model, same prompts, same code as last week. Score our output quality and tell us what to fix in our prompts.",
+      "expected_root_cause": "The answer declines the user's framing. Garbled output, token repetition and responses unrelated to the input, appearing suddenly on a fraction of traffic with no change to model, prompt or code, is the signature of an infrastructure or service-side fault rather than a quality regression a prompt change would fix. The answer says evaluation scoring is the wrong instrument, gives the reasoning that separates the two, and routes to incident triage and AWS support. It may still offer a way to quantify the affected share. The eval account does not reproduce garbled output, so where the telemetry shows no such fault the investigation says so and still explains how to tell a serving fault from a quality regression (abrupt onset, partial blast radius, no model or prompt change) rather than prescribing an evaluation job.",
+      "should_trigger": true,
+      "assertions": [
+        "The response declines the user's framing and does not present prompt edits as the fix",
+        "The response identifies a service-side or infrastructure fault as the likely cause rather than a model quality regression",
+        "The response gives the reasoning that separates the two: abrupt onset, only part of the traffic affected, nothing changed on the customer side",
+        "The response explains why running an evaluation job would not diagnose this",
+        "The response recommends escalation rather than treating it as a self-service quality fix",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-output-contract-drift",
+      "task_type": "chat",
+      "prompt": "Our downstream JSON parser started failing last week. The model is now wrapping its responses in markdown code fences some of the time, and occasionally the field order changes. We did not touch the prompt. How do we measure how often this happens and stop it breaking production?",
+      "should_trigger": true,
+      "expected_output": "The answer treats conformance to an output contract as a measurable quality dimension. It distinguishes a real distributional shift from normal model non-determinism, says how to quantify the failure rate from invocation logs against a pre-change baseline, identifies plausible causes including an undocumented model update, and recommends enforcement that does not depend on the model complying: structured output or schema validation, a parse-failure metric with an alarm, and a conformance gate before promotion.",
+      "assertions": [
+        "The response gives a concrete way to quantify the parse-failure or schema-deviation rate",
+        "The response requires a baseline from before the change to separate a real shift from non-determinism",
+        "The response notes the dependency on Bedrock model invocation logging and reports whether it is enabled",
+        "The response recommends enforcement that does not rely on the model voluntarily complying",
+        "The response considers an undocumented model update as a candidate cause given the prompt was unchanged",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-nondeterminism-vs-regression",
+      "task_type": "chat",
+      "prompt": "Running the same prompt twice against the same Bedrock model gives slightly different answers. Is our model broken, and how do we make it reproducible?",
+      "should_trigger": true,
+      "expected_output": "The answer explains that generation is non-deterministic by default and that temperature, top-p and top-k control it, while noting that even greedy decoding can vary because of floating-point non-determinism in the serving stack. It distinguishes expected variability from a quality regression and explains that reproducibility is best pursued through evaluation on a fixed dataset with aggregate scoring rather than expecting identical strings.",
+      "assertions": [
+        "The response explains that output variability is expected rather than a defect",
+        "The response names the specific sampling parameters that control it",
+        "The response is candid that even deterministic settings may not produce byte-identical output",
+        "The response redirects reproducibility to aggregate evaluation on a fixed dataset rather than string equality",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-judge-model-validity",
+      "task_type": "chat",
+      "prompt": "We score our chatbot's answers with another model as the judge. Leadership asks how we know the judge is right. What do we tell them?",
+      "should_trigger": true,
+      "expected_output": "The answer addresses judge validity directly: agreement with human labels on a sample, a rubric the judge applies consistently, position and verbosity bias, and the risk of using the same model family as both generator and judge. It prescribes measuring judge-human agreement rather than asserting the judge is trustworthy.",
+      "assertions": [
+        "The response prescribes measuring agreement between the judge and human labels",
+        "The response names at least one specific judge bias such as position, verbosity, or self-preference",
+        "The response raises the concern of the judge sharing a model family with the generator",
+        "The response does not simply assert that LLM-as-judge is reliable",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-baseline-missing",
+      "task_type": "chat",
+      "prompt": "We want to prove our new prompt is better than the old one. We never scored the old one. What can we do now?",
+      "should_trigger": true,
+      "expected_output": "The answer is candid that no retrospective baseline exists if outputs were never scored or captured, then gives the forward path: check whether invocation logs retain enough historical output to score after the fact, and if not, establish a baseline now and run both variants against a fixed dataset before deciding. It does not invent a comparison that the data cannot support.",
+      "assertions": [
+        "The response is explicit that a retrospective comparison may not be possible",
+        "The response checks whether historical outputs were captured and could be scored after the fact",
+        "The response prescribes establishing a baseline and comparing both variants on a fixed dataset",
+        "The response does not claim an improvement that the available data cannot support",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-eval-job-failed",
+      "task_type": "chat",
+      "prompt": "Our Bedrock evaluation job failed. Where do we look and what usually causes it?",
+      "should_trigger": true,
+      "expected_output": "The answer names the job's own failure reason as the first source and the common configuration causes: the dataset format and its S3 location, the service role's access to the input and output buckets and any KMS key, the metric and task-type configuration, and regional support for the evaluation type. It reports the job's actual state rather than listing possibilities only.",
+      "assertions": [
+        "The response names the job's failure reason as the authoritative first source",
+        "The response lists concrete configuration causes such as dataset format, role access, or metric configuration",
+        "The response addresses the service role's access to the input and output locations including KMS",
+        "The response reports actual findings rather than only enumerating possibilities",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-dataset-representativeness",
+      "task_type": "chat",
+      "prompt": "Our evaluation scores are consistently high but users still complain about answer quality. How is that possible?",
+      "should_trigger": true,
+      "expected_output": "The answer identifies a gap between the evaluation dataset and real traffic as the leading explanation: the dataset may be too easy, too small, stale, or missing the categories users actually ask about. It prescribes comparing the dataset's distribution against production traffic and adding the failure cases users report, rather than concluding the users are wrong.",
+      "assertions": [
+        "The response identifies the evaluation dataset's representativeness as the likely gap",
+        "The response prescribes comparing the dataset distribution against real production traffic",
+        "The response recommends incorporating reported failure cases into the dataset",
+        "The response does not dismiss the user complaints as inconsistent with the scores",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-regression-gate-missing",
+      "task_type": "chat",
+      "prompt": "Anyone on our team can change the system prompt and deploy it. What is the minimum we should put in place so a quality regression cannot reach production?",
+      "should_trigger": true,
+      "expected_output": "The answer prescribes a concrete gate: a fixed evaluation dataset, a scored baseline, a threshold that blocks promotion on regression, and the wiring into the deployment path so it cannot be skipped. It identifies the prompt as a versioned artifact and is explicit that AWS APIs alone cannot confirm CI/CD wiring.",
+      "assertions": [
+        "The response prescribes a specific regression gate with a threshold rather than generic testing advice",
+        "The response treats the system prompt as a versioned artifact that should be gated",
+        "The response states that pipeline wiring cannot be confirmed from AWS APIs alone",
+        "The response gives the minimum viable set rather than an exhaustive programme",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-safety-refusal-rate",
+      "task_type": "chat",
+      "prompt": "After tightening our safety configuration, users say the assistant refuses reasonable questions. How do we measure whether we overcorrected?",
+      "should_trigger": true,
+      "expected_output": "The answer frames over-refusal as a measurable quality dimension with a two-sided trade-off, prescribes measuring the refusal or intervention rate against a baseline and on a labelled set containing both benign and genuinely unsafe prompts, and warns that optimising one side alone degrades the other.",
+      "assertions": [
+        "The response prescribes measuring the refusal or intervention rate against a baseline",
+        "The response requires a labelled set containing both benign and genuinely unsafe prompts",
+        "The response frames the trade-off explicitly rather than recommending only loosening the configuration",
+        "The response names where the intervention data comes from",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "qe-token-truncation-vs-quality",
+      "task_type": "chat",
+      "prompt": "Users report our summaries end mid-sentence. Our evaluation scores have not moved. Why would the scores miss this?",
+      "should_trigger": true,
+      "expected_output": "The answer connects the symptom to truncation rather than semantic quality and explains why the metrics missed it: the scoring rubric or metric does not penalise incompleteness. It prescribes measuring the finish-reason distribution to confirm truncation and adding a completeness check to the evaluation so the metric would catch it next time.",
+      "assertions": [
+        "The response identifies truncation as the cause rather than a semantic quality drop",
+        "The response explains why the existing metric did not detect it",
+        "The response prescribes measuring the finish-reason distribution to confirm",
+        "The response recommends adding a completeness criterion to the evaluation",
+        {
+          "text": "At least one finding carries a EVAL check-id",
+          "evaluator": "regex",
+          "pattern": "LLM-EVAL-\\d{3}"
+        }
+      ]
+    },
+    {
+      "id": "negative-provisioned-throughput-sizing",
+      "task_type": "chat",
+      "prompt": "We are deciding between on-demand and provisioned throughput for a steady Bedrock workload of about 400 requests per minute. Which is cheaper, and how many model units would we need?",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-guardrail-blocking-responses",
+      "task_type": "chat",
+      "prompt": "Our guardrail is returning empty model responses because it intervenes on the whole conversation history rather than the latest turn. How do we scope the guardrail to just the current message?",
+      "should_trigger": false
+    }
+  ]
+}

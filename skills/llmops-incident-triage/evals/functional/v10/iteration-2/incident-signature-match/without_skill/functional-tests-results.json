@@ -1,0 +1,62 @@
+{
+  "version": "v10",
+  "iteration": 2,
+  "eval_id": "incident-signature-match",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause description is somewhat generic/meta, emphasizing that a correct investigation should: (1) report the cause the telemetry actually shows rather than confirming the premise blindly, (2) not attribute unrelated workloads' errors to the prompt's issue, and (3) explicitly note when telemetry doesn't show the claimed symptom (true throttling/quota issue) rather than just confirming it.\n\nThe investigation summary does exactly this: it explicitly rules out actual quota/rate throttling (InvocationThrottles = 0, Lambda throttles = 0, no CloudTrail throttling events), identifies that the 'catalog agent 429 matches' are false positives unrelated to this issue (explicitly avoiding misattributing unrelated workload errors), and determines that the real cause is a deterministic per-request guardrail input size limit (Classic tier 1000 text-unit cap) being misreported as ThrottlingException, not actual rate-based throttling. This matches the spirit of the expected root cause: it correctly declines to confirm the \"throttling due to quota\" premise, instead identifying the actual telemetry-supported cause (a size-limit error misclassified as throttling), and explicitly separates out unrelated workload errors (catalog agent false positives) rather than attributing them to this incident.\n\nThis aligns well with the expected root cause's core requirement \u2014 correctly diagnosing via telemetry, not confirming the user's premise, and not misattributing unrelated errors. The specific technical mechanism (guardrail tier text-unit limit) is a plausible and well-supported finding consistent with the expected approach's emphasis on distinguishing real causes from false premises.",
+      "evidence": "\"That guardrail's content filter runs on the CLASSIC tier, which caps input at 1000 text units, so Bedrock returns ThrottlingException on every call... it is a deterministic per-request size limit, not a rate quota, so retries can never succeed. It does not appear in Bedrock InvocationThrottles.\" and \"The 733 matches in the catalog agent runtime log came only from the '429' term... those 733 are unrelated strings, not throttles.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names a specific metric to examine (for example InvocationThrottles) rather than describing throttling in general terms",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response explicitly names 'AWS/Bedrock InvocationThrottles metric has never been emitted in us-east-1' and 'AWS/Bedrock-AgentCore Throttles (SUM by Name, 2026-11-02 to 2026-11-16) is 0 for all five eval runtimes', plus 'Lambda Throttles are 0 for every function over 7 days'.",
+          "reasoning": "The output specifically cites the InvocationThrottles metric and AgentCore Throttles metric by name, with concrete values, rather than describing throttling in vague general terms.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives an ordered, concrete next step (what to check first, then what to conclude) rather than a flat list of generic tips",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output presents an 'Investigation Summary' with Symptoms, Findings, Supporting Observations, and Gaps sections, but it does not present a numbered/ordered sequence of next steps like 'first check X, then conclude Y'. It ends with 'Gaps' describing unconfirmed items (e.g. 'Standard-tier text-unit limit unconfirmed') and a passing mention of 'The plan gates the tier change on a test against the DRAFT guardrail', but no explicit ordered action list is given in this excerpt.",
+          "reasoning": "While the investigation is thorough and identifies a root cause, the provided summary does not explicitly lay out an ordered list of concrete next steps (e.g., '1. Check X, 2. If Y then conclude Z'). It references a mitigation plan tangentially ('The plan gates the tier change on a test against the DRAFT guardrail') but does not spell out the ordered steps themselves within this output's text, leaving the assertion unmet based on visible content.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response distinguishes quota-driven throttling on the customer side from provider-side capacity, instead of assuming one cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response explicitly rules out customer-side quota/rate throttling: 'the error is reported as ThrottlingException, but it is a deterministic per-request size limit, not a rate quota, so retries can never succeed' and separately confirms 'Throttling and quota limits are ruled out' based on zero InvocationThrottles, zero Lambda throttles, and zero AgentCore throttles, distinguishing this from the actual cause (an input size limit on the Classic guardrail tier, a provider-side capability limit rather than a quota or capacity issue).",
+          "reasoning": "The output clearly separates the hypothesis of quota-driven throttling (ruled out via metrics) from the actual root cause, which is a per-request size limit on a specific tier -- this is a provider-side/service-tier capability limit rather than capacity throttling, and the response explicitly does not assume one cause, instead systematically eliminating quota/capacity explanations before landing on the size-limit explanation.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m41s",
+    "cost": "$3.83",
+    "context_window": {
+      "utilization": "14.7%",
+      "compaction_count": 0
+    }
+  }
+}

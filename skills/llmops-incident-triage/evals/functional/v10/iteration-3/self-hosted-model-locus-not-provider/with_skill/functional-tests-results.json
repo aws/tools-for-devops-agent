@@ -1,0 +1,80 @@
+{
+  "version": "v10",
+  "iteration": 3,
+  "eval_id": "self-hosted-model-locus-not-provider",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause emphasizes that this is a self-hosted infrastructure issue (EKS/ALB serving layer), not an AWS model-service/Bedrock incident, and that a correct investigation should not fabricate confirmation of the symptom when telemetry for the actual workload isn't available, instead reporting honestly what the telemetry shows (or doesn't show).\n\nThe investigation summary does exactly this: it correctly frames the hypothesis as the shared vLLM serving layer (EKS+ALB) being the likely locus of failure, explicitly states this would be a self-hosted infrastructure fault rather than an AWS/Bedrock issue, and confirms via AWS Health that there are no open AWS-side incidents for ELB/EKS/EC2 (ruling out AWS-side causation). Crucially, it does not fabricate or hallucinate a specific root cause from unrelated telemetry in the account\u2014it explicitly states that the EKS/ALB serving stack is not in the associated account, that no telemetry for the actual vLLM workload could be found, and that the hypothesis remains 'unconfirmed' due to this gap. It avoids attributing unrelated account workloads' errors to this symptom, and transparently flags the critical gap (LLM-TEL-001) rather than falsely confirming the premise.\n\nThis matches the expected root cause's core requirements: (1) correctly identifies that the fault locus is the customer's self-hosted serving layer (EKS/ALB), not an AWS-side Bedrock/model-provider incident, (2) does not misattribute unrelated seeded-fault errors in the eval account to this symptom, and (3) honestly reports that telemetry for the actual workload is unavailable rather than confirming the symptom's premise without evidence.",
+      "evidence": "\"For a self-hosted vLLM binding a model-provider fault is not a possible locus. AWS Health shows 0 open events for ELASTICLOADBALANCING, EKS or EC2\" and \"the EKS cluster and ALB serving vLLM are not in <account>, the only associated account... Connect it to this agent space to rerun triage.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The locus is INFRASTRUCTURE and not PROVIDER",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"binding=self-hosted-alb, locus=UNDETERMINED, transience=UNKNOWN. Could not be confirmed because no telemetry is reachable.\"",
+          "reasoning": "The output explicitly states the locus is UNDETERMINED, not INFRASTRUCTURE. It never confirms an infrastructure-only locus because the hosting account could not be queried.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provider health is recorded as not-applicable rather than as a missing or zero signal",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"For a self-hosted vLLM binding a model-provider fault is not a possible locus. AWS Health shows 0 open events for ELASTICLOADBALANCING, EKS or EC2; open events cover only BEDROCK_AGENTCORE, BEDROCK planned lifecycle, CODEBUILD, and me-central-1/me-south-1 (not enabled).\"",
+          "reasoning": "The AWS-side incident hypothesis explicitly reasons that a model-provider fault is not a possible locus for a self-hosted vLLM binding, rather than treating absence of events as a gap or zero signal, and separately lists 0 open Health events for the relevant infra services (ELB/EKS/EC2) as evidence AWS wasn't the cause there, distinct from the critical telemetry gap noted elsewhere.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not propose a cross-region inference profile or any Bedrock-specific failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'inference profile', 'failover', or Bedrock-based mitigation anywhere in the summary.",
+          "reasoning": "Nowhere in the output does it propose a cross-region inference profile or any Bedrock-specific failover; it only discusses the vLLM/EKS/ALB stack and notes the account hosts Bedrock-calling Lambdas but does not recommend Bedrock failover as a remedy.",
+          "confidence": "high"
+        },
+        {
+          "text": "The error signals are bound to load balancer or application metrics rather than AWS/Bedrock",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"HTTPCode_ELB_503_Count rising = ALB has no healthy targets... HTTPCode_Target_5XX_Count rising = vLLM reachable but returning 503 itself\"",
+          "reasoning": "The error signals discussed (HTTPCode_ELB_503_Count, HTTPCode_Target_5XX_Count) are explicitly ALB/application-level metrics, not AWS/Bedrock service metrics, and Bedrock is explicitly ruled out as not applicable.",
+          "confidence": "high"
+        },
+        {
+          "text": "No Bedrock namespace is asserted for a self-hosted model",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m57s",
+    "cost": "$1.97",
+    "context_window": {
+      "utilization": "8.7%",
+      "compaction_count": 0
+    }
+  }
+}

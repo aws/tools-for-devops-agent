@@ -1,0 +1,65 @@
+{
+  "version": "v10",
+  "iteration": 3,
+  "eval_id": "incident-signature-match",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'llmops-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected root cause description is generic/meta guidance rather than a specific factual claim: it emphasizes that a correct investigation should compare throttling telemetry against actual quotas and workload traffic, distinguish provider-side vs customer-side causes, and report what the telemetry actually shows rather than confirming an unverified premise (since the quota/retry config \"looks correct\" per the user's claim). The investigation does exactly this: it dug into the actual telemetry (CloudWatch metrics, Lambda logs, Service Quotas), found that the apparent 'quota throttling' was actually a per-request text-unit size limit violation (1760 text units vs 1000 limit for Classic tier content filter) being misreported as ThrottlingException, correctly identified this as unrelated to request rate or quota settings, and distinguished this from unrelated/other guardrail errors. It explicitly states 'Model quota and retry config are irrelevant' and explains apparent intermittency comes from a scheduled job pattern, not quota pressure. This matches the spirit of the expected root cause: it is the telemetry-grounded answer rather than confirming the premise of quota/retry misconfiguration, and it correctly scopes the finding to the specific workload (bigdoc-app) without conflating it with other errors in the account. The investigation also appropriately flagged gaps where quota values couldn't be fully confirmed, which aligns with transparent reporting of what telemetry does/doesn't show.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names a specific metric to examine (for example InvocationThrottles) rather than describing throttling in general terms",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output explicitly names 'AWS/Bedrock/Guardrails InvocationThrottles on guardrail slxtt9h3y7i9' and later 'AWS/Bedrock InvocationThrottles and InvocationServerErrors have no data' and 'Throttle metrics exist only for Bedrock Guardrails: AWS/Bedrock/Guardrails InvocationThrottles is published for guardrails ej450jeydh6e (v1) and slxtt9h3y7i9 (v1)'",
+          "reasoning": "The response repeatedly names the specific metric InvocationThrottles (and related InvocationServerErrors) by exact AWS namespace, satisfying the assertion that a specific metric is named rather than generic description of throttling.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives an ordered, concrete next step (what to check first, then what to conclude) rather than a flat list of generic tips",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output is structured as 'Symptoms / Findings / Supporting Observations / Gaps' with a root cause and a fix suggestion ('Fixing it means chunking input to 1000 text units or less per call, or moving off the Classic tier'), but there is no explicit ordered 'first check X, then conclude Y' procedural list for a reader to follow next.",
+          "reasoning": "While the investigation narrates the steps it took (in past tense, as an investigation log) and ends with a root cause and remediation suggestion, it does not present a forward-looking ordered sequence of next steps (e.g., '1. Check CloudWatch metric X, 2. If Y then conclude Z'). The content is more of a retrospective summary of findings than a prescriptive ordered action plan for the reader to execute next, aside from the single remediation line about chunking input or changing tiers, which is not framed as an ordered multi-step check-then-conclude list.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response distinguishes quota-driven throttling on the customer side from provider-side capacity, instead of assuming one cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states 'Model quota and retry config are irrelevant: AWS/Bedrock InvocationThrottles and InvocationServerErrors have no data' and 'The cause is per-request input size, not request rate or a quota,' explicitly ruling out quota-driven causes and attributing it to a per-request size limit (a provider-side constraint on the Classic tier), rather than assuming either quota or capacity without distinguishing them.",
+          "reasoning": "The response explicitly distinguishes between customer-side quota exhaustion (ruled out: 'Model quota and retry config are irrelevant') and the actual mechanism (oversized input rejected by Classic-tier limit, which is a per-request size policy rather than a rate-based provider capacity issue or customer quota). It explicitly separates these causes rather than assuming one without investigation, satisfying the assertion that the response distinguishes between these causes instead of assuming one blindly.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m15s",
+    "cost": "$3.12",
+    "context_window": {
+      "utilization": "13.1%",
+      "compaction_count": 0
+    }
+  }
+}

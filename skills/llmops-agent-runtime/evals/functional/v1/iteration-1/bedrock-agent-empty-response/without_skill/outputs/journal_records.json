@@ -1,0 +1,58 @@
+[
+  {
+    "agentSpaceId": "ec825e54-6fb9-4c18-a6c5-4e1f636c2547",
+    "executionId": "d4542328-643e-4eaa-a799-62b04601a5a4",
+    "recordId": "862fc75e-6046-4ba5-a0ae-490e533c0d2a",
+    "content": "{\"id\": \"862fc75e-6046-4ba5-a0ae-490e533c0d2a\", \"role\": \"user\", \"content\": [{\"text\": \"Our Bedrock agent in us-east-1 is returning empty responses in production, but when we test it in the console it works. We prepared a new version yesterday. What should we check?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-18T00:14:26.703000+05:30",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "ec825e54-6fb9-4c18-a6c5-4e1f636c2547",
+    "executionId": "d4542328-643e-4eaa-a799-62b04601a5a4",
+    "recordId": "ce59a2c7-ac5c-4850-8b22-9eebad7ce203",
+    "content": "{\"id\": \"0831bfb5-0a27-4437-a876-e7d7e59a5269\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"Bedrock Agent Empty Responses in Production\"}]}",
+    "createdAt": "2026-11-18T00:14:26.864000+05:30",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "ec825e54-6fb9-4c18-a6c5-4e1f636c2547",
+    "executionId": "d4542328-643e-4eaa-a799-62b04601a5a4",
+    "recordId": "85dae3b9-c8fe-455e-a645-f454cac6cf0f",
+    "content": "{\"id\": \"36d974ca-76c9-4310-91e1-cabca3deee43\", \"role\": \"assistant\", \"block_type\": \"thinking\", \"content\": [{\"type\": \"text\", \"text\": \"This is a troubleshooting request asking what to check. The key difference is that console testing runs against the DRAFT version via TestAlias, while production hits an alias pinned to a specific version\\u2014so if a new version was prepared but the alias wasn't updated, production could still be pointing at a stale or broken version.\\n\\nOther suspects worth listing: PrepareAgent only updates DRAFT, so the alias/version still needs updating; wrong alias ID in the app; mishandling of the EventStream response (empty if chunks aren't read); guardrails blocking output; model throttling; Lambda action group failures; IAM permission issues tied to the alias's version; or knowledge base problems.\\n\\nI don't need to call any tools here\\u2014I'll just give a direct checklist covering these possibilities and offer to dig in further if they share the agent ID or name.\\n\\n\"}]}",
+    "createdAt": "2026-11-18T00:14:35.969000+05:30",
+    "recordType": "thinking"
+  },
+  {
+    "agentSpaceId": "ec825e54-6fb9-4c18-a6c5-4e1f636c2547",
+    "executionId": "d4542328-643e-4eaa-a799-62b04601a5a4",
+    "recordId": "0888137c-ead7-46ac-96fd-d76537d5d4f7",
+    "content": "{\"id\": \"a8a80267-74bc-4c7f-b63e-25cd7bc0fafe\", \"role\": \"assistant\", \"block_type\": \"thinking_duration\", \"content\": [{\"type\": \"text\", \"text\": \"5850\"}]}",
+    "createdAt": "2026-11-18T00:14:36.014000+05:30",
+    "recordType": "thinking_duration"
+  },
+  {
+    "agentSpaceId": "ec825e54-6fb9-4c18-a6c5-4e1f636c2547",
+    "executionId": "d4542328-643e-4eaa-a799-62b04601a5a4",
+    "recordId": "0022435e-9462-4772-9450-0895ce4f845a",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 4.2, \"compaction_count\": 0}}}",
+    "createdAt": "2026-11-18T00:14:41.143000+05:30",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "ec825e54-6fb9-4c18-a6c5-4e1f636c2547",
+    "executionId": "d4542328-643e-4eaa-a799-62b04601a5a4",
+    "recordId": "3229ce8e-b3d9-4853-af42-848e49bde538",
+    "content": "{\"id\": \"3229ce8e-b3d9-4853-af42-848e49bde538\", \"role\": \"assistant\", \"content\": [{\"text\": \"The console test chat and production usually run different things. Since you prepared a new version yesterday, I'd check these in order.\\n\\n**1. Which version the production alias points to**\\n- The console test chat uses the agent's **DRAFT** version through the built-in test alias. Production calls a named alias, which points to a fixed, numbered version.\\n- Preparing the agent only updates DRAFT. Production doesn't change until you create a version and point the alias at it.\\n- Check whether your app calls the alias you think it does (`agentAliasId`). A new version may be sitting unused, or the alias may have been repointed to a version that is broken.\\n- Compare the alias's version with DRAFT: instructions, model, action groups, knowledge bases and guardrail.\\n\\n**2. How the app reads the response**\\n- `InvokeAgent` returns an event stream, not a plain body. If the code doesn't iterate the stream and concatenate the `chunk` events, you get an empty string with no error.\\n- A recent SDK or code change can cause this, so check what was deployed alongside the new version.\\n- Make sure the response is completed and decoded properly, for example `chunk.bytes` decoded as UTF-8.\\n\\n**3. Guardrails**\\n- A guardrail on the versioned agent can block or mask the output. Some setups return an empty or canned string in that case.\\n- DRAFT may have a different guardrail or guardrail version than the one the alias uses.\\n\\n**4. Action groups and Lambda**\\n- If the agent's Lambda or API schema fails in production, the agent can return nothing useful. Check the Lambda's CloudWatch logs for errors or timeouts.\\n- Check that the Lambda's resource policy allows the agent to invoke it. The policy has to cover the production alias or agent ARN, not just the test one.\\n- Confirm the action group is still enabled in the version.\\n\\n**5. Knowledge bases, model access and quotas**\\n- Look for throttling or `ThrottlingException` on the foundation model. Production traffic can hit on-demand quotas that console testing doesn't.\\n- Confirm model access is still enabled in us-east-1 and that the agent's service role still has `bedrock:InvokeModel` for the model in the new version.\\n- Check that the knowledge base is attached to the version and its data source is synced.\\n\\n**6. Session and input differences**\\n- Production may reuse a `sessionId`, so earlier session state or attributes affect the reply. Try a fresh session ID.\\n- Check `sessionState` and `promptSessionAttributes`, and any prompt override or orchestration settings that changed in the new version.\\n\\n**7. Logs**\\n- If you've enabled model invocation logging or agent trace, look at the production request's trace for orchestration, guardrail and post-processing steps. A post-processing or parser step returning empty is a common cause.\\n- Also check CloudWatch for `InvokeAgent` errors or 4xx/5xx counts on the day of the change.\\n\\nIf you share the agent name or ID and the alias your app calls, I can look at the alias-to-version mapping, compare it with DRAFT and check for related errors. I'd start with check 1, since it's the most common cause of \\\"works in console, empty in prod\\\".\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-18T00:14:41.187000+05:30",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "ec825e54-6fb9-4c18-a6c5-4e1f636c2547",
+    "executionId": "d4542328-643e-4eaa-a799-62b04601a5a4",
+    "recordId": "c50963be-3597-4883-ad9a-06186a432f93",
+    "content": "{\"id\": \"0d52ac63-a987-4324-a3ae-45fcd0c6a13b\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"The console test chat and production usually run different things. Since you prepared a new version yesterday, I'd check these in order.\\n\\n**1. Which version the production alias points to**\\n- The console test chat uses the agent's **DRAFT** version through the built-in test alias. Production calls a named alias, which points to a fixed, numbered version.\\n- Preparing the agent only updates DRAFT. Production doesn't change until you create a version and point the alias at it.\\n- Check whether your app calls the alias you think it does (`agentAliasId`). A new version may be sitting unused, or the alias may have been repointed to a version that is broken.\\n- Compare the alias's version with DRAFT: instructions, model, action groups, knowledge bases and guardrail.\\n\\n**2. How the app reads the response**\\n- `InvokeAgent` returns an event stream, not a plain body. If the code doesn't iterate the stream and concatenate the `chunk` events, you get an empty string with no error.\\n- A recent SDK or code change can cause this, so check what was deployed alongside the new version.\\n- Make sure the response is completed and decoded properly, for example `chunk.bytes` decoded as UTF-8.\\n\\n**3. Guardrails**\\n- A guardrail on the versioned agent can block or mask the output. Some setups return an empty or canned string in that case.\\n- DRAFT may have a different guardrail or guardrail version than the one the alias uses.\\n\\n**4. Action groups and Lambda**\\n- If the agent's Lambda or API schema fails in production, the agent can return nothing useful. Check the Lambda's CloudWatch logs for errors or timeouts.\\n- Check that the Lambda's resource policy allows the agent to invoke it. The policy has to cover the production alias or agent ARN, not just the test one.\\n- Confirm the action group is still enabled in the version.\\n\\n**5. Knowledge bases, model access and quotas**\\n- Look for throttling or `ThrottlingException` on the foundation model. Production traffic can hit on-demand quotas that console testing doesn't.\\n- Confirm model access is still enabled in us-east-1 and that the agent's service role still has `bedrock:InvokeModel` for the model in the new version.\\n- Check that the knowledge base is attached to the version and its data source is synced.\\n\\n**6. Session and input differences**\\n- Production may reuse a `sessionId`, so earlier session state or attributes affect the reply. Try a fresh session ID.\\n- Check `sessionState` and `promptSessionAttributes`, and any prompt override or orchestration settings that changed in the new version.\\n\\n**7. Logs**\\n- If you've enabled model invocation logging or agent trace, look at the production request's trace for orchestration, guardrail and post-processing steps. A post-processing or parser step returning empty is a common cause.\\n- Also check CloudWatch for `InvokeAgent` errors or 4xx/5xx counts on the day of the change.\\n\\nIf you share the agent name or ID and the alias your app calls, I can look at the alias-to-version mapping, compare it with DRAFT and check for related errors. I'd start with check 1, since it's the most common cause of \\\"works in console, empty in prod\\\".\"}]}",
+    "createdAt": "2026-11-18T00:14:41.264000+05:30",
+    "recordType": "final_response"
+  }
+]
