@@ -117,7 +117,6 @@ Skip this section with `overlays: none` when no overlay was requested.
 
 - ☐ Each requested overlay is recorded with its trigger, and no unrequested overlay is rendered.
 - ☐ Overlay output is derived from exact ledger verdicts or already-collected evidence. No verdict, severity, count, or membership changed. No extra discovery was run.
-- ☐ Compliance: N/A-mapped controls are `Not assessed`, unmapped controls are `Not covered`, partial rows are never plain PASS, and the disclaimer is present.
 - ☐ Vulnerability posture: every CVE ID cited appears in a retrieved Inspector finding or AWS bulletin. Version lag is labelled a version gap.
 - ☐ Delta: the prior report's identity matches the current cluster. FAIL→N/A is `Unverified`, never Resolved.
 - ☐ Comparison/fleet: each cluster has its own QA PASS and complete report. Unreviewed clusters are listed. The comparison is a separate deliverable.

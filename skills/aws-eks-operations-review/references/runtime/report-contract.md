@@ -67,7 +67,6 @@ Overlays from [`overlays.md`](overlays.md) render only when the ledger records t
 
 - Delta: `### Change since previous review` at the end of §1.
 - Vulnerability posture: `### Vulnerability posture` at the end of §2.
-- Compliance crosswalk: `### Compliance crosswalk` at the end of §5, with uncovered controls in §7.
 
 A comparison, drift, or fleet view is a separate `# EKS Fleet Comparison` deliverable. It is emitted only after every per-cluster review has been delivered complete, and it is never folded into a cluster report. Overlays never alter section order, verdicts, severity, or counts.
 

@@ -4,17 +4,12 @@ Load in S5 only when the user explicitly asks for an overlay. Load it again in S
 
 | Overlay | Trigger (explicit user request) | Inputs | Rendered in |
 |---|---|---|---|
-| Compliance | Names CIS, NIST 800-53, PCI DSS, SOC 2, HIPAA, or asks for "compliance mapping/audit evidence" | ledger verdicts + [`../compliance-crosswalk.md`](../compliance-crosswalk.md) | §5 subsection `### Compliance crosswalk`; uncovered controls in §7 |
 | Vulnerability posture | Asks about add-on/image/node CVEs or "vulnerable add-ons" | AX5, Op7, N2, S38, Op29 evidence already collected | §2 subsection `### Vulnerability posture` |
 | Historical delta | Supplies a previous report from this skill, or asks "what changed since last review" and supplies it | prior report text in conversation + current ledger | §1 subsection `### Change since previous review` |
 | Comparison / drift | Asks to compare clusters or environments (dev vs prod), or asks for drift | compact comparison record per cluster | separate `# EKS Fleet Comparison` deliverable after the per-cluster reviews |
 | Fleet (multi-account) | Names clusters in several accounts/regions, or "all clusters across accounts" | same as comparison | same as comparison |
 
 Record each requested overlay and its trigger phrase in the ledger and in the §8 load audit. An overlay whose inputs are missing renders one explicit line saying so (`Not available — <reason>`). Never estimate or fabricate the missing input.
-
-## Compliance
-
-After S6, load `../compliance-crosswalk.md` and apply its derivation rules to the exact ledger verdicts. Render only the frameworks the user asked for. If the user only said "compliance", render CIS. Mapping is derived after grading, so it can never change a verdict. A mapped ID that is N/A makes its control `Not assessed`, not PASS.
 
 ## Vulnerability posture
 

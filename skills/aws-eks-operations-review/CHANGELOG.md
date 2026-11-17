@@ -1,17 +1,11 @@
 # Changelog
-## [1.10.0] - 2026-10-23
+## [1.10.0] - 2026-11-18
 Optional overlays, contributed from the `eks-guardian` proposal (PR #85) instead of adding a
 fourth EKS review skill. All overlays are opt-in derived views: they add no check, discovery area,
 or report section, and never change membership, verdicts, severity, or gates.
-- New `references/runtime/overlays.md`: activation triggers and rules for compliance crosswalk,
-  vulnerability posture, historical delta, and comparison/drift/fleet. It is loaded in S5/S8 only
-  when the user requests an overlay; otherwise the ledger records `overlays: none`.
-- New `references/compliance-crosswalk.md`: maps canonical IDs to CIS Amazon EKS Benchmark v1.8.0
-  (IDs and titles per the `kube-bench` `eks-1.8.0` profile), NIST SP 800-53 Rev. 5 and PCI DSS v4.0.1
-  (Security Hub EKS.1/EKS.2/EKS.8 related requirements, otherwise indicative), SOC 2 TSC 2017, and
-  the HIPAA Security Rule (indicative). It defines PASS / PASS (partial coverage) / FAIL /
-  Not assessed / Not covered derivation; N/A never becomes PASS. It lists node-host CIS sections
-  (3.x) and ungraded CIS controls as Not covered.
+- New `references/runtime/overlays.md`: activation triggers and rules for vulnerability posture,
+  historical delta, and comparison/drift/fleet. It is loaded in S5/S8 only when the user requests
+  an overlay; otherwise the ledger records `overlays: none`.
 - Historical delta matches by the existing finding fingerprint (fallback `check_id` +
   `canonical_resource_id`, never fuzzy titles). Classes are New / Regressed / Persisting /
   Resolved / Unverified, and FAIL→N/A is never Resolved. The prior report must be supplied in
@@ -23,13 +17,17 @@ or report section, and never change membership, verdicts, severity, or gates.
   reviews are capped at three per conversation.
 - Vulnerability posture reuses AX5/Op7/N2/S38/Op29 evidence and never cites a CVE that a
   retrieved Inspector finding or AWS bulletin does not contain.
-- `router.md` overlay routing, `report-contract.md` placement (subsections of §1/§2/§5, uncovered
-  controls in §7), and `qa-checklist.md` §8a overlay gate.
+- `router.md` overlay routing, `report-contract.md` placement (subsections of §1/§2), and
+  `qa-checklist.md` §8a overlay gate. The router states that this review does not map findings
+  to compliance frameworks.
+- Compliance framework mapping (CIS EKS, NIST 800-53, PCI DSS, SOC 2, HIPAA) was drafted here
+  during review and then moved out to a dedicated compliance skill, at the maintainers' request.
 - `SKILL.md`: description mentions the overlays, and S5 points at the router. Redundant wording
-  was trimmed to stay within the 12 KiB bound (12289 → 12271 bytes); the CP19–CP25 just-in-time
-  bullet was removed because Step 7's Control Plane sub-state already states it.
-- Evals: seven `eks-overlay-*` functional cases and three trigger queries (not yet run; see
-  `evals/TESTING.md`). Payload is 76 files.
+  was trimmed to stay within the 12 KiB bound; the CP19–CP25 just-in-time bullet was removed
+  because Step 7's Control Plane sub-state already states it.
+- Evals: five `eks-overlay-*` functional cases and two drift/vulnerability trigger queries; a
+  compliance-mapping query is now `should_trigger: false`. See `evals/TESTING.md`. Payload is
+  75 files.
 
 ## [1.9.7] - 2026-11-10
 - Added `aws-services` (`Amazon EKS`) and `technical-domains` (`Containers, Operations`), so catalogs list the skill under EKS and those domains.

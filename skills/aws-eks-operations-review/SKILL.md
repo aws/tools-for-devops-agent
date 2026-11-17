@@ -10,9 +10,9 @@ description: >
   — Operations, Resilience, Security, Scalability, Performance, Observability,
   Networking, Cost, Control Plane — plus AWS API and Cluster Insights, and
   returns evidence-backed PASS/FAIL/N/A scorecards with prioritized
-  remediations. On request it maps verdicts to CIS EKS, NIST 800-53, PCI DSS,
-  SOC 2, and HIPAA, diffs against a prior review, and compares clusters across
-  accounts for drift. Do not use it for a quick ungraded health snapshot or an
+  remediations. On request it summarizes add-on and image vulnerability
+  posture, diffs against a prior review, and compares clusters across accounts
+  for drift. Do not use it for a quick ungraded health snapshot or an
   active incident investigation.
 metadata:
   author: shyamkulkarni
