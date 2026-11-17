@@ -140,7 +140,7 @@ normally.
 - *Administrators* can remove the bucket policy or change `AuthType`. Administrators are trusted; use an SCP that requires `lambda:FunctionUrlAuthType = AWS_IAM` to guard against misconfiguration.
 - *Diff engine defects* could cause a false negative. The engine is deterministic and unit-tested, and incomplete reads are always flagged.
 - *Diff engine defects* in trust and policy-body classification are covered by tests for the known hard cases: a condition removed from or swapped on one trust principal (`principal_conditions_lost`), a new unconditioned `Federated` principal, a removed trust `Deny` (`deny_statements_removed`), `Allow` + `NotAction` / `NotResource` (rendered as `NOT[...]` grants), and removed or added `Deny` statements in policy bodies (`denies_removed` / `denies_added`). Before/after trust documents are always returned.
-- *Capture flooding and cost* are bounded by the capture throttle. No reserved concurrency is set, because new accounts often lack spare concurrency to reserve.
+- *Capture flooding and cost* are bounded by the capture throttle, and the throttles and duration alarms report sustained load (see Operations). No reserved concurrency is set, because new accounts often lack spare concurrency to reserve; setting it to 0 is the kill switch.
 - *Errors:* `coverage.denied_calls` carries only the AWS error code (for example `AccessDenied`); the full error text goes to the function log only.
 - *Stack deletion* removes the KMS key and bucket resources (no `DeletionPolicy: Retain`). CloudFormation cannot delete a non-empty versioned bucket, and deleting the stack is an administrator action; add `DeletionPolicy: Retain` if snapshots must outlive the stack.
 - *The KMS key policy* gives the account root full key administration, as in the AWS default key policy, so the key stays manageable. Data-key use is denied except through S3 in the owning account.
@@ -199,6 +199,30 @@ classification policy treats any write, including the snapshot write, as
 mutative, classify `iam_snapshot_capture` and `iam_snapshot_diff` accordingly and
 approve them in chat; the other two remain read-only.
 
+## Operations: alarms and incident response
+
+The stack creates three CloudWatch alarms on the function. Pass `AlarmTopicArn=<your SNS topic ARN>` at deploy time to get notified; without it the alarms still exist and show in the CloudWatch console.
+
+| Alarm | Fires when | Likely cause | What to do |
+|---|---|---|---|
+| `iam-drift-diff-<stage>-errors` | Any function error in 5 minutes | IAM or S3 throttling, a permissions change, a malformed request, a code defect | Read `/iam-drift-diff/<stage>` (`FunctionLogGroupName` output): each failed call has an audit line with `error` and the caller ARN |
+| `iam-drift-diff-<stage>-throttles` | Lambda throttled any invocation in 5 minutes | More concurrent calls than the account's Lambda concurrency allows: a misbehaving agent, a retry loop, or an authorized principal flooding the endpoint | Check the audit lines for the callers. If the calls are not expected, use the kill switch below |
+| `iam-drift-diff-<stage>-duration` | An invocation ran over 240 s of its 300 s timeout | A very large account or IAM API throttling | Check `coverage.complete` in the latest snapshot; an incomplete capture is reported as such, never as "no drift" |
+
+**Kill switch (stop all invocations, keep data):**
+
+```bash
+aws lambda put-function-concurrency --function-name iam-drift-diff-mcp-<stage> --reserved-concurrent-executions 0
+# restore
+aws lambda delete-function-concurrency --function-name iam-drift-diff-mcp-<stage>
+```
+
+To cut off DevOps Agent only, remove the MCP registration from the Agent Space, or delete the inline policy on the `McpInvokeRoleArn` role.
+
+**Suspected misuse:** every call writes an audit line with the caller ARN and account. CloudTrail management events record `AssumeRole` on the invoke role and any change to the stack, bucket policy, key policy or log group. Snapshots are versioned for 90 days, so an overwritten or deleted snapshot can be recovered.
+
+**Reporting a security issue in this code:** use the [AWS vulnerability reporting page](https://aws.amazon.com/security/vulnerability-reporting/). Do not open a public GitHub issue (see the repository's CONTRIBUTING.md).
+
 ## Maintenance and dependency updates
 
 This is sample code that you deploy into your own account, so you own its updates. What to watch and how to update:
@@ -207,7 +231,7 @@ This is sample code that you deploy into your own account, so you own its update
 |---|---|---|
 | `fastmcp`, `boto3` | `requirements.in` (direct pins), `requirements.txt` (local dev and tests) | Edit the version in both files, then regenerate the lock (below) |
 | All transitive Python packages | `layers/dependencies/requirements.txt` (SHA-256 hashes) | From `layers/dependencies`: `uv pip compile requirements.in --generate-hashes --python-platform x86_64-manylinux_2_17 --python-version 3.12 -o requirements.txt`. Run in place, this keeps every pinned version and only changes what a new direct pin requires. To pick up a fix in one transitive package add `--upgrade-package <name>`; to refresh everything add `--upgrade`. Review the diff, run the tests, then `sam build` (the layer build uses `pip --require-hashes`) |
-| AWS Lambda Web Adapter layer | `template.yaml` (layer ARN, version 24) | Pick a newer published version of the public layer from the Lambda Web Adapter project, change the version number, redeploy |
+| AWS Lambda Web Adapter layer | `template.yaml` (layer ARN, version 30 = adapter 1.1.0) | Pick a newer published version of the public layer from the Lambda Web Adapter project, change the version number, redeploy |
 | Python runtime | `template.yaml` (`python3.12`) and the layer `Makefile` | Change both together, regenerate the lock for the new Python version, redeploy |
 
 Suggested cadence: check for updates monthly and within a week of any security advisory for `fastmcp`, `boto3` or a package in the lock (for example with `pip-audit -r layers/dependencies/requirements.txt` or your organization's scanner). After any update, run `PYTHONPATH=src python3 -m pytest tests/ -q`, `sam validate --lint`, and redeploy; the first scheduled drift run afterwards confirms the server still captures and diffs. Repository-wide automation (for example Dependabot for `pip` and the Lambda layer) is up to the repository maintainers; this directory does not enable it.

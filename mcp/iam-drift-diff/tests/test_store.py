@@ -636,3 +636,20 @@ def test_execution_role_stays_read_only_and_scoped():
         if s.get("Resource") == "*":
             assert s["Action"] == ["iam:GetAccountAuthorizationDetails"], s
     assert all(s["Effect"] == "Allow" for s in stmts)
+
+
+# ---- availability alarms exist and notify only when a topic is given (M33) --
+def test_template_alarms_cover_errors_throttles_and_duration():
+    tpl = _load_template()
+    res = tpl["Resources"]
+    alarms = {k: v["Properties"] for k, v in res.items() if v["Type"] == "AWS::CloudWatch::Alarm"}
+    metrics = {p["MetricName"] for p in alarms.values()}
+    assert metrics == {"Errors", "Throttles", "Duration"}
+    for p in alarms.values():
+        assert p["Namespace"] == "AWS/Lambda"
+        assert p["Dimensions"] == [{"Name": "FunctionName", "Value": {"Ref": "IamDriftDiffFunction"}}]
+        assert p["AlarmActions"] == {"If": ["HasAlarmTopic", [{"Ref": "AlarmTopicArn"}], {"Ref": "AWS::NoValue"}]}
+    duration = next(p for p in alarms.values() if p["MetricName"] == "Duration")
+    timeout_ms = tpl["Globals"]["Function"]["Timeout"] * 1000
+    assert duration["Threshold"] < timeout_ms
+    assert tpl["Parameters"]["AlarmTopicArn"]["Default"] == ""

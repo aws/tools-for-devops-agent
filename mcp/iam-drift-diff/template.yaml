@@ -68,8 +68,17 @@ Parameters:
       the Function URL (lambda:InvokedViaFunctionUrl). Set 'false' only if your
       DevOps Agent registration fails with 403 after enabling it.
 
+  AlarmTopicArn:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^arn:aws[a-zA-Z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$'
+    Description: >
+      Optional SNS topic ARN that receives the stack's CloudWatch alarm
+      notifications (errors, throttles, duration near the timeout). Leave
+      empty to create the alarms without notifications.
 Conditions:
   RestrictInvokeViaUrl: !Equals [!Ref RestrictInvokeToFunctionUrl, 'true']
+  HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, '']]
 
 Resources:
 
@@ -255,15 +264,17 @@ Resources:
       Architectures:
         - x86_64
       Layers:
-        # Public Lambda Web Adapter layer (x86_64).
-        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+        # Public Lambda Web Adapter layer (x86_64), version 30 = adapter 1.1.0.
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:30
         - !Ref DependenciesLayer
       Environment:
         Variables:
           AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
           AWS_LWA_PORT: '8000'
           AWS_LWA_READINESS_CHECK_PATH: /mcp
-          AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS: 500
+          # Adapter 1.x replaced MIN_UNHEALTHY_STATUS (removed). 100-499 keeps the
+          # old behavior: the /mcp GET readiness probe returns 4xx and counts as up.
+          AWS_LWA_READINESS_CHECK_HEALTHY_STATUS: 100-499
           AWS_LWA_INVOKE_MODE: response_stream
           AWS_LWA_READINESS_CHECK_PROTOCOL: http
           AWS_LWA_ASYNC_INIT: 'true'
@@ -350,6 +361,61 @@ Resources:
                   Resource: !GetAtt IamDriftDiffFunction.Arn
 
   # ---- dependencies layer (FastMCP + boto3), platform-pinned ------------
+  # ---- alarms (threat model M33; BSC21) ---------------------------------
+  # Alert on errors, throttling, and invocations running close to the
+  # 300 s timeout (a symptom of very large accounts or IAM API throttling).
+  # See README "Operations" for what each alarm means and what to do.
+  FunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub iam-drift-diff-${StageName}-errors
+      AlarmDescription: iam-drift-diff function errors (see README Operations).
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref IamDriftDiffFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+  FunctionThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub iam-drift-diff-${StageName}-throttles
+      AlarmDescription: iam-drift-diff invocations throttled by Lambda concurrency limits (see README Operations).
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref IamDriftDiffFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+  FunctionDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub iam-drift-diff-${StageName}-duration
+      AlarmDescription: iam-drift-diff invocation ran over 240 s of its 300 s timeout (see README Operations).
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref IamDriftDiffFunction
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 240000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
   DependenciesLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:

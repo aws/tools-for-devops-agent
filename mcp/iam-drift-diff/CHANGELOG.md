@@ -17,6 +17,9 @@
 - Tests: execution-role scope assertion on `template.yaml`; account gate refuses in every tool.
 - Deploy docs and `samconfig.toml` now pass `CAPABILITY_NAMED_IAM` (required because the invoke role has a fixed name).
 - README: new "Maintenance and dependency updates" section (what is pinned where, how to regenerate the hash lock, suggested update cadence).
+- Lambda Web Adapter layer 24 (adapter 0.9.0) to 30 (adapter 1.1.0). `AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS` (removed in 1.0) replaced by `AWS_LWA_READINESS_CHECK_HEALTHY_STATUS: 100-499`, the equivalent.
+- `dnspython` 2.9.1 to 2.9.2 in the layer lock (CVE-2026-128089 / GHSA-vvf4-9x63-8xvv, zone-file WKS parsing; not reachable from this server). Only that pin changed.
+- CloudWatch alarms on function errors, throttles and duration over 240 s, with an optional `AlarmTopicArn` parameter for SNS notifications. README: new "Operations: alarms and incident response" section (what each alarm means, kill switch, misuse investigation, how to report a security issue).
 
 ## [1.0.0] - 2026-11-02
 ### Pre-release hardening (security)
