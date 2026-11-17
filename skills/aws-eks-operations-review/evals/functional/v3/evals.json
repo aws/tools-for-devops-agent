@@ -1,0 +1,71 @@
+{
+  "skill_name": "aws-eks-operations-review",
+  "evals": [
+    {
+      "id": "eks-overlay-delta-classification",
+      "prompt": "During an EKS operations review, the user pasted a previous aws-eks-operations-review report for the same account, region, and cluster and asked what changed. Previous verdicts: S1 FAIL, S2 FAIL, R6 PASS, O12 FAIL; AX5 was not in the previous report. Current verdicts: S1 PASS, S2 FAIL, R6 FAIL, O12 N/A, AX5 FAIL. Per the skill's historical delta overlay, classify each, say how findings are matched between the two reports, and say where the delta appears in the report. No cluster access required.",
+      "expected_output": "S1 Resolved, S2 Persisting, R6 Regressed, O12 Unverified (FAIL to N/A is never Resolved), AX5 New. Matching uses fingerprints or check_id plus canonical_resource_id, never fuzzy titles; the prior report is used only from the conversation, never saved to a file.",
+      "assertions": [
+        "The response classifies S1 as Resolved, S2 as Persisting, R6 as Regressed, and AX5 as New",
+        "The response classifies O12 as Unverified and explicitly not Resolved",
+        "The response states findings are matched by the finding fingerprint (or check_id plus canonical_resource_id), not by fuzzy title matching",
+        "The response places the delta in a 'Change since previous review' subsection of the executive summary"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-fp13-no-invented-cve",
+      "should_trigger": true,
+      "prompt": "During an EKS operations review the user asked which add-ons or images are vulnerable. Evidence already collected: AX5 shows vpc-cni is 3 minor versions behind the latest compatible version and coredns is current; S38 found Amazon Inspector enabled with zero CRITICAL/HIGH findings for images running in the cluster. Which grading guard applies, what may the report say about vpc-cni, and which CVEs affect that vpc-cni version? No cluster access required.",
+      "expected_output": "Guard FP13 applies to AX5/S38. The vpc-cni lag is reported as a version gap, not a vulnerability, and no CVE, CVSS score, or vulnerable version is named because none appears in a retrieved Inspector finding or AWS security bulletin. Customer Inspector findings do not cover AWS-hosted add-on images, so the report points to the add-on release notes and AWS security bulletins.",
+      "assertions": [
+        "The response names grading guard FP13 as the guard that applies",
+        "The response labels the vpc-cni lag as a version gap rather than a confirmed vulnerability",
+        "The response names no CVE identifier or CVSS score for vpc-cni",
+        "The response states customer Inspector findings do not cover AWS-hosted add-on images and points to add-on release notes or AWS security bulletins"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-overlay-fleet-drift",
+      "should_trigger": true,
+      "prompt": "During an EKS operations review, the user asks to compare dev-cluster, staging-cluster, and prod-cluster for drift. They pasted last week's aws-eks-operations-review report for dev-cluster, have no report for staging-cluster, and asked you to review prod-cluster live now. Assume the prod-cluster review completed with QA PASS. Parity verdicts: AX11 dev PASS / prod FAIL; S15 dev FAIL / prod FAIL; S28 dev FAIL / prod PASS; AX10 dev PASS / prod N/A. Per the skill's comparison overlay, classify each, say what happens to staging-cluster, and describe how the result is delivered. No cluster access required.",
+      "expected_output": "AX11 Production-only gap, S15 Systemic, S28 Lower-environment gap, AX10 Not comparable. staging-cluster is not reviewed live in this conversation, because a comparison reviews at most one cluster live; it is listed as Not compared until the user supplies a report from a separate review. prod-cluster keeps its own complete report, and the comparison is a separate EKS Fleet Comparison deliverable. Drift classes never change per-cluster severity.",
+      "assertions": [
+        "The response classifies AX11 as a production-only gap and S15 as systemic",
+        "The response classifies S28 as a lower-environment gap and AX10 as not comparable",
+        "The response does not start a second live review for staging-cluster and lists it as not compared until a report is supplied",
+        "The response states the comparison is a separate deliverable from prod-cluster's own complete report",
+        "The response states at most one cluster is reviewed live and the other clusters come from supplied reports"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-overlay-not-requested",
+      "prompt": "For a plain full EKS operations review where the user never mentioned prior reports or other clusters, does the skill load the overlays reference or add any overlay subsection? No cluster access required.",
+      "expected_output": "No. The ledger records overlays: none, overlays.md is not loaded, and the report contains only the eight mandatory sections without overlay subsections.",
+      "assertions": [
+        "The response states overlays.md is not loaded when no overlay is requested",
+        "The response states the ledger records overlays: none",
+        "The response states the eight mandatory report sections are unchanged"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-overlay-live-delta",
+      "should_trigger": true,
+      "prompt": "Run an EKS operations review of the Security pillar for cluster ops-delta-test in us-east-1 in the connected AWS account, and show what changed since the previous review. Here is the previous aws-eks-operations-review report for this same cluster from earlier today:\n\n# EKS Operations Review \u2014 ops-delta-test (previous report, compacted to its appendix)\nRegion: us-east-1. Account: the same connected account as this review; AWS identifiers were replaced with placeholders before sharing (`<cluster-arn>` is this cluster's ARN, `<cluster-vpc-id>` its VPC, `<node-volume-n>` its node root volumes). Skill: aws-eks-operations-review 1.10.0. Pillars graded: Security (46 IDs). No fingerprints were included.\n\n| ID | Verdict | Severity | Canonical resource ID (FAIL only) |\n|---|---|---|---|\n| S1 | FAIL | Critical | `team-a/priv-pod` privileged |\n| S2 | PASS |  | hostNetwork only on kube-system and the AWS-managed GuardDuty agent; no hostPID/hostIPC anywhere |\n| S3 | FAIL | High | unset on 3 user workloads |\n| S4 | FAIL | High | no drop ALL on 3 user workloads |\n| S5 | FAIL | Medium | seccomp unset on 3 user workloads |\n| S6 | FAIL | Medium | rootfs writable on 3 user workloads |\n| S7 | FAIL | High | runAsNonRoot unset on 3 user workloads |\n| S8 | PASS |  | hostPath only on `aws-node`, `kube-proxy` and the GuardDuty agent (its mounts are read-only). Confidence Medium |\n| S9 | FAIL | Medium | `default` and `team-a` lack PSA labels |\n| S10 | N/A |  | ClusterRoleBindings list Forbidden |\n| S11 | N/A |  | ClusterRoles list Forbidden |\n| S12 | FAIL | Medium | `aws-auth` present; mode `API_AND_CONFIG_MAP` |\n| S13 | N/A |  | ServiceAccounts Forbidden; Pod Identity associations = 0 |\n| S14 | FAIL | Medium | token auto-mounted on 3 workloads that do not need it |\n| S15 | N/A |  | NetworkPolicies Forbidden |\n| S16 | N/A |  | webhook configurations Forbidden |\n| S17 | N/A |  | webhook configurations Forbidden |\n| S18 | FAIL | Medium | no external-secrets tooling |\n| S19 | FAIL | Low | `DB_PASSWORD` via `secretKeyRef` env |\n| S20 | PASS |  | all 12 pods use explicit tags (`pause:3.10`, versioned ECR tags) |\n| S21 | FAIL | Medium | no in-cluster scanner (registry-side unverified) |\n| S22 | PASS |  | `aws-guardduty-agent` add-on ACTIVE; DaemonSet 2/2 Running |\n| S23 | FAIL | Medium | no Kyverno or Gatekeeper |\n| S24 | PASS |  | Amazon Linux 2023.12.20261112, EKS-optimized AL2023 AMI type |\n| S25 | PASS |  | no key pair on either instance; cluster SG has no port-22 ingress (only self-referencing rules) |\n| S26 | N/A |  | Secrets list Forbidden |\n| S27 | N/A |  | no EFS file systems, no PVs |\n| S28 | PASS |  | both instances `HttpTokens=required`, hop limit 1 |\n| S29 | N/A |  | bindings Forbidden |\n| S30 | FAIL | Medium | no flow logs on VPC or subnets |\n| S31 | N/A |  | tenancy not established; quotas and NetworkPolicies unreadable |\n| S32 | FAIL | High | `gp2` has no `encrypted` |\n| S33 | N/A |  | webhook configurations Forbidden |\n| S34 | N/A |  | webhook configurations Forbidden |\n| S35 | N/A |  | Secrets Store CSI not installed |\n| S36 | FAIL | Medium | `aws-node` has no dedicated role; node role carries CNI policy |\n| SM1 | FAIL | Medium | no `encryptionConfig` |\n| SM2 | FAIL | Medium | audit logging disabled |\n| SM3 | FAIL | High | public endpoint open to `0.0.0.0/0` |\n| SM4 | FAIL | Medium | unencrypted StorageClass and node volumes |\n| SM5 | N/A |  | no cluster image comes from account ECR; Inspector status AccessDenied |\n| SM6 | N/A |  | no mesh and no mTLS requirement established |\n| SM7 | PASS |  | node role has only `AmazonEKSWorkerNodePolicy`, `AmazonEC2ContainerRegistryReadOnly` and `AmazonEKS_CNI_Policy`; no inline policies |\n| S37 | PASS |  | EKS audit logs and runtime monitoring enabled; 0 active findings with severity \u22657. Confidence Medium: cluster coverage is `UNHEALTHY` with 0 covered nodes while provisioning |\n| S38 | N/A |  | Inspector status AccessDenied; cluster images are not in account ECR |\n| S39 | N/A |  | Security Hub enabled with FSBP standard, but 0 findings of any kind exist for this cluster, so evidence is absent |\n| ID | Verdict |  | Canonical resource ID (FAIL only) |\n| ----- | --------- |  | -------------------------------------------------------------------------------------------- |\n| S1 | FAIL | Critical | `team-a/Pod/priv-pod` |\n| S2 | PASS |  |  |\n| S3 | FAIL | High | `default/Deployment/legacy-web`; `team-a/Deployment/env-secret-app`; `team-a/Pod/priv-pod` |\n| S4 | FAIL | High | `default/Deployment/legacy-web`; `team-a/Deployment/env-secret-app`; `team-a/Pod/priv-pod` |\n| S5 | FAIL | Medium | `default/Deployment/legacy-web`; `team-a/Deployment/env-secret-app`; `team-a/Pod/priv-pod` |\n| S6 | FAIL | Medium | `default/Deployment/legacy-web`; `team-a/Deployment/env-secret-app`; `team-a/Pod/priv-pod` |\n| S7 | FAIL | High | `default/Deployment/legacy-web`; `team-a/Deployment/env-secret-app`; `team-a/Pod/priv-pod` |\n| S8 | PASS |  |  |\n| S9 | FAIL | Medium | `Namespace/default`; `Namespace/team-a` |\n| S10 | N/A |  |  |\n| S11 | N/A |  |  |\n| S12 | FAIL | Medium | `kube-system/ConfigMap/aws-auth` |\n| S13 | N/A |  |  |\n| S14 | FAIL | Medium | `default/Deployment/legacy-web`; `team-a/Deployment/env-secret-app`; `team-a/Pod/priv-pod` |\n| S15 | N/A |  |  |\n| S16 | N/A |  |  |\n| S17 | N/A |  |  |\n| S18 | FAIL | Medium | `<cluster-arn>` |\n| S19 | FAIL | Low | `team-a/Deployment/env-secret-app` |\n| S20 | PASS |  |  |\n| S21 | FAIL | Medium | `<cluster-arn>` |\n| S22 | PASS |  |  |\n| S23 | FAIL | Medium | `<cluster-arn>` |\n| S24 | PASS |  |  |\n| S25 | PASS |  |  |\n| S26 | N/A |  |  |\n| S27 | N/A |  |  |\n| S28 | PASS |  |  |\n| S29 | N/A |  |  |\n| S30 | FAIL | Medium | `<cluster-vpc-id>` |\n| S31 | N/A |  |  |\n| S32 | FAIL | High | `StorageClass/gp2` |\n| S33 | N/A |  |  |\n| S34 | N/A |  |  |\n| S35 | N/A |  |  |\n| S36 | FAIL | Medium | `kube-system/ServiceAccount/aws-node` |\n| SM1 | FAIL | Medium | `<cluster-arn>` |\n| SM2 | FAIL | Medium | `<cluster-arn>` |\n| SM3 | FAIL | High | `<cluster-arn>` |\n| SM4 | FAIL | Medium | `StorageClass/gp2`; `<node-volume-1>`; `<node-volume-2>` |\n| SM5 | N/A |  |  |\n| SM6 | N/A |  |  |\n| SM7 | PASS |  |  |\n| S37 | PASS |  |  |\n| S38 | N/A |  |  |\n| S39 | N/A |  |  |\n\nTotals: PASS 9 / FAIL 20 / N/A 17.",
+      "expected_output": "Graded live from the cluster, then compared with the supplied report by check_id plus canonical_resource_id because it has no fingerprints. S1 is Resolved (team-a/Pod/priv-pod no longer exists). S2 is Regressed (PASS before, now FAIL for team-a/Pod/hostnet-pod). S19 is Persisting for team-a/Deployment/env-secret-app. For S3, team-a/Pod/priv-pod is Resolved and team-a/Pod/hostnet-pod is New. IDs that were N/A in both runs are not counted as changes. The delta renders as a `### Change since previous review` subsection at the end of \u00a71 of the eight-section report.",
+      "assertions": [
+        "The response classifies S1 as Resolved because team-a/Pod/priv-pod is no longer privileged or no longer exists",
+        "The response classifies S2 as Regressed, naming team-a/Pod/hostnet-pod",
+        "The response classifies S19 as Persisting for team-a/Deployment/env-secret-app",
+        "The response states findings were matched by check_id plus canonical_resource_id because the previous report has no fingerprints",
+        "The response includes a 'Change since previous review' subsection in the executive summary (\u00a71) of the eight-section report"
+      ],
+      "task_type": "chat"
+    }
+  ]
+}

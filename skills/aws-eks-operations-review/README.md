@@ -26,19 +26,17 @@ Canonical coverage: 49 discovery areas; 288 core checks (41 Operations, 26 Resil
 
 ## Optional overlays
 
-These views run only when the user asks for them. They are derived from the graded ledger and never add checks, change verdicts or severity, or alter the eight-section report. Activation, inputs, and rules live in `references/runtime/overlays.md`. This skill does not map findings to compliance frameworks such as CIS, NIST 800-53, or PCI DSS.
+These views run only when the user asks for them. Guardrails for vulnerability claims (version lag is a version gap; a CVE is named only when a retrieved Inspector finding or AWS security bulletin contains it) apply to every review, through guard FP13 in `references/runtime/grading-guards.md`. They are derived from the graded ledger and never add checks, change verdicts or severity, or alter the eight-section report. Activation, inputs, and rules live in `references/runtime/overlays.md`. This skill does not map findings to compliance frameworks such as CIS, NIST 800-53, or PCI DSS.
 
 | Overlay | Ask for it with | Output |
 |---|---|---|
-| Vulnerability posture | "which add-ons or images have CVEs" | §2 summary of add-on version gaps (AX5/Op7/N2), Inspector image findings (S38), and node AMI age (Op29). It never names a CVE that a retrieved finding or bulletin does not contain. |
 | Historical delta | Paste a previous report from this skill and ask "what changed" | §1 New / Regressed / Persisting / Resolved / Unverified, matched by finding fingerprint. The prior report is used from the conversation only. |
-| Comparison, drift, fleet | "compare dev and prod", "review clusters across accounts" | One complete review per cluster, then a separate `EKS Fleet Comparison` with drift classes on parity checks. Each account must be a cloud source in the Agent Space, and each cluster needs the access entry described above. Up to three live reviews run per conversation; larger fleets compare supplied reports. |
+| Comparison, drift, fleet | Paste reports from earlier reviews and ask to "compare dev and prod" or "check for drift" | A separate `EKS Fleet Comparison` with drift classes on parity checks. It compares reports: at most one cluster is reviewed live in the conversation, and every other cluster comes from a report you supply, so review each cluster in its own conversation first. |
 
 Example prompts:
 
-- "Run a full EKS operations review of `prod-cluster` in us-east-1 and tell me which add-ons or images have known vulnerabilities."
 - "Here is last month's review of `prod-cluster`. Re-run the review and show what changed."
-- "Review `dev-cluster` (account `<dev-account-id>`) and `prod-cluster` (account `<prod-account-id>`), then compare them for configuration drift."
+- "Here are last week's reviews of `dev-cluster` and `staging-cluster`. Review `prod-cluster` now and compare all three for configuration drift."
 
 ## Package layout
 

@@ -10,9 +10,8 @@ description: >
   — Operations, Resilience, Security, Scalability, Performance, Observability,
   Networking, Cost, Control Plane — plus AWS API and Cluster Insights, and
   returns evidence-backed PASS/FAIL/N/A scorecards with prioritized
-  remediations. On request it summarizes add-on and image vulnerability
-  posture, diffs against a prior review, and compares clusters across accounts
-  for drift. Do not use it for a quick ungraded health snapshot or an
+  remediations. On request it diffs against a prior review and compares
+  supplied reports across clusters for drift. Do not use it for a quick ungraded health snapshot or an
   active incident investigation.
 metadata:
   author: shyamkulkarni
@@ -34,7 +33,7 @@ A full review needs many read-only tool calls; duration varies with cluster size
 - Every verdict needs observed evidence. Missing/partial evidence is N/A with the exact reason; empty output never proves health. Never omit, invent, merge, sample, rename, or renumber canonical rows. Scorecard membership never includes query IDs.
 - A full review grades exactly 288 core rows; the check manifest owns membership. S7 must PASS before S8.
 ## Transient ledger and stop rules
-Keep in current context only: confirmed identity/scope/window; 49 area statuses and bounded projections; source attempts; gate decisions; selected/completed units; exact verdicts; FAIL evidence, descriptive severity, canonical resource ID, fingerprint, and remediation route; reference-load audit; QA result; next unit. Update after every area/unit and discard raw output. Stop and report evidence/completed work/retry requirement if the Kubernetes tool is unavailable, identity differs from the confirmed target, initial access fails, more than 30% of a discovery phase fails, or mutation/safety is attempted. Later isolated denial/timeout/optional-CRD gaps are N/A unless that threshold is crossed. For production, confirm timing before the broad read sweep. Never fetch Kubernetes Secret values. EKS control-plane hosts/etcd are AWS-managed: use only customer-visible APIs, logs, metrics, and Kubernetes behavior.
+Keep in current context only: confirmed identity/scope/window; 49 area statuses and bounded projections; source attempts; gate decisions; selected/completed units; exact verdicts; FAIL evidence, descriptive severity, canonical resource ID, fingerprint, and remediation route; reference-load audit; requested overlays and their triggers (or `overlays: none`); QA result; next unit. Update after every area/unit and discard raw output. Stop and report evidence/completed work/retry requirement if the Kubernetes tool is unavailable, identity differs from the confirmed target, initial access fails, more than 30% of a discovery phase fails, or mutation/safety is attempted. Later isolated denial/timeout/optional-CRD gaps are N/A unless that threshold is crossed. For production, confirm timing before the broad read sweep. Never fetch Kubernetes Secret values. EKS control-plane hosts/etcd are AWS-managed: use only customer-visible APIs, logs, metrics, and Kubernetes behavior.
 ## Workflow checklist
 Work these steps in order; never start a step before the previous one is recorded in the ledger.
 

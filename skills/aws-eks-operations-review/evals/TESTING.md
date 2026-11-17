@@ -54,30 +54,33 @@ upload payload.
 
 ### 1.10.0 results (2026-11-17, devops-agent 0.1.0, judge `us.anthropic.claude-sonnet-5`, us-east-1)
 
-These runs follow the removal of the compliance overlay. The results committed under `evals/structure/` (v2), `evals/best-practices/v2/`, and `evals/functional/v2/` come from them.
+These runs follow the second review round: the vulnerability posture overlay became grading guard FP13, comparison/fleet compares supplied reports with at most one live review, and the overlay cases were reworked. The results committed under `evals/structure/` (v3), `evals/best-practices/v3/`, and `evals/functional/v3/` come from them.
 
 | Tier | Result | Notes |
 |---|---|---|
-| structure | 12/12 (100%) | `structure-tests-results-v2.json` |
-| best-practices | 83% / 91% / 80%, consistency 82% | BP-04 fails 3/3, the accepted deviation below. BP-16 failed in two iterations on the Step 7 Control Plane sub-state heading, which has no checklist item of its own; 1.9.x and the earlier 1.10.0 run passed it, and `SKILL.md`'s step layout is unchanged from 1.9.6. BP-02 and BP-11 gave warnings. |
-| functional (5 `eks-overlay-*` cases × 3 iterations, one invocation) | 30/30 iterations ran | See the per-case table |
+| structure | 12/12 (100%) | `structure-tests-results-v3.json` |
+| best-practices | 92% / 91% / 91%, consistency 94% | BP-04 fails 3/3, the accepted deviation below. BP-02 gave warnings in two iterations. |
+| functional (5 cases × 3 iterations, one invocation) | 30/30 iterations ran; the skill loaded in 15/15 with-skill iterations | See the per-case table |
 
-Functional results for the overlay cases only (the 22 original cases were not re-run):
+Functional results for these cases only (the 22 original cases were not re-run):
 
 | Case | Skill loaded | Expected output (with / without) | Assertions (with / without) |
 |---|---|---|---|
-| `eks-overlay-delta-classification` | 3/3 | 2/3 / 0/3 | 9/12 / 3/12 |
-| `eks-overlay-delta-identity-mismatch` | 1/3 | 3/3 / 3/3 | 9/9 / 8/9 |
-| `eks-overlay-vuln-no-invented-cve` | 1/3 | 1/3 / 0/3 | 6/12 / 3/12 |
-| `eks-overlay-fleet-drift` | 2/3 | 2/3 / 0/3 | 12/15 / 3/15 |
-| `eks-overlay-not-requested` | 2/3 | 2/3 / 0/3 | 6/9 / 0/9 |
+| `eks-overlay-delta-classification` | 3/3 | 3/3 / 0/3 | 12/12 / 2/12 |
+| `eks-overlay-live-delta` (live cluster) | 3/3 | 3/3 / 0/3 | 15/15 / 0/15 |
+| `eks-overlay-fleet-drift` | 3/3 | 3/3 / 0/3 | 15/15 / 8/15 |
+| `eks-overlay-not-requested` | 3/3 | 3/3 / 0/3 | 9/9 / 0/9 |
+| `eks-scenario-fp13-no-invented-cve` | 3/3 | 3/3 / 0/3 | 12/12 / 7/12 |
+
+With the skill uploaded, 15/15 expected outputs and 63/63 assertions passed, against 0/15 and 17/63 without it.
 
 How to read this:
 
-- **Activation is the weak point, not overlay behaviour.** In every iteration where the skill loaded, the case met its expected output. The misses are the parallel-run activation race described below; `vuln-no-invented-cve` loaded 3/3 in the earlier 1.10.0 run with the same prompt. In two misses the agent loaded a skill named `eks-operations-review` instead, which is not part of this package.
-- **`delta-identity-mismatch` barely separates the two sides.** Any model refuses a diff across mismatched cluster identities, so it passes without the skill too.
+- **`eks-overlay-live-delta` runs against a real cluster.** A temporary EKS 1.37 cluster (two AL2023 nodes, deleted after testing) was seeded with a privileged pod, unhardened workloads, a Secret passed as an env var, a public endpoint, and no audit logging or KMS encryption. A live Security review produced the previous report, which the prompt supplies compacted to its appendix with AWS identifiers replaced by placeholders and no fingerprints. Between the two runs the privileged pod was deleted and a `hostNetwork` pod was added. In all three iterations the skill graded the cluster live, classified S1 as Resolved, S2 as Regressed, and S19 as Persisting, matched by `check_id` plus `canonical_resource_id`, and rendered `### Change since previous review` in §1.
+- **Correction to the previous record.** The earlier version of this section said every iteration where the skill loaded met its expected output. That run had 4 of 15 with-skill iterations where the agent reported the skill as unavailable, and in two of them it loaded a different skill named `eks-operations-review`, so the sentence overstated the result. In this run the skill loaded in all 15 with-skill iterations, so there were no activation misses to re-run serially.
+- **Case changes.** `delta-identity-mismatch` was dropped because it passed 3/3 without the skill. The vulnerability case now tests guard FP13 and asserts the guard by name. `fleet-drift` now asks for three clusters with one supplied report, one live review, and one cluster with no report, and checks that no second live review starts.
 - **Before trusting a full-suite number, re-run serially.** These cases were added to `evals.json` by hand, so port them into `convert-evals.py` before its next regeneration, or they will be dropped.
-- Real account identifiers in the recorded agent output were redacted to `123456789012`.
+- Real account identifiers, node public IPs, and resource identifiers in the recorded agent output were replaced with placeholders.
 
 ### Serial run — the trustworthy path
 

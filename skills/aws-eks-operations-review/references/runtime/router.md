@@ -25,7 +25,7 @@ Load only in S5. Discovery always attempts all 49 areas; routing selects grading
 
 ## Overlays
 
-Load [`overlays.md`](overlays.md) only when the user explicitly asks for vulnerability posture, a delta against a supplied prior report, a cluster or environment comparison, drift, or a multi-account fleet view. Otherwise record `overlays: none`. Overlays are derived views and never change unit selection, membership, gates, or verdicts. A fleet or comparison request still runs one complete review per cluster. This review does not map findings to compliance frameworks (CIS, NIST 800-53, PCI DSS, SOC 2, HIPAA); if asked, say so in §7 and do not invent a mapping.
+Load [`overlays.md`](overlays.md) only when the user explicitly asks for a delta against a supplied prior report, or a cluster, environment, drift, or fleet comparison. Otherwise record `overlays: none`. Overlays are derived views and never change unit selection, membership, gates, or verdicts. A comparison grades at most one cluster live; the other clusters come from reports the user supplies. This review does not map findings to compliance frameworks (CIS, NIST 800-53, PCI DSS, SOC 2, HIPAA); if asked, say so in §7 and do not invent a mapping.
 
 ## Shared grading references
 

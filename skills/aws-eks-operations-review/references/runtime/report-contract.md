@@ -66,9 +66,8 @@ Minimum substance per section: §1 is 2–4 sentences plus the severity and PASS
 Overlays from [`overlays.md`](overlays.md) render only when the ledger records them as requested. Each one is a `###` subsection inside an existing section, never a new top-level section:
 
 - Delta: `### Change since previous review` at the end of §1.
-- Vulnerability posture: `### Vulnerability posture` at the end of §2.
 
-A comparison, drift, or fleet view is a separate `# EKS Fleet Comparison` deliverable. It is emitted only after every per-cluster review has been delivered complete, and it is never folded into a cluster report. Overlays never alter section order, verdicts, severity, or counts.
+A comparison, drift, or fleet view is a separate `# EKS Fleet Comparison` deliverable. It is emitted only after the live report, if any, has been delivered complete, and it is never folded into a cluster report. Overlays never alter section order, verdicts, severity, or counts.
 
 ## Severity model
 
