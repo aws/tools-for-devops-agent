@@ -1,4 +1,7 @@
 # Changelog
+## [1.9.7] - 2026-11-10
+- Added `aws-services` (`Amazon EKS`) and `technical-domains` (`Containers, Operations`), so catalogs list the skill under EKS and those domains.
+
 ## [1.9.6] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

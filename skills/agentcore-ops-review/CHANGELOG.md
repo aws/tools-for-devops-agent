@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.4] - 2026-11-17
+- Added `Amazon Bedrock` to `aws-services`, so a filter for Bedrock lists the skill as well as one for AgentCore.
+- `technical-domains` uses `AI/ML` instead of `Machine Learning` and `GenAI`, so catalogs list every AI skill under one domain.
+
 ## [1.0.3] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

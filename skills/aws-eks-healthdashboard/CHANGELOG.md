@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Added `aws-services` (`Amazon EKS`) and `technical-domains` (`Containers, Observability`), so catalogs list the skill under EKS and those domains.
+
 ## 1.0.0
 
 Close the metric-coverage gaps against the AWS [EKS essential metrics guide](https://aws-observability.github.io/observability-best-practices/guides/containers/oss/eks/best-practices-metrics-collection/),

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.2
+- `metadata.author` is the contributor's GitHub username, `yprikhodko`, so catalogs link to their profile.
+
 ## 1.0.1
 - Agent types now use the API values in `metadata.aws-devops-agent-skills.agent-types` (`CHAT`, `INCIDENT_RCA`, `INCIDENT_TRIAGE`), the field that sets which agents load the skill.
 
