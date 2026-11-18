@@ -253,7 +253,7 @@ class AwsSupportManagedTests(unittest.TestCase):
             "| SUPPORT SKILL | context |",
             "It needs support skill.",
             "It needs the Support\nSkill skill.",
-            "It needs the Support Skill skill.",
+            "It needs the Support\u00a0Skill skill.",
         ):
             with self.subTest(markdown=markdown), self.assertLogs("mkdocs.hooks.skills_catalog", "WARNING"):
                 self.hook.on_page_content("", page=self.page(markdown))
