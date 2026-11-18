@@ -33,7 +33,7 @@ The skill currently covers **Automation**:
 - Only Automation is covered today. For other Systems Manager capabilities, the skill says so and falls back to the public documentation.
 - The agent doesn't start, stop or signal executions; it prepares the commands for a person to run.
 - The runbook catalog reflects the AWS-owned runbooks published on 2026-11-04. Availability and versions differ by Region, so the skill confirms every runbook with a live call.
-- Risk tiers come from static analysis of each runbook's steps. Runbooks that run shell or PowerShell scripts on an instance are rated `mutating-reversible` without inspecting the script.
+- Risk tiers come from static analysis of each runbook's steps, including the code embedded in `aws:createStack` templates. A runbook whose script lives in an attachment outside the document, or that runs shell or PowerShell commands on an instance, can't be fully inspected and is rated at least `mutating-reversible`, never `read-only`.
 - The hardening review is static: it doesn't run the runbook or review the assume role's IAM policy.
 - The multi-account guidance follows the Systems Manager documentation; single-account behaviour was verified in a test account.
 

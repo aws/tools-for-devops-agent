@@ -6,7 +6,6 @@ Availability and the default version differ by Region. Before recommending or st
 
 | Runbook | Tier | Target type | What it does | Required parameters | Notes |
 |---|---|---|---|---|---|
-| `AWSSupport-TroubleshootDMSTableErrors` | read-only | — | Is designed to automate the troubleshooting process for table errors in AWS Database Migration Service (AWS DMS). These errors occur when tables fail to migrate from the source endpoint to the target endpoint during Database Migration Tasks or Serverless Replications created in AWS DMS service. | `DMSArn` |  |
 | `AWS-EnableDynamoDbAutoscaling` | mutating-reversible | — | Enable Application Autoscaling for an existing DynamoDB Table which is configured for provisioned capacity in order to maintain availability using the RegisterScalableTarget and PutScalingPolicy APIs. | `MaxReadCapacity`, `MaxWriteCapacity`, `MinReadCapacity`, `MinWriteCapacity`, `ReadScaleInCooldown`, `ReadScaleOutCooldown`, `TableName`, `TargetReadCapacityUtilization`, `TargetWriteCapacityUtilization`, `WriteScaleInCooldown`, `WriteScaleOutCooldown` |  |
 | `AWS-RebootRdsInstance` | mutating-reversible | AWS::RDS::DBInstance | Reboot RDS Instance | `InstanceId` | failure branch |
 | `AWS-StartRdsInstance` | mutating-reversible | AWS::RDS::DBInstance | Start RDS instance | `InstanceId` | failure branch |
@@ -19,5 +18,6 @@ Availability and the default version differ by Region. Before recommending or st
 | `AWSResilienceHub-ScaleUpDocumentDBClusterSOP_2020-09-21` | mutating-reversible | — | Scale up Amazon Document DB cluster. | `DBClusterIdentifier` |  |
 | `AWSSQLServer-DBCC` | mutating-reversible | AWS::EC2::Instance | Performs database integrity checks (DBCC) on the specified SQL Server database. | `Database`, `InstanceId`, `SecretsMangerCredential`, `ThirdPartySoftwareConsent` | deletes files in guest |
 | `AWSSQLServer-Index` | mutating-reversible | AWS::EC2::Instance | Performs SQL Server index maintenance operations on a specified database. | `Database`, `InstanceId`, `SecretsMangerCredential`, `ThirdPartySoftwareConsent` | deletes files in guest |
+| `AWSSupport-TroubleshootDMSTableErrors` | mutating-reversible | — | Is designed to automate the troubleshooting process for table errors in AWS Database Migration Service (AWS DMS). These errors occur when tables fail to migrate from the source endpoint to the target endpoint during Database Migration Tasks or Serverless Replications created in AWS DMS service. | `DMSArn` | script in attachment, not inspected |
 | `AWSResilienceHub-PromoteRdsReadReplicaSOP_2020-04-01` | destructive | — | SOP to recover an instance by promoting a replica to master in case of failure in the master instance. | `DbInstanceIdentifier` |  |
 | `AWSResilienceHub-ScaleDownDocumentDBClusterSOP_2020-09-21` | destructive | — | Scale down Amazon Document DB cluster. | `DBClusterIdentifier` |  |

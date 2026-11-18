@@ -36,7 +36,7 @@ Copy this checklist and work through the steps that apply:
 - [ ] Step 2: Build the start command, resolve the targets and check the alarm
 - [ ] Step 3: Monitor the execution
 - [ ] Step 4: Interpret the result
-- [ ] Step 5: Give the stop or approval command, if needed
+- [ ] Step 5: Give the stop, approval or resume command, if needed
 - [ ] Step 6: Check your answer, then present it
 
 For a question about an existing execution, start at Step 3.
@@ -163,7 +163,7 @@ Poll every 30 seconds or longer while the status is `Pending`, `InProgress`, `Wa
 | `Failed` | A step failed, an approver rejected, or `MaxErrors` was exceeded | The failing step's `FailureDetails`; for a rejection, the `FailureMessage` names who rejected and their comment |
 | `TimedOut` | A step ran past its `timeoutSeconds` | The step, and what it was waiting for |
 | `Cancelled` | Someone called `StopAutomationExecution`, or an alarm fired | If `FailureMessage` is `Cancelled due to Alarm(s)`, the alarm in `TriggeredAlarms` |
-| `Waiting` | An `aws:approve` or `aws:pause` step is waiting for a signal | Who can approve (the step's `Approvers`) and the command below |
+| `Waiting` | An `aws:approve` or `aws:pause` step is waiting for a signal | For `aws:approve`: who can approve (the step's `Approvers`) and the approve/reject commands below. For `aws:pause`: the resume command below |
 
 For a failure, link the error code to a cause before suggesting a fix:
 
@@ -177,23 +177,30 @@ For a failure, link the error code to a cause before suggesting a fix:
 Worked examples of each status, from real executions, are in
 [references/automation/execution-results.md](references/automation/execution-results.md).
 
-## Step 5: Stop or approve
+## Step 5: Stop, approve or resume
 
-Give the person the command; don't run it.
+Give the person the command; don't run it. Which signal applies depends on the waiting step's
+`Action` (read it from `describe-automation-step-executions`).
 
 ```bash
 # Stop an execution that is in progress
 aws ssm stop-automation-execution --region <region> --automation-execution-id <execution-id> --type Cancel
 
-# Approve or reject a step that is waiting
+# Approve or reject a waiting aws:approve step
 aws ssm send-automation-signal --region <region> --automation-execution-id <execution-id> \
   --signal-type Approve --payload Comment="<reason>"
 aws ssm send-automation-signal --region <region> --automation-execution-id <execution-id> \
   --signal-type Reject --payload Comment="<reason>"
+
+# Resume a waiting aws:pause step
+aws ssm send-automation-signal --region <region> --automation-execution-id <execution-id> \
+  --signal-type Resume
 ```
 
-Only a principal listed in the step's `Approvers` can approve or reject. After a rejection the
-execution ends `Failed`.
+Only a principal listed in the `aws:approve` step's `Approvers` can approve or reject; after a
+rejection the execution ends `Failed`. An `aws:pause` step has no `Approvers`: anyone allowed to
+call `ssm:SendAutomationSignal` on the execution can resume it
+([`aws:pause`](https://docs.aws.amazon.com/systems-manager/latest/userguide/automation-action-pause.html)).
 
 ## Step 6: Check your answer
 

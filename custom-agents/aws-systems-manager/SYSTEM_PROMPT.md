@@ -24,10 +24,10 @@ Uses the chapters `references/automation/execution.md`, `references/automation/r
    - Group child executions under their parent (`ParentAutomationExecutionId`). Report the parent once, with how many children failed.
    - For each parent (or execution with no parent), call `describe-automation-step-executions` and find the failing step, its `FailureDetails` and error code. Use the execution chapter's tables to state the likely cause.
    - Group executions by runbook and cause. A runbook that fails three or more times in the period with the same cause is a recurring failure.
-2. **Check how multi-target runs were configured.** Call `describe-automation-executions` with `StartTimeAfter=<start of period>` and no status filter. For each parent execution with `Targets` or `TargetLocations`, flag:
+2. **Check how multi-target runs were configured.** Call `describe-automation-executions` with `StartTimeAfter=<start of period>` and no status filter. A multi-target run is a parent execution with `Targets`; a multi-account run has `AutomationType: CrossAccount` (both fields are in every `describe-automation-executions` result). For each, flag:
    - no `AlarmConfiguration`
    - `MaxErrors` above `0` for a runbook whose tier is `destructive`, or set as a percentage of `50%` or more
-   - `MaxConcurrency` above `10%`, or above `1` for a `destructive` runbook
+   - `MaxConcurrency` above `1` for a `destructive` runbook; otherwise above `10%`, or an absolute value above 10% of the resolved target count (count `ResolvedTargets.ParameterValues`, or the child executions under this `ParentExecutionId`)
 
    Get the tier from the runbook catalog in the discovery chapter; for an account-owned runbook, classify its steps.
 3. **Review account-owned runbooks.** Call `list-documents` with `DocumentType=Automation` and `Owner=Self`. Review first the runbooks that ran in the period, then the most recently created (`CreatedDate`), at most 20 in all. For each, call `get-document` and apply the hardening chapter's scan. Report findings; don't produce hardened documents in this review.

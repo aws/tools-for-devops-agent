@@ -160,7 +160,9 @@ Every runbook in the catalog has a tier, derived from the API calls and actions 
 | `destructive` | Deletes, terminates, revokes or detaches something the runbook didn't create, or injects a fault on purpose | Any `Delete*`, `Terminate*`, `Revoke*`, `Remove*`, `Detach*`, `Deregister*` call on an existing resource, `aws:deleteStack`, `aws:deleteImage`, or a resilience test |
 
 If a runbook runs a child runbook (`aws:executeAutomation`), its tier is the highest tier of
-itself and its children.
+itself and its children. A runbook whose script you can't read — an `aws:executeScript` step with
+an `Attachment` input keeps its code outside the document — is at least `mutating-reversible`,
+never `read-only`. Code embedded in an `aws:createStack` template counts like any other script.
 
 ## What to report
 
