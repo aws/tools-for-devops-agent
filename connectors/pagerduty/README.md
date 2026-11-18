@@ -1,6 +1,6 @@
 # PagerDuty
 
-Steps to take in PagerDuty before you connect. The agent can do only what the API key is allowed to do in PagerDuty.
+Steps to take in PagerDuty before you connect.
 
 ## Choose your region
 
@@ -11,16 +11,12 @@ Pick the endpoint that matches where your PagerDuty account lives:
 | `<subdomain>.pagerduty.com` | **US** |
 | `<subdomain>.eu.pagerduty.com` | **EU** |
 
-## Connect with an API key
+## Connect by signing in
 
-<!-- TODO: user vs account (REST API) key, and read-only option -->
-
-1. In PagerDuty, create an API key as described in [API access keys](https://support.pagerduty.com/main/docs/api-access-keys).
-2. Name it after its purpose, such as `aws-devops-agent`.
-3. Copy the key and paste it into the connection form.
+You sign in to PagerDuty when you connect, and grant the agent access to your account. The agent acts as you, with your PagerDuty role and permissions.
 
 ## Allow write actions
 
-Reading works with read-only access. Acknowledging or resolving incidents and adding notes changes PagerDuty, and needs a key whose owner can update incidents.
+Reading works with any role. Acknowledging or resolving incidents and adding notes changes PagerDuty, and needs a role that can update incidents.
 
 For more detail, see the [PagerDuty MCP server documentation](https://docs.pagerduty.com/developer/mcp-tooling-remote-server). For help, contact [PagerDuty Support](https://support.pagerduty.com).
