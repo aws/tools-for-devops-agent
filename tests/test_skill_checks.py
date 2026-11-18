@@ -403,7 +403,7 @@ class MetadataTests(CheckSkillTestCase):
         self.assertOneError(tree(skill_md(frontmatter_with(author=None))), '"metadata.author" is required')
         for bad in ('"-octocat"', '"octo cat"', '"octo--cat"', '"a,,b"', '""'):
             with self.subTest(bad=bad):
-                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames or teams")
+                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames, organizations or teams")
 
     def test_author_accepts_a_comma_separated_list(self):
         self.assertEqual(self.errors(tree(skill_md(frontmatter_with(author='"octocat, hubot"')))), [])
@@ -426,7 +426,7 @@ class MetadataTests(CheckSkillTestCase):
             f'"octo-org/{team_101}"',
         ):
             with self.subTest(bad=bad):
-                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames or teams")
+                self.assertOneError(tree(skill_md(frontmatter_with(author=bad))), "GitHub usernames, organizations or teams")
 
     def test_version_is_required(self):
         self.assertOneError(tree(skill_md(frontmatter_with(version=None))), '"metadata.version" is required')
@@ -517,14 +517,57 @@ class DimensionTests(CheckSkillTestCase):
         fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": '"Amazon EKS, "'})
         self.assertOneError(tree(skill_md(fm)), "empty value between commas")
 
-    def test_unapproved_value_is_a_warning_with_suggestion(self):
+    def test_placeholder_values_are_errors_in_any_case(self):
+        for key in ("aws-devops-agent-skills.aws-services", "aws-devops-agent-skills.technical-domains"):
+            for value in ("All", "any", "NONE", "N/A", "n/a", "Other", "General", "*"):
+                with self.subTest(key=key, value=value):
+                    skill = tree(skill_md(frontmatter_with(**{key: f'"{value}"'})))
+                    error = self.assertOneError(skill, f'"{value}" is a placeholder', line=9)
+                    self.assertIn(f'Leave "metadata.{key}" out instead', error.message)
+                    self.assertEqual(self.warnings(skill), [])
+
+    def test_a_placeholder_beside_real_values_is_removed_from_the_list(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": '"Amazon EKS, All"'})
+        error = self.assertOneError(tree(skill_md(fm)), '"All" is a placeholder')
+        self.assertTrue(
+            error.message.endswith('Remove it from "metadata.aws-devops-agent-skills.aws-services"'), error.message
+        )
+
+    def test_values_that_only_contain_a_placeholder_word_are_not_placeholders(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.technical-domains": '"Operations, All Services, n/a/b"'})
+        skill = tree(skill_md(fm))
+        self.assertFalse(any("placeholder" in f.message for f in self.check(skill)[0]))
+
+    def test_agent_types_report_a_placeholder_as_an_unknown_agent_type(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.agent-types": '"All"'})
+        self.assertOneError(tree(skill_md(fm)), 'unknown value "All"')
+
+    def test_unapproved_value_is_an_error_with_suggestion(self):
         fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": '"CloudWatch, Amazon S3"'})
         skill = tree(skill_md(fm))
-        self.assertEqual(self.errors(skill), [])
-        messages = [w.message for w in self.warnings(skill)]
-        self.assertEqual(len(messages), 2)
-        self.assertIn('use "Amazon CloudWatch"', messages[0])
-        self.assertIn('"Amazon S3" is not an approved aws-services value', messages[1])
+        self.assertEqual(self.warnings(skill), [])
+        errors = self.errors(skill)
+        self.assertEqual([e.line for e in errors], [9, 9])
+        self.assertEqual(errors[0].message, '"CloudWatch" is not an approved aws-services value; use "Amazon CloudWatch"')
+        self.assertEqual(
+            errors[1].message,
+            '"Amazon S3" is not an approved aws-services value; use a value from '
+            ".github/scripts/skill-rules/vocabulary.json, or add this one to it for review",
+        )
+
+    def test_an_alias_for_another_dimension_gives_no_suggestion(self):
+        fm = frontmatter_with(**{"aws-devops-agent-skills.technical-domains": '"CloudWatch"'})
+        error = self.assertOneError(tree(skill_md(fm)), '"CloudWatch" is not an approved technical-domains value')
+        self.assertNotIn("Amazon CloudWatch", error.message)
+        self.assertIn("or add this one to it for review", error.message)
+
+    def test_a_value_that_differs_only_in_case_or_spacing_gets_the_approved_spelling(self):
+        for value in ("Amazon Cloudwatch", "amazon  eks", "Amazon\u00a0EKS"):
+            with self.subTest(value=value):
+                fm = frontmatter_with(**{"aws-devops-agent-skills.aws-services": f'"{value}"'})
+                error = self.assertOneError(tree(skill_md(fm)), "is not an approved aws-services value")
+                self.assertIn("which differs from it in letter case or spacing", error.message)
+                self.assertRegex(error.message, r'use "Amazon (CloudWatch|EKS)"')
 
 
 class SummaryAndAgentTypeTests(CheckSkillTestCase):
@@ -691,6 +734,7 @@ class PublishedSetTests(unittest.TestCase):
         )
 
     def test_repository_published_set_matches_the_catalog(self):
+        """The catalog publisher has its own copy of this list, so the two change together."""
         gitignore = (ROOT / "skills" / ".gitignore").read_text(encoding="utf-8")
         rules = sc.load_rules(ROOT / ".github" / "scripts" / "skill-rules", gitignore)
         self.assertEqual(rules.published_excludes, ("evals/", ".skilleval.yaml", "CHANGELOG.md"))
@@ -1006,10 +1050,26 @@ class GitattributesTests(unittest.TestCase):
         ]
         for line in applies:
             with self.subTest(line=line):
-                self.assertTrue(sc.gitattributes_line_applies_to_skills(line))
+                self.assertTrue(sc.gitattributes_line_applies_to(line, "skills"))
         for line in ignored:
             with self.subTest(line=line):
-                self.assertFalse(sc.gitattributes_line_applies_to_skills(line))
+                self.assertFalse(sc.gitattributes_line_applies_to(line, "skills"))
+
+    def test_a_line_is_matched_against_the_folder_it_is_asked_about(self):
+        """Connectors are published from the same archive as skills, so the rule checks both folders."""
+        for line, folders in {
+            "connectors/** export-ignore": {"connectors"},
+            "/connectors/acme/logo.svg export-subst": {"connectors"},
+            "connectors/*/README.md eol=crlf": {"connectors"},
+            "skills/** export-ignore": {"skills"},
+            "*.svg text eol=crlf": {"connectors", "skills"},
+            "[attr]gone export-ignore": {"connectors", "skills"},
+            "/connector/** export-ignore": set(),
+            "mcp/** export-ignore": set(),
+        }.items():
+            with self.subTest(line=line):
+                matched = {folder for folder in ("connectors", "skills") if sc.gitattributes_line_applies_to(line, folder)}
+                self.assertEqual(matched, folders)
 
 
 def versioned(version: str = "1.0.0", **files: bytes) -> sc.SkillTree:
@@ -1200,6 +1260,18 @@ class LoadRulesValidationTests(unittest.TestCase):
         vocabulary = {"values": {"aws-services": [], "technical-domains": []}, "aliases": {"a": 1}}
         with self.assertRaisesRegex(ValueError, "aliases"):
             sc.load_rules(self.rules_dir(None, vocabulary), "!*.md\n")
+
+    def test_a_placeholder_in_the_vocabulary_fails_closed(self):
+        cases = {
+            "All": {"values": {"aws-services": ["Amazon EKS", "All"], "technical-domains": []}, "aliases": {}},
+            "n/a": {"values": {"aws-services": [], "technical-domains": ["n/a"]}, "aliases": {}},
+            "Any": {"values": {"aws-services": ["Amazon EKS"], "technical-domains": []}, "aliases": {"Any": "Amazon EKS"}},
+            "NONE": {"values": {"aws-services": [], "technical-domains": []}, "aliases": {"EKS": "NONE"}},
+        }
+        for value, vocabulary in cases.items():
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, f'"{value}" is a placeholder'):
+                    sc.load_rules(self.rules_dir(None, vocabulary), "!*.md\n")
 
 
 class ConformanceTests(unittest.TestCase):

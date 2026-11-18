@@ -22,6 +22,7 @@ import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
@@ -34,7 +35,7 @@ INTERNAL_NAMES_FILE = "internal-names.json"
 
 NAME_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAX_NAME_LENGTH = 64
-# A skill catalog keeps an index file beside the skill folders, so no skill may take its name.
+# A catalog keeps an index file beside the skill or connector folders, so no skill or connector may take its name.
 RESERVED_NAMES = frozenset({"index"})
 MAX_DESCRIPTION_LENGTH = 1024
 MAX_TITLE_LENGTH = 100
@@ -72,6 +73,11 @@ DIMENSION_KEYS = tuple(DIMENSION_PREFIX + d for d in DIMENSIONS)
 AGENT_TYPES_DIMENSION = "agent-types"
 AGENT_TYPES_KEY = DIMENSION_PREFIX + AGENT_TYPES_DIMENSION
 VOCABULARY_DIMENSIONS = tuple(d for d in DIMENSIONS if d != AGENT_TYPES_DIMENSION)
+# Placeholders that stand for every value, or for none, rather than naming one.
+# Catalogs would show one as a filter option of its own, so a skill can't use
+# one in aws-services or technical-domains, and vocabulary.json can't list one.
+# Compared ignoring case.
+PLACEHOLDER_DIMENSION_VALUES = frozenset({"all", "any", "none", "n/a", "other", "general", "*"})
 # Loads the skill for every agent, so it can't be combined with another type.
 GENERIC_AGENT_TYPE = "GENERIC"
 
@@ -168,14 +174,14 @@ DEBUG_FOLDERS = frozenset({"cli_debug", "sdk_debug"})
 FUNCTIONAL_METADATA_PATTERN = re.compile(r"(?:.*/)?evals/functional/[^/]+/_metadata\.json")
 
 # .gitattributes settings that change the bytes `git archive`, and so GitHub's
-# archive of the repository, holds for a file. Skills are published from that
-# archive, so a setting that applies under skills/ would make the published
-# files differ from the Git objects this check reads.
+# archive of the repository, holds for a file. Skills and connectors are
+# published from that archive, so a setting that applies under skills/ or
+# connectors/ would make the published files differ from the Git objects this
+# check reads.
 ARCHIVE_ATTRIBUTES = frozenset({"export-ignore", "export-subst", "ident", "filter", "eol", "text", "crlf", "working-tree-encoding"})
 # Line-ending settings that only take effect when a file is committed. On a
 # server with Git's default settings they leave archived bytes as stored.
 ARCHIVE_NEUTRAL_SETTINGS = frozenset({"text", "text=auto", "eol=lf", "crlf", "crlf=input"})
-SKILLS_FOLDER = "skills"
 # Git splits a .gitattributes file at newlines only, and a line at these.
 GITATTRIBUTES_BLANKS = " \t\r"
 
@@ -314,6 +320,7 @@ class SkillInfo:
     deprecated: bool = False
     deprecated_line: int | None = None
     name_line: int | None = None
+    author_line: int | None = None
 
 
 def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
@@ -341,6 +348,13 @@ def load_rules(rules_dir: Path, gitignore_text: str) -> Rules:
         vocabulary_sets = {
             dim: frozenset(_string_list(dimensions[dim], f"{VOCABULARY_FILE} {dim}")) for dim in VOCABULARY_DIMENSIONS
         }
+        listed = [value for values in vocabulary_sets.values() for value in values] + [*aliases, *aliases.values()]
+        placeholders = sorted(value for value in listed if _is_placeholder(value))
+        if placeholders:
+            raise TypeError(
+                f'{VOCABULARY_FILE}: "{placeholders[0]}" is a placeholder, which the check refuses as a value, '
+                "so it can't be listed"
+            )
         return Rules(
             agent_types=frozenset(values),
             vocabulary=vocabulary_sets,
@@ -374,6 +388,11 @@ def _string_list(value, label: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
         raise TypeError(f"{label} must be a list of non-empty strings")
     return value
+
+
+def _is_placeholder(value: str) -> bool:
+    """Whether a dimension value is a placeholder such as All, N/A or *, in any letter case."""
+    return value.casefold() in PLACEHOLDER_DIMENSION_VALUES
 
 
 def allowed_extensions_from_gitignore(text: str) -> frozenset[str]:
@@ -749,6 +768,23 @@ def _plain_scalar_problem(text: str, is_in_flow_collection: bool, *, is_key: boo
     return f"has the unquoted value {text}, which YAML parsers don't all read as the same type; {fix}"
 
 
+def plain_scalar_value(text: str) -> bool | int | float | str | None:
+    """The JSON value of a plain (unquoted) scalar that read_yaml accepts, as every parser types it.
+
+    true and false are booleans; null, ~ and an empty value are null; an
+    integer in JavaScript's safe range, or a decimal written the shortest way,
+    is a number; anything else is text. read_yaml refuses every other plain
+    value that a parser reads as something other than text.
+    """
+    if text in ("true", "false"):
+        return text == "true"
+    if text in ("null", "~", ""):
+        return None
+    if _is_typed_alike_by_every_parser(text):
+        return int(text) if CANONICAL_INTEGER_PATTERN.fullmatch(text) else float(text)
+    return text
+
+
 def _is_read_as_non_text_by_some_parser(text: str) -> bool:
     return any(pattern.fullmatch(text) for pattern in NON_TEXT_PLAIN_SCALAR_PATTERNS)
 
@@ -859,6 +895,7 @@ def _check_skill_md(folder: str, data: bytes, rules: Rules, findings: list[Findi
         deprecated=deprecated,
         deprecated_line=lines.get("deprecated"),
         name_line=_line(top["name"][0]) if "name" in top else None,
+        author_line=lines.get("author"),
     )
 
 
@@ -869,10 +906,7 @@ def _parse_frontmatter(frontmatter: str, report: _Report, *, strict: bool = True
     that may predate the stricter rules.
     """
     if not strict:
-        try:
-            return yaml.compose(frontmatter, Loader=yaml.SafeLoader)
-        except (yaml.YAMLError, RecursionError):
-            return None
+        return compose_lenient(frontmatter)
     root, problems = read_yaml(frontmatter, "the frontmatter", FRONTMATTER_FIRST_LINE, FRONTMATTER_FORBIDDEN_TOKENS)
     for line, message in problems:
         report.error(message, line=line)
@@ -890,6 +924,14 @@ def _parse_frontmatter(frontmatter: str, report: _Report, *, strict: bool = True
         report.error("the frontmatter is empty", line=FRONTMATTER_FIRST_LINE)
         return None
     return root
+
+
+def compose_lenient(text: str) -> Node | None:
+    """The node tree as PyYAML alone reads it, or None, for a merge-base copy that may predate the stricter rules."""
+    try:
+        return yaml.compose(text, Loader=yaml.SafeLoader)
+    except (yaml.YAMLError, RecursionError):
+        return None
 
 
 def _mapping_items(node: MappingNode) -> dict[str, tuple[ScalarNode, Node]]:
@@ -1062,13 +1104,19 @@ def _check_author(metadata: dict, items: dict, lines: dict, metadata_line: int, 
         return
     if "author" not in metadata:
         return
-    parts = _split(metadata["author"])
-    if not all(GITHUB_LOGIN_PATTERN.fullmatch(part) or GITHUB_TEAM_PATTERN.fullmatch(part) for part in parts):
+    if author_names(metadata["author"]) != _split(metadata["author"]):
         report.error(
-            '"metadata.author" must be one or more GitHub usernames or teams (org/team) separated by commas, '
-            'for example "octocat", "octocat, hubot" or "octo-org/octo-team"',
+            '"metadata.author" must be one or more GitHub usernames, organizations or teams (org/team) separated '
+            'by commas, for example "octocat", "octocat, hubot" or "octo-org/octo-team"',
             line=lines["author"],
         )
+
+
+def author_names(author: str) -> list[str]:
+    """The names in a metadata.author value that have the form of a GitHub login or org/team, in order."""
+    return [
+        part for part in _split(author) if GITHUB_LOGIN_PATTERN.fullmatch(part) or GITHUB_TEAM_PATTERN.fullmatch(part)
+    ]
 
 
 def _check_version(
@@ -1130,12 +1178,21 @@ def _check_deprecated(items: dict, lines: dict, report: _Report) -> bool:
     value_node = items["deprecated"][1]
     if isinstance(value_node, ScalarNode) and value_node.tag == BOOL_TAG:
         return value_node.value == "true"
-    message = '"metadata.deprecated" must be true or false, without quotes, because the catalog reads it as a boolean'
-    text = value_node.value if isinstance(value_node, ScalarNode) and value_node.tag == STR_TAG else ""
-    if text.lower() in ("true", "false"):
-        message += f"; write deprecated: {text.lower()}"
-    report.error(message, line=lines["deprecated"])
+    text = value_node.value if isinstance(value_node, ScalarNode) and value_node.tag == STR_TAG else None
+    report.error(deprecated_problem("metadata.deprecated", text), line=lines["deprecated"])
     return False
+
+
+def deprecated_problem(key: str, text: str | None) -> str:
+    """The error for a skill's or a connector's deprecated value that isn't a plain true or false.
+
+    `text` is the value when it is text, so a quoted "true" or "True" gets the
+    unquoted spelling to use.
+    """
+    message = f'"{key}" must be true or false, without quotes, because the catalog reads it as a boolean'
+    if text is not None and text.lower() in ("true", "false"):
+        message += f"; write deprecated: {text.lower()}"
+    return message
 
 
 def _check_tier(metadata: dict, lines: dict, report: _Report) -> None:
@@ -1206,16 +1263,44 @@ def _check_dimensions(metadata: dict, items: dict, rules: Rules, report: _Report
         if dimension == AGENT_TYPES_DIMENSION:
             continue  # _check_agent_types validates it against agent-types.json.
         approved = rules.vocabulary.get(dimension, frozenset())
-        for part in _split(metadata[key]):
+        parts = _split(metadata[key])
+        # Leaving the key out is the fix only when nothing else would be left in it.
+        fix = (
+            f'Remove it from "metadata.{key}"'
+            if any(part and not _is_placeholder(part) for part in parts)
+            else f'Leave "metadata.{key}" out instead; a skill without it still appears when no filter is chosen'
+        )
+        for part in parts:
             if not part:
                 report.error(f'"metadata.{key}" has an empty value between commas', line=line)
-            elif part not in approved:
-                hint = (
-                    f'use "{rules.aliases[part]}"'
-                    if part in rules.aliases
-                    else f"approved values are listed in {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}"
+            elif _is_placeholder(part):
+                report.error(
+                    f'"{part}" is a placeholder rather than a value, and catalogs would list it as a filter option '
+                    f"of its own. {fix}",
+                    line=line,
                 )
-                report.warning(f'"{part}" is not an approved {dimension} value; {hint}', line=line)
+            elif part not in approved:
+                report.error(
+                    f'"{part}" is not an approved {dimension} value; {_approved_value_hint(part, approved, rules)}',
+                    line=line,
+                )
+
+
+def _approved_value_hint(part: str, approved: frozenset[str], rules: Rules) -> str:
+    """What to write instead of an unapproved dimension value.
+
+    An alias counts only when it names a value of the same dimension. A value
+    that differs from an approved one only in letter case or spacing, such as a
+    non-breaking space copied from a web page, gets that approved spelling.
+    """
+    alias = rules.aliases.get(part)
+    if alias in approved:
+        return f'use "{alias}"'
+    folded = " ".join(part.split()).casefold()
+    spelling = next((value for value in sorted(approved) if value.casefold() == folded), None)
+    if spelling is not None:
+        return f'use "{spelling}", which differs from it in letter case or spacing'
+    return f"use a value from {RULES_DIR_DISPLAY}/{VOCABULARY_FILE}, or add this one to it for review"
 
 
 # --- Package: the files that are published and installed -----------------------
@@ -1472,12 +1557,12 @@ def check_added_content(base: SkillTree | None, head: SkillTree, rules: Rules) -
     return findings
 
 
-def gitattributes_line_applies_to_skills(line: str) -> bool:
-    """Whether one line of the root .gitattributes can change archived bytes under skills/.
+def gitattributes_line_applies_to(line: str, folder: str) -> bool:
+    """Whether one line of the root .gitattributes can change archived bytes under `folder`/, a top-level folder.
 
     It errs toward yes. A macro definition counts when it sets an archive
     attribute, since the macro can then be used on any pattern, and a pattern
-    this function can't read exactly is taken to match skills/.
+    this function can't read exactly is taken to match the folder.
     """
     line = line.strip(GITATTRIBUTES_BLANKS)
     if not line or line.startswith("#"):
@@ -1500,11 +1585,11 @@ def gitattributes_line_applies_to_skills(line: str) -> bool:
     anchored = pattern.startswith("/")
     first, slash, _ = pattern.lstrip("/").rstrip("/").partition("/")
     if anchored or slash:
-        # Matched from the root, so its first part must match the skills folder.
+        # Matched from the root, so its first part must match the folder.
         # Without a further slash only that folder itself matches, which
         # export-ignore drops whole.
-        return _part_may_match(first, SKILLS_FOLDER)
-    return True  # Matched at any depth, so under skills/ too.
+        return _part_may_match(first, folder)
+    return True  # Matched at any depth, so under the folder too.
 
 
 def _gitattributes_tokens(text: str) -> list[str]:
@@ -1579,11 +1664,11 @@ def published_hash(tree: SkillTree, rules: Rules) -> str:
     return content_hash({p: e.data for p, e in published_files(tree, rules).items()})
 
 
-def _format_version(version: tuple[int, int, int]) -> str:
+def format_version(version: tuple[int, int, int]) -> str:
     return ".".join(str(part) for part in version)
 
 
-def _next_versions(version: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
+def next_versions(version: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
     """The only versions allowed after `version`: the next patch, minor or major release."""
     major, minor, patch = version
     return ((major, minor, patch + 1), (major, minor + 1, 0), (major + 1, 0, 0))
@@ -1595,6 +1680,16 @@ def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
     Fixing a two-part version changes SKILL.md, so the fix itself needs a
     version above the old one: 2.6 -> 2.6.1, not 2.6.0.
     """
+    text = lenient_metadata_text(tree, "version")
+    return parse_version(text, allow_two_part=True) if text is not None else None
+
+
+def lenient_metadata_text(tree: SkillTree, key: str) -> str | None:
+    """A metadata value of a merge-base copy, as PyYAML alone reads it, or None when it isn't text.
+
+    The merge-base copy may predate the stricter frontmatter rules, so they
+    aren't applied to it.
+    """
     entry = tree.entries.get("SKILL.md")
     try:
         match = FRONTMATTER_PATTERN.match(entry.data.decode("utf-8")) if entry else None
@@ -1602,10 +1697,9 @@ def _lenient_version(tree: SkillTree) -> tuple[int, int, int] | None:
         return None
     scratch = _Report([])
     root = _parse_frontmatter(match.group(1) or "", scratch, strict=False) if match else None
-    metadata = _last_value(root, "metadata")
-    node = _last_value(metadata, "version")
+    node = _last_value(_last_value(root, "metadata"), key)
     if isinstance(node, ScalarNode) and node.tag == STR_TAG:
-        return parse_version(node.value, allow_two_part=True)
+        return node.value
     return None
 
 
@@ -1647,7 +1741,7 @@ def check_history(
                 )
             ]
         if info is not None and info.version is not None and info.version != FIRST_VERSION:
-            message = f"a new skill starts at version 1.0.0, not {_format_version(info.version)}"
+            message = f"a new skill starts at version 1.0.0, not {format_version(info.version)}"
             return [Finding("error", message, "SKILL.md", info.version_line)]
         return []
 
@@ -1667,26 +1761,26 @@ def check_history(
     new = head_info.version
     changed = published_hash(base, rules) != published_hash(head, rules)
     if new < old:
-        message = f"metadata.version went down from {_format_version(old)} to {_format_version(new)}; it must never go down"
+        message = f"metadata.version went down from {format_version(old)} to {format_version(new)}; it must never go down"
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
     if new == old and changed:
         message = (
-            f"published files changed, so metadata.version must go up from {_format_version(old)}. "
+            f"published files changed, so metadata.version must go up from {format_version(old)}. "
             f"A published version is immutable. Changes only to {', '.join(rules.published_excludes)} need no bump"
         )
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
-    if new > old and new not in _next_versions(old):
-        steps = [_format_version(v) for v in _next_versions(old)]
+    if new > old and new not in next_versions(old):
+        steps = [format_version(v) for v in next_versions(old)]
         message = (
-            f"metadata.version can only go up one step from {_format_version(old)}: to {steps[0]}, {steps[1]} "
-            f"or {steps[2]}, not {_format_version(new)}"
+            f"metadata.version can only go up one step from {format_version(old)}: to {steps[0]}, {steps[1]} "
+            f"or {steps[2]}, not {format_version(new)}"
         )
         return [Finding("error", message, "SKILL.md", head_info.version_line)]
     if new > old:
         before = base.entries.get("CHANGELOG.md")
         after = head.entries.get("CHANGELOG.md")
         if after is None or (before is not None and before.data == after.data):
-            message = f"metadata.version went up to {_format_version(new)}, but CHANGELOG.md has no new entry for it"
+            message = f"metadata.version went up to {format_version(new)}, but CHANGELOG.md has no new entry for it"
             return [Finding("warning", message, "CHANGELOG.md")]
     return []
 
@@ -1695,7 +1789,7 @@ def check_history(
 
 
 def load_cases(path: Path) -> list[dict]:
-    """The cases in conformance-cases.json. Raises ValueError when the file is malformed."""
+    """The cases in conformance-cases.json or connector-conformance-cases.json. Raises ValueError when malformed."""
     document = _read_json(path)
     cases = document.get("cases") if isinstance(document, dict) else None
     if not isinstance(cases, list) or not cases:
@@ -1722,7 +1816,7 @@ def _case_problem(case) -> str | None:
     if case["expect"] == "fail" and not isinstance(case.get("error"), str):
         return 'a "fail" case needs an "error" string'
     if "base" in case and case["base"] is not None and not isinstance(case["base"], dict):
-        return '"base" must be an object of files, or null for a skill the pull request adds'
+        return '"base" must be an object of files, or null for a folder the pull request adds'
     if "retired" in case and not isinstance(case["retired"], bool):
         return '"retired" must be true or false'
     files = case.get("files")
@@ -1768,8 +1862,8 @@ def tree_from_files(name: str, files: dict) -> SkillTree:
 
 def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
     """Problems with the rules' results on the cases; an empty list means every case gives its expected result."""
-    problems = []
-    for case in cases:
+
+    def findings_for(case: dict) -> list[Finding]:
         name = case["name"]
         head = tree_from_files(name, case["files"]) if case.get("files") is not None else None
         findings = check_skill(head, rules)[0] if head is not None else []
@@ -1777,10 +1871,19 @@ def run_conformance(cases: list[dict], rules: Rules) -> list[str]:
             base = tree_from_files(name, case["base"]) if case.get("base") is not None else None
             retired = frozenset({name}) if case.get("retired") else frozenset()
             findings += check_history(name, base, head, rules, retired)
-        errors = [f.message for f in findings if f.severity == "error"]
+        return findings
+
+    return run_cases(cases, findings_for)
+
+
+def run_cases(cases: list[dict], findings_for: Callable[[dict], list[Finding]], label: str = "case") -> list[str]:
+    """Problems with `findings_for(case)` on each case: pass means no errors, fail an error holding the case's text."""
+    problems = []
+    for case in cases:
+        errors = [f.message for f in findings_for(case) if f.severity == "error"]
         if case["expect"] == "pass" and errors:
-            problems.append(f"case {case['id']}: expected pass, got: {'; '.join(errors)}")
+            problems.append(f"{label} {case['id']}: expected pass, got: {'; '.join(errors)}")
         elif case["expect"] == "fail" and not any(case["error"] in message for message in errors):
             got = "; ".join(errors) if errors else "no errors"
-            problems.append(f"case {case['id']}: expected an error containing {case['error']!r}, got: {got}")
+            problems.append(f"{label} {case['id']}: expected an error containing {case['error']!r}, got: {got}")
     return problems

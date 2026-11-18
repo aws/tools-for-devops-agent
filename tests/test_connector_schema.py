@@ -1,4 +1,4 @@
-"""Tests for the string rules in connectors/schema/v1/.
+"""Tests for connectors/schema/v1/: the string rules in its schemas, and the files the catalog publisher accepts.
 
 Standard library only, so the repository's test job runs them without a JSON Schema
 dependency. A small evaluator covers the keywords the string rules use; the schemas
@@ -7,6 +7,7 @@ as a whole are validated by the connector check that consumes them.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import unittest
@@ -124,6 +125,23 @@ class StringRuleTests(unittest.TestCase):
             good=["sumologic", "acme-observability", "a"],
             bad=["Sumo", "sumo_logic", "-acme", "acme-", "a--b", "a" * 65],
         )
+
+
+class CatalogSchemaSetTests(unittest.TestCase):
+    def test_the_schema_files_are_the_set_the_catalog_publisher_accepts(self):
+        """The publisher bundles its own copies of these files and accepts connectors/schema/v1/ only when it matches.
+
+        Any other bytes stop every publish run, skills included, so a change here
+        merges only once a publisher release bundles it. Update these hashes in
+        the same pull request.
+        """
+        accepted = {
+            "connector.schema.json": "d8763d5b3d1d02600650117a38722a65a39ac62d52186b36f8727b496714329d",
+            "published-files.json": "a9b62504d44b5d3a1cb7324d0b34b326a14b829f5e07d2ca4db24d3ebe272aac",
+            "releases.schema.json": "95f3c897e1e41fe93d19f8aed7dfdac12f498eaf48f8b46c62add2881ad92c2f",
+        }
+        hashes = {name: hashlib.sha256((SCHEMA_DIR / name).read_bytes()).hexdigest() for name in accepted}
+        self.assertEqual(hashes, accepted)
 
 
 if __name__ == "__main__":
