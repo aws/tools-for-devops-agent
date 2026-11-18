@@ -59,6 +59,14 @@ The hooks write a file only when its content changes, so `mkdocs serve` does not
 
 For the rules that control how a tool shows on the site (display names, acronyms, skill tags on agent cards, link formats), see "Common Review Findings" in [CONTRIBUTING.md](../CONTRIBUTING.md) and [`.kiro/steering/project-conventions.md`](../.kiro/steering/project-conventions.md).
 
+### Leaving out `aws-support-managed` skills
+
+While `extra.skills_catalog.show_aws_support_managed` in `mkdocs.yml` is `false`, `hooks/skills_catalog.py` leaves out every skill whose `metadata.tier` is `aws-support-managed`, and any skill whose front matter can't be read, since its tier is unknown. They get no catalog card, page or navigation entry, so the site search doesn't find them either. The build log names each one and says why. A page that an earlier local build wrote for one is removed. The skills stay in the repository.
+
+The setting keeps that tier off the site until it launches. To list the skills, set it to `true`. The build fails if it is missing or isn't `true` or `false`.
+
+While it's `false`, the strict build fails if another page names one of these skills, such as a custom agent that needs one or a connector that lists one, and the log names the page. The check reads each page's Markdown, links included, and counts a name only as a whole word, so `my-skill-report` doesn't name `my-skill`.
+
 ## Blogs page
 
 The Blogs page lists blog posts, videos and audio about AWS DevOps Agent. Its content is data, not Markdown:

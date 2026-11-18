@@ -13,12 +13,44 @@ and group-by buttons dynamically.
 This also generates individual doc stubs for skills and custom agents
 that don't have a docs page yet, so new entries appear on the site
 automatically.
+
+Skills whose metadata.tier is aws-support-managed are left out of all of
+this while extra.skills_catalog.show_aws_support_managed in mkdocs.yml is
+false, which keeps that tier off the site until it launches, and so are
+skills whose frontmatter can't be read, since their tier is unknown. With
+no catalog entry and no page, the site search doesn't find them either.
+While it's false, a page that names one of them fails the strict build,
+so the name can't reach the site through another page.
 """
 
 import html
 import json
+import logging
 import re
+from collections.abc import Mapping
 from pathlib import Path
+
+import yaml
+
+try:
+    from mkdocs.exceptions import PluginError
+except ImportError:  # the unit tests run without mkdocs installed
+    class PluginError(Exception):
+        pass
+
+log = logging.getLogger("mkdocs.hooks.skills_catalog")
+
+# Skills of this tier stay off the site until mkdocs.yml sets
+# extra.skills_catalog.show_aws_support_managed to true.
+AWS_SUPPORT_MANAGED = "aws-support-managed"
+SHOW_AWS_SUPPORT_MANAGED = "show_aws_support_managed"
+
+# The frontmatter, found as .github/scripts/skill_checks.py finds it.
+_FRONTMATTER = re.compile(r"\A---\r?\n(?:(.*?)\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.S)
+
+# The skills this build leaves off the site, each with why, for on_page_content.
+# Set by on_pre_build.
+_HIDDEN: dict = {}
 
 # metadata.aws-devops-agent-skills.agent-types carries the API values, because it
 # sets which agents load the skill. The catalog shows them in readable form; a
@@ -84,6 +116,71 @@ def _parse_frontmatter(path: Path) -> dict:
 
     result["metadata"] = metadata
     return result
+
+
+def _show_aws_support_managed(config) -> bool:
+    """extra.skills_catalog.show_aws_support_managed in mkdocs.yml, which must be true or false."""
+    settings = (config.get("extra") or {}).get("skills_catalog")
+    value = settings.get(SHOW_AWS_SUPPORT_MANAGED) if isinstance(settings, Mapping) else None
+    if not isinstance(value, bool):
+        raise PluginError(
+            f"Skills catalog: set extra.skills_catalog.{SHOW_AWS_SUPPORT_MANAGED} in mkdocs.yml "
+            "to true or false"
+        )
+    return value
+
+
+def _hidden_skills(config_dir: str) -> dict:
+    """The skills to leave off the site while the setting is false, each with why."""
+    skills_dir = Path(config_dir) / "skills"
+    if not skills_dir.is_dir():
+        return {}
+    return {
+        skill_md.parent.name: why
+        for skill_md in skills_dir.glob("*/SKILL.md")
+        if skill_md.is_file() and (why := _why_hidden(skill_md.read_text(encoding="utf-8")))
+    }
+
+
+def _why_hidden(text: str) -> str | None:
+    """Why a SKILL.md stays off the site while the setting is false, or None if it's listed.
+
+    The tier is read as YAML: _parse_frontmatter keeps quotes and comments in a
+    value, so it would miss tier: 'aws-support-managed', or the value followed by
+    a comment. Frontmatter that is missing or can't be read as YAML hides the
+    skill too, since its tier is unknown. The publishing check fails such a
+    skill anyway.
+    """
+    match = _FRONTMATTER.match(text)
+    if not match:
+        return "its tier can't be read: SKILL.md has no frontmatter between --- lines"
+    try:
+        root = yaml.compose(match.group(1) or "", Loader=yaml.SafeLoader)
+    except yaml.YAMLError as err:
+        mark, problem = getattr(err, "problem_mark", None), getattr(err, "problem", None)
+        if mark and problem:
+            # The mark counts lines from the frontmatter, which starts on line 2 of SKILL.md.
+            return f"its tier can't be read: line {mark.line + 2} of SKILL.md isn't valid YAML ({problem})"
+        return "its tier can't be read: its frontmatter isn't valid YAML"
+    except RecursionError:
+        return "its tier can't be read: its frontmatter is nested too deeply"
+    if any(
+        isinstance(tier, yaml.ScalarNode) and tier.value == AWS_SUPPORT_MANAGED
+        for metadata in _values(root, "metadata")
+        for tier in _values(metadata, "tier")
+    ):
+        return f"it's {AWS_SUPPORT_MANAGED}"
+    return None
+
+
+def _values(node, key: str) -> list:
+    """The value nodes of key in a YAML mapping node.
+
+    A repeated key, which the publishing check refuses, gives several.
+    """
+    if not isinstance(node, yaml.MappingNode):
+        return []
+    return [value for k, value in node.value if isinstance(k, yaml.ScalarNode) and k.value == key]
 
 
 def _build_catalog(config_dir: str) -> list:
@@ -175,7 +272,10 @@ def _format_name(skill_id: str) -> str:
 def on_pre_build(config, **kwargs):
     """Generate skills-data.json and skill doc stubs before the build."""
     config_dir = config["docs_dir"].replace("/docs", "")
-    catalog = _build_catalog(config_dir)
+    hidden = {} if _show_aws_support_managed(config) else _hidden_skills(config_dir)
+    _HIDDEN.clear()
+    _HIDDEN.update(hidden)
+    catalog = [skill for skill in _build_catalog(config_dir) if skill["id"] not in hidden]
 
     # Write JSON for the JS to consume (only if changed, to avoid dev-server loop)
     js_dir = Path(config["docs_dir"]) / "javascripts"
@@ -195,8 +295,40 @@ def on_pre_build(config, **kwargs):
         doc_path = skills_docs_dir / f"{skill['id']}.md"
         _generate_skill_stub(doc_path, skill, config_dir)
 
+    # An earlier build may have written a page for a hidden skill. It would still
+    # be published, and found by the site search, so remove it.
+    for skill_id, why in sorted(hidden.items()):
+        (skills_docs_dir / f"{skill_id}.md").unlink(missing_ok=True)
+        log.info(
+            "Skills catalog: leaving %s off the site while extra.skills_catalog.%s is false, since %s",
+            skill_id,
+            SHOW_AWS_SUPPORT_MANAGED,
+            why,
+        )
+
     # Inject skill pages into nav in memory
     _update_nav(config, catalog)
+
+
+def on_page_content(html_text, page, **kwargs):
+    """Fail the strict build when a page names a skill this build leaves off the site.
+
+    The check reads page.markdown here rather than in on_page_markdown, because by
+    now every hook's on_page_markdown has run, including blogs_catalog.py's, which
+    adds the Blogs page's posts. Every catalog entry that names a skill comes from
+    a page that names it too, so this covers the cards as well.
+    """
+    for skill_id, why in sorted(_HIDDEN.items()):
+        if re.search(rf"(?<![\w-]){re.escape(skill_id)}(?![\w-])", page.markdown):
+            log.warning(
+                "Skills catalog: %s names %s, which is left off the site while extra.skills_catalog.%s "
+                "is false, since %s",
+                page.file.src_uri,
+                skill_id,
+                SHOW_AWS_SUPPORT_MANAGED,
+                why,
+            )
+    return html_text
 
 
 def _generate_skill_stub(doc_path: Path, skill: dict, config_dir: str):
