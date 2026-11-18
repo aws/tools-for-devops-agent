@@ -1,0 +1,492 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+# ============================================================================
+#  ⚠️  DELIBERATELY MISCONFIGURED — DO NOT DEPLOY TO A PRODUCTION ACCOUNT  ⚠️
+#
+#  This template seeds one fault per check family so the
+#  serverless-operation-review skill can be validated end to end.
+#
+#  Safe by default. With SeedPublicExposureFaults left at 'false', nothing in
+#  this stack is anonymously reachable from the internet: the Lambda function
+#  URL requires AWS_IAM (SigV4) and the API Gateway stage requires IAM
+#  authorization. Set it to 'true' only in an isolated sandbox — it creates a
+#  genuinely public endpoint and corporate security tooling will raise a
+#  finding against it.
+#
+#  It still intentionally creates, in every mode:
+#    - an over-privileged execution role (dynamodb:*/sqs:*/sns:* on Resource "*")
+#    - a function on a DEPRECATED runtime (python3.9)
+#    - a DynamoDB table with NO point-in-time recovery and NO deletion protection
+#    - an API Gateway stage with request/response data tracing ON and no access logs
+#    - functions that time out, run out of memory, and fail asynchronously with no DLQ
+#
+#  Deploy ONLY in an isolated, non-production account. Delete the stack when done:
+#    aws cloudformation delete-stack --stack-name serverless-review-testbed --profile <profile>
+# ============================================================================
+
+Description: >
+  Deliberately misconfigured serverless test bed for validating the
+  serverless-operation-review DevOps Agent skill. NOT FOR PRODUCTION.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: slsreview
+    Description: Prefix applied to every resource name.
+
+  SeedPublicExposureFaults:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Controls whether the Lambda function URL is anonymously reachable.
+
+      Default 'false' is safe: the function URL requires AWS_IAM (SigV4). Setting it to 'true' sets
+      AuthType NONE, creating a genuinely public HTTPS endpoint that exercises SLS-LMB-056 (CRITICAL).
+      Automated security tooling in a corporate account will raise a finding against a public
+      endpoint, so leave this 'false' unless you are in an isolated sandbox.
+
+      The API Gateway stage always requires IAM authorization and is never anonymously reachable,
+      because SAM's transform rejects an intrinsic function inside the Auth property. Every other
+      fault in this template applies in both modes.
+
+Conditions:
+  PublicExposure: !Equals [!Ref SeedPublicExposureFaults, 'true']
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    # Intentionally omitted globally so per-function faults stand out:
+    #   Tracing, Architectures, LoggingConfig, EventInvokeConfig
+
+Resources:
+
+  # ------------------------------------------------------------------
+  # FAULT 1 — over-privileged shared execution role
+  #   Expected findings: SLS-LMB-052 (CRITICAL), SLS-LMB-053 (HIGH),
+  #                      SLS-DDB-051 (HIGH)
+  # ------------------------------------------------------------------
+  OverPrivilegedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-overprivileged-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: far-too-broad
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Service-level wildcards on all resources — deliberate.
+              # s3:* is intentionally NOT included: dynamodb:* exercises the same
+              # wildcard checks (SLS-LMB-053, SLS-DDB-051) without attracting
+              # data-exposure tooling that specifically watches for S3 wildcards.
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                  - sqs:*
+                  - sns:*
+                Resource: "*"
+
+  # ------------------------------------------------------------------
+  # FAULT 2 — function that always times out
+  #   Expected findings: SLS-LMB-030/031 (Duration p99 vs timeout),
+  #                      SLS-LMB-032 (`Task timed out` in logs),
+  #                      SLS-LMB-010 (error rate)
+  # ------------------------------------------------------------------
+  TimeoutFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-always-times-out"
+      Runtime: python3.13
+      Handler: index.handler
+      Timeout: 5
+      Architectures: [arm64]
+      Role: !GetAtt OverPrivilegedRole.Arn
+      InlineCode: |
+        import time
+        def handler(event, context):
+            # Sleeps past the 5s timeout on purpose.
+            time.sleep(30)
+            return {"never": "reached"}
+
+  # ------------------------------------------------------------------
+  # FAULT 3 — function that exhausts its memory
+  #   Expected findings: SLS-LMB-033 (memory >= 90% / OOM in logs)
+  # ------------------------------------------------------------------
+  MemoryHogFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-memory-hog"
+      Runtime: python3.13
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 60
+      Architectures: [arm64]
+      Role: !GetAtt OverPrivilegedRole.Arn
+      InlineCode: |
+        def handler(event, context):
+            # Allocates past the 128 MB allocation on purpose.
+            # Writes each chunk so the pages are actually touched: a bare
+            # bytearray(n) is backed by lazily-mapped zero pages, so it can fail
+            # (or succeed) without Max Memory Used ever reflecting the size.
+            chunks = []
+            for i in range(40):
+                chunks.append(bytearray(b"x" * (10 * 1024 * 1024)))  # 10 MB each
+            return {"allocated_mb": sum(len(c) for c in chunks) // (1024 * 1024)}
+
+  # ------------------------------------------------------------------
+  # FAULT 4 — deprecated runtime, x86 architecture, no tracing,
+  #           text log format, and an async trigger with NO DLQ
+  #   Expected findings: SLS-LMB-050 (CRITICAL, python3.9 deprecated
+  #                      2025-12-15), SLS-LMB-071 (x86 on Graviton-eligible),
+  #                      SLS-LMB-001 (no OnFailure destination),
+  #                      SLS-LMB-086 (tracing PassThrough),
+  #                      SLS-LMB-087 (LogFormat Text)
+  # ------------------------------------------------------------------
+  LegacyRuntimeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-legacy-runtime"
+      Runtime: python3.9
+      Handler: index.handler
+      Architectures: [x86_64]
+      Role: !GetAtt OverPrivilegedRole.Arn
+      Environment:
+        Variables:
+          # Secret-suggesting KEY NAMES with harmless placeholder values.
+          # The skill must report the key name only, never the value.
+          DB_PASSWORD: "not-a-real-secret-placeholder"
+          API_KEY: "not-a-real-secret-placeholder"
+          SERVICE_TOKEN: "not-a-real-secret-placeholder"
+      InlineCode: |
+        def handler(event, context):
+            raise RuntimeError("deliberate async failure with no DLQ configured")
+      Events:
+        Scheduled:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+
+  # ------------------------------------------------------------------
+  # FAULT 5 — function URL authentication
+  #   Default (SeedPublicExposureFaults=false): AuthType AWS_IAM, so the
+  #     endpoint requires SigV4 and is NOT anonymously reachable. Only the
+  #     permissive CORS finding applies (SLS-LMB-057).
+  #   Opt-in (SeedPublicExposureFaults=true): AuthType NONE, which creates a
+  #     genuinely public endpoint and exercises SLS-LMB-056 (CRITICAL).
+  #     Expect corporate security tooling to raise a finding against it.
+  # ------------------------------------------------------------------
+  PublicUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-function-url"
+      Runtime: python3.13
+      Handler: index.handler
+      Architectures: [arm64]
+      Role: !GetAtt OverPrivilegedRole.Arn
+      FunctionUrlConfig:
+        AuthType: !If [PublicExposure, NONE, AWS_IAM]
+        Cors:
+          AllowOrigins: ["*"]   # <-- deliberate: permissive CORS (MEDIUM either way)
+      InlineCode: |
+        def handler(event, context):
+            return {"statusCode": 200, "body": "function URL reachable"}
+
+  # ------------------------------------------------------------------
+  # FAULT 6 — SQS consumer with no DLQ, no partial batch response,
+  #           and a visibility timeout equal to (not 6x) the function timeout
+  #   Expected findings: SLS-SQS-002 (HIGH, < 6x), SLS-SQS-003 (no redrive
+  #                      policy), SLS-SQS-006 (no ReportBatchItemFailures),
+  #                      SLS-SQS-011 (reserved concurrency < 5)
+  #   The smoke test can lower VisibilityTimeout below the function timeout
+  #   to also produce SLS-SQS-001 (CRITICAL).
+  # ------------------------------------------------------------------
+  NoDlqQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-no-dlq-queue"
+      VisibilityTimeout: 60     # equals the consumer timeout; recommendation is 6x
+      # Deliberately no RedrivePolicy and no KmsMasterKeyId.
+
+  SqsConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-sqs-consumer"
+      Runtime: python3.13
+      Handler: index.handler
+      Timeout: 60
+      Architectures: [arm64]
+      Role: !GetAtt OverPrivilegedRole.Arn
+      ReservedConcurrentExecutions: 2   # below the documented minimum of 5
+      InlineCode: |
+        def handler(event, context):
+            # Fails the whole batch; no partial batch response configured.
+            raise RuntimeError("deliberate batch failure")
+      Events:
+        FromQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt NoDlqQueue.Arn
+            BatchSize: 10
+            # Deliberately no FunctionResponseTypes: [ReportBatchItemFailures]
+
+  # ------------------------------------------------------------------
+  # FAULT 7 — DynamoDB table with no PITR, no deletion protection,
+  #           no TTL, and a stream consumer with no error handling
+  #   Expected findings: SLS-DDB-001/002 (no PITR/backups), SLS-DDB-003
+  #                      (no deletion protection), SLS-DDB-072 (no TTL),
+  #                      SLS-STR-001 (CRITICAL, no error-handling controls),
+  #                      SLS-STR-002/003/004
+  # ------------------------------------------------------------------
+  UnprotectedTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${NamePrefix}-unprotected-table"
+      BillingMode: PAY_PER_REQUEST
+      # Deliberately no PointInTimeRecoverySpecification,
+      # no DeletionProtectionEnabled, no TimeToLiveSpecification,
+      # no customer-managed SSESpecification.
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  PoisonPillConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-stream-consumer"
+      Runtime: python3.13
+      Handler: index.handler
+      Timeout: 30
+      Architectures: [arm64]
+      Role: !GetAtt OverPrivilegedRole.Arn
+      InlineCode: |
+        def handler(event, context):
+            for record in event.get("Records", []):
+                keys = record.get("dynamodb", {}).get("Keys", {})
+                if keys.get("pk", {}).get("S") == "POISON":
+                    # Blocks the shard until the records expire.
+                    raise RuntimeError("poison pill record")
+            return {"processed": len(event.get("Records", []))}
+      Events:
+        FromStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt UnprotectedTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 100
+            # Deliberately no BisectBatchOnFunctionError,
+            # no MaximumRetryAttempts, no MaximumRecordAgeInSeconds,
+            # no DestinationConfig, no FunctionResponseTypes.
+
+  # ------------------------------------------------------------------
+  # FAULT 8 — API stage with no access logging, data tracing on, no
+  #           tracing, and no stage throttling.
+  #   The stage ALWAYS requires IAM authorization (SigV4), so it is never
+  #   anonymously reachable. SAM's transform rejects an intrinsic function
+  #   inside the Auth property, so this is not switchable by parameter.
+  #   Consequence: SLS-APG-001 (no authorizer) is not exercised by this
+  #   template. Validate that check against a real API instead.
+  # ------------------------------------------------------------------
+  WideOpenApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${NamePrefix}-api"
+      StageName: prod
+      TracingEnabled: false
+      Auth:
+        DefaultAuthorizer: AWS_IAM
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          DataTraceEnabled: true    # <-- deliberate: logs full request/response bodies
+          MetricsEnabled: false
+      # Deliberately no AccessLogSetting and no throttling.
+
+  ApiBackedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-api-backend"
+      Runtime: python3.13
+      Handler: index.handler
+      Timeout: 60          # exceeds the API Gateway integration ceiling on purpose
+      Architectures: [arm64]
+      Role: !GetAtt OverPrivilegedRole.Arn
+      InlineCode: |
+        def handler(event, context):
+            return {"statusCode": 200, "body": "{\"ok\":true}"}
+      Events:
+        Get:
+          Type: Api
+          Properties:
+            RestApiId: !Ref WideOpenApi
+            Path: /items
+            Method: get
+
+  # ------------------------------------------------------------------
+  # FAULT 9 — state machine with logging OFF, no tracing, and a task
+  #           with no Retry, no Catch, and no TimeoutSeconds
+  #   Expected findings: SLS-SFN-030 (HIGH, logging OFF), SLS-SFN-033
+  #                      (no tracing), SLS-SFN-001 (no Retry),
+  #                      SLS-SFN-002 (no Catch), SLS-SFN-004 (no task timeout),
+  #                      SLS-SFN-005 (no top-level timeout)
+  # ------------------------------------------------------------------
+  FragileStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub "${NamePrefix}-fragile-workflow"
+      Type: STANDARD
+      # Deliberately no Logging block (defaults to OFF) and no Tracing.
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref TimeoutFunction
+      Definition:
+        Comment: Deliberately fragile — no Retry, no Catch, no timeouts.
+        StartAt: CallFlakyFunction
+        States:
+          CallFlakyFunction:
+            Type: Task
+            Resource: !GetAtt TimeoutFunction.Arn
+            End: true
+
+  # ------------------------------------------------------------------
+  # FAULT 10 — healthy control function
+  #   Expect NO critical or high findings against this one. If the skill
+  #   reports any, that is a false positive worth fixing.
+  # ------------------------------------------------------------------
+  HealthyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-healthy-control"
+      Runtime: python3.13
+      Handler: index.handler
+      Timeout: 10
+      MemorySize: 256
+      Architectures: [arm64]
+      Tracing: Active
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: WARN
+      ReservedConcurrentExecutions: 10
+      EventInvokeConfig:
+        MaximumRetryAttempts: 2
+        MaximumEventAgeInSeconds: 3600
+        DestinationConfig:
+          OnFailure:
+            Type: SQS
+            Destination: !GetAtt HealthyFailureQueue.Arn
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt HealthyFailureQueue.QueueName
+      Tags:
+        Environment: test
+        Owner: serverless-review-testbed
+        Runbook: https://example.internal/runbooks/healthy-control
+        OnCall: serverless-review-testbed
+      InlineCode: |
+        import json, logging
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        def handler(event, context):
+            logger.info(json.dumps({"msg": "ok", "requestId": context.aws_request_id}))
+            return {"ok": True}
+
+  HealthyFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${NamePrefix}-healthy-failures"
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+
+  HealthyFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${NamePrefix}-healthy-control"
+      RetentionInDays: 30       # the control: retention IS set here
+
+  HealthyErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${NamePrefix}-healthy-control-errors"
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref HealthyFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  HealthyThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${NamePrefix}-healthy-control-throttles"
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref HealthyFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 5
+      Threshold: 0
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  TimeoutFunctionName:
+    Value: !Ref TimeoutFunction
+  MemoryHogFunctionName:
+    Value: !Ref MemoryHogFunction
+  LegacyRuntimeFunctionName:
+    Value: !Ref LegacyRuntimeFunction
+  PublicUrlFunctionName:
+    Value: !Ref PublicUrlFunction
+  FunctionUrlAuthType:
+    Description: AuthType applied to the function URL
+    Value: !If [PublicExposure, "NONE (PUBLIC — delete this stack promptly)", "AWS_IAM (SigV4 required)"]
+  PublicFunctionUrl:
+    Description: >
+      Function URL. With SeedPublicExposureFaults=false this requires SigV4 and is not anonymously
+      reachable. With true it is a public unauthenticated endpoint — delete the stack when done.
+    Value: !GetAtt PublicUrlFunctionUrl.FunctionUrl
+  SqsConsumerFunctionName:
+    Value: !Ref SqsConsumerFunction
+  NoDlqQueueUrl:
+    Value: !Ref NoDlqQueue
+  UnprotectedTableName:
+    Value: !Ref UnprotectedTable
+  StreamConsumerFunctionName:
+    Value: !Ref PoisonPillConsumerFunction
+  WideOpenApiEndpoint:
+    Description: API endpoint. Requires IAM authorization (SigV4); unsigned requests get 403.
+    Value: !Sub "https://${WideOpenApi}.execute-api.${AWS::Region}.amazonaws.com/prod/items"
+  ApiAuthorizationMode:
+    Description: Authorization applied to the API stage — always IAM, never anonymous
+    Value: "AWS_IAM (SigV4 required)"
+  FragileStateMachineArn:
+    Value: !Ref FragileStateMachine
+  HealthyFunctionName:
+    Description: Control resource — the skill should report no CRITICAL or HIGH findings here
+    Value: !Ref HealthyFunction
