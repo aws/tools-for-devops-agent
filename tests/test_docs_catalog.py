@@ -167,9 +167,11 @@ class AwsSupportManagedTests(unittest.TestCase):
             "nav": [path for entry in catalog_nav[1:] for path in entry.values()],
         }
 
-    def page(self, markdown: str):
+    def page(self, markdown: str, meta: dict | None = None):
         """A page, as mkdocs passes it to on_page_content once its Markdown is final."""
-        return types.SimpleNamespace(file=types.SimpleNamespace(src_uri="custom-agents/demo.md"), markdown=markdown)
+        return types.SimpleNamespace(
+            file=types.SimpleNamespace(src_uri="custom-agents/demo.md"), markdown=markdown, meta=meta or {}
+        )
 
     def test_false_leaves_the_skills_out_of_the_data_the_pages_and_the_nav(self):
         self.assertEqual(
@@ -241,6 +243,17 @@ class AwsSupportManagedTests(unittest.TestCase):
             '<a href="https://github.com/aws/tools-for-devops-agent/tree/main/skills/support-skill">',
             "| `support-skill` | context |",
             "It needs support-skill.",
+            "Load _support-skill_ first.",
+            "Load __support-skill__ first.",
+            "Load *support-skill* first.",
+            "Support-Skill",
+            "Support Skill",
+            "Try **Support Skill** first.",
+            "Try _Support Skill_ first.",
+            "| SUPPORT SKILL | context |",
+            "It needs support skill.",
+            "It needs the Support\nSkill skill.",
+            "It needs the Support Skill skill.",
         ):
             with self.subTest(markdown=markdown), self.assertLogs("mkdocs.hooks.skills_catalog", "WARNING"):
                 self.hook.on_page_content("", page=self.page(markdown))
@@ -249,9 +262,50 @@ class AwsSupportManagedTests(unittest.TestCase):
             "my-support-skill",
             "support-skills",
             "support_skill",
+            "Support Skills",
+            "SupportSkill",
+            "Support-Skill-Report",
         ):
             with self.subTest(markdown=markdown), self.assertNoLogs("mkdocs.hooks.skills_catalog", "WARNING"):
                 self.hook.on_page_content("", page=self.page(markdown))
+
+    def test_the_page_warning_quotes_a_name_written_differently(self):
+        self.build(False)
+        with self.assertLogs("mkdocs.hooks.skills_catalog", "WARNING") as logs:
+            self.hook.on_page_content("", page=self.page("See the Support\n  Skill skill."))
+        self.assertEqual(
+            logs.output,
+            [
+                'WARNING:mkdocs.hooks.skills_catalog:Skills catalog: custom-agents/demo.md names support-skill as '
+                '"Support Skill", which is left off the site while extra.skills_catalog.show_aws_support_managed '
+                "is false, since it's aws-support-managed",
+            ],
+        )
+
+    def test_a_longer_name_of_another_tool_doesnt_name_the_skill(self):
+        (self.root / "custom-agents" / "support-skill-report").mkdir(parents=True)
+        self.build(False)
+        for markdown in (
+            "# Support Skill Report",
+            "Run the support skill report agent.",
+            "Run [support-skill-report](../custom-agents/support-skill-report.md).",
+        ):
+            with self.subTest(markdown=markdown), self.assertNoLogs("mkdocs.hooks.skills_catalog", "WARNING"):
+                self.hook.on_page_content("", page=self.page(markdown))
+        for markdown in (
+            "# Support Skill Report\n\nIt needs Support Skill.",
+            "The Support Skill reporter",
+        ):
+            with self.subTest(markdown=markdown), self.assertLogs("mkdocs.hooks.skills_catalog", "WARNING"):
+                self.hook.on_page_content("", page=self.page(markdown))
+
+    def test_a_page_names_a_skill_in_its_front_matter(self):
+        self.build(False)
+        with self.assertLogs("mkdocs.hooks.skills_catalog", "WARNING") as logs:
+            self.hook.on_page_content("", page=self.page("# Demo\n", meta={"title": "Support Skill in practice"}))
+        self.assertIn('names support-skill as "Support Skill"', logs.output[0])
+        with self.assertNoLogs("mkdocs.hooks.skills_catalog", "WARNING"):
+            self.hook.on_page_content("", page=self.page("# Demo\n", meta={"hide": ["navigation", "toc"]}))
 
     def test_the_page_warning_says_why_each_skill_is_left_out(self):
         self.add_skill("broken-skill", "# broken-skill\n\nNo frontmatter.\n")

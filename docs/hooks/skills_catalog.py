@@ -19,9 +19,12 @@ this while extra.skills_catalog.show_aws_support_managed in mkdocs.yml is
 false, which keeps that tier off the site until it launches, and so are
 skills whose frontmatter can't be read, since their tier is unknown. With
 no catalog entry and no page, the site search doesn't find them either.
-While it's false, a page that names one of them fails the strict build,
-so the name can't reach the site through another page.
+While it's false, a page that names one of them, by its folder name or its
+display name in any case, fails the strict build, so the name can't reach
+the site through another page.
 """
+
+from __future__ import annotations
 
 import html
 import json
@@ -51,6 +54,14 @@ _FRONTMATTER = re.compile(r"\A---\r?\n(?:(.*?)\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.
 # The skills this build leaves off the site, each with why, for on_page_content.
 # Set by on_pre_build.
 _HIDDEN: dict = {}
+
+# For each of those skills, the longer names of other skills, custom agents,
+# connectors and MCP servers that contain its name, for on_page_content.
+# Set by on_pre_build.
+_LONGER_NAMES: dict = {}
+
+# The folders whose names are the names of things the site lists.
+_TOOL_DIRS = ("skills", "custom-agents", "connectors", "mcp")
 
 # metadata.aws-devops-agent-skills.agent-types carries the API values, because it
 # sets which agents load the skill. The catalog shows them in readable form; a
@@ -269,12 +280,45 @@ def _format_name(skill_id: str) -> str:
     )
 
 
+def _name_pattern(name: str) -> re.Pattern:
+    """A name as a page can write it: as a folder name, or as a display name, in any case.
+
+    For aws-health-events that's aws-health-events, AWS Health Events, aws health
+    events and a mix of the two, with a line break wherever a space can go. It
+    counts only as a whole word: no letter, digit or hyphen touches it, so
+    my-aws-health-events and aws-health-events-report don't name it. Underscores,
+    asterisks and backticks can, since Markdown uses them for emphasis and code.
+    """
+    words = r"(?:-|\s+)".join(re.escape(word) for word in name.split("-"))
+    return re.compile(rf"(?<![a-z0-9-]){words}(?![a-z0-9-])", re.IGNORECASE)
+
+
+def _tool_names(config_dir: str) -> set:
+    """The names of the skills, custom agents, connectors and MCP servers: their folder names."""
+    root = Path(config_dir)
+    return {
+        path.name
+        for folder in _TOOL_DIRS
+        if (root / folder).is_dir()
+        for path in (root / folder).iterdir()
+        if path.is_dir()
+    }
+
+
+def _longer_names(name: str, names) -> list:
+    """The names in names that contain name as whole words, such as aws-health-events-report for aws-health-events."""
+    return sorted(other for other in names if other != name and f"-{name}-" in f"-{other}-")
+
+
 def on_pre_build(config, **kwargs):
     """Generate skills-data.json and skill doc stubs before the build."""
     config_dir = config["docs_dir"].replace("/docs", "")
     hidden = {} if _show_aws_support_managed(config) else _hidden_skills(config_dir)
     _HIDDEN.clear()
     _HIDDEN.update(hidden)
+    names = _tool_names(config_dir) if hidden else set()
+    _LONGER_NAMES.clear()
+    _LONGER_NAMES.update({skill_id: _longer_names(skill_id, names) for skill_id in hidden})
     catalog = [skill for skill in _build_catalog(config_dir) if skill["id"] not in hidden]
 
     # Write JSON for the JS to consume (only if changed, to avoid dev-server loop)
@@ -315,16 +359,32 @@ def on_page_content(html_text, page, **kwargs):
 
     The check reads page.markdown here rather than in on_page_markdown, because by
     now every hook's on_page_markdown has run, including blogs_catalog.py's, which
-    adds the Blogs page's posts. Every catalog entry that names a skill comes from
-    a page that names it too, so this covers the cards as well.
+    adds the Blogs page's posts. It reads the page's front matter too, which can
+    set its title. Every catalog entry that names a skill comes from a page that
+    names it too, so this covers the cards as well.
+
+    A page names a skill with its folder name or its display name, in any case
+    (see _name_pattern). The longer name of another skill, custom agent, connector
+    or MCP server doesn't name it, even as a display name: AWS Health Events Report
+    names aws-health-events-report, not aws-health-events.
     """
+    if not _HIDDEN:
+        return html_text
+    source = page.markdown
+    if getattr(page, "meta", None):
+        source += "\n" + json.dumps(page.meta, ensure_ascii=False, default=str)
     for skill_id, why in sorted(_HIDDEN.items()):
-        if re.search(rf"(?<![\w-]){re.escape(skill_id)}(?![\w-])", page.markdown):
+        text = source
+        for longer in _LONGER_NAMES.get(skill_id, ()):
+            text = _name_pattern(longer).sub("\0", text)
+        match = _name_pattern(skill_id).search(text)
+        if match:
+            shown = " ".join(match.group().split())
             log.warning(
                 "Skills catalog: %s names %s, which is left off the site while extra.skills_catalog.%s "
                 "is false, since %s",
                 page.file.src_uri,
-                skill_id,
+                skill_id if shown == skill_id else f'{skill_id} as "{shown}"',
                 SHOW_AWS_SUPPORT_MANAGED,
                 why,
             )
