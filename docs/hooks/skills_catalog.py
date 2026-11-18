@@ -20,8 +20,8 @@ false, which keeps that tier off the site until it launches, and so are
 skills whose frontmatter can't be read, since their tier is unknown. With
 no catalog entry and no page, the site search doesn't find them either.
 While it's false, a page that names one of them, by its folder name or its
-display name in any case, fails the strict build, so the name can't reach
-the site through another page.
+display name, fails the strict build, so the name can't reach the site
+through another page.
 """
 
 from __future__ import annotations
@@ -281,16 +281,24 @@ def _format_name(skill_id: str) -> str:
 
 
 def _name_pattern(name: str) -> re.Pattern:
-    """A name as a page can write it: as a folder name, or as a display name, in any case.
+    """A name as a page writes it: its folder name, or its display name.
 
-    For aws-health-events that's aws-health-events, AWS Health Events, aws health
-    events and a mix of the two, with a line break wherever a space can go. It
-    counts only as a whole word: no letter, digit or hyphen touches it, so
-    my-aws-health-events and aws-health-events-report don't name it. Underscores,
-    asterisks and backticks can, since Markdown uses them for emphasis and code.
+    For aws-health-events, the folder name counts in any case (aws-health-events,
+    AWS-Health-Events), and the display name with each word starting with a
+    capital letter (AWS Health Events, Aws Health Events, AWS HEALTH EVENTS), with
+    a line break, a blockquote's > or &nbsp; wherever a space can go. Lowercase
+    words don't count, since "triage AWS Health events" is about the events, not
+    the skill. A name counts only as a whole word: no letter, digit or hyphen
+    touches it, so my-aws-health-events and aws-health-events-report don't name
+    it. Underscores, asterisks and backticks can, since Markdown uses them for
+    emphasis and code.
     """
-    words = r"(?:-|\s+)".join(re.escape(word) for word in name.split("-"))
-    return re.compile(rf"(?<![a-z0-9-]){words}(?![a-z0-9-])", re.IGNORECASE)
+    words = name.split("-")
+    folder = "-".join(re.escape(word) for word in words)
+    display = r"(?:[\s>]|&nbsp;)+".join(
+        re.escape(word[0].upper()) + (f"(?i:{re.escape(word[1:])})" if word[1:] else "") for word in words
+    )
+    return re.compile(rf"(?<![A-Za-z0-9-])(?:(?i:{folder})|{display})(?![A-Za-z0-9-])")
 
 
 def _tool_names(config_dir: str) -> set:
@@ -363,23 +371,22 @@ def on_page_content(html_text, page, **kwargs):
     set its title. Every catalog entry that names a skill comes from a page that
     names it too, so this covers the cards as well.
 
-    A page names a skill with its folder name or its display name, in any case
-    (see _name_pattern). The longer name of another skill, custom agent, connector
-    or MCP server doesn't name it, even as a display name: AWS Health Events Report
-    names aws-health-events-report, not aws-health-events.
+    A page names a skill with its folder name or its display name (see
+    _name_pattern). The longer name of another skill, custom agent, connector or
+    MCP server doesn't name it, even as a display name: if a custom agent is
+    called aws-health-events-report, AWS Health Events Report names the agent,
+    not the aws-health-events skill.
     """
     if not _HIDDEN:
         return html_text
-    source = page.markdown
-    if getattr(page, "meta", None):
-        source += "\n" + json.dumps(page.meta, ensure_ascii=False, default=str)
+    source = page.markdown + "\n" + _text(getattr(page, "meta", None) or {})
     for skill_id, why in sorted(_HIDDEN.items()):
         text = source
         for longer in _LONGER_NAMES.get(skill_id, ()):
             text = _name_pattern(longer).sub("\0", text)
         match = _name_pattern(skill_id).search(text)
         if match:
-            shown = " ".join(match.group().split())
+            shown = " ".join(re.sub(r"&nbsp;|>", " ", match.group()).split())
             log.warning(
                 "Skills catalog: %s names %s, which is left off the site while extra.skills_catalog.%s "
                 "is false, since %s",
@@ -389,6 +396,15 @@ def on_page_content(html_text, page, **kwargs):
                 why,
             )
     return html_text
+
+
+def _text(value) -> str:
+    """The text in a page's front matter: every key and value, one per line."""
+    if isinstance(value, Mapping):
+        return "\n".join(_text(item) for pair in value.items() for item in pair)
+    if isinstance(value, (list, tuple)):
+        return "\n".join(_text(item) for item in value)
+    return str(value)
 
 
 def _generate_skill_stub(doc_path: Path, skill: dict, config_dir: str):

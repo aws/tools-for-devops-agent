@@ -65,7 +65,7 @@ While `extra.skills_catalog.show_aws_support_managed` in `mkdocs.yml` is `false`
 
 The setting keeps that tier off the site until it launches. To list the skills, set it to `true`. The build fails if it is missing or isn't `true` or `false`.
 
-While it's `false`, the strict build fails if another page names one of these skills, such as a custom agent that needs one or a connector that lists one, and the log names the page. The check reads each page's Markdown and front matter, links included. A page names `my-skill` with its folder name or its display name, in any case, so `my-skill`, `_my-skill_`, `My Skill` and `my skill` all count, even with a line break between the words. A name counts only as a whole word, so `my-skill-report` and `my-skills` don't name `my-skill`, and nor does `My Skill Report` when `my-skill-report` is another skill, custom agent, connector or MCP server.
+While it's `false`, the strict build fails if another page names one of these skills, such as a custom agent that needs one or a connector that lists one, and the log names the page. The check reads each page's Markdown and front matter, links included. A page names `my-skill` with its folder name in any case (`my-skill`, `_my-skill_`, `My-Skill`), or with its display name with each word capitalized (`My Skill`, `MY SKILL`), even across a line break. Lowercase words such as "my skill" don't count, since they're usually just words. A name counts only as a whole word, so `my-skill-report` and `my-skills` don't name `my-skill`, and nor does `My Skill Report` when `my-skill-report` is another skill, custom agent, connector or MCP server.
 
 ## Blogs page
 

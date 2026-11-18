@@ -251,9 +251,11 @@ class AwsSupportManagedTests(unittest.TestCase):
             "Try **Support Skill** first.",
             "Try _Support Skill_ first.",
             "| SUPPORT SKILL | context |",
-            "It needs support skill.",
             "It needs the Support\nSkill skill.",
             "It needs the Support\u00a0Skill skill.",
+            "> It needs the Support\n> Skill skill.",
+            "> - It needs the Support\n>   Skill skill.",
+            "It needs Support&nbsp;Skill.",
         ):
             with self.subTest(markdown=markdown), self.assertLogs("mkdocs.hooks.skills_catalog", "WARNING"):
                 self.hook.on_page_content("", page=self.page(markdown))
@@ -265,6 +267,8 @@ class AwsSupportManagedTests(unittest.TestCase):
             "Support Skills",
             "SupportSkill",
             "Support-Skill-Report",
+            "It escalates through support skill owners.",
+            "It needs Support skill owners.",
         ):
             with self.subTest(markdown=markdown), self.assertNoLogs("mkdocs.hooks.skills_catalog", "WARNING"):
                 self.hook.on_page_content("", page=self.page(markdown))
@@ -287,7 +291,7 @@ class AwsSupportManagedTests(unittest.TestCase):
         self.build(False)
         for markdown in (
             "# Support Skill Report",
-            "Run the support skill report agent.",
+            "Run the Support Skill Report agent.",
             "Run [support-skill-report](../custom-agents/support-skill-report.md).",
         ):
             with self.subTest(markdown=markdown), self.assertNoLogs("mkdocs.hooks.skills_catalog", "WARNING"):
@@ -301,11 +305,15 @@ class AwsSupportManagedTests(unittest.TestCase):
 
     def test_a_page_names_a_skill_in_its_front_matter(self):
         self.build(False)
-        with self.assertLogs("mkdocs.hooks.skills_catalog", "WARNING") as logs:
-            self.hook.on_page_content("", page=self.page("# Demo\n", meta={"title": "Support Skill in practice"}))
-        self.assertIn('names support-skill as "Support Skill"', logs.output[0])
+        for meta in (
+            {"title": "Support Skill in practice"},
+            {"description": "How to use the Support\nSkill skill.\n"},
+            {"links": [{"related": "support-skill"}]},
+        ):
+            with self.subTest(meta=meta), self.assertLogs("mkdocs.hooks.skills_catalog", "WARNING"):
+                self.hook.on_page_content("", page=self.page("# Demo\n", meta=meta))
         with self.assertNoLogs("mkdocs.hooks.skills_catalog", "WARNING"):
-            self.hook.on_page_content("", page=self.page("# Demo\n", meta={"hide": ["navigation", "toc"]}))
+            self.hook.on_page_content("", page=self.page("# Demo\n", meta={"hide": ["navigation", "toc"], "n": 1}))
 
     def test_the_page_warning_says_why_each_skill_is_left_out(self):
         self.add_skill("broken-skill", "# broken-skill\n\nNo frontmatter.\n")
