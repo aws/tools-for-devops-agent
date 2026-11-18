@@ -24,7 +24,7 @@ makes possible:
 - The `serverless-operation-review` skill uploaded to the same Agent Space
 - No extra IAM permissions if the Agent Space uses the default role: `AIDevOpsAgentAccessPolicy`
   already grants every action the skill uses. For a custom, narrower role, see the permission list in
-  the [skill README](../../skills/serverless-operation-review/README.md#iam-permissions)
+  the [skill README](https://github.com/aws/tools-for-devops-agent/blob/main/skills/serverless-operation-review/README.md#iam-permissions)
 - A delivery destination configured for the report
 
 ## Setup
@@ -69,7 +69,7 @@ naming the tag or stack boundary, for example: "Restrict scope to resources tagg
 
 `sample-app/` contains a SAM template that deploys a deliberately misconfigured serverless workload —
 one fault per check family — so you can confirm the skill and agent actually detect what they claim
-to. See [`sample-app/README.md`](sample-app/README.md).
+to. See [`sample-app/README.md`](https://github.com/aws/tools-for-devops-agent/blob/main/custom-agents/serverless-operation-review/sample-app/README.md).
 
 **It creates real, billable AWS resources and deliberately insecure configuration.** The two faults
 that would create internet-reachable endpoints — an unauthenticated function URL and an API stage with
@@ -86,9 +86,9 @@ account, and delete the stack when you are done.
   replace them.
 - **Inherits every skill limitation** — configuration and telemetry only, estimated per-resource
   costs, sampled log analysis, no code inspection. See the
-  [skill README](../../skills/serverless-operation-review/README.md#limitations).
+  [skill README](https://github.com/aws/tools-for-devops-agent/blob/main/skills/serverless-operation-review/README.md#limitations).
 - **Read-only by design.** It will not fix anything, including findings it has reported for months.
 
 ## Version History
 
-See [CHANGELOG.md](CHANGELOG.md).
+See [CHANGELOG.md](https://github.com/aws/tools-for-devops-agent/blob/main/custom-agents/serverless-operation-review/CHANGELOG.md).

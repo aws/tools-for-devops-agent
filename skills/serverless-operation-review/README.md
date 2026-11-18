@@ -171,4 +171,4 @@ Then in the AWS Console:
 
 ## Version History
 
-See [CHANGELOG.md](CHANGELOG.md).
+See [CHANGELOG.md](https://github.com/aws/tools-for-devops-agent/blob/main/skills/serverless-operation-review/CHANGELOG.md).
