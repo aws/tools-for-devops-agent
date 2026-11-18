@@ -2,7 +2,7 @@
 name: atlassian-triage-issue
 description: "Intelligently triage bug reports and error messages by searching for duplicates in Jira and offering to create new issues or add comments to existing ones. When an agent needs to: (1) Triage a bug report or error message, (2) Check if an issue is a duplicate, (3) Find similar past issues, (4) Create a new bug ticket with proper context, or (5) Add information to an existing ticket. Searches Jira for similar issues, identifies duplicates, checks fix history, and helps create well-structured bug reports."
 license: Apache-2.0
-compatibility: Requires AWS DevOps Agent with the Atlassian MCP v2 connector and authorized Atlassian Cloud access.
+compatibility: Requires AWS DevOps Agent with the Atlassian MCP connector and authorized Atlassian Cloud access.
 metadata:
   author: "sbourkeatlassian"
   version: "1.0.0"
@@ -13,7 +13,7 @@ metadata:
 
 ## AWS DevOps Agent usage
 
-Requires the Atlassian MCP v2 connector at `https://mcp.atlassian.com/v2/mcp`.
+Requires the Atlassian MCP connector at `https://mcp.atlassian.com/v2/mcp`.
 Use only tools enabled for this connection and data within the user's requested scope.
 Resolve the authorized site with `getAccessibleAtlassianResources`; never infer a cloud ID
 from a site name. Verify the live tool schema before using the examples below.
@@ -399,7 +399,7 @@ usage rules above when using these examples.
 
 ## Calling non-primary tools
 
-The Atlassian Rovo MCP server exposes only a small set of **primary** tools directly in your tool
+The Atlassian MCP server exposes only a small set of **primary** tools directly in your tool
 list. Everything else lives in the catalog and is reached through meta-tools:
 
 - **`discover`** — describe the goal in natural language when you do not know an operation's name.

@@ -20,7 +20,7 @@ Ask: "Show a sprint dashboard for project DEMO with blockers and unassigned work
 
 ## Source and maintenance
 
-Adapted from [Atlassian's v2 skill](https://github.com/atlassian/atlassian-mcp-server/tree/352a02b05189e2a958a973867cc6eca365cb8fc3/skills/jira-sprint-dashboard) at commit `352a02b05189e2a958a973867cc6eca365cb8fc3`.
+Adapted from [Atlassian MCP skill](https://github.com/atlassian/atlassian-mcp-server/tree/352a02b05189e2a958a973867cc6eca365cb8fc3/skills/jira-sprint-dashboard) at commit `352a02b05189e2a958a973867cc6eca365cb8fc3`.
 Upstream is Apache-2.0 licensed; see [its license](https://github.com/atlassian/atlassian-mcp-server/blob/352a02b05189e2a958a973867cc6eca365cb8fc3/LICENSE).
 The AWS adaptation adds product-prefixed identity, publishing metadata, tool-routing
 guidance, approval and data-handling rules, and on-demand references. It excludes

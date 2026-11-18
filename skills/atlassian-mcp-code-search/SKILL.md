@@ -6,18 +6,18 @@ description: >
   listCodeDirectory). Use whenever an answer needs code that is not checked out
   locally, even without an explicit search request or a known repository.
 license: Apache-2.0
-compatibility: Requires AWS DevOps Agent with the Atlassian MCP v2 connector and authorized Atlassian Cloud access.
+compatibility: Requires AWS DevOps Agent with the Atlassian MCP connector and authorized Atlassian Cloud access.
 metadata:
   author: "sbourkeatlassian"
   version: "1.0.0"
-  summary: "Find source code, callers and API consumers through Atlassian MCP v2."
+  summary: "Find source code, callers and API consumers through Atlassian MCP."
   tier: "partner-managed"
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_TRIAGE, INCIDENT_RCA, PREVENTION, RELEASE_READINESS_REVIEW"
 ---
 
 ## AWS DevOps Agent usage
 
-Requires the Atlassian MCP v2 connector at `https://mcp.atlassian.com/v2/mcp`.
+Requires the Atlassian MCP connector at `https://mcp.atlassian.com/v2/mcp`.
 Use only tools enabled for this connection and data within the user's requested scope.
 Resolve the authorized site with `getAccessibleAtlassianResources`; never infer a cloud ID
 from a site name. Verify the live tool schema before using the examples below.
@@ -48,7 +48,7 @@ behavior, error, API, or symbol; discover the repository if unknown. Verify
 implementation claims against source. Skip when local code, supplied context,
 or general knowledge answers the question.
 
-The Atlassian MCP covers code as well as Jira and Confluence. In the default v2
+The Atlassian MCP covers code as well as Jira and Confluence. In the default
 tool list, code search is reached through `discover` and `execute`. This skill
 teaches that workflow; it does not register additional MCP tools.
 
@@ -140,7 +140,7 @@ are the normal starting point.
 
 ## Calling non-primary tools
 
-The Atlassian Rovo MCP server exposes only a small set of **primary** tools directly in your tool
+The Atlassian MCP server exposes only a small set of **primary** tools directly in your tool
 list. Everything else lives in the catalog and is reached through meta-tools:
 
 - **`discover`** — describe the goal in natural language when you do not know an operation's name.

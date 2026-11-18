@@ -2,7 +2,7 @@
 name: atlassian-spec-to-backlog
 description: "Automatically convert Confluence specification documents into structured Jira backlogs with Epics and implementation tickets. When an agent needs to: (1) Create Jira tickets from a Confluence page, (2) Generate a backlog from a specification, (3) Break down a spec into implementation tasks, or (4) Convert requirements into Jira issues. Handles reading Confluence pages, analyzing specifications, creating Epics with proper structure, and generating detailed implementation tickets linked to the Epic."
 license: Apache-2.0
-compatibility: Requires AWS DevOps Agent with the Atlassian MCP v2 connector and authorized Atlassian Cloud access.
+compatibility: Requires AWS DevOps Agent with the Atlassian MCP connector and authorized Atlassian Cloud access.
 metadata:
   author: "sbourkeatlassian"
   version: "1.0.0"
@@ -13,7 +13,7 @@ metadata:
 
 ## AWS DevOps Agent usage
 
-Requires the Atlassian MCP v2 connector at `https://mcp.atlassian.com/v2/mcp`.
+Requires the Atlassian MCP connector at `https://mcp.atlassian.com/v2/mcp`.
 Use only tools enabled for this connection and data within the user's requested scope.
 Resolve the authorized site with `getAccessibleAtlassianResources`; never infer a cloud ID
 from a site name. Verify the live tool schema before using the examples below.
@@ -448,7 +448,7 @@ usage rules above when using these examples.
 
 ## Calling non-primary tools
 
-The Atlassian Rovo MCP server exposes only a small set of **primary** tools directly in your tool
+The Atlassian MCP server exposes only a small set of **primary** tools directly in your tool
 list. Everything else lives in the catalog and is reached through meta-tools:
 
 - **`discover`** — describe the goal in natural language when you do not know an operation's name.

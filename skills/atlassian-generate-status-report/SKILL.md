@@ -2,7 +2,7 @@
 name: atlassian-generate-status-report
 description: "Generate project status reports from Jira issues and publish to Confluence. When an agent needs to: (1) Create a status report for a project, (2) Summarize project progress or updates, (3) Generate weekly/daily reports from Jira, (4) Publish status summaries to Confluence, or (5) Analyze project blockers and completion. Queries Jira issues, categorizes by status/priority, and creates formatted reports for delivery managers and executives."
 license: Apache-2.0
-compatibility: Requires AWS DevOps Agent with the Atlassian MCP v2 connector and authorized Atlassian Cloud access.
+compatibility: Requires AWS DevOps Agent with the Atlassian MCP connector and authorized Atlassian Cloud access.
 metadata:
   author: "sbourkeatlassian"
   version: "1.0.0"
@@ -13,7 +13,7 @@ metadata:
 
 ## AWS DevOps Agent usage
 
-Requires the Atlassian MCP v2 connector at `https://mcp.atlassian.com/v2/mcp`.
+Requires the Atlassian MCP connector at `https://mcp.atlassian.com/v2/mcp`.
 Use only tools enabled for this connection and data within the user's requested scope.
 Resolve the authorized site with `getAccessibleAtlassianResources`; never infer a cloud ID
 from a site name. Verify the live tool schema before using the examples below.
@@ -437,7 +437,7 @@ Detailed templates for different report types and audiences. Reference this to s
 
 ## Calling non-primary tools
 
-The Atlassian Rovo MCP server exposes only a small set of **primary** tools directly in your tool
+The Atlassian MCP server exposes only a small set of **primary** tools directly in your tool
 list. Everything else lives in the catalog and is reached through meta-tools:
 
 - **`discover`** — describe the goal in natural language when you do not know an operation's name.

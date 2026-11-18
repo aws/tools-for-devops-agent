@@ -1,6 +1,6 @@
 # Atlassian MCP
 
-Use Atlassian MCP v2 to find Jira work, Confluence runbooks, previous incidents and
+Use Atlassian MCP to find Jira work, Confluence runbooks, previous incidents and
 connected source code, and to create follow-up work when requested. The server is
 hosted and supported by Atlassian. Access follows the connected identity's product
 permissions and your organization's policies.
@@ -10,12 +10,23 @@ permissions and your organization's policies.
 1. Confirm that your Atlassian Cloud account or service account can access the sites,
    projects and spaces needed for investigations. Grant only the permissions needed;
    search and investigation do not require permission to create or edit content.
-2. Ask your organization administrator to review the **Rovo MCP server** settings in
-   Atlassian Administration. For API-key access, authentication via API token must
-   be enabled. For OAuth access, the client's redirect domain must be allowed.
+2. Ask your organization administrator to review the **Atlassian MCP server** settings in
+   Atlassian Administration. For OAuth access, the client's redirect domain must be allowed.
+   For API-key access, authentication via API token must be enabled.
 3. If your organization uses app IP allowlists, ask the administrator to permit the
    required AWS DevOps Agent outbound addresses. A successful sign-in alone does
    not establish access to every app or site.
+
+## OAuth sign-in (recommended)
+
+Use an Atlassian account with access to the intended sites and apps. During Atlassian
+sign-in, review the requested permissions, choose the intended site when prompted,
+and consent only if those permissions match your use case. Client registration is
+dynamic; you do not need to create an OAuth application or supply a client secret.
+
+If your organization restricts MCP clients by domain, have your administrator approve
+the client's redirect domain before sign-in. Consult
+[Atlassian MCP settings](https://support.atlassian.com/security-and-access-policies/docs/control-atlassian-mcp-server-settings/).
 
 ## Service account API key
 
@@ -34,17 +45,6 @@ and pass its authorized `cloudId` to tools that require it.
 
 See [Configure authentication via API token](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/configuring-authentication-via-api-token/).
 
-## OAuth sign-in
-
-Use an Atlassian account with access to the intended sites and apps. During Atlassian
-sign-in, review the requested permissions, choose the intended site when prompted,
-and consent only if those permissions match your use case. Client registration is
-dynamic; you do not need to create an OAuth application or supply a client secret.
-
-If your organization restricts MCP clients by domain, have your administrator approve
-the client's redirect domain before sign-in. Consult
-[Atlassian MCP settings](https://support.atlassian.com/security-and-access-policies/docs/control-atlassian-mcp-server-settings/).
-
 ## Sites, tools and skills
 
 The hosted endpoint is `https://mcp.atlassian.com/v2/mcp`. There is no region or
@@ -57,7 +57,7 @@ Knowledge search, code search and dashboards read data. Other workflows can crea
 Jira issues, add comments or publish Confluence content when explicitly requested.
 Review tool permissions and required approvals for the workflows you use.
 
-For a `401`, check the key or sign-in session. For a `403`, review scopes, site/app
+For a `401`, check the sign-in session or API key. For a `403`, review scopes, site/app
 permissions and IP policies. A missing tool can reflect authentication or product
 restrictions; it does not imply that the underlying data is absent.
 
