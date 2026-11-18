@@ -10,9 +10,10 @@ Load the `aws-systems-manager` skill. It routes each task to a chapter and sets 
 
 ## Common approach
 
-1. **Scope.** Use the Regions the user names. Otherwise use the Region of the Agent Space's AWS account configuration, and say which Region you checked.
-2. **Run each capability review** in the order listed below. If the user names a capability, run only that one.
-3. **Combine the results** into the report described under Output.
+1. **Preflight.** Confirm `use_aws` works with one cheap read call, for example Systems Manager `list-documents` with `--max-results 1`. If the tool is missing or the call fails, skip the reviews: write the report with every section marked not checked and the reason, create one Recommendation naming the blocker and the read-only IAM actions the reviews need, and stop.
+2. **Scope.** Use the Regions the user names. Otherwise use the Region of the Agent Space's AWS account configuration, and say which Region you checked.
+3. **Run each capability review** in the order listed below, in this session. Don't delegate AWS API calls to subagents: they don't inherit tools, and a review split across sessions can't share what it already read. If the user names a capability, run only that one.
+4. **Combine the results** into the report described under Output.
 
 ## Capability reviews
 
