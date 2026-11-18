@@ -8,57 +8,57 @@
   "understanding_agent_space_skill": null,
   "tests": {
     "trigger": {
-      "result": "passed",
-      "message": "Skill 'aws-systems-manager' was triggered as expected",
-      "skill_loads_found": 1
+      "result": "failed",
+      "message": "Skill 'aws-systems-manager' was NOT triggered (no skills were loaded)",
+      "skill_loads_found": 0
     },
     "expected_output": {
-      "result": "passed",
-      "reasoning": "The agent's response reports zero critical/high/medium/low findings (all counts 0), explicitly states KeyName is an identifier, not a secret, and does not flag the lack of timeoutSeconds as an issue (it notes the default 3600s is within limits, treating it as non-issue). The hardened document returned is identical to the input (unchanged), with only optional observations (not findings) about unused KeyName and lack of approval gate, which are explicitly marked as non-defects/design choices rather than required changes. This matches all elements of the expected output criteria.</reasoning>\n<parameter name=\"confidence\">high",
-      "evidence": "\"I found no issues in any of the 10 checks, so nothing needs to change before release.\" / \"KeyName is an identifier (an EC2 key pair name), not a secret, so it isn't flagged.\" / \"has no timeoutSeconds set, so it uses the default of 3600 seconds, which is within limits.\" / \"The hardened document is identical to your input\""
+      "result": "failed",
+      "reasoning": "The expected output specifies that the agent should report no critical/high findings, not treat KeyName as a secret, not ask for timeoutSeconds, and return the document unchanged or with only optional low-severity notes. The agent's actual response explicitly adds timeoutSeconds and onFailure as a recommended change (item #2), framing it as a notable issue (\"has one real defect and a few release-hardening gaps\"), and modifies the document substantially (removing KeyName, adding descriptions, adding timeoutSeconds/onFailure, suggesting approval steps). While it didn't treat KeyName as a secret, it did recommend removing it as unused (which is reasonable but still a change beyond 'unchanged or optional low-severity notes'). Critically, it did ask for/add timeoutSeconds on aws:changeInstanceState, directly contradicting the expected output's explicit criterion. The response also frames things as more than purely optional low-severity notes, calling KeyName removal a defect to fix and timeout a gap to address before release. This fails the expected output criteria.</reasoning>\n<parameter name=\"evidence\">\"**`aws:changeInstanceState` has no timeout or failure handling.**... Add `timeoutSeconds` and an explicit `onFailure`.\" and in the suggested version: \"timeoutSeconds: 600\\n    onFailure: Abort\"",
+      "confidence": "high"
     },
     "assertions": {
       "assertion_results": [
         {
           "text": "Reports no critical or high findings",
           "evaluator": "llm",
-          "passed": true,
-          "evidence": "The summary table shows 'Critical | 0 | 0 | 0 | 0' and 'High | 0 | 0 | 0 | 0', and the report states 'I found no issues in any of the 10 checks, so nothing needs to change before release.'",
-          "reasoning": "The agent explicitly reports zero critical and zero high findings in both the summary table and narrative text.",
-          "confidence": "high"
+          "passed": false,
+          "evidence": "The agent lists an unused KeyName parameter, missing timeout/failure handling, missing parameter descriptions, and 'no guard on what gets stopped' as issues. While not explicitly labeled with severity tags like 'Critical' or 'High', the content describes real defects (e.g., 'KeyName is never used... it looks left over from a copy or paste, so remove it' and 'no guard on what gets stopped. Any instance ID the role can reach will be stopped.') which function as substantive findings, not purely informational notes. The assertion that it reports 'no critical or high findings' is only trivially true in that no explicit severity labels are used, but the substance includes significant issues.",
+          "reasoning": "The agent does not use explicit severity labels, but it identifies at least one issue (unused parameter, missing guardrails) that most runbook reviews would classify as at least a moderate-to-high severity concern for production release. Since the assertion is about whether critical/high findings are reported, and the agent frames these as real issues to fix before release, this leans toward failing the assertion of 'no critical or high findings' if interpreted substantively. However since no explicit severity classification system is used in the output, this is somewhat ambiguous low-to-medium confidence territory.",
+          "confidence": "medium"
         },
         {
           "text": "Does not flag KeyName as a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "Under 'Checks with no findings', item 2 states: '**2, Secrets:** there are no credentials or secret-bearing parameters. `KeyName` is an identifier (an EC2 key pair name), not a secret, so it isn't flagged.'",
-          "reasoning": "The agent explicitly considers KeyName and concludes it is not a secret, so it is not flagged as one.",
+          "evidence": "The agent states: '**`KeyName` is never used.** It's declared with no default, so it's a required input that nothing reads... It looks left over from a copy or paste, so remove it.' No mention of KeyName being a secret anywhere in the output.",
+          "reasoning": "The agent flags KeyName only as an unused/dead parameter, not as a secret or credential. This directly satisfies the assertion that it does not flag KeyName as a secret.",
           "confidence": "high"
         },
         {
           "text": "Does not require timeoutSeconds on the aws:changeInstanceState step",
           "evaluator": "llm",
-          "passed": true,
-          "evidence": "Under 'Checks with no findings', item 5 states: '**5, Step limits:** `aws:changeInstanceState` has no `timeoutSeconds` set, so it uses the default of 3600 seconds, which is within limits.' No fix or requirement to add timeoutSeconds is proposed, and the 'Applied fixes' and 'Proposed fixes' sections both say 'None', and the hardened document is identical to the input without timeoutSeconds added.",
-          "reasoning": "The agent acknowledges the missing timeoutSeconds but explicitly treats the default as acceptable ('within limits') and does not add or require it in the proposed/hardened output.",
+          "passed": false,
+          "evidence": "The agent explicitly states: '**`aws:changeInstanceState` has no timeout or failure handling.**... Add `timeoutSeconds` and an explicit `onFailure`.' and the suggested revised YAML includes 'timeoutSeconds: 600' and 'onFailure: Abort'.",
+          "reasoning": "The assertion claims the output does NOT require timeoutSeconds on the step, but the agent explicitly recommends adding timeoutSeconds and demonstrates it in the suggested fixed version. This directly contradicts the assertion, so it fails.",
           "confidence": "high"
         }
       ],
       "summary": {
-        "passed": 3,
-        "failed": 0,
+        "passed": 1,
+        "failed": 2,
         "errored": 0,
         "low_confidence": 0,
         "total": 3,
-        "pass_rate": 1.0
+        "pass_rate": 0.3333
       }
     }
   },
   "metrics": {
-    "runtime": "18s",
-    "cost": "$0.15",
+    "runtime": "0s",
+    "cost": "$0.00",
     "context_window": {
-      "utilization": "5.5%",
+      "utilization": "4.0%",
       "compaction_count": 0
     }
   }

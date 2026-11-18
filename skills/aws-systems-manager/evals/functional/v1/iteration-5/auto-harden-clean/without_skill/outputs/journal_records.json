@@ -1,0 +1,58 @@
+[
+  {
+    "agentSpaceId": "d470f680-2496-48c6-b079-8643647ad220",
+    "executionId": "aa2c2c62-ed0d-4e72-8cc7-9af169fabbf4",
+    "recordId": "62a0c02a-3e7c-41ab-ba9a-3599a867f400",
+    "content": "{\"id\": \"2a8fb81a-d658-432a-b355-32fa693ada91\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"Review EC2 stop SSM runbook before release\"}]}",
+    "createdAt": "2026-11-18T13:28:23.224000-08:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "d470f680-2496-48c6-b079-8643647ad220",
+    "executionId": "aa2c2c62-ed0d-4e72-8cc7-9af169fabbf4",
+    "recordId": "a39608dc-577b-472e-a0b5-8256d60bd4ae",
+    "content": "{\"id\": \"a39608dc-577b-472e-a0b5-8256d60bd4ae\", \"role\": \"user\", \"content\": [{\"text\": \"Check this runbook before release:\\n\\n```yaml\\nschemaVersion: '0.3'\\ndescription: Stops an EC2 instance.\\nassumeRole: '{{AutomationAssumeRole}}'\\nparameters:\\n  AutomationAssumeRole:\\n    type: AWS::IAM::Role::Arn\\n  InstanceId:\\n    type: String\\n    allowedPattern: '^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$'\\n  KeyName:\\n    type: String\\n    allowedPattern: '^[A-Za-z0-9._-]{1,255}$'\\nmainSteps:\\n  - name: StopInstance\\n    action: aws:changeInstanceState\\n    inputs:\\n      InstanceIds: ['{{InstanceId}}']\\n      DesiredState: stopped\\n```\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-18T13:28:23.504000-08:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "d470f680-2496-48c6-b079-8643647ad220",
+    "executionId": "aa2c2c62-ed0d-4e72-8cc7-9af169fabbf4",
+    "recordId": "26ebbee6-3a42-4331-ae75-612e0c3e96e1",
+    "content": "{\"id\": \"1bfd72d4-51ae-424f-adcf-928ee2026941\", \"role\": \"assistant\", \"block_type\": \"thinking\", \"content\": [{\"type\": \"text\", \"text\": \"This is a pasted SSM Automation runbook I can review directly without external verification. I'm checking that the schema version is correct and examining the inputs for the changeInstanceState action to make sure they're properly specified.\\n\\nSpotting some issues: the KeyName parameter looks unused and should be removed, parameters lack descriptions, and InstanceId's type could be tightened. I'm also noting missing failure handling (onFailure, timeoutSeconds), no safety guard like an approval step before stopping production instances, and IAM role considerations like ec2:StopInstances permissions and iam:PassRole. I should also flag the data-loss risk for instance-store volumes on stop, then put together a corrected version of the runbook.\\n\\n\"}]}",
+    "createdAt": "2026-11-18T13:28:31.667000-08:00",
+    "recordType": "thinking"
+  },
+  {
+    "agentSpaceId": "d470f680-2496-48c6-b079-8643647ad220",
+    "executionId": "aa2c2c62-ed0d-4e72-8cc7-9af169fabbf4",
+    "recordId": "73744b01-496a-4ccc-a27c-9e082205ab92",
+    "content": "{\"id\": \"f9fe8bb8-af20-42e6-a438-1da46380fcc0\", \"role\": \"assistant\", \"block_type\": \"thinking_duration\", \"content\": [{\"type\": \"text\", \"text\": \"5184\"}]}",
+    "createdAt": "2026-11-18T13:28:31.752000-08:00",
+    "recordType": "thinking_duration"
+  },
+  {
+    "agentSpaceId": "d470f680-2496-48c6-b079-8643647ad220",
+    "executionId": "aa2c2c62-ed0d-4e72-8cc7-9af169fabbf4",
+    "recordId": "b1e5fc8a-bac3-4dec-9056-9d1551ec964b",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 4.3, \"compaction_count\": 0}}}",
+    "createdAt": "2026-11-18T13:28:36.029000-08:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "d470f680-2496-48c6-b079-8643647ad220",
+    "executionId": "aa2c2c62-ed0d-4e72-8cc7-9af169fabbf4",
+    "recordId": "e2498b2c-0dce-4095-ba83-8c768af1c815",
+    "content": "{\"id\": \"e2498b2c-0dce-4095-ba83-8c768af1c815\", \"role\": \"assistant\", \"content\": [{\"text\": \"The runbook is valid and should run, but it has one real problem and a few things to tighten before release.\\n\\n**Problem: `KeyName` is never used**\\n- `KeyName` is declared with no default and isn't referenced in any step.\\n- That makes it a required parameter, so every caller must supply a value that does nothing. This is likely a copy-paste leftover from a different runbook.\\n- Remove it. If you do need it, add a step that uses it.\\n\\n**What checks out**\\n- `schemaVersion: '0.3'` is correct for Automation runbooks.\\n- `aws:changeInstanceState` accepts `InstanceIds` and `DesiredState: stopped`.\\n- The `InstanceId` pattern correctly matches both the 8-character and 17-character instance ID formats.\\n- The step is idempotent. An instance that is already stopped counts as success. A terminated instance makes the step fail.\\n\\n**Suggested improvements**\\n- **Parameter types:** Use `AWS::EC2::Instance::Id` for `InstanceId`. It validates the ID and gives console users a picker. You can then drop the regex.\\n- **Descriptions:** Add descriptions to the parameters and the document so operators know what to enter.\\n- **Timeout and failure handling:** Add `timeoutSeconds` and `onFailure` so a stuck stop doesn't hang the execution. A stop can sit in `stopping` for a long time.\\n- **Guardrail (optional):** Stopping is disruptive. Consider an `aws:approve` step or a tag check (for example, refuse to run on `Environment=prod`) if people outside the owning team can run this.\\n- **Permissions to confirm:** The assume role needs `ec2:StopInstances` and `ec2:DescribeInstances`. It also needs `ec2:DescribeInstanceStatus`, which the action uses to poll state. Callers need `iam:PassRole` on that role.\\n- **Operational note:** Stopping an instance erases any instance-store volumes, and public IPs change unless you use an Elastic IP. Mention this in the description if it applies.\\n\\n**Revised version**\\n```yaml\\nschemaVersion: '0.3'\\ndescription: Stops an EC2 instance and waits until it reaches the stopped state. Note that instance-store data is lost and non-Elastic public IPs change.\\nassumeRole: '{{AutomationAssumeRole}}'\\nparameters:\\n  AutomationAssumeRole:\\n    type: AWS::IAM::Role::Arn\\n    description: (Required) Role with ec2:StopInstances, ec2:DescribeInstances and ec2:DescribeInstanceStatus.\\n  InstanceId:\\n    type: AWS::EC2::Instance::Id\\n    description: (Required) ID of the instance to stop.\\nmainSteps:\\n  - name: StopInstance\\n    action: aws:changeInstanceState\\n    timeoutSeconds: 600\\n    onFailure: Abort\\n    inputs:\\n      InstanceIds: ['{{InstanceId}}']\\n      DesiredState: stopped\\n```\\n\\nI can't see how this document is referenced elsewhere, such as in pipelines or other automations. Before you remove `KeyName`, check that nothing passes it in. Otherwise those callers will fail on an unknown parameter.\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-18T13:28:36.075000-08:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "d470f680-2496-48c6-b079-8643647ad220",
+    "executionId": "aa2c2c62-ed0d-4e72-8cc7-9af169fabbf4",
+    "recordId": "413e52a1-1354-4675-a131-41611473b706",
+    "content": "{\"id\": \"8da3c6a0-b90b-4025-a627-7c89a1aa076d\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"The runbook is valid and should run, but it has one real problem and a few things to tighten before release.\\n\\n**Problem: `KeyName` is never used**\\n- `KeyName` is declared with no default and isn't referenced in any step.\\n- That makes it a required parameter, so every caller must supply a value that does nothing. This is likely a copy-paste leftover from a different runbook.\\n- Remove it. If you do need it, add a step that uses it.\\n\\n**What checks out**\\n- `schemaVersion: '0.3'` is correct for Automation runbooks.\\n- `aws:changeInstanceState` accepts `InstanceIds` and `DesiredState: stopped`.\\n- The `InstanceId` pattern correctly matches both the 8-character and 17-character instance ID formats.\\n- The step is idempotent. An instance that is already stopped counts as success. A terminated instance makes the step fail.\\n\\n**Suggested improvements**\\n- **Parameter types:** Use `AWS::EC2::Instance::Id` for `InstanceId`. It validates the ID and gives console users a picker. You can then drop the regex.\\n- **Descriptions:** Add descriptions to the parameters and the document so operators know what to enter.\\n- **Timeout and failure handling:** Add `timeoutSeconds` and `onFailure` so a stuck stop doesn't hang the execution. A stop can sit in `stopping` for a long time.\\n- **Guardrail (optional):** Stopping is disruptive. Consider an `aws:approve` step or a tag check (for example, refuse to run on `Environment=prod`) if people outside the owning team can run this.\\n- **Permissions to confirm:** The assume role needs `ec2:StopInstances` and `ec2:DescribeInstances`. It also needs `ec2:DescribeInstanceStatus`, which the action uses to poll state. Callers need `iam:PassRole` on that role.\\n- **Operational note:** Stopping an instance erases any instance-store volumes, and public IPs change unless you use an Elastic IP. Mention this in the description if it applies.\\n\\n**Revised version**\\n```yaml\\nschemaVersion: '0.3'\\ndescription: Stops an EC2 instance and waits until it reaches the stopped state. Note that instance-store data is lost and non-Elastic public IPs change.\\nassumeRole: '{{AutomationAssumeRole}}'\\nparameters:\\n  AutomationAssumeRole:\\n    type: AWS::IAM::Role::Arn\\n    description: (Required) Role with ec2:StopInstances, ec2:DescribeInstances and ec2:DescribeInstanceStatus.\\n  InstanceId:\\n    type: AWS::EC2::Instance::Id\\n    description: (Required) ID of the instance to stop.\\nmainSteps:\\n  - name: StopInstance\\n    action: aws:changeInstanceState\\n    timeoutSeconds: 600\\n    onFailure: Abort\\n    inputs:\\n      InstanceIds: ['{{InstanceId}}']\\n      DesiredState: stopped\\n```\\n\\nI can't see how this document is referenced elsewhere, such as in pipelines or other automations. Before you remove `KeyName`, check that nothing passes it in. Otherwise those callers will fail on an unknown parameter.\"}]}",
+    "createdAt": "2026-11-18T13:28:36.150000-08:00",
+    "recordType": "final_response"
+  }
+]

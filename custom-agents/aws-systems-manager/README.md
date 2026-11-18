@@ -22,7 +22,8 @@ The agent currently reviews **Automation**: it finds executions that failed, tim
 
 - An AWS DevOps Agent space
 - The [aws-systems-manager](../../skills/aws-systems-manager/) skill uploaded to the Agent Space
-- The agent calls `ssm:DescribeAutomationExecutions`, `ssm:DescribeAutomationStepExecutions`, `ssm:ListDocuments`, `ssm:GetDocument` and `ssm:DescribeDocument`, which the [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security-devops-agent-iam-permissions.html) managed policy grants. No additional permissions are needed.
+- The agent calls `ssm:DescribeAutomationExecutions`, `ssm:DescribeAutomationStepExecutions`, `ssm:ListDocuments`, `ssm:GetDocument` and `ssm:DescribeDocument`, which the [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security-devops-agent-iam-permissions.html) managed policy grants.
+- Optional: `ssm:GetAutomationExecution` (read-only; not in the managed policy). The agent uses it only to read the per-location rate-control and alarm settings (`TargetLocations`) of multi-account executions, which `DescribeAutomationExecutions` doesn't return. Without it, the agent still detects multi-account runs and reports their per-location checks as Not checked.
 
 ## Creating the Agent
 

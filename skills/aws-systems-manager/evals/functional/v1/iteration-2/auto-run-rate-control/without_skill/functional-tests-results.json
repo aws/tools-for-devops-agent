@@ -10,9 +10,9 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The response covers many expected elements well: it resolves the tag to 3 instance IDs, checks the alarm state (confirms OK), uses --target-parameter-name InstanceId, --targets Key=tag:ssm-skill-test,Values=true, --max-concurrency 1, and includes an --alarm-configuration naming the alarm. However, several specific expected details are missing or diverge:\n\n1. No mention of using describe-document to confirm the AWS-RestartEC2Instance runbook exists/its parameters.\n2. No --document-version pinned in the command (expected a pinned document version).\n3. --max-errors is set to \"1\" instead of the expected \"0\".\n4. The alarm-configuration uses \"IgnoreUnavailableAlarms\": false, but the expected parameter name is \"IgnorePollAlarmFailure\" (a real SSM AlarmConfiguration field) \u2014 the agent used a non-existent/incorrect field name, which is a factual error.\n5. While the agent says \"I haven't run it\" and offers to run it after approval, it also says \"I can run this for you\" and describes an approval step, which is somewhat consistent with requiring a person to run it, but it frames itself as able to execute it directly rather than clearly stating a human must execute the command themselves outside the agent's own execution capabilities. This is a softer miss compared to the explicit requirement.\n\nGiven multiple factual/parameter inaccuracies (wrong field name, missing document-version pin, wrong max-errors value, no describe-document step), the response does not fully meet the expected output criteria despite covering several points well.",
-      "evidence": "\"--alarm-configuration '{\"Alarms\":[{\"Name\":\"ssm-skill-test-cpu\"}],\"IgnoreUnavailableAlarms\":false}'\" and \"--max-errors \\\"1\\\"\" with no --document-version or describe-document step mentioned.",
-      "confidence": "medium"
+      "reasoning": "The agent's response meets several expected elements: it describes resolving the tag to instance IDs (lists three instance IDs), checks that the alarm ssm-skill-test-cpu is not in ALARM (states it is 'OK'), confirms the runbook parameters via describe-document-like info (mentions AWS-RestartEC2Instance takes InstanceId and AutomationAssumeRole), and uses --target-parameter-name InstanceId and --targets Key=tag:ssm-skill-test,Values=true with --max-concurrency 1. It also says a person must approve/run it ('I can run it for you, but the call would need your approval first') and does not execute it.\n\nHowever, several specific required details are missing or incorrect:\n1. --max-errors is set to 1, but expected output requires --max-errors 0.\n2. The --alarm-configuration uses \"IgnoreInactiveAlarms\":false, but the expected output specifies the parameter name \"IgnorePollAlarmFailure\":false. These are different parameter names (IgnoreInactiveAlarms is not a real/expected field per the task spec), so this is a mismatch.\n3. There is no --document-version pinned in the command, which the expected output explicitly requires.\n4. There's no explicit mention of running \"describe-document\" to confirm the runbook - though it describes findings about the runbook, it doesn't explicitly state it ran describe-document.\n\nGiven the explicit requirements for --max-errors 0, --alarm-configuration with IgnorePollAlarmFailure=false, and a pinned --document-version are all missing or incorrect, the response fails to meet the expected output criteria despite partial alignment.",
+      "evidence": "\"--max-errors 1\" and \"--alarm-configuration '{\"IgnoreInactiveAlarms\":false,...}'\" with no --document-version parameter present in the command.",
+      "confidence": "high"
     },
     "assertions": {
       "assertion_results": [
@@ -20,33 +20,33 @@
           "text": "The command sets --max-errors 0 and explains that the run stops after the first failed target",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The command uses `--max-errors \"1\"`, not 0, and the agent explains: 'MaxConcurrency=1 restarts the instances one at a time... With a higher value, more instances could already be mid-restart when the alarm trips.' There is no statement that the run stops after the first failed target due to max-errors=0.",
-          "reasoning": "Assertion requires --max-errors 0 with an explanation about stopping after first failure; the output has --max-errors 1 and the explanation given is about concurrency/alarm timing, not about stopping after a single failed target.",
+          "evidence": "The command uses '--max-errors 1', not '--max-errors 0'. The agent explains: 'Error limit: --max-errors 1 also halts the run after the first failed instance.' This explanation matches max-errors=1 behavior, not max-errors=0.",
+          "reasoning": "Assertion requires --max-errors 0 specifically; the output uses 1, so it fails the literal value check even though the explanation of halting after first failure is present.",
           "confidence": "high"
         },
         {
           "text": "The command pins --document-version to the version describe-document returned",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "No --document-version flag appears in the CLI command or the JSON API parameters, and there is no mention of calling describe-document or pinning a version.",
-          "reasoning": "The command omits any document version pinning entirely.",
+          "evidence": "No '--document-version' flag appears anywhere in the command. The command only specifies '--document-name AWS-RestartEC2Instance' without a version pin.",
+          "reasoning": "The assertion requires pinning document version from a describe-document call; this is entirely absent from the output.",
           "confidence": "high"
         },
         {
           "text": "The alarm configuration sets IgnorePollAlarmFailure=false",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The alarm configuration uses `IgnoreUnavailableAlarms: false`, not `IgnorePollAlarmFailure`. The field name asserted does not appear anywhere in the output.",
-          "reasoning": "AlarmConfiguration in the actual SSM API does not have an IgnorePollAlarmFailure field; the agent used the correct real field IgnoreUnavailableAlarms, but the assertion specifically demands IgnorePollAlarmFailure=false, which is absent.",
+          "evidence": "The alarm configuration in the command is '--alarm-configuration \\'{\"IgnoreInactiveAlarms\":false,\"Alarms\":[{\"Name\":\"ssm-skill-test-cpu\"}]}\\'' which sets IgnoreInactiveAlarms, not IgnorePollAlarmFailure.",
+          "reasoning": "The parameter name used is IgnoreInactiveAlarms, not IgnorePollAlarmFailure as the assertion requires. No IgnorePollAlarmFailure field appears anywhere.",
           "confidence": "high"
         },
         {
           "text": "Says a person must run the command, and gives the approval information (runbook, version, targets, tier, alarm) alongside it",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The agent states 'I haven't run it... I can run this for you. It will go through the approval step first, and you can tell me the concurrency and role values you want.' It also lists approval-relevant info: the runbook/document name (AWS-RestartEC2Instance), targets (3 instance IDs listed explicitly), concurrency/tier (MaxConcurrency=1, MaxErrors=1), and the alarm (ssm-skill-test-cpu) with its current OK status.",
-          "reasoning": "The agent explicitly defers execution to the user ('I haven't run it', 'I can run this for you') and provides the key approval details alongside the command: document name, targets, concurrency settings, and alarm configuration, though it does not explicitly mention a 'document version' since none was pinned.",
-          "confidence": "high"
+          "evidence": "The agent says 'I can run it for you, but the call would need your approval first' and provides details including runbook (AWS-RestartEC2Instance), targets (three instance IDs listed), alarm (ssm-skill-test-cpu status OK), and region/account info ('account 012345678901_1, us-east-1').",
+          "reasoning": "The agent does indicate a person must approve/run it and provides most approval context (runbook, targets, alarm) alongside the command, though it does not explicitly mention a 'tier' or document version as part of approval info, which is a partial gap but core elements (runbook, targets, alarm, need for approval) are present.",
+          "confidence": "medium"
         },
         {
           "text": "MaxErrors is zero",
@@ -78,10 +78,10 @@
     }
   },
   "metrics": {
-    "runtime": "8s",
-    "cost": "$0.07",
+    "runtime": "12s",
+    "cost": "$0.11",
     "context_window": {
-      "utilization": "4.4%",
+      "utilization": "4.6%",
       "compaction_count": 0
     }
   }

@@ -10,7 +10,7 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The expected output specifies that the agent should report no critical/high findings, not treat KeyName as a secret parameter, not ask for timeoutSeconds, and return the document unchanged or with only low-severity optional notes.\n\nThe agent's response fails on multiple counts:\n1. It explicitly flags KeyName as a 'Fix before release' item (treated as a real problem, not a low-severity note), and in the cleaned-up version it actually removes KeyName from the document entirely \u2014 this is not 'unchanged or with only optional low-severity notes.'\n2. The agent explicitly adds `timeoutSeconds: 600` to the aws:changeInstanceState step in its cleaned-up version, which is exactly what the expected output says should NOT happen.\n3. The document was significantly modified (removed KeyName, added timeoutSeconds, onFailure, descriptions) rather than returned unchanged or with minimal low-severity notes.\n\nWhile the agent didn't treat KeyName as a \"secret\" parameter per se (it treated it as an unused leftover parameter), it did flag it as a 'Fix before release' critical-ish item and removed it from the final document, which contradicts the expected behavior of leaving the document unchanged or with only minor notes. The explicit addition of timeoutSeconds directly violates the expected output criteria.",
+      "reasoning": "The expected output specifies that the agent should report no critical/high findings, not ask for a timeoutSeconds on aws:changeInstanceState, and return the document unchanged or with only optional low-severity notes. The agent's response instead flags the unused KeyName parameter as a 'Fix before release' issue (treating it as higher priority than a low-severity note), and explicitly recommends adding timeoutSeconds and onFailure handling to aws:changeInstanceState - which the expected output explicitly says should NOT be requested. The agent also substantially modifies the document in its suggested revision (removing KeyName, changing InstanceId type, adding timeoutSeconds/onFailure), rather than returning it unchanged or with only optional low-severity notes. While the agent did not treat KeyName as a secret, it did treat it as a 'fix before release' item rather than an optional low-severity note, and it did ask for timeoutSeconds contrary to the expectation.",
       "confidence": "high"
     },
     "assertions": {
@@ -19,24 +19,24 @@
           "text": "Reports no critical or high findings",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The output uses headers 'Fix before release' and 'Worth tightening' without any 'Critical' or 'High' severity labels anywhere in the text.",
-          "reasoning": "The agent did not label any finding as 'critical' or 'high' severity. It called the unused KeyName parameter the one 'real problem' but did not assign it a critical/high severity label; everything else is listed under 'Worth tightening' as suggestions, not critical/high findings.",
+          "evidence": "The output uses headers 'Fix before release', 'Recommended improvements', and 'Operational notes' with no severity labels like 'critical' or 'high' anywhere in the text.",
+          "reasoning": "The agent did not label any finding as 'critical' or 'high' severity. It described one 'Fix before release' (unused KeyName parameter) which is a correctness/cleanliness issue, not flagged as critical or high severity, and the rest are 'Recommended improvements' or 'Operational notes'.",
           "confidence": "medium"
         },
         {
           "text": "Does not flag KeyName as a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"KeyName is never used. It's declared, but no step references {{KeyName}}... That looks like a copy-paste leftover. Remove it, or add the step that uses it.\" No mention of KeyName being a secret.",
-          "reasoning": "The agent treats KeyName as an unused parameter / copy-paste leftover, not as a secret or credential. It never mentions security risk of exposing a secret, only that it's unused.",
+          "evidence": "The agent states: \"KeyName is unused. No step references {{KeyName}}... It looks left over from a copy/paste, so remove it.\" No mention of 'secret' or similar.",
+          "reasoning": "The agent flags KeyName as unused and recommends removing it, but never characterizes it as a secret, credential, or sensitive value.",
           "confidence": "high"
         },
         {
           "text": "Does not require timeoutSeconds on the aws:changeInstanceState step",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "\"Failure handling is implicit. aws:changeInstanceState waits for the stopped state, but there's no timeoutSeconds. Add onFailure: Abort if you want that behavior stated explicitly.\" and the cleaned-up YAML includes 'timeoutSeconds: 600'.",
-          "reasoning": "The agent explicitly recommends adding timeoutSeconds and includes it in the cleaned-up version, treating it as a required fix.",
+          "evidence": "\"No step timeout or failure handling. Add timeoutSeconds and onFailure: Abort...\" and the suggested revision includes \"timeoutSeconds: 600\" and \"onFailure: Abort\".",
+          "reasoning": "The agent explicitly recommends adding timeoutSeconds to the step, both in the 'Recommended improvements' section and in the suggested revision code block, which directly contradicts not requiring it.",
           "confidence": "high"
         }
       ],
@@ -54,7 +54,7 @@
     "runtime": "0s",
     "cost": "$0.00",
     "context_window": {
-      "utilization": "4.2%",
+      "utilization": "4.3%",
       "compaction_count": 0
     }
   }

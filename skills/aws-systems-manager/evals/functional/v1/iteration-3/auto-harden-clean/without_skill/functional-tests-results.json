@@ -10,8 +10,8 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The expected output specifies that the agent should report no critical/high findings, should not treat KeyName as a problem requiring attention beyond optional notes, should NOT ask for a timeoutSeconds on aws:changeInstanceState, and should return the document unchanged or with only optional low-severity notes.\n\nThe agent's response fails on multiple counts:\n1. It explicitly flags KeyName under a 'Fix before release' heading (implying it's a required/blocking issue, not just a low-severity optional note), saying 'it will confuse operators and break automation' \u2014 treating it as more than a trivial note.\n2. It explicitly recommends adding timeoutSeconds to aws:changeInstanceState, which the expected output says should NOT happen ('does not ask for a timeoutSeconds on aws:changeInstanceState').\n3. It provides a 'cleaned-up version' with substantial changes (changing InstanceId type, removing KeyName, adding Force parameter, adding timeoutSeconds, onFailure) rather than returning the document unchanged or with only optional low-severity notes.\n\nThis directly contradicts the expected behavior.",
-      "evidence": "\"Fix before release** - **`KeyName` is never used.**\" ... \"Add a timeout and failure handling... Without `timeoutSeconds` on the step, you rely on the defaults.\" ... provides a fully rewritten \"cleaned-up version\" of the document",
+      "reasoning": "The expected output specifies that the agent should NOT recommend adding timeoutSeconds to the aws:changeInstanceState step, and should return the document unchanged or with only optional low-severity notes. However, the agent's response explicitly recommends adding 'timeoutSeconds: 600' and 'onFailure: Abort' to the step, and provides a 'suggested revision' that includes these changes applied to the document - directly contradicting the expectation. While the agent does correctly avoid treating KeyName as a secret parameter (it flags it as an unused parameter rather than a secret), the timeoutSeconds recommendation is a clear violation of the expected criteria.",
+      "evidence": "\"Failure and timeout handling is missing... Consider adding these to the step: timeoutSeconds: 600, onFailure: Abort\" and the suggested revision includes \"timeoutSeconds: 600\\n    onFailure: Abort\" added to the StopInstance step.",
       "confidence": "high"
     },
     "assertions": {
@@ -20,24 +20,24 @@
           "text": "Reports no critical or high findings",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The only 'Fix before release' item is: 'KeyName is never used... It looks like a copy-paste leftover from another runbook.' No finding is labeled critical or high severity; the rest are under 'Recommended improvements' and 'Operational notes'.",
-          "reasoning": "The agent did not use severity labels like 'critical' or 'high'. The only item under 'Fix before release' is the unused KeyName parameter, which is a cleanliness/clarity issue, not flagged as a critical or high severity finding. All other items are listed as 'Recommended improvements' or 'Operational notes', not critical/high findings.",
-          "confidence": "medium"
+          "evidence": "The agent states: 'I reviewed the runbook and found no blocking errors. It should run, but I'd change a few things before release.' All subsequent items are framed as 'What to fix or consider' rather than critical/high severity findings; no item is labeled critical or high.",
+          "reasoning": "The agent explicitly says there are no blocking errors, and frames all issues as considerations/improvements rather than critical or high-severity findings. No severity labels of 'critical' or 'high' appear anywhere in the output.",
+          "confidence": "high"
         },
         {
           "text": "Does not flag KeyName as a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "'KeyName is never used. No step references {{KeyName}}, yet callers must supply it because it has no default. It looks like a copy-paste leftover from another runbook.' No mention of KeyName being a secret.",
-          "reasoning": "The agent explicitly identifies KeyName as an unused parameter and a 'copy-paste leftover', not as a secret or security issue.",
+          "evidence": "The agent discusses KeyName only as: 'KeyName is unused. No step references {{KeyName}}, and it has no default, so it's a required input... That's probably a copy-paste leftover, so remove it.' There is no mention of it being a secret or sensitive credential.",
+          "reasoning": "The agent never characterizes KeyName as a secret, credential, or sensitive value. Its only concern is that the parameter is unused/dead code, which is a legitimate but entirely different concern from flagging it as a secret.",
           "confidence": "high"
         },
         {
           "text": "Does not require timeoutSeconds on the aws:changeInstanceState step",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "'Add a timeout and failure handling... Without timeoutSeconds on the step, you rely on the defaults.' The example shown includes 'timeoutSeconds: 600' and the final cleaned-up version also includes 'timeoutSeconds: 600'.",
-          "reasoning": "The agent explicitly recommends adding timeoutSeconds to the aws:changeInstanceState step, including it in the example code and in the cleaned-up version at the end.",
+          "evidence": "The agent explicitly recommends: 'Failure and timeout handling is missing... Consider adding these to the step: timeoutSeconds: 600, onFailure: Abort, maxAttempts if you want retries' and then includes 'timeoutSeconds: 600' directly in the suggested revised YAML for the StopInstance step.",
+          "reasoning": "The assertion states the output should NOT require timeoutSeconds on the step, but the agent explicitly suggests adding timeoutSeconds: 600 as a recommendation and includes it in the final suggested revision, directly contradicting this assertion. While phrased as 'consider adding,' it is presented as a recommended fix and concretely added to the revised code, effectively requiring/recommending it.",
           "confidence": "high"
         }
       ],
@@ -55,7 +55,7 @@
     "runtime": "0s",
     "cost": "$0.00",
     "context_window": {
-      "utilization": "4.2%",
+      "utilization": "4.3%",
       "compaction_count": 0
     }
   }

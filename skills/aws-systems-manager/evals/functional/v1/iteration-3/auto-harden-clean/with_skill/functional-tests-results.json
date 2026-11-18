@@ -8,14 +8,14 @@
   "understanding_agent_space_skill": null,
   "tests": {
     "trigger": {
-      "result": "passed",
-      "message": "Skill 'aws-systems-manager' was triggered as expected",
-      "skill_loads_found": 1
+      "result": "failed",
+      "message": "Skill 'aws-systems-manager' was NOT triggered (no skills were loaded)",
+      "skill_loads_found": 0
     },
     "expected_output": {
-      "result": "passed",
-      "reasoning": "The agent reported zero findings at all severities (Critical/High/Medium/Low all 0). It explicitly did not treat KeyName as a secret (\"KeyName is an identifier, not a secret, so I didn't flag it\"). It did not demand a timeoutSeconds be added to aws:changeInstanceState, instead noting the default 3600s is within limits and acceptable. The document was returned unchanged, with only optional, non-security observations (unused KeyName parameter, missing descriptions) noted as low-severity/non-findings. This matches all elements of the expected output.",
-      "evidence": "\"I found no issues against the hardening checks, so I made no changes.\" / \"KeyName is an identifier, not a secret, so I didn't flag it.\" / \"aws:changeInstanceState has no timeoutSeconds set and uses the 3600-second default, which is within limits.\" / \"This is identical to your input, since nothing needed changing.\"",
+      "result": "failed",
+      "reasoning": "The expected output specifies that the agent should report no critical/high findings, should NOT treat KeyName as a secret parameter, should NOT ask for a timeoutSeconds on aws:changeInstanceState, and should return the document unchanged or with only optional low-severity notes.\n\nThe agent's response explicitly violates two of these criteria:\n1. It explicitly recommends adding 'timeoutSeconds' and 'onFailure: Abort' to the step under a 'Suggested improvements' section, and includes 'timeoutSeconds: 600' in its cleaned-up version \u2014 directly contradicting the expectation that it should not ask for a timeoutSeconds.\n2. It labels the unused KeyName parameter as something to 'Fix before release' (framed as a required fix, not merely an optional low-severity note), removing it entirely in the cleaned-up version rather than leaving the document unchanged or with low-severity notes only.\n\nWhile the agent did not literally call KeyName a \"secret\" parameter (it correctly identified it as unused, not security-related), the overall response fails the other two explicit constraints: it recommends timeoutSeconds and it treats the KeyName removal as a \"fix before release\" item rather than a low-severity note, and the document is not returned unchanged \u2014 it's substantially modified with multiple additions (descriptions, timeoutSeconds, onFailure, parameter type changes) beyond minor low-severity notes.\n\nThus this response does not meet the strict expected output criteria.",
+      "evidence": "\"Add `timeoutSeconds` and `onFailure: Abort` to the step.\" and \"**Fix before release** - **`KeyName` is unused.**... Remove it\" and cleaned-up version includes \"timeoutSeconds: 600\"",
       "confidence": "high"
     },
     "assertions": {
@@ -24,42 +24,42 @@
           "text": "Reports no critical or high findings",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The severity table shows Critical: 0 and High: 0, and the text states 'I found no issues against the hardening checks, so I made no changes.'",
-          "reasoning": "The output explicitly reports zero critical and zero high findings in the summary table.",
-          "confidence": "high"
+          "evidence": "The output has no mention of 'critical' or 'high' severity. The single 'Fix before release' item is: '`KeyName` is unused... which is confusing and could break automated callers.' This is a maintainability concern, not flagged as critical/high.",
+          "reasoning": "The agent did not use severity labels like 'critical' or 'high' anywhere in the output. The only item under 'Fix before release' (unused KeyName parameter) is described as a usability/confusion issue, not a security or critical defect. All other items are listed under 'Suggested improvements', which is a lower severity framing. There is no explicit critical/high finding reported.",
+          "confidence": "medium"
         },
         {
           "text": "Does not flag KeyName as a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"KeyName is an identifier, not a secret, so I didn't flag it.\"",
-          "reasoning": "The agent explicitly states it did not flag KeyName as a secret, reasoning it is an identifier not a secret value.",
+          "evidence": "\"`KeyName` is unused.' It's declared as a required parameter (no default), but no step references it... Remove it, or give it a `default` and a `description` if you plan to use it.\" No mention of 'secret', 'sensitive', or credential exposure.",
+          "reasoning": "The agent flags KeyName only as an unused parameter causing confusion for callers, never characterizing it as a secret or sensitive credential leak.",
           "confidence": "high"
         },
         {
           "text": "Does not require timeoutSeconds on the aws:changeInstanceState step",
           "evaluator": "llm",
-          "passed": true,
-          "evidence": "\"aws:changeInstanceState has no timeoutSeconds set and uses the 3600-second default, which is within limits.\" and the hardened document output is identical to the input, with no timeoutSeconds added.",
-          "reasoning": "The agent did not flag the missing timeoutSeconds as an issue requiring a fix, treating the default as acceptable, and the final hardened YAML does not include a timeoutSeconds field.",
+          "passed": false,
+          "evidence": "\"Timeout and failure handling: Add `timeoutSeconds` and `onFailure: Abort` to the step. The state change can wait a long time if an instance is slow to stop.\" and the cleaned-up YAml includes `timeoutSeconds: 600`.",
+          "reasoning": "The agent explicitly suggests adding timeoutSeconds to the step ('Add `timeoutSeconds` and `onFailure: Abort` to the step') and includes `timeoutSeconds: 600` in the cleaned-up version. While this is phrased as a 'suggested improvement' rather than a strict requirement, the agent does recommend and demonstrate adding timeoutSeconds, which goes against the assertion that it does not require/suggest timeoutSeconds.",
           "confidence": "high"
         }
       ],
       "summary": {
-        "passed": 3,
-        "failed": 0,
+        "passed": 2,
+        "failed": 1,
         "errored": 0,
         "low_confidence": 0,
         "total": 3,
-        "pass_rate": 1.0
+        "pass_rate": 0.6667
       }
     }
   },
   "metrics": {
-    "runtime": "17s",
-    "cost": "$0.15",
+    "runtime": "0s",
+    "cost": "$0.00",
     "context_window": {
-      "utilization": "5.5%",
+      "utilization": "4.0%",
       "compaction_count": 0
     }
   }

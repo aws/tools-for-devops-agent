@@ -9,9 +9,9 @@
   "tests": {
     "trigger": null,
     "expected_output": {
-      "result": "failed",
-      "reasoning": "The expected output requires the agent to actually find the Cancelled parent execution, report the specific FailureMessage 'Cancelled due to Alarm(s)', name the triggered alarm, list which child executions ran vs never started, and explain that the alarm configuration (rate control) stopped the run. The agent's actual response did none of this - it claimed a tool outage prevented it from investigating, and instead gave generic speculation about possible causes (MaxErrors threshold, manual stop call, wait timeout) without ever mentioning alarms or CloudWatch alarm-based automatic cancellation, which is the actual root cause per the expected output. The response fails to identify the correct cause and provides no concrete findings from the account.",
-      "evidence": "\"I couldn't look into this just now, so I don't know yet what cancelled the automation. The tool service I use to query your AWS account is temporarily unavailable.\" ... lists generic causes like \"Error threshold hit\" and \"Stop call from another principal\" but never mentions alarm-triggered cancellation or 'Cancelled due to Alarm(s)'.",
+      "result": "passed",
+      "reasoning": "The agent's response identifies the Cancelled parent execution (0b7d62a4-...), reports the FailureMessage 'Cancelled due to Alarm(s)' verbatim, names the triggered alarm (ssm-skill-test-cpu) in ALARM state, details which child execution ran (for i-1234567890abcdef0_8) and explicitly notes the second target (i-1234567890abcdef0_9) never started due to MaxConcurrency 1, and explains in depth how the alarm configuration (CloudWatch alarm attached to the automation) caused the cancellation. All required elements of the expected output are present and substantively correct.",
+      "evidence": "\"Its failure message is \\\"Cancelled due to Alarm(s)\\\". Its triggered alarm is `ssm-skill-test-cpu`, in state ALARM.\" ... \"The second instance never started because concurrency was 1.\" ... \"The rate-controlled automation was cancelled automatically because a CloudWatch alarm attached to it went into ALARM.\"",
       "confidence": "high"
     },
     "assertions": {
@@ -19,55 +19,55 @@
         {
           "text": "Quotes the FailureMessage 'Cancelled due to Alarm(s)'",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "The output never mentions 'Cancelled due to Alarm(s)'. It only lists hypothetical causes like 'Error threshold hit', 'Stop call from another principal', and 'Wait step timeout'.",
-          "reasoning": "The agent explicitly states it could not retrieve any information due to a tool outage, so it never quotes any FailureMessage, let alone the specific 'Cancelled due to Alarm(s)' message.",
+          "passed": true,
+          "evidence": "\"Its failure message is \\\"Cancelled due to Alarm(s)\\\".\"",
+          "reasoning": "The agent directly quotes the FailureMessage field with the exact text.",
           "confidence": "high"
         },
         {
           "text": "Explains that the alarm configuration cancelled the run, rather than a person",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "The agent states: 'I don't know yet what cancelled the automation... The tool service I use to query your AWS account is temporarily unavailable.' It does not mention alarms as the cause at all, only generic possibilities like MaxErrors, stop calls, and wait timeouts.",
-          "reasoning": "The assertion requires the output to explain that an alarm configuration caused the cancellation rather than a person. The agent never identifies alarms as a cause (it lists MaxErrors, stop calls, and wait timeouts instead), and explicitly says it doesn't know the cause due to tool unavailability.",
+          "passed": true,
+          "evidence": "\"The rate-controlled automation was cancelled automatically because a CloudWatch alarm attached to it went into ALARM. Nobody stopped it by hand.\"",
+          "reasoning": "The agent explicitly explains the cancellation was caused by the alarm configuration (CloudWatch alarm tied to the automation) rather than manual human intervention, and reinforces this throughout the response.",
           "confidence": "high"
         },
         {
           "text": "Reads the child executions with the ParentExecutionId filter",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "The agent says: 'I couldn't look into this just now... That means I couldn't read the ssm-skill-test-Wait executions or check CloudTrail for a stop call.' No tool calls or queries with ParentExecutionId filter are shown.",
-          "reasoning": "The agent explicitly states it was unable to query AWS at all due to tool unavailability, so it did not read child executions with any filter, including ParentExecutionId.",
-          "confidence": "high"
+          "passed": true,
+          "evidence": "\"The child execution for `i-1234567890abcdef0_8` (`7f44e36c-\u2026`) was cascaded from the parent.\" / \"The child execution for `i-1234567890abcdef0_8` (`7f44e36c-\\u2026`) was cancelled a second earlier, at 20:16:44.\"",
+          "reasoning": "The agent references a specific child execution tied to the parent execution ID, indicating it looked up child executions filtered by ParentExecutionId. While the output doesn't explicitly show the filter syntax used, the presence of the specific child execution ID and its relationship to the parent strongly implies this query was performed. However, there's no explicit mention of the filter mechanism itself, so this is inferred from the data presented rather than directly stated.",
+          "confidence": "medium"
         },
         {
           "text": "The failure message is quoted",
           "evaluator": "regex",
-          "passed": false,
-          "evidence": "Pattern not found in the output"
+          "passed": true,
+          "evidence": "Matched 'Cancelled due to Alarm'"
         },
         {
           "text": "Child executions are listed by parent",
           "evaluator": "regex",
-          "passed": true,
-          "evidence": "Matched 'parent automation execution ID'"
+          "passed": false,
+          "evidence": "Pattern not found in the output"
         }
       ],
       "summary": {
-        "passed": 1,
-        "failed": 4,
+        "passed": 4,
+        "failed": 1,
         "errored": 0,
         "low_confidence": 0,
         "total": 5,
-        "pass_rate": 0.2
+        "pass_rate": 0.8
       }
     }
   },
   "metrics": {
-    "runtime": "4s",
-    "cost": "$0.04",
+    "runtime": "15s",
+    "cost": "$0.13",
     "context_window": {
-      "utilization": "4.0%",
+      "utilization": "4.8%",
       "compaction_count": 0
     }
   }
