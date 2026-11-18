@@ -355,12 +355,12 @@ class HistoryIntegrationTests(RepoTestCase):
         self.write("skills/alpha/SKILL.md", skill_md("alpha"))
         self.write("connectors/acme/connector.yaml", "name: acme\nskills: [alpha, beta]\n")
         base = self.commit("base")
-        deprecated = skill_md("alpha", version="1.0.1", extra='  deprecated: "true"\n')
+        deprecated = skill_md("alpha", version="1.0.1", extra="  deprecated: true\n")
         self.write("skills/alpha/SKILL.md", deprecated)
         self.commit("deprecate alpha")
         code, out = self.run_check("--base-ref", base)
         self.assertEqual(code, 1, out)
-        line = deprecated.splitlines().index('  deprecated: "true"') + 1
+        line = deprecated.splitlines().index("  deprecated: true") + 1
         self.assertIn(f"FAIL  skills/alpha/SKILL.md:{line}: the skill is deprecated, but connectors/acme/connector.yaml still recommends it", out)
         self.write("connectors/acme/connector.yaml", "name: acme\nskills: [beta]\n")
         self.commit("drop alpha from the connector")
@@ -426,7 +426,7 @@ class HistoryIntegrationTests(RepoTestCase):
                 self.write("skills/alpha/SKILL.md", skill_md("alpha"))
                 self.write("connectors/acme/connector.yaml", text)
                 base = self.commit("base")
-                self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1", extra='  deprecated: "true"\n'))
+                self.write("skills/alpha/SKILL.md", skill_md("alpha", version="1.0.1", extra="  deprecated: true\n"))
                 self.commit("deprecate alpha")
                 code, out = self.run_check("--base-ref", base)
                 self.assertEqual(code, 1, out)

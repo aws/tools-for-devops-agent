@@ -124,7 +124,7 @@ class ValidSkillTests(CheckSkillTestCase):
     def test_optional_fields_are_accepted(self):
         fm = frontmatter_with(
             summary='"Checks a demo skill."',
-            deprecated='"false"',
+            deprecated="false",
             **{"aws-devops-agent-skills.agent-types": '"CHAT, INCIDENT_RCA"'},
         ).replace("metadata:\n", "title: Demo Skill\ncompatibility: Requires nothing.\nmetadata:\n")
         self.assertEqual(self.check(tree(skill_md(fm)))[0], [])
@@ -204,7 +204,7 @@ class FileAndYamlTests(CheckSkillTestCase):
             with self.subTest(code=hex(ord(char))):
                 fm = VALID_FRONTMATTER.replace(
                     '  summary: "Checks a demo skill."\n',
-                    f'  summary: "Checks a demo skill."{char}  deprecated: "true"\n',
+                    f'  summary: "Checks a demo skill."{char}  deprecated: true\n',
                 )
                 self.assertOneError(tree(skill_md(fm)), f"U+{ord(char):04X}, which YAML parsers disagree on", line=8)
 
@@ -265,6 +265,16 @@ class ReadYamlTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIn("the same type", self.messages(f"a: {value}\n")[0])
                 self.assertIn("keys must be plain text", self.messages(f"{value}: a\n")[0])
+
+    def test_a_value_yaml_11_reads_as_a_boolean_can_be_a_boolean_or_quoted_text(self):
+        """Quoting is the only fix the message gives for other values, but deprecated: "True" is an error too."""
+        for value in ("True", "FALSE", "yes", "n", "on"):
+            with self.subTest(value=value):
+                (message,) = self.messages(f"a: {value}\n")
+                fix = f'write true or false for a boolean, or put it in quotes, as in "{value}", for text'
+                self.assertTrue(message.endswith(f"don't all read as the same type; {fix}"), message)
+        (message,) = self.messages("a: 1e3\n")
+        self.assertTrue(message.endswith('don\'t all read as the same type; put it in quotes, as in "1e3"'), message)
 
     def test_a_lone_dash_in_a_flow_collection_is_rejected_unless_a_colon_follows_it(self):
         for text in ("k: [a, -]\n", "k: {a: -}\n", "k: {-}\n"):
@@ -441,10 +451,29 @@ class MetadataTests(CheckSkillTestCase):
         fm = frontmatter_with(summary='"two\\nlines"')
         self.assertOneError(tree(skill_md(fm)), '"metadata.summary" must be a single line')
 
-    def test_deprecated_must_be_true_or_false_text(self):
-        self.assertOneError(tree(skill_md(frontmatter_with(deprecated='"yes"'))), '"true" or "false"')
-        self.assertOneError(tree(skill_md(frontmatter_with(deprecated="true"))), "must be text, not true or false")
-        self.assertEqual(self.errors(tree(skill_md(frontmatter_with(deprecated='"true"')))), [])
+    def test_deprecated_is_a_boolean_not_text(self):
+        """The catalog publisher refuses a deprecated value that isn't a YAML boolean."""
+        for value, deprecated in (("true", True), ("false", False)):
+            with self.subTest(value=value):
+                findings, info = self.check(tree(skill_md(frontmatter_with(deprecated=value))))
+                self.assertEqual(findings, [])
+                self.assertIs(info.deprecated, deprecated)
+                self.assertEqual(info.deprecated_line, 9)
+                self.assertNotIn("deprecated", info.metadata)
+        for value, unquoted in (('"true"', "true"), ('"True"', "true"), ('"FALSE"', "false")):
+            with self.subTest(value=value):
+                error = self.assertOneError(tree(skill_md(frontmatter_with(deprecated=value))), "without quotes", line=9)
+                self.assertTrue(error.message.endswith(f"reads it as a boolean; write deprecated: {unquoted}"), error)
+        # Unquoted, True is refused by the YAML rules, whose message gives the boolean as well as the quotes.
+        error = self.assertOneError(tree(skill_md(frontmatter_with(deprecated="True"))), "unquoted value True", line=9)
+        self.assertIn("write true or false for a boolean", error.message)
+        for value in ('"yes"', "1", '""', ""):
+            with self.subTest(value=value):
+                skill = tree(skill_md(frontmatter_with(deprecated=value)))
+                error = self.assertOneError(skill, '"metadata.deprecated" must be true or false, without quotes')
+                self.assertNotIn("write deprecated", error.message)
+                self.assertFalse(self.check(skill)[1].deprecated)
+        self.assertFalse(self.check(tree(skill_md()))[1].deprecated)
 
     def test_generic_cannot_be_combined_with_another_agent_type(self):
         """The Asset API rejects GENERIC alongside another type."""
@@ -1017,7 +1046,7 @@ class HistoryTests(unittest.TestCase):
 
     def test_removed_folder_is_an_error(self):
         (message,) = self.errors(versioned(), None)
-        self.assertIn('set metadata.deprecated: "true"', message)
+        self.assertIn("set metadata.deprecated: true instead", message)
 
     def test_new_skill_passes_unless_its_path_was_retired(self):
         self.assertEqual(self.history(None, versioned()), [])
@@ -1107,7 +1136,7 @@ class HistoryTests(unittest.TestCase):
     def test_a_folder_is_never_removed_even_in_an_emergency(self):
         (finding,) = sc.check_history("demo-skill", versioned(), None, RULES, frozenset())
         self.assertIn("never removed, even in an emergency", finding.message)
-        self.assertIn('metadata.deprecated: "true"', finding.message)
+        self.assertIn("metadata.deprecated: true", finding.message)
 
     def test_invalid_head_version_is_left_to_check_skill(self):
         self.assertEqual(self.history(versioned("1.0.0"), versioned("1.0")), [])

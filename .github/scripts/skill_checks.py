@@ -188,10 +188,13 @@ YAML12_NUMBER_PATTERN = re.compile(
 )
 # Characters PyYAML reads as line breaks and YAML 1.2 parsers don't.
 YAML11_LINE_BREAK_PATTERN = re.compile("[\x85\u2028\u2029]")
+# Plain values that PyYAML's resolver, with the y and n of the YAML 1.1 bool
+# type, reads as booleans. Only true and false are booleans to every parser.
+YAML11_BOOL_PATTERN = re.compile(r"[yYnN]|yes|Yes|YES|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF")
 # Plain values that PyYAML's resolver (with the y and n of the YAML 1.1 bool
 # type) or the YAML 1.2 core schema reads as something other than text.
 NON_TEXT_PLAIN_SCALAR_PATTERNS = (
-    re.compile(r"[yYnN]|yes|Yes|YES|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF"),
+    YAML11_BOOL_PATTERN,
     re.compile(r"~|null|Null|NULL|"),
     re.compile(r"<<|="),
     re.compile(r"[-+]?(?:0b[0-1_]+|0[0-7_]+|0|[1-9][0-9_]*|0x[0-9a-fA-F_]+|[1-9][0-9_]*(?::[0-5]?[0-9])+)"),
@@ -235,10 +238,11 @@ FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(?:(.*?)\r?\n)?---[ \t]*(?:\r?\n|\Z
 FRONTMATTER_FIRST_LINE = 2
 
 STR_TAG = "tag:yaml.org,2002:str"
+BOOL_TAG = "tag:yaml.org,2002:bool"
 _SCALAR_KINDS = {
     "tag:yaml.org,2002:int": "a number",
     "tag:yaml.org,2002:float": "a number",
-    "tag:yaml.org,2002:bool": "true or false",
+    BOOL_TAG: "true or false",
     "tag:yaml.org,2002:null": "empty",
     "tag:yaml.org,2002:timestamp": "a date",
 }
@@ -307,6 +311,7 @@ class SkillInfo:
     version: tuple[int, int, int] | None
     metadata: dict[str, str]
     version_line: int | None = None
+    deprecated: bool = False
     deprecated_line: int | None = None
     name_line: int | None = None
 
@@ -737,10 +742,11 @@ def _plain_scalar_problem(text: str, is_in_flow_collection: bool, *, is_key: boo
         )
     if _is_typed_alike_by_every_parser(text):
         return None
-    return (
-        f"has the unquoted value {text}, which YAML parsers don't all read as the same type; "
-        f'put it in quotes, as in "{text}"'
-    )
+    # A value such as True may be meant as a boolean, such as deprecated: true, so quotes aren't the only fix.
+    fix = f'put it in quotes, as in "{text}"'
+    if YAML11_BOOL_PATTERN.fullmatch(text):
+        fix = f"write true or false for a boolean, or {fix}, for text"
+    return f"has the unquoted value {text}, which YAML parsers don't all read as the same type; {fix}"
 
 
 def _is_read_as_non_text_by_some_parser(text: str) -> bool:
@@ -844,12 +850,13 @@ def _check_skill_md(folder: str, data: bytes, rules: Rules, findings: list[Findi
     _check_spec_text_fields(top, report)
     _check_body_length(text[match.end():], report)
 
-    metadata, version, lines = _check_metadata(top, rules, report)
+    metadata, version, lines, deprecated = _check_metadata(top, rules, report)
     return SkillInfo(
         name=name or folder,
         version=version,
         metadata=metadata,
         version_line=lines.get("version"),
+        deprecated=deprecated,
         deprecated_line=lines.get("deprecated"),
         name_line=_line(top["name"][0]) if "name" in top else None,
     )
@@ -992,21 +999,24 @@ def _check_body_length(body: str, report: _Report) -> None:
 
 def _check_metadata(
     top: dict, rules: Rules, report: _Report
-) -> tuple[dict[str, str], tuple[int, int, int] | None, dict[str, int]]:
-    """The metadata values, the parsed version, and the SKILL.md line of each value."""
+) -> tuple[dict[str, str], tuple[int, int, int] | None, dict[str, int], bool]:
+    """The text metadata values, the parsed version, the SKILL.md line of each value, and whether it is deprecated."""
     if "metadata" not in top:
         report.error('"metadata" is required, with at least author and version')
-        return {}, None, {}
+        return {}, None, {}, False
     key_node, node = top["metadata"]
     metadata_line = _line(key_node)
     if not isinstance(node, MappingNode):
         report.error('"metadata" must be a mapping, with one key: value pair per line', line=metadata_line)
-        return {}, None, {}
+        return {}, None, {}, False
 
     items = _mapping_items(node)
     metadata: dict[str, str] = {}
     lines: dict[str, int] = {}
     for key in items:
+        if key == "deprecated":
+            lines[key] = _line(items[key][0])
+            continue  # The one value that isn't text: _check_deprecated reads it.
         value = _text(items, key, f"metadata.{key}", report, required=key in ("author", "version"))
         if value is not None:
             metadata[key] = value
@@ -1016,11 +1026,11 @@ def _check_metadata(
     _check_author(metadata, items, lines, metadata_line, report)
     version = _check_version(metadata, items, lines, metadata_line, report)
     _check_summary(metadata, items, lines, metadata_line, report)
-    _check_deprecated(metadata, lines, report)
+    deprecated = _check_deprecated(items, lines, report)
     _check_tier(metadata, lines, report)
     _check_agent_types(metadata, items, lines, metadata_line, rules, report)
     _check_dimensions(metadata, items, rules, report)
-    return metadata, version, lines
+    return metadata, version, lines, deprecated
 
 
 def _check_unknown_metadata_keys(items: dict, report: _Report) -> None:
@@ -1107,13 +1117,25 @@ def _check_summary(metadata: dict, items: dict, lines: dict, metadata_line: int,
         )
 
 
-def _check_deprecated(metadata: dict, lines: dict, report: _Report) -> None:
-    deprecated = metadata.get("deprecated")
-    if deprecated is not None and deprecated not in ("true", "false"):
-        report.error(
-            '"metadata.deprecated" must be "true" or "false", in quotes, because metadata values are text',
-            line=lines["deprecated"],
-        )
+def _check_deprecated(items: dict, lines: dict, report: _Report) -> bool:
+    """Whether metadata.deprecated is true. Unlike every other metadata value, it is a YAML boolean, not text.
+
+    The catalog publisher refuses any other value, and one refused skill stops
+    the whole publish run. read_yaml has already refused the unquoted values,
+    such as True or yes, that YAML parsers don't all read as a boolean, and
+    said to write true or false for one.
+    """
+    if "deprecated" not in items:
+        return False
+    value_node = items["deprecated"][1]
+    if isinstance(value_node, ScalarNode) and value_node.tag == BOOL_TAG:
+        return value_node.value == "true"
+    message = '"metadata.deprecated" must be true or false, without quotes, because the catalog reads it as a boolean'
+    text = value_node.value if isinstance(value_node, ScalarNode) and value_node.tag == STR_TAG else ""
+    if text.lower() in ("true", "false"):
+        message += f"; write deprecated: {text.lower()}"
+    report.error(message, line=lines["deprecated"])
+    return False
 
 
 def _check_tier(metadata: dict, lines: dict, report: _Report) -> None:
@@ -1606,7 +1628,7 @@ def check_history(
             Finding(
                 "error",
                 f"the skill folder skills/{name} was removed. A skill's folder is its permanent identity, "
-                'so a skill is never removed, even in an emergency: set metadata.deprecated: "true" instead. '
+                "so a skill is never removed, even in an emergency: set metadata.deprecated: true instead. "
                 "To rename a skill, deprecate this folder and add the new one",
             )
         ]
