@@ -472,7 +472,7 @@ AWS reference: [Control access to Lambda function URLs](https://docs.aws.amazon.
 
 Stop if discovery returns a different count or unexpected tool name.
 
-The companion PostgreSQL DBA skill is not packaged in the Lambda stack and is not installed by MCP registration. Install it separately from [PostgreSQL DBA Skill](https://github.com/aws/tools-for-devops-agent/blob/main/skills/postgresql-dba/SKILL.md) through an approved AWS DevOps Agent skill workflow; do not place the skill and server in one directory.
+The companion PostgreSQL DBA skill ships in a separate follow-up pull request and is not packaged in the Lambda stack or installed by MCP registration. Once it lands, install it separately through an approved AWS DevOps Agent skill workflow; do not place the skill and server in one directory.
 
 ## End-to-end verification
 
