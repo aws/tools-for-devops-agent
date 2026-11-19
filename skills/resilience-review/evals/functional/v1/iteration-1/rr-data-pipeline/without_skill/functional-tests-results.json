@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-data-pipeline",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers most of the core findings expected: OpenSearch telemetry-search running a single node in a single AZ with zone awareness off (matches exactly), DocumentDB telemetry-metadata with a single instance and no Multi-AZ (matches), and notes Kinesis/S3/Lambda are on multi-AZ managed infrastructure but there is no cross-region replication anywhere (covering the region-failure gap for S3, DocumentDB, OpenSearch, and no standby stack - implicitly covering Kinesis's lack of cross-region counterpart and S3's lack of replication, though it doesn't explicitly mention S3 versioning status or Kinesis's 24-hour retention window explicitly as a named figure, though it does mention '~24h of unindexed data' tied to OpenSearch risk which aligns with the 24-hour Kinesis retention concept).\n\nIt does not explicitly mention: automated snapshots only restoring the OpenSearch domain itself, DocumentDB's 1-day backup retention specifically, Kinesis's 24-hour retention explicitly as a stated fact (it's implied in the 24h figure), or S3 bucket versioning status. However, it captures the major structural findings (AZ-level SPOFs in OpenSearch and DocumentDB, no region-level failover anywhere) and gives a prioritized recommendation (fix OpenSearch zone awareness first, then DocumentDB Multi-AZ), consistent with the expected prioritization implied by \"what should we fix first.\"\n\nAdditionally, the agent explicitly asks a related question - not exactly \"can the search index be rebuilt from raw data\" but it does ask \"Want me to dig into that, or look at the DocumentDB Multi-AZ fix in more detail?\" which is a different follow-up question, not the specific one expected about rebuildability of the search index from raw data. This key element from the expected output (asking whether the search index can be rebuilt from the raw data) is missing from the response.\n\nDespite this gap, the response substantively covers the major resilience findings (OpenSearch SPOF, DocumentDB SPOF, no cross-region failover) and provides correct, actionable prioritization, meeting most of the substantive expected criteria. It does miss one specific expected question (about search index rebuildability) and doesn't mention exact backup retention figures (1-day DocumentDB retention, S3 versioning status) as explicitly as expected. Given it covers the majority of core substantive content and the overall directional correctness, this is a borderline case leaning toward a pass with noted gaps.",
+      "evidence": "\"OpenSearch (`telemetry-search`) \u2014 1 node, zone awareness off, lives in `eu-west-1a` only, and sits synchronously in the ingestion path... DocumentDB (`telemetry-metadata`) \u2014 1 instance, `MultiAZ: false`, pinned to `eu-west-1c`... Region failure... Zero failover anywhere \u2014 no S3 cross-region replication, no DocumentDB global cluster or cross-region snapshot copy, no OpenSearch cross-region backup, no standby stack elsewhere.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says OpenSearch automated snapshots cannot restore the data in another Region or domain, and names manual snapshots to S3 or cross-cluster replication as the way to get a copy elsewhere, or asks whether the index can be rebuilt from the raw data.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response only says 'no OpenSearch cross-region backup' for region failure; it does not mention automated snapshots being unable to restore cross-region/cross-domain, nor manual snapshots to S3, nor cross-cluster replication, nor ask whether the index can be rebuilt from raw data.",
+          "reasoning": "None of the specific claims in the assertion are present in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the recovery Region would need its own Kinesis stream, because the stream telemetry-events keeps its data only in eu-west-1.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not mention Kinesis at all in the context of region failure needing its own stream; it only says 'Kinesis, Lambda, and S3 all ride on AWS-managed multi-AZ infrastructure, so they're fine' for AZ failure, and for region failure just says 'Zero failover anywhere' without naming Kinesis or the stream telemetry-events specifically.",
+          "reasoning": "The specific claim about needing a separate Kinesis stream in the recovery region and naming telemetry-events is absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits versioning on the raw S3 bucket and says the bucket is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'no S3 cross-region replication' but does not mention S3 versioning on the raw bucket at all.",
+          "reasoning": "Only half of the assertion (no cross-region replication) is present; versioning is not credited/mentioned.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, booking-api and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response only discusses telemetry-pipeline components: Kinesis, Lambda, S3, OpenSearch (telemetry-search), DocumentDB (telemetry-metadata), and telemetry-ingest. No mention of orders-web, booking-api, catalog-k8s, database-1 Aurora, or a metrics stack.",
+          "reasoning": "The output stays scoped to the telemetry-pipeline stack resources as required.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.3333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m48s",
+    "cost": "$0.90",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

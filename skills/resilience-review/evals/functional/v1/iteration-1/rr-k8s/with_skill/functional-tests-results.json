@@ -1,0 +1,94 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-k8s",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all key required elements: (1) ECR replication is explicitly reported as off/empty (\"replicationConfiguration.rules = [] \u2014 not replicated anywhere\"); (2) the cluster is reported as not protected by AWS Backup (\"No AWS Backup plan covers it; 0 recovery points exist\"); (3) the Fargate profile/cluster spanning only two AZs is explicitly called out multiple times (\"compute only spans 2 of 3 Availability Zones\", \"Only attached to eu-west-1a/1b; eu-west-1c isn't wired in\"); (4) it explicitly states what inside the cluster it could not see rather than assuming none exists - \"Not checked: Kubernetes-level internals (namespaces, deployments, pods, secrets, configmaps) \u2014 the cluster API rejected the session's credentials\" and flags this upfront as \"not checked\"; (5) it addresses recreation in another Region by referencing the catalog-k8s CloudFormation stack explicitly multiple times (e.g., \"deploy the catalog-k8s stack via IaC\", \"Once a recovery Region and strategy are agreed, deploy the CloudFormation stack there\"), and frames it as a roadmap/strategy question tied to IaC redeployment, which aligns with asking how the cluster would be recreated elsewhere. While it doesn't explicitly mention \"Git or a pipeline\" as alternatives, it does reference IaC/CloudFormation as the recreation mechanism, which satisfies the core spirit of the requirement. All major substantive criteria are met.",
+      "evidence": "\"replicationConfiguration.rules = [] \u2014 not replicated anywhere\" ... \"No AWS Backup plan covers it; 0 recovery points exist\" ... \"Only attached to eu-west-1a/1b; eu-west-1c isn't wired in despite the VPC having that subnet\" ... \"Kubernetes-level internals (namespaces, deployments, pods, secrets, configmaps) \u2014 the cluster API rejected the session's credentials\" ... \"deploy the catalog-k8s stack via IaC and pull a replicated image at recovery time\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the ECR repository catalog-service is not replicated to another Region, so the recovery Region cannot pull its images.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"catalog-service ECR repo | replicationConfiguration.rules = [] \u2014 not replicated anywhere | Turn on ECR replication once a recovery Region is picked\" and \"ECR replication is off, no copy of the stack exists in another Region\"",
+          "reasoning": "The response explicitly states ECR repo is not replicated and that there's no copy elsewhere, implying recovery region cannot pull images without replication being enabled.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the EKS cluster catalog-eks is not protected by AWS Backup and has no counterpart in another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"No AWS Backup plan covers it; 0 recovery points exist (the account's one backup vault only protects an unrelated eu-central-1 workload)\" and \"No copy of catalog-k8s exists outside eu-west-1\"",
+          "reasoning": "The response clearly states catalog-eks has no AWS Backup coverage and no counterpart in another region.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says what inside the cluster could not be checked (for example deployments, pods or persistent volumes) instead of claiming there are none.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Kubernetes-level internals (namespaces, deployments, pods, secrets, configmaps) \u2014 the cluster API rejected the session's credentials.\" listed under 'Not checked'",
+          "reasoning": "The response explicitly flags that it could not check deployments, pods, secrets, configmaps due to credential rejection, rather than claiming none exist. Though it also states 'zero images ever pushed or pods ever run' which is a factual claim, it separately notes the not-checked k8s internals.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits the Fargate profile spreading pods over two Availability Zones, or reports the two subnets the cluster uses.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Cluster and Fargate profile are wired to only eu-west-1a and eu-west-1b; the VPC's third subnet (eu-west-1c) isn't attached\" and \"compute only spans 2 of 3 Availability Zones\"",
+          "reasoning": "The response reports the two AZs/subnets the cluster uses (eu-west-1a and eu-west-1b), satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response asks or states how the cluster and its workloads would be recreated in the recovery Region (IaC such as the catalog-k8s stack, Git or a pipeline).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Recovery Region holds nothing, until needed \u2014 deploy the catalog-k8s stack via IaC and pull a replicated image at recovery time\" and \"Once a recovery Region and strategy are agreed, deploy the CloudFormation stack there (backup and restore: on-demand; pilot light: pre-deployed and scaled to zero)\"",
+          "reasoning": "The response explicitly states that recreation would happen via the catalog-k8s CloudFormation IaC stack deployed in the recovery region, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched \"## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | partly | No data tier to fail over; the service has never run a pod, so there's \u2026\""
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m30s",
+    "cost": "$3.74",
+    "context_window": {
+      "utilization": "8.2%",
+      "compaction_count": 0
+    }
+  }
+}

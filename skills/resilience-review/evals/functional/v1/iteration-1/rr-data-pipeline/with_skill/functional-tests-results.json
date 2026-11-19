@@ -1,0 +1,85 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "rr-data-pipeline",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'resilience-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's report covers telemetry-pipeline specifically and addresses nearly all required findings: OpenSearch telemetry-search runs 1 node ('InstanceCount=1'), single AZ (eu-west-1a), zone awareness disabled ('ZoneAwarenessEnabled=false'); DocumentDB telemetry-metadata has a single instance/member and 1-day backup retention ('BackupRetentionPeriod=1 day'); raw S3 bucket has versioning on but no Cross-Region Replication (explicitly flagged as a long-term fix: 'Versioned, but no Cross-Region Replication... Enable CRR'). It also explicitly raises the key question of whether search can be rebuilt from raw/metadata data multiple times (in Targets section: 'can it be fully rebuilt from DocumentDB/the raw bucket, or does it hold anything that exists nowhere else?' and in the roadmap: 'only if it holds data that exists nowhere else; otherwise plan to rebuild it from metadata/raw storage instead').\n\nThe one point not explicitly stated is the Kinesis stream's 24-hour retention period specifically, though the agent does note the stream is 'Single-Region; no entry/routing layer in front of the pipeline' and lacks cross-Region counterpart, which covers the spirit of 'no counterpart in another Region' but doesn't mention the specific 24-hour retention detail. This is a minor omission in an otherwise comprehensive and substantively correct report that matches nearly all the core expected findings (OpenSearch single-node/single-AZ/no zone awareness, snapshot scope, DocumentDB single instance/1-day retention, S3 versioning without replication, and the rebuild question). Given the strong overall match on substance, this passes.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says OpenSearch automated snapshots cannot restore the data in another Region or domain, and names manual snapshots to S3 or cross-cluster replication as the way to get a copy elsewhere, or asks whether the index can be rebuilt from the raw data.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'telemetry-search (OpenSearch) | No cross-cluster replication or cross-Region snapshot copy | Cross-Region manual snapshot copy or cross-cluster replication \u2014 only if it holds unique data; otherwise rebuild after failover' and also 'OpenSearch keeps default ~14-day automated snapshots... but there's no AWS Backup plan... covering this stack' plus the question 'can it be fully rebuilt from DocumentDB/the raw bucket, or does it hold anything that exists nowhere else?'",
+          "reasoning": "The response explicitly names manual snapshot copy and cross-cluster replication as the mechanisms to get OpenSearch data elsewhere, and repeatedly asks whether the index can be rebuilt from other sources, implying default automated snapshots alone don't provide cross-Region/domain restore. This satisfies the assertion's substance.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the recovery Region would need its own Kinesis stream, because the stream telemetry-events keeps its data only in eu-west-1.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'Kinesis stream + Lambda + event source mapping | Single-Region; no entry/routing layer in front of the pipeline at all | Deploy equivalents in the recovery Region from IaC, and give device clients a way to switch endpoints on failover | Region fails'",
+          "reasoning": "The response explicitly calls for deploying a Kinesis stream equivalent in the recovery Region, implying the stream's data stays only in eu-west-1 and must be replicated/stood up separately. It doesn't name the specific stream 'telemetry-events' but addresses the substance of the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response credits versioning on the raw S3 bucket and says the bucket is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'Already in place: S3 bucket versioning' and later 'telemetry-raw bucket (S3) | Versioned, but no Cross-Region Replication | Enable CRR to a bucket in the recovery Region'",
+          "reasoning": "The response explicitly credits the bucket's versioning as already in place and explicitly notes it lacks Cross-Region Replication, directly satisfying both parts of the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not mention resources of other workloads in the account, such as the orders-web, booking-api and catalog-k8s stacks, the Aurora cluster database-1 or the metrics stack.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention anywhere in the output of orders-web, booking-api, catalog-k8s, database-1 (Aurora), or a metrics stack. The output focuses solely on telemetry-pipeline resources: Kinesis, Lambda, DocumentDB (telemetry-metadata), OpenSearch (telemetry-search), S3 raw bucket, Secrets Manager, IAM role.",
+          "reasoning": "The response scopes itself strictly to the telemetry-pipeline stack and its directly related resources, with no references to unrelated workloads or stacks named in the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response uses the six required section headings in order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched '## 1. Scenario and scope\\n\\n| Scenario | In scope? | Covered today? | Why |\\n|---|---|---|---|\\n| One service fails | yes | **no** | DocumentDB cluster has exactly 1 member (no reader); OpenSearch domain \u2026'"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m32s",
+    "cost": "$3.25",
+    "context_window": {
+      "utilization": "7.4%",
+      "compaction_count": 0
+    }
+  }
+}
