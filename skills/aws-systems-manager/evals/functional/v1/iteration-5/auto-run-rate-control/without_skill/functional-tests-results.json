@@ -10,7 +10,8 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The agent's response does satisfy several key criteria: it provides a start-automation-execution command with --target-parameter-name InstanceId, --targets Key=tag:ssm-skill-test,Values=true, --max-concurrency 1, --alarm-configuration naming the alarm with IgnorePollAlarmFailure=false, and clearly states it has not run anything and that the user must run it themselves. However, it fails on several explicit expectations: (1) it does not actually confirm the runbook via describe-document (it only mentions checking the alarm exists as a prerequisite, not actually calling describe-document); (2) it does not actually resolve the tag to instance IDs - it offers to do a 'dry check' with describe-instances but doesn't actually run it or show resolved instance IDs; (3) it does not check whether the ssm-skill-test-cpu alarm is currently in ALARM state - it only offers to check this as a future action; (4) it uses --max-errors 1 instead of the required --max-errors 0; (5) it does not include a pinned --document-version parameter at all. The command is missing --document-version entirely and uses the wrong --max-errors value, and the agent did not perform the verification steps (describe-document, resolving tags to instances, checking alarm state) that were expected to be done as part of preparing the command - it only offered to do them as follow-up actions.",
+      "reasoning": "The response covers most expected elements: it confirms the runbook details (parameters, describe-document-like check), resolves the tag to specific instance IDs, checks the alarm is OK (not ALARM), and provides a start-automation-execution command with --target-parameter-name InstanceId, --targets Key=tag:ssm-skill-test,Values=true, --max-concurrency 1, and --alarm-configuration naming the alarm with IgnorePollAlarmFailure=false. It also clearly states it hasn't run anything and offers to run it only after approval, satisfying the 'person must run it / does not start it' requirement.\n\nHowever, it fails two explicit requirements: (1) --max-errors is set to 1, not the required 0, and (2) there is no pinned --document-version in the command (no $DEFAULT, $LATEST, or specific version number specified). These are concrete, checkable deviations from the expected command structure, so the output does not fully match the expected output criteria.",
+      "evidence": "\"--max-concurrency 1 \\\\\\n  --max-errors 1 \\\\\\n  --alarm-configuration 'IgnorePollAlarmFailure=false,Alarms=[{Name=ssm-skill-test-cpu}]'\" \u2014 missing --document-version and using max-errors 1 instead of required 0.",
       "confidence": "high"
     },
     "assertions": {
@@ -19,32 +20,32 @@
           "text": "The command sets --max-errors 0 and explains that the run stops after the first failed target",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "Command uses `--max-errors 1`, and the text says '`--max-errors 1` stops the run after the first failed restart.'",
-          "reasoning": "Assertion requires --max-errors 0, but the agent used --max-errors 1. The explanation of stopping after first failure matches but the value is wrong (should be 0 per assertion).",
+          "evidence": "The command uses `--max-errors 1`, and the explanation states \"`--max-errors 1` stops the run after the first failure.\" The assertion requires --max-errors 0, but the agent used 1.",
+          "reasoning": "Assertion specifically requires --max-errors 0; the agent's command sets --max-errors 1 instead. While the explanation of stopping after first failure is present, the flag value does not match what was asserted.",
           "confidence": "high"
         },
         {
           "text": "The command pins --document-version to the version describe-document returned",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "No --document-version flag appears anywhere in the command, and there is no mention of pinning to a version returned by describe-document.",
-          "reasoning": "The command does not include --document-version at all, nor does the response mention checking describe-document output to pin a version.",
+          "evidence": "The command does not include a --document-version parameter at all. The agent mentions checking the runbook's parameters but never states a specific document version or pins it in the command.",
+          "reasoning": "No --document-version flag appears anywhere in the command or output, so the assertion fails.",
           "confidence": "high"
         },
         {
           "text": "The alarm configuration sets IgnorePollAlarmFailure=false",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "--alarm-configuration \"IgnorePollAlarmFailure=false,Alarms=[{Name=ssm-skill-test-cpu}]\"",
-          "reasoning": "The command explicitly sets IgnorePollAlarmFailure=false as asserted.",
+          "evidence": "The command includes `--alarm-configuration 'IgnorePollAlarmFailure=false,Alarms=[{Name=ssm-skill-test-cpu}]'` and the explanation states \"`IgnorePollAlarmFailure=false` means a failure to read the alarm also halts the run, so it fails safe.\"",
+          "reasoning": "The alarm configuration explicitly sets IgnorePollAlarmFailure=false as required.",
           "confidence": "high"
         },
         {
           "text": "Says a person must run the command, and gives the approval information (runbook, version, targets, tier, alarm) alongside it",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The agent says 'I haven't run anything. Here's the command, ready for you to review and run' and lists checks like alarm existence, role permissions, and a dry check listing instances, but does not explicitly present a structured approval summary with runbook name, version, targets, tier, and alarm together.",
-          "reasoning": "While the agent does not run the command itself and does provide some context (targets, alarm, document name), it does not pin or mention a document version, nor does it present a consolidated 'tier' or formal approval summary combining all these elements as required by the assertion. The information is scattered across explanation, not a clear approval block with version and tier.",
+          "evidence": "The agent says \"I haven't run anything. This is the command, ready to run... I can run it for you (it will ask for your approval first)\" and lists targets, alarm, and runbook details in the 'What I checked' section, but there is no explicit 'tier' information and no structured approval summary combining runbook, version, targets, tier, and alarm together as a distinct approval package.",
+          "reasoning": "While the agent does present targets, alarm, and runbook info, and indicates a human must approve before running, it does not explicitly mention a 'tier' nor does it pin a document version, and the information is not presented as a cohesive approval summary alongside the command as the assertion specifies.",
           "confidence": "medium"
         },
         {
@@ -77,10 +78,10 @@
     }
   },
   "metrics": {
-    "runtime": "0s",
-    "cost": "$0.00",
+    "runtime": "15s",
+    "cost": "$0.13",
     "context_window": {
-      "utilization": "4.0%",
+      "utilization": "4.5%",
       "compaction_count": 0
     }
   }

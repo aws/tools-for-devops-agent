@@ -10,8 +10,8 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The expected output specifies that the agent should NOT recommend adding timeoutSeconds to the aws:changeInstanceState step, and should return the document unchanged or with only optional low-severity notes. However, the agent's response explicitly recommends adding 'timeoutSeconds: 600' and 'onFailure: Abort' to the step, and provides a 'suggested revision' that includes these changes applied to the document - directly contradicting the expectation. While the agent does correctly avoid treating KeyName as a secret parameter (it flags it as an unused parameter rather than a secret), the timeoutSeconds recommendation is a clear violation of the expected criteria.",
-      "evidence": "\"Failure and timeout handling is missing... Consider adding these to the step: timeoutSeconds: 600, onFailure: Abort\" and the suggested revision includes \"timeoutSeconds: 600\\n    onFailure: Abort\" added to the StopInstance step.",
+      "reasoning": "The expected output specifies three concrete criteria: (1) no critical/high findings, (2) KeyName should not be treated as a secret parameter, and (3) the agent should NOT ask for a timeoutSeconds on aws:changeInstanceState, with the document returned unchanged or with only optional low-severity notes.\n\nThe agent's response fails criterion (3) explicitly: it lists 'Set an explicit timeoutSeconds on the step (for example 600)' as a 'Recommended' item, and includes timeoutSeconds: 600 in its cleaned-up version. This directly contradicts the expected behavior of not asking for a timeoutSeconds addition.\n\nAdditionally, the agent flags KeyName as an unused parameter and recommends removing it, labeling it under 'Fix before release' (not low-severity/optional) \u2014 framing it as a required fix rather than an optional/low-severity note, which also doesn't match 'returns the document unchanged or with only optional low-severity notes.' While it doesn't treat KeyName as a secret, it does treat the unused parameter issue as a release-blocking fix, which goes beyond the expected low-severity optional notes threshold.\n\nThe agent also substantially modified the document rather than returning it largely unchanged, adding onFailure, descriptions, timeoutSeconds, and removing KeyName entirely \u2014 going well beyond 'optional low-severity notes.'",
+      "evidence": "\"Set an explicit `timeoutSeconds` on the step (for example 600).\" and \"**Fix before release** - **`KeyName` is never used.**... Remove it\"",
       "confidence": "high"
     },
     "assertions": {
@@ -20,24 +20,24 @@
           "text": "Reports no critical or high findings",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The agent states: 'I reviewed the runbook and found no blocking errors. It should run, but I'd change a few things before release.' All subsequent items are framed as 'What to fix or consider' rather than critical/high severity findings; no item is labeled critical or high.",
-          "reasoning": "The agent explicitly says there are no blocking errors, and frames all issues as considerations/improvements rather than critical or high-severity findings. No severity labels of 'critical' or 'high' appear anywhere in the output.",
-          "confidence": "high"
+          "evidence": "The only 'Fix before release' item is: 'KeyName is never used.' No item is labeled critical or high; others fall under 'Recommended' or 'Optional'.",
+          "reasoning": "The agent only lists one issue under 'Fix before release' (unused KeyName parameter), and does not label any finding as 'critical' or 'high' severity. All other items are labeled 'Recommended' or 'Optional'. There is no severity taxonomy used that labels anything critical/high.",
+          "confidence": "medium"
         },
         {
           "text": "Does not flag KeyName as a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The agent discusses KeyName only as: 'KeyName is unused. No step references {{KeyName}}, and it has no default, so it's a required input... That's probably a copy-paste leftover, so remove it.' There is no mention of it being a secret or sensitive credential.",
-          "reasoning": "The agent never characterizes KeyName as a secret, credential, or sensitive value. Its only concern is that the parameter is unused/dead code, which is a legitimate but entirely different concern from flagging it as a secret.",
+          "evidence": "\"KeyName is never used. It's declared with no default, so Automation will require every caller to supply it, even though no step references it. It looks like a leftover from another runbook.\" No mention of 'secret' anywhere.",
+          "reasoning": "The agent flags KeyName as unused/dead parameter, not as a secret or security issue. It explicitly frames it as a leftover unused parameter, not a credential or secret exposure concern.",
           "confidence": "high"
         },
         {
           "text": "Does not require timeoutSeconds on the aws:changeInstanceState step",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The agent explicitly recommends: 'Failure and timeout handling is missing... Consider adding these to the step: timeoutSeconds: 600, onFailure: Abort, maxAttempts if you want retries' and then includes 'timeoutSeconds: 600' directly in the suggested revised YAML for the StopInstance step.",
-          "reasoning": "The assertion states the output should NOT require timeoutSeconds on the step, but the agent explicitly suggests adding timeoutSeconds: 600 as a recommendation and includes it in the final suggested revision, directly contradicting this assertion. While phrased as 'consider adding,' it is presented as a recommended fix and concretely added to the revised code, effectively requiring/recommending it.",
+          "evidence": "\"Set an explicit timeoutSeconds on the step (for example 600). A stop that hangs would otherwise wait for the default step timeout.\" and the cleaned-up YAML includes `timeoutSeconds: 600` on the StopInstance step.",
+          "reasoning": "The agent explicitly recommends setting an explicit timeoutSeconds on the step and includes it in the cleaned-up version, meaning it does require/strongly recommend timeoutSeconds on the aws:changeInstanceState step.",
           "confidence": "high"
         }
       ],

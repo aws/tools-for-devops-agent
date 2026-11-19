@@ -10,8 +10,8 @@
     "trigger": null,
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent's response identifies the specific automation execution ID, explains the Approve step is an aws:approve action waiting for an approval signal (MinRequiredApprovals=1), names the approver (IAM role [redacted ARN]), provides the exact send-automation-signal command with --signal-type Approve and the correct execution ID, mentions the Reject alternative, and notes that a rejection fails the step causing the run to abort (equivalent to ending Failed). It explicitly states it cannot approve/reject itself ('I can't approve it from here... Approving or rejecting is also a decision for the named approver'), satisfying the 'does not send the signal itself' requirement. This covers all the key expected elements: execution discovery, step-level reading, explanation of the approve step, naming the approver, giving the signal commands for both approve/reject, noting rejection causes failure, and not actually sending the signal.",
-      "confidence": "high"
+      "reasoning": "The agent's response identifies the specific execution ID, explains the Approve step (aws:approve action) is waiting for a signal, names the approver (Admin role ARN) from the Approvers input, mentions the SendAutomationSignal API with signal type Approve, and notes that anyone with permission can reject it (implying rejection ends it, though it doesn't explicitly state 'ends in Failed' - it does mention onFailure: Abort for timeout, which is related but not exactly the rejection outcome). It explicitly states it did not send the signal itself ('I can't approve it for you'). The response covers almost all required elements: execution found in Waiting, steps read, Approve step explained, approver named, SendAutomationSignal command referenced (though not explicit CLI syntax for both approve/reject), and explicitly does not send the signal. Minor gaps: doesn't give explicit CLI command syntax for send-automation-signal, and doesn't explicitly state rejection results in Failed status. But the core substance is present.",
+      "confidence": "medium"
     },
     "assertions": {
       "assertion_results": [
@@ -19,54 +19,54 @@
           "text": "Explains that the execution is waiting at an aws:approve step",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"It's stuck at the `Approve` step, which is an `aws:approve` action.\"",
-          "reasoning": "The output explicitly states the execution is waiting at a step named Approve that is an aws:approve action, directly satisfying the assertion.",
+          "evidence": "\"The runbook's first step, `Approve` (an `aws:approve` action), has been waiting since 2026-11-19 19:09:56 UTC.\"",
+          "reasoning": "The output explicitly identifies the step as an aws:approve action and states it is waiting.",
           "confidence": "high"
         },
         {
           "text": "Gives the send-automation-signal command for Approve and for Reject",
           "evaluator": "llm",
-          "passed": true,
-          "evidence": "\"The approval is sent with `aws ssm send-automation-signal --automation-execution-id 9542a72b-b917-4e9c-b60b-861ade4772fa --signal-type Approve`. Use `Reject` to deny it.\"",
-          "reasoning": "The output provides the full send-automation-signal command for Approve and explicitly tells the user to substitute Reject for denial, covering both signal types.",
+          "passed": false,
+          "evidence": "The output only says 'they can send an approval for this execution ID with the SSM SendAutomationSignal API (signal type Approve) from the console or CLI' and 'Anyone with ssm:SendAutomationSignal can reject it or stop the run.' No actual aws ssm send-automation-signal CLI command syntax is given for either Approve or Reject.",
+          "reasoning": "The assertion requires concrete send-automation-signal commands for both Approve and Reject actions, but the output only describes the API/action in prose without giving the actual command (e.g., 'aws ssm send-automation-signal --automation-execution-id ... --signal-type Approve'). No command is shown for Reject at all beyond mentioning it's possible.",
           "confidence": "high"
         },
         {
           "text": "Says a rejection ends the execution as Failed",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "\"A rejection fails the step, and the run aborts.\"",
-          "reasoning": "The output says a rejection causes the step to fail and the run to 'abort', not explicitly that the execution ends with status 'Failed'. While 'fails the step' and 'aborts' imply a failure-like outcome, the assertion specifically requires stating the execution ends as 'Failed' status, and the output instead uses 'aborts' (which could be read as a distinct terminal state 'Cancelled' in SSM terminology), creating ambiguity rather than a clear statement that the overall execution status becomes Failed.",
+          "evidence": "The output does not mention what happens if the execution is rejected at all, other than noting 'Anyone with ssm:SendAutomationSignal can reject it or stop the run.' There is no statement that rejection ends the execution as Failed.",
+          "reasoning": "No mention of the outcome/status resulting from a rejection is present in the output.",
           "confidence": "high"
         },
         {
           "text": "Does not send the signal itself",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"I can't approve it from here. The agent's role can read the step details but isn't allowed to call `GetAutomationExecution`. Approving or rejecting is also a decision for the named approver.\"",
-          "reasoning": "The agent explicitly states it does not and cannot send the approval/rejection signal itself, satisfying the assertion that it does not send the signal.",
+          "evidence": "\"I can't approve it for you. My role isn't the named approver, and I also don't have `ssm:GetAutomationExecution` permission.\"",
+          "reasoning": "The agent explicitly states it does not send the approval signal itself and clarifies it lacks permission to do so.",
           "confidence": "high"
         },
         {
           "text": "The signal command is given",
           "evaluator": "regex",
-          "passed": true,
-          "evidence": "Matched 'send-automation-signal'"
+          "passed": false,
+          "evidence": "Pattern not found in the output"
         }
       ],
       "summary": {
-        "passed": 4,
-        "failed": 1,
+        "passed": 2,
+        "failed": 3,
         "errored": 0,
         "low_confidence": 0,
         "total": 5,
-        "pass_rate": 0.8
+        "pass_rate": 0.4
       }
     }
   },
   "metrics": {
-    "runtime": "13s",
-    "cost": "$0.11",
+    "runtime": "15s",
+    "cost": "$0.13",
     "context_window": {
       "utilization": "4.7%",
       "compaction_count": 0

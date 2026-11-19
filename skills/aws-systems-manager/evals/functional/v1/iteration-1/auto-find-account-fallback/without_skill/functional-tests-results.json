@@ -10,8 +10,7 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The expected output requires the agent to actively search the account's own Automation runbooks via list-documents with DocumentType=Automation, Owner=Self, and SearchKeyword filters like 'cert' or 'tls', and report findings from that search. Instead, the agent only checked the agent space's internal skills/associations (a skill called sample-skip-scheduled-maintenance and an AWS account association), concluded no runbook exists there, and offered to help write one. It never performed or mentioned an SSM Automation document search (list-documents with DocumentType=Automation, Owner=Self, SearchKeyword=cert/tls) against the AWS account. This is a materially different investigative approach than what was expected, and the key required action (searching SSM Automation runbooks) is missing entirely.",
-      "evidence": "\"The space has one skill, `sample-skip-scheduled-maintenance`... Associations: The only association is the AWS account 012345678901_1, which is used for monitoring.\" - No mention of SSM list-documents search with DocumentType=Automation, Owner=Self, SearchKeyword=cert/tls.",
+      "reasoning": "The expected output requires the agent to actually search the account's own Automation runbooks via SSM list-documents (filtered by DocumentType=Automation, Owner=Self, SearchKeyword cert/tls) and report findings (or lack thereof). Instead, the agent only checked the agent-space's skills and associations (not SSM documents at all), explicitly stated it did NOT look through SSM documents, and offered to do so as a follow-up action rather than actually performing the search. It never queried AWS Systems Manager for Automation runbooks, so the core expected behavior was not fulfilled.</reasoning>\n<parameter name=\"evidence\">\"Check SSM documents: I can look through Systems Manager documents or Automation runbooks in us-east-1 for something certificate-related.\" \u2014 indicates this was never actually done, only offered.",
       "confidence": "high"
     },
     "assertions": {
@@ -20,33 +19,29 @@
           "text": "Says no AWS-owned runbook in the catalog fits before searching further",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The response says: \"The space has one skill, sample-skip-scheduled-maintenance... It has nothing to do with certificates.\" It talks about skills/runbooks in the agent space (associations, skills), not about an AWS SSM document catalog search, and there's no mention of checking an 'AWS-owned runbook catalog' before searching further.",
-          "reasoning": "The assertion requires the agent to explicitly state that no AWS-owned runbook in the catalog fits before searching further. The output discusses skills and associations in the agent space, not an AWS SSM Automation document catalog check, so this specific claim is not present.",
-          "confidence": "medium"
+          "evidence": "The agent says 'I can look through Systems Manager documents or Automation runbooks in us-east-1 for something certificate-related' as a future action, and never states it already searched AWS-owned runbooks and found none fitting.",
+          "reasoning": "The agent never mentions searching an AWS-owned runbook catalog (SSM documents) before responding. It says it didn't find a runbook in the 'agent space' (skills/associations), not in an AWS runbook catalog. It explicitly offers to check SSM documents as a next step, implying it has not yet searched there."
         },
         {
           "text": "Searches with list-documents using DocumentType=Automation and Owner=Self",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "No mention of 'list-documents', 'DocumentType=Automation', or 'Owner=Self' anywhere in the output. The agent only mentions checking 'Skills and runbooks' in the agent space and 'Associations' (AWS account, GitHub, GitLab, wiki, MCP server).",
-          "reasoning": "There is no evidence the agent used the AWS SSM list-documents API call with those specific filters; the output describes a different search process entirely (agent space skills and associations).",
-          "confidence": "high"
+          "evidence": "No mention of 'list-documents', 'DocumentType=Automation', or 'Owner=Self' anywhere in the output; the agent only discusses skills and associations.",
+          "reasoning": "There is no evidence the agent executed any list-documents API call with DocumentType=Automation and Owner=Self. The agent only reviewed skills and associations within the agent space, not SSM document listings."
         },
         {
           "text": "Tries more than one keyword",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The output does not show any search keywords being used at all - it describes checking skills and associations, not a keyword-based search for documents.",
-          "reasoning": "There's no evidence of any keyword search, let alone multiple keywords, being tried in the visible output. The agent's process as described is about checking space associations/skills, not performing keyword searches.",
-          "confidence": "medium"
+          "evidence": "The agent lists 'Skills' and 'Associations' sections but no keyword search terms or search attempts are described.",
+          "reasoning": "The output shows no search activity using keywords at all - it only reports on the agent's internal skills (one skill unrelated to certs) and associations (one AWS account, no repos/wikis). No keyword-based search of SSM documents or any other system is shown."
         },
         {
           "text": "Does not search or recommend runbooks owned by other accounts",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The output never mentions or recommends any runbook owned by another AWS account. It only mentions 'the AWS account 012345678901_1, which is used for monitoring' as an association, and states no runbook was found, suggesting the user may have one in 'a wiki, a repo or a shared drive' - no cross-account runbook recommendation is made.",
-          "reasoning": "Since the agent found no runbook at all and did not recommend any document from another account, this negative assertion holds true by absence of any such recommendation.",
-          "confidence": "medium"
+          "evidence": "The only account mentioned is 'AWS account 012345678901_1, which is a monitoring account' and no other-account runbooks are searched or recommended.",
+          "reasoning": "The agent does not recommend or search runbooks owned by other accounts; it only discusses the agent space's own associations (one AWS account) and offers to search SSM in us-east-1, without referencing other accounts' runbooks."
         },
         {
           "text": "The account-owned search filter is used",

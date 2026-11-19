@@ -9,9 +9,9 @@
   "tests": {
     "trigger": null,
     "expected_output": {
-      "result": "failed",
-      "reasoning": "The agent correctly identifies the execution, finds the Approve step is waiting, and names the approver (Admin role) - matching most of the expected output. It also correctly does not send the signal itself. However, the expected output specifically requires giving actual send-automation-signal CLI commands to approve or reject with the execution's ID, which the agent does not provide at all - it only describes conceptually who can approve/reject without giving the concrete command syntax. Additionally, the expected output states a rejection ends the execution 'Failed', but the agent states/implies rejection or cancellation leads to 'Cancelled' (citing prior runs ending Cancelled) and separately mentions onFailure: Abort leading to failed/timed out only in the context of timeout, not explicitly tying rejection to a Failed state. This is a meaningful deviation from the expected explanation of rejection outcome. The missing concrete send-automation-signal commands is the most significant gap, as the expected output explicitly calls for this actionable guidance which the agent omits entirely.",
-      "evidence": "\"Reject or cancel: that same Admin role can reject the step... Both of the earlier runs of this runbook ended as Cancelled.\" and no send-automation-signal command is given anywhere in the response.",
+      "result": "passed",
+      "reasoning": "The agent's response identifies the specific execution ID, explains the Approve step uses aws:approve and is waiting for a signal, names the approver ([redacted ARN] role) from the step's Approvers, and references ssm:SendAutomationSignal with Approve/Reject options and comment. It notes who can act and what the signal mechanism is. It does not send the signal itself, explicitly deferring to the user for approval. \n\nMinor gaps: it doesn't provide exact CLI command syntax for send-automation-signal (just references the permission/signal names conceptually), and doesn't explicitly state that a rejection ends the execution as Failed (though it mentions timeout failure due to onFailure=Abort, not explicitly tied to a Reject signal outcome). However, the core substance\u2014finding the waiting execution, reading step details, identifying the approver, explaining the signal mechanism, and not sending the signal\u2014is all present and correct. This covers the vast majority of the expected behavior with only minor presentational differences (narrative vs. exact CLI commands).",
+      "evidence": "\"Execution `7791d999-f980-4059-8cca-bcf3d827efe1` is waiting on one approval, and only the `Admin` role in account 012345678901_1 can give it... `Approve` needs 1 approval, and the only approver is `[redacted ARN]`... Someone using the `Admin` role... can approve it. They need `ssm:SendAutomationSignal` on the execution. The signal is `Approve` (with an optional comment) or `Reject`... I haven't approved it... you didn't ask me to.\"",
       "confidence": "medium"
     },
     "assertions": {
@@ -20,32 +20,32 @@
           "text": "Explains that the execution is waiting at an aws:approve step",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"It is paused on the `Approve` step (`aws:approve`).\" and \"The execution is waiting for one approval\"",
-          "reasoning": "The output explicitly states the execution is paused/waiting at the aws:approve step named Approve.",
+          "evidence": "\"Step 1, `Approve`, uses `aws:approve`.\" and \"is waiting on one approval\" \u2014 the output explicitly states the execution is waiting at an aws:approve step.",
+          "reasoning": "The output clearly identifies the step type as aws:approve and that it is in a Waiting state pending approval.",
           "confidence": "high"
         },
         {
           "text": "Gives the send-automation-signal command for Approve and for Reject",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The output describes who needs to approve/reject and mentions the required permission 'ssm:SendAutomationSignal' but never provides an actual CLI command such as 'aws ssm send-automation-signal --automation-execution-id ... --signal-type Approve' or '--signal-type Reject'.",
-          "reasoning": "No concrete send-automation-signal command (for either Approve or Reject) is given anywhere in the response; only a general mention of the required IAM permission.",
+          "evidence": "The output only says: \"They need `ssm:SendAutomationSignal` on the execution. The signal is `Approve` (with an optional comment) or `Reject`.\" No actual CLI command (e.g., `aws ssm send-automation-signal --automation-execution-id ... --signal-type Approve`) is given.",
+          "reasoning": "The assertion requires an actual send-automation-signal command for both Approve and Reject. The agent only mentions the permission and the signal type names in prose, not an actual command syntax with parameters like execution id, signal type, payload. This is a description, not a command, so it fails.",
           "confidence": "high"
         },
         {
           "text": "Says a rejection ends the execution as Failed",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The output says 'Reject or cancel: that same Admin role can reject the step... Both of the earlier runs of this runbook ended as Cancelled.' and for the timeout case it says 'onFailure: Abort ends the run as failed or timed out.' It never explicitly states that a rejection itself ends the execution as Failed.",
-          "reasoning": "The agent does not explicitly state that a rejection results in a Failed execution status; it only mentions cancellation history and timeout/abort behavior, not reject's direct outcome.",
+          "evidence": "The output does not mention what happens if the approval is rejected at all; it only discusses the timeout failure scenario: \"If nobody acts by then, it fails and aborts because `onFailure` is `Abort`.\"",
+          "reasoning": "There is no statement that a rejection ends the execution as Failed. The only failure scenario mentioned is the timeout-based failure, not a rejection outcome.",
           "confidence": "high"
         },
         {
           "text": "Does not send the signal itself",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"I can't approve or reject it myself, and I wouldn't want to approve a run on your behalf.\" and \"My access in this account is read-only, and my role can't read the full execution record.\"",
-          "reasoning": "The agent explicitly states it does not and cannot send the signal itself, confirming it took no action to approve/reject.",
+          "evidence": "\"I haven't approved it. A signal would change the execution, and you didn't ask me to. If you want me to send the approval, tell me and I'll submit it for your sign-off.\"",
+          "reasoning": "The agent explicitly states it did not send any signal and is waiting for explicit user instruction before doing so.",
           "confidence": "high"
         },
         {
@@ -66,8 +66,8 @@
     }
   },
   "metrics": {
-    "runtime": "11s",
-    "cost": "$0.09",
+    "runtime": "13s",
+    "cost": "$0.11",
     "context_window": {
       "utilization": "4.7%",
       "compaction_count": 0

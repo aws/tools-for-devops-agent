@@ -43,6 +43,7 @@ Metadata:
           default: Optional Add-On Permissions
         Parameters:
           - EnableConfigAthenaCiAnalysis
+          - EnableSsmAutomationExecutionRead
 
 Parameters:
   ExistingRoleName:
@@ -210,6 +211,18 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableSsmAutomationExecutionRead:
+    Type: String
+    Description: >
+      Optional add-on for the aws-systems-manager custom agent: grants read-only
+      ssm:GetAutomationExecution so the agent can inspect the per-location rate-control and
+      alarm settings (TargetLocations) of multi-account Automation executions, which
+      DescribeAutomationExecutions does not return. OFF by default. Without it the agent
+      still detects multi-account runs and reports their per-location checks as Not checked.
+      The aws-systems-manager skill itself needs no extra permissions.
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -229,6 +242,7 @@ Conditions:
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
+  SsmAutomationExecutionRead: !Equals [!Ref EnableSsmAutomationExecutionRead, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
@@ -756,6 +770,28 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # aws-systems-manager custom agent add-on: read the per-location settings of
+  # multi-account Automation executions. GetAutomationExecution is the only
+  # Automation read the review needs that AIDevOpsAgentAccessPolicy does not
+  # grant; it is scoped to this account's automation executions and grants no
+  # write.
+  PolicySsmAutomationExecutionRead:
+    Type: AWS::IAM::Policy
+    Condition: SsmAutomationExecutionRead
+    Properties:
+      PolicyName: DevOpsAgentAddOn-SsmAutomationExecutionRead
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SsmGetAutomationExecution
+            Effect: Allow
+            Action:
+              - ssm:GetAutomationExecution
+            Resource:
+              - !Sub 'arn:aws:ssm:*:${AWS::AccountId}:automation-execution/*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -789,6 +825,7 @@ Outputs:
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
+        - aws-systems-manager custom agent add-on: ${EnableSsmAutomationExecutionRead} (ssm:GetAutomationExecution on this account's automation executions, for the per-location settings of multi-account runs; the aws-systems-manager skill itself needs no extra policy)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)

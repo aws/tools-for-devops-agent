@@ -1,13 +1,11 @@
 ---
 name: aws-systems-manager
-description: Use when diagnosing or fixing an operational problem that an AWS Systems Manager
-  Automation runbook can handle, even when the request doesn't mention Systems Manager or
-  runbooks - an EC2 instance unreachable over SSH or RDP, a node missing from Systems Manager, a
-  public S3 bucket, failing health checks, or a Config or Security Hub finding to remediate - and
-  for any Automation task named directly. Finds the right AWS-owned or account-owned runbook,
-  prepares a safe start with rate control and a stopping alarm, explains why an execution failed,
-  was cancelled or is waiting for approval, and reviews a runbook for security problems.
-  Investigates read-only and prepares commands for a person to run.
+description: Use for AWS Systems Manager Automation tasks. Find an AWS-owned or account-owned
+  runbook for an operational problem such as an unreachable EC2 instance, a node missing from
+  Systems Manager, a public S3 bucket or a Config finding; prepare a safe start with rate control
+  and a stopping alarm; explain why an execution failed, was cancelled or is waiting for
+  approval; or review a runbook for security problems. Investigates read-only and prepares
+  commands for a person to run.
 metadata:
   author: hejn-amzn
   version: "1.0.0"

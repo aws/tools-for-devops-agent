@@ -14,8 +14,8 @@
     },
     "expected_output": {
       "result": "passed",
-      "reasoning": "The agent's response identifies the failed AWS-RestartEC2Instance executions in us-east-1 on 2026-11-10, names the stopInstances step (aws:changeInstanceState) and the StopInstances API call, cites the specific error code (InvalidInstanceID.Malformed) with the failure message from what appears to be FailureDetails, explains that the instance ID passed was invalid/malformed (not a real instance ID), and explicitly notes that the startInstances step remained in 'Pending' status as a consequence. This covers all the key elements described in the expected output: identifying the failed execution, the specific step, the API, the error code, the explanation of invalid instance ID, and the Pending status of the subsequent step.",
-      "evidence": "\"Each failed run stopped at its first step, `stopInstances` (`aws:changeInstanceState`). That step called the EC2 `StopInstances` API. EC2 rejected the call with a 400 `InvalidInstanceID.Malformed` error: \\\"The instance ID 'i-1234567890abcdef0_4' is malformed.\\\" The `startInstances` step stayed `Pending`, so nothing was stopped or restarted.\"",
+      "reasoning": "The agent's response identifies the failed AWS-RestartEC2Instance automation execution(s), names the specific step (stopInstances / aws:changeInstanceState), the underlying API call (StopInstances), and the error code (InvalidInstanceID.Malformed, HTTP 400) drawn from FailureDetails. It explicitly explains the root cause as an invalid/malformed instance ID, and notes that the subsequent startInstances step remained in Pending status because the stop step failed. This matches all the key elements of the expected output: filtering for failed executions of the document, reading step executions, naming the step/API/error code, explaining the invalid instance ID cause, and noting the downstream step stayed Pending. The response goes further by enumerating multiple related failed/succeeded executions, which adds detail but doesn't detract from meeting the core expectation.",
+      "evidence": "\"The `stopInstances` step (`aws:changeInstanceState`) failed. Its `StopInstances` call returned `InvalidInstanceID.Malformed` with HTTP 400... The `startInstances` step stayed `Pending`, so nothing was stopped or started.\"",
       "confidence": "high"
     },
     "assertions": {
@@ -24,24 +24,24 @@
           "text": "Reads the step details with describe-automation-step-executions",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"Each failed run stopped at its first step, `stopInstances` (`aws:changeInstanceState`). That step called the EC2 `StopInstances` API.\" and \"EC2 rejected the call with a 400 `InvalidInstanceID.Malformed` error: 'The instance ID ... is malformed.'\"",
-          "reasoning": "The agent's response gives detailed step-level information (step name 'stopInstances', action 'aws:changeInstanceState', the exact API call and error message), which indicates it read step execution details via describe-automation-step-executions. This level of granularity (step name, action type, exact API error text) is only obtainable from that API call.",
+          "evidence": "\"The stopInstances step (aws:changeInstanceState) failed. Its StopInstances call returned InvalidInstanceID.Malformed with HTTP 400.\"",
+          "reasoning": "The agent describes step-level details including the specific step name, API call, error code, and HTTP status, which indicates it read step execution details (consistent with describe-automation-step-executions). The output explicitly references the stopInstances step and its StopInstances call result.",
           "confidence": "medium"
         },
         {
           "text": "Reports the FailureStage or FailureType from the step's FailureDetails",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "The output mentions \"EC2 rejected the call with a 400 `InvalidInstanceID.Malformed` error\" but never references 'FailureStage' or 'FailureType' explicitly.",
-          "reasoning": "The agent reports the underlying API error message ('InvalidInstanceID.Malformed') but does not explicitly state the FailureStage or FailureType fields from the step's FailureDetails structure. No mention of fields like 'FailureStage: Automation' or 'FailureType: Action' is present.",
-          "confidence": "medium"
+          "evidence": "The output only states: \"Its StopInstances call returned InvalidInstanceID.Malformed with HTTP 400.\" No FailureStage or FailureType field is referenced anywhere in the response.",
+          "reasoning": "The agent reports the error code (InvalidInstanceID.Malformed) and HTTP status (400), but never explicitly reports a FailureStage or FailureType field from FailureDetails. There's no mention of terms like 'FailureStage' or 'FailureType' or their values.",
+          "confidence": "high"
         },
         {
           "text": "Notes that the steps after the failed step stayed Pending",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "\"The `startInstances` step stayed `Pending`, so nothing was stopped or restarted.\"",
-          "reasoning": "The agent explicitly notes that the startInstances step remained in Pending status because the prior step failed, which directly satisfies this assertion.",
+          "evidence": "\"The startInstances step stayed Pending, so nothing was stopped or started.\"",
+          "reasoning": "The agent explicitly notes that the startInstances step remained in a Pending state after the stopInstances step failed, which matches the assertion about subsequent steps staying Pending.",
           "confidence": "high"
         },
         {
@@ -68,10 +68,10 @@
     }
   },
   "metrics": {
-    "runtime": "28s",
-    "cost": "$0.23",
+    "runtime": "18s",
+    "cost": "$0.16",
     "context_window": {
-      "utilization": "5.7%",
+      "utilization": "5.9%",
       "compaction_count": 0
     }
   }

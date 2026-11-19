@@ -10,7 +10,8 @@
     "trigger": null,
     "expected_output": {
       "result": "failed",
-      "reasoning": "The expected output specifies that the agent should report no critical/high findings, should NOT ask for a timeoutSeconds on aws:changeInstanceState, and should return the document unchanged or with only optional low-severity notes. The agent's response does the opposite: it flags KeyName as an issue to fix 'before release' (treating it as a required fix rather than optional), and explicitly recommends adding timeoutSeconds (600) and onFailure: Abort to the aws:changeInstanceState step, which the expected output explicitly says should not happen. The agent also provides a 'Suggested version' that changes the document (removing KeyName, adding timeoutSeconds), rather than returning it unchanged or with only low-severity optional notes. While the agent does categorize some of this as 'optional improvements', the KeyName issue is framed as a required fix ('fix the unused KeyName parameter before release'), not a low-severity note, and the timeoutSeconds suggestion directly violates the expectation.</reasoning>\n<parameter name=\"evidence\">\"Verdict: it's valid and will work, but fix the unused `KeyName` parameter before release.\" and \"Step timeout: add `timeoutSeconds` (for example 600) and `onFailure: Abort` to the step.\"",
+      "reasoning": "The expected output specifies that the agent should report no critical/high findings, not treat KeyName as problematic (secret or otherwise), not ask for timeoutSeconds, and return the document unchanged or with only optional low-severity notes. The agent's actual response violates multiple of these criteria: (1) It explicitly flags KeyName as an issue to 'Fix before release' calling it a 'copy-paste leftover' that should be removed or wired in - this is treating it as a problematic/unused parameter rather than leaving it alone as expected. (2) It explicitly recommends adding 'timeoutSeconds' to the step (e.g., 600) under 'Recommended improvements', which is exactly what the expected output says should NOT happen. (3) The agent provides a 'Suggested version' that modifies the document significantly (changes InstanceId type, removes KeyName, adds Force parameter, adds timeoutSeconds, onFailure, etc.) rather than returning the document unchanged or with only low-severity notes. The agent treats these as needing fixes before release rather than optional low-severity notes, which contradicts the expected behavior.",
+      "evidence": "\"Fix before release** - **`KeyName` is unused.**...Remove it, or if you meant to use it, wire it into a step.\" and \"**Failure handling:** Add `timeoutSeconds` to the step, for example 600.\"",
       "confidence": "high"
     },
     "assertions": {
@@ -19,25 +20,25 @@
           "text": "Reports no critical or high findings",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The agent writes: '**Verdict: it's valid and will work, but fix the unused `KeyName` parameter before release.**' and lists only one issue under 'Issue to fix' without any severity label like 'critical' or 'high'. All other suggestions are under 'Optional improvements'.",
-          "reasoning": "The agent's verdict states the runbook 'is valid and will work' with only one issue to fix (unused KeyName parameter), which it does not label as critical or high severity. All other items are categorized as 'Optional improvements' or informational checks, not critical/high findings.",
+          "evidence": "\"The runbook is valid and should work as written. I found one real issue and a few things worth tightening before release.\" The KeyName issue is described as \"likely a copy-paste leftover\" under a 'Fix before release' heading, not labeled critical/high; other items are under 'Recommended improvements'.",
+          "reasoning": "The agent explicitly states the runbook is valid and frames the KeyName issue as a lower-severity cleanup item, not a critical/high security or correctness finding. It uses language like 'likely a copy-paste leftover' and lists other items under 'Recommended improvements' (optional, lower priority). No finding is labeled critical or high severity.",
           "confidence": "medium"
         },
         {
           "text": "Does not flag KeyName as a secret",
           "evaluator": "llm",
           "passed": true,
-          "evidence": "The agent says: '`KeyName` is declared but never used. It has no default... It looks left over from a copy-paste, maybe from a runbook that launches instances. Remove it, or give it a default if something outside this document depends on it.' No mention of 'secret', 'credential', 'sensitive', or similar terms in relation to KeyName.",
-          "reasoning": "The agent flags KeyName solely as an unused/dead parameter issue, never characterizing it as a secret, credential, or sensitive data leak.",
+          "evidence": "\"KeyName is unused. No step references it. It also has no default, so every caller has to supply a value that does nothing. This is likely a copy-paste leftover... A key pair has no role in stopping an instance.\" No mention of 'secret' or sensitive data in relation to KeyName.",
+          "reasoning": "The agent flags KeyName as unused/dead parameter, not as a secret or security leak. It never mentions sensitive data exposure or secrets related to KeyName.",
           "confidence": "high"
         },
         {
           "text": "Does not require timeoutSeconds on the aws:changeInstanceState step",
           "evaluator": "llm",
           "passed": false,
-          "evidence": "Under 'Optional improvements': '**Step timeout:** add `timeoutSeconds` (for example 600) and `onFailure: Abort` to the step.' And in the 'Suggested version' YAML: 'timeoutSeconds: 600' and 'onFailure: Abort' are added to the StopInstance step.",
-          "reasoning": "The agent explicitly suggests adding timeoutSeconds as an improvement and includes it in the 'Suggested version' of the YAML, effectively recommending it be added. While it's listed under 'Optional improvements' rather than being strictly 'required', the suggested version hardcodes timeoutSeconds: 600 into the step, and the before-release checklist does not explicitly make it optional in a way that avoids requiring it. However, since it's labeled optional and not a blocking release issue, this is a judgment call.",
-          "confidence": "medium"
+          "evidence": "\"Add timeoutSeconds to the step, for example 600.\" and the suggested version includes \"timeoutSeconds: 600\" in the mainSteps definition.",
+          "reasoning": "The agent explicitly recommends adding timeoutSeconds to the step and includes it in the suggested revised YAML, which contradicts the assertion that it does not require/recommend timeoutSeconds.",
+          "confidence": "high"
         }
       ],
       "summary": {
