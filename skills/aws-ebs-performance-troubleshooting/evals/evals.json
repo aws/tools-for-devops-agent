@@ -1,0 +1,172 @@
+{
+  "skill_name": "aws-ebs-performance-troubleshooting",
+  "evals": [
+    {
+      "id": "gp2-burst-credits-exhausted",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Disk writes on instance app-server-01 became very slow in the last 30 minutes. Is the disk the cause? Why, and what should I do? Look into it here in chat, don't open an investigation.",
+      "expected_output": "Answers Yes. Identifies the gp2 data volume whose BurstBalance reached 0 and whose IOPS then stayed flat at its baseline of 3 IOPS per GiB, and gives the time it happened. Rules out the instance EBS limit, a stall and a change in the account with values. Recommends moving the volume to gp3 or a larger gp2 volume and an alarm on BurstBalance, without offering to make the change. No support case.",
+      "assertions": [
+        "The response states that the gp2 volume used up its burst credits and dropped to its baseline IOPS, with the time",
+        "The response cites BurstBalance at 0 as the evidence for the timing",
+        "The response recommends gp3 or a larger gp2 volume, and an alarm on BurstBalance",
+        "The response says the application waits longer than the CloudWatch average latency shows",
+        "The response does not offer to modify the volume on the user's behalf (advising the user how to change it is fine)",
+        "The response does not recommend an AWS Support case",
+        {
+          "text": "BurstBalance is named",
+          "evaluator": "regex",
+          "pattern": "BurstBalance"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "pattern": "\\b\\d{12}\\b",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "instance-ebs-throughput-limit",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Disk writes on all data volumes of instance app-server-01 became very slow at the same time in the last 30 minutes. Is the disk the cause? Why, and what should I do? Look into it here in chat, don't open an investigation.",
+      "expected_output": "Answers Partly: the instance's EBS throughput limit, not the volumes. Cites InstanceEBSThroughputExceededCheck at 1, EBSByteBalance% at 0, the instance total flat at the instance type's limits, and each volume under its own limit. Recommends an instance type with a higher EBS baseline or less throughput, and an alarm on EBSByteBalance%. Does not recommend more volumes or higher volume IOPS or throughput.",
+      "assertions": [
+        "The response identifies the instance EBS limit as the cause, not the volumes",
+        "The response cites InstanceEBSThroughputExceededCheck or the instance total throughput against the instance type's limit",
+        "The response shows that each volume stayed under its own limit",
+        "The response does not recommend adding volumes or raising volume IOPS or throughput on the same instance",
+        "The response says the observed throughput at the limit is a minimum, and sizes the fix above it",
+        "The response gives the latency before and after the slowdown as measured, without calling it unchanged if it rose",
+        "The response says EBS is only partly the cause: the volumes are within their own limits and the instance's EBS bandwidth limit is the bottleneck (the exact wording does not matter, the word Partly is not required)",
+        {
+          "text": "EBSByteBalance% is named",
+          "evaluator": "regex",
+          "pattern": "EBSByteBalance"
+        }
+      ]
+    },
+    {
+      "id": "fis-pause-io-stall",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Disk writes on instance app-server-01 hang since a few minutes ago. Is the disk the cause? Why, and what should I do? Look into it here in chat, don't open an investigation.",
+      "expected_output": "Answers Partly. Identifies the running AWS FIS experiment and its PauseVolumeIO action on the data volume as the cause, a change made in the account, not an AWS fault. Shows the stall evidence (VolumeStalledIOCheck at 1, io-performance stalled, attached EBS status check failed, queue above 0 with no completed ops). Gives the time the pause ends. Advises waiting for the experiment to end or stopping it. No support case, no detach, no stop and start.",
+      "assertions": [
+        "The response names the AWS FIS experiment or the PauseVolumeIO call as the cause",
+        "The response does not attribute the stall to an AWS-side fault",
+        "The response gives the time the pause ends, from the action start and its duration",
+        "The response does not recommend force-detaching, detaching, reattaching, or stopping and starting the instance",
+        "The response does not recommend or offer to open an AWS Support case",
+        "The response does not offer to stop the experiment on the user's behalf (advising the user to wait or to stop it themselves is fine)",
+        "The response states that AWS Health was checked and what it found (for example no relevant events), or why it could not be checked",
+        {
+          "text": "PauseVolumeIO is named",
+          "evaluator": "regex",
+          "pattern": "PauseVolumeIO"
+        },
+        "The response says the stall shows on the EBS volume but the cause is the AWS FIS experiment, a change made in the account, not an EBS fault (the exact wording does not matter, the word Partly is not required)"
+      ]
+    },
+    {
+      "id": "fis-pause-io-stall-investigation",
+      "task_type": "investigation",
+      "should_trigger": true,
+      "prompt": "Disk writes on instance app-server-01 hang since a few minutes ago. Is the disk the cause? Why, and what should I do?",
+      "expected_root_cause": "The I/O stall on the data volume is caused by an AWS FIS experiment in the account that paused the volume's I/O (PauseVolumeIO), not by an EBS fault. The stall signals (VolumeStalledIOCheck, io-performance stalled, failed attached EBS status check) are the effect. The mitigation is to let the experiment end or stop it, with no support case and no detach.",
+      "assertions": [
+        "The root cause names the AWS FIS experiment or PauseVolumeIO",
+        "The root cause does not blame an AWS-side or backend fault",
+        "The mitigation does not include detaching the volume or stopping and starting the instance",
+        "The mitigation does not include an AWS Support case",
+        {
+          "text": "AWS FIS is named",
+          "evaluator": "regex",
+          "pattern": "(?i)\\b(FIS|Fault Injection)\\b"
+        }
+      ]
+    },
+    {
+      "id": "fis-latency-injection",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Disk writes on instance app-server-01 became very slow a few minutes ago. Is the disk the cause? Why, and what should I do? Look into it here in chat, don't open an investigation.",
+      "expected_output": "Answers Partly. Identifies the running AWS FIS experiment and its InjectVolumeIOLatency action as the cause. Explains that IOPS fell because each I/O takes longer (I/Os in flight divided by latency), not because demand fell. Rules out a stall (VolumeStalledIOCheck at 0, volume status ok) and the volume and instance limits. Gives the end time. No support case.",
+      "assertions": [
+        "The response names the AWS FIS experiment or the InjectVolumeIOLatency call as the cause",
+        "The response explains that the IOPS drop comes from the added latency, not from lower demand",
+        "The response rules out a stall with VolumeStalledIOCheck or the volume status",
+        "The response gives the time the injection ends",
+        "The response does not offer to stop the experiment on the user's behalf (advising the user to wait or to stop it themselves is fine)",
+        {
+          "text": "The latency injection action is named",
+          "evaluator": "regex",
+          "pattern": "(?i)InjectVolumeIOLatency|volume-io-latency|inject\\w*\\s.{0,40}latency|latency injection"
+        },
+        "The response says the slowdown shows on the EBS volume but the cause is the AWS FIS experiment, a change made in the account, not an EBS fault (the exact wording does not matter, the word Partly is not required)"
+      ]
+    },
+    {
+      "id": "gp3-volume-iops-limit",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Disk writes on instance app-server-01 became very slow in the last 15 minutes. Is the disk the cause? Why, and what should I do? Look into it here in chat, don't open an investigation.",
+      "expected_output": "Answers Yes. Identifies the gp3 volume flat at its provisioned IOPS with VolumeIOPSExceededCheck at 1, and the instance well under its EBS IOPS limit. Says CloudWatch latency looks low but the application waits longer. Says the observed IOPS is a minimum and recommends raising the provisioned IOPS above it, checking the instance limit first. No support case and no offer to make the change.",
+      "assertions": [
+        "The response identifies the gp3 volume at its provisioned IOPS limit",
+        "The response cites VolumeIOPSExceededCheck",
+        "The response checks the instance EBS IOPS limit and says it is not reached",
+        "The response says the application waits longer than CloudWatch latency shows",
+        "The response says real demand may be higher than the observed IOPS and recommends raising provisioned IOPS above it",
+        "The response does not offer to modify the volume on the user's behalf (advising the user how to change it is fine)",
+        {
+          "text": "VolumeIOPSExceededCheck is named",
+          "evaluator": "regex",
+          "pattern": "VolumeIOPSExceededCheck"
+        }
+      ]
+    },
+    {
+      "id": "snapshot-initialization",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Reads on the newest data volume of instance app-server-01 became very slow a few minutes after we attached it. Is the disk the cause? Why, and what should I do? Look into it here in chat, don't open an investigation.",
+      "expected_output": "Answers Yes. Identifies that the volume was created from a snapshot without fast snapshot restore and is still initializing, so first reads load blocks from Amazon S3. Explains that the degraded io-performance status is expected during initialization. Recommends reading all blocks (dd or fio), or fast snapshot restore or a provisioned initialization rate for future restores. No support case.",
+      "assertions": [
+        "The response identifies snapshot initialization (lazy loading from Amazon S3) as the cause",
+        "The response checks fast snapshot restore and reports it is not enabled",
+        "The response explains the degraded io-performance status as expected during initialization",
+        "The response recommends pre-reading the volume or fast snapshot restore or a provisioned initialization rate",
+        "The response does not recommend an AWS Support case",
+        {
+          "text": "Fast snapshot restore is named",
+          "evaluator": "regex",
+          "pattern": "(?i)fast snapshot restore|\\bFSR\\b"
+        }
+      ]
+    },
+    {
+      "id": "negative-s3-bucket-protection",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "Is my S3 bucket protected against accidental deletion?",
+      "expected_output": "Answers about S3 bucket protection (versioning, MFA delete, Object Lock, bucket policies) without loading the EBS performance troubleshooting skill.",
+      "assertions": [
+        "The response is about S3 bucket protection, not EBS performance"
+      ]
+    },
+    {
+      "id": "negative-ebs-cost-review",
+      "task_type": "chat",
+      "should_trigger": false,
+      "prompt": "List my unattached EBS volumes and what they cost each month.",
+      "expected_output": "Lists unattached EBS volumes and their cost without loading the EBS performance troubleshooting skill, because this is a cost and configuration review, not a performance problem.",
+      "assertions": [
+        "The response lists unattached volumes or says there are none",
+        "The response does not diagnose I/O performance"
+      ]
+    }
+  ]
+}

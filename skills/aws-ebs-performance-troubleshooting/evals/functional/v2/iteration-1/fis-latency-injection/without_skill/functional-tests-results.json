@@ -1,0 +1,89 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "fis-latency-injection",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to identify an AWS FIS (Fault Injection Simulator) experiment running the InjectVolumeIOLatency action as the root cause, explain the IOPS-vs-latency math (IOPS = I/Os in flight / latency, so IOPS drops because each I/O takes longer, not because demand dropped), rule out a stall via VolumeStalledIOCheck=0 and volume status ok, cite volume/instance limits as ruled out, and give the experiment's end time \u2014 with no support case opened.\n\nThe agent's actual response reaches a different conclusion entirely: it attributes the slowdown to a 'post-burst IOPS saturation' pattern where the volume hit its 3,000 provisioned IOPS ceiling and is now working through a backlog, unrelated to any FIS experiment. It never mentions AWS FIS, InjectVolumeIOLatency, the I/Os-in-flight/latency relationship, VolumeStalledIOCheck, or a specific end time for an injected fault. Instead it recommends checking for a writer process and potentially bumping provisioned IOPS \u2014 a fundamentally different diagnosis and remediation path.\n\nWhile the agent does avoid opening a support case/investigation (satisfying that minor constraint) and does rule out volume/instance modifications via CloudTrail, the core causal finding is wrong and omits all the FIS-specific details required by the expected output.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names the AWS FIS experiment or the InjectVolumeIOLatency call as the cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response attributes the issue to a 'classic post-burst saturation pattern' and 'write burst' hitting IOPS ceiling, with 'no volume/instance modifications in CloudTrail' ruling out changes. There is no mention of AWS FIS, fault injection experiment, or InjectVolumeIOLatency anywhere in the output.",
+          "reasoning": "The agent explicitly attributes the cause to organic IOPS saturation from a write burst, not to any FIS experiment or injected latency API call. This is a fundamentally different causal explanation.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains that the IOPS drop comes from the added latency, not from lower demand",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'the volume is now running ~99-100% busy while only serving a trickle of actual throughput (~2-12 MB/s, nowhere near its 125 MiB/s cap)' and explains it as 'still working through the backlog' from a prior burst, i.e., it frames low throughput as due to backlog clearing, not due to added latency reducing IOPS capacity.",
+          "reasoning": "The assertion requires the response to explain IOPS drop as caused by added latency (consistent with an injected-latency scenario), but the agent instead explains it via backlog/post-burst saturation, not latency-induced throughput reduction from an external injection.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response rules out a stall with VolumeStalledIOCheck or the volume status",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not mention VolumeStalledIOCheck or EBS volume status checks anywhere. It mentions CloudTrail, EBSIOBalance%, and other volumes being idle, but no explicit mention of stalled I/O check or volume status.",
+          "reasoning": "There is no reference to ruling out a stall via VolumeStalledIOCheck or volume status metrics in the output, so this specific claim cannot be substantiated.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response gives the time the injection ends",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response gives a start time ('At 22:51Z a write burst slammed data-02') and suggests monitoring 'for the next 15-30 min' but does not provide any specific end time for an injection or experiment.",
+          "reasoning": "No end time for any injection is given since the response doesn't even acknowledge an injection/experiment exists; it only gives a start time for the burst and a vague monitoring window.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not offer to stop the experiment on the user's behalf (advising the user to wait or to stop it themselves is fine)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent offers 'I can do this for you if you want' regarding bumping provisioned IOPS/throughput, and asks 'Want me to bump the provisioned IOPS/throughput on data-02, or pull the instance's recent write activity' \u2014 it does not offer to stop any experiment.",
+          "reasoning": "Since the agent's narrative does not involve an experiment at all, it never offers to stop one; its offers are strictly about increasing IOPS or investigating further, which satisfies the assertion's intent (no offer to stop an experiment on user's behalf).",
+          "confidence": "high"
+        },
+        {
+          "text": "InjectVolumeIOLatency is named",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The answer starts with Partly",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 6,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 7,
+        "pass_rate": 0.1429
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m35s",
+    "cost": "$1.79",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}
