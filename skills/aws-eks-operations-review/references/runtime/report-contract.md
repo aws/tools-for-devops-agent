@@ -111,7 +111,7 @@ Before rendering the response, confirm:
 
 - All eight mandatory sections plus the header are present, in order, and non-empty; §3 row count and §4 block count each equal the FAIL count; §5 row count equals the selected ID count.
 - All 49 discovery areas have exactly one status.
-- A full review includes all **288 core rows**: Operations 41, Resilience 26, Security 46, Scalability 30, Performance 19, Observability 26, Networking 33, Cost 33, Control Plane 20, AWS API 14.
+- A full review includes all **289 core rows**: Operations 41, Resilience 27, Security 46, Scalability 30, Performance 19, Observability 26, Networking 33, Cost 33, Control Plane 20, AWS API 14.
 - Cost is A1–A26 + AM1–AM7. Control Plane is CP1–CP11 + CP-M1–CP-M6 + CPM1–CPM3. CP1–CP25 query IDs do not become rows; Cluster Insights is AX1.
 - All nine pillars are graded for a full review, including mandatory Control Plane Health and Networking.
 - Each selected unit's non-kubectl source attempts are represented.

@@ -35,7 +35,7 @@ Compare exact ID sets, not only counts. Record missing, extra, and duplicate IDs
 | Unit | Required | Actual | Missing / extra / duplicate | Pass? |
 |---|---:|---:|---|---|
 | Operations | 41 | ___ | ___ | ☐ |
-| Resilience & HA | 26 | ___ | ___ | ☐ |
+| Resilience & HA | 27 | ___ | ___ | ☐ |
 | Security | 46 | ___ | ___ | ☐ |
 | Scalability | 30 | ___ | ___ | ☐ |
 | Performance | 19 | ___ | ___ | ☐ |
@@ -44,7 +44,7 @@ Compare exact ID sets, not only counts. Record missing, extra, and duplicate IDs
 | Cost / Architecture | 33 | ___ | ___ | ☐ |
 | Control Plane Health | 20 | ___ | ___ | ☐ |
 | AWS-API & Cluster Insights | 14 | ___ | ___ | ☐ |
-| **TOTAL CORE** | **288** | ___ | ___ | ☐ |
+| **TOTAL CORE** | **289** | ___ | ___ | ☐ |
 
 ## 4 — ID integrity and definition resolution
 
@@ -130,7 +130,7 @@ Skip this section with `overlays: none` when no overlay was requested.
 ## Gate result
 
 - Areas attempted: ___ / 49
-- Core IDs graded: ___ / expected selected core IDs (288 for a full review)
+- Core IDs graded: ___ / expected selected core IDs (289 for a full review)
 - Conditional IDs graded: ___ / expected ___
 - FAIL blocks complete: ___ / ___
 - Mandatory report sections present and in order: ___ / 8 (plus header ☐)

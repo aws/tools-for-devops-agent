@@ -6,7 +6,7 @@ This compact identity manifest is authoritative for scorecard membership and cou
 | Unit | Count | Definition | Exact IDs |
 |---|---:|---|---|
 | Operations | 41 | `../pillars/operations.md` | Op1,Op2,Op3,Op4,Op5,Op6,Op7,Op8,Op9,Op10,Op11,Op12,Op13,Op20,Op21,Op22,Op23,Op24,Op26,Op27,Op28,Op14,Op15,Op16,Op17,Op25,Op29,Op18,Op19,OpM1,OpM2,OpM3,OpM4,OpM5,OpM6,OpM7,OpM8,OpM9,Op30,Op31,Op32 |
-| Resilience & HA | 26 | `../pillars/resilience.md` | R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11,R12,R13,R14,R15,R16,R17,R18,R19,R20,R21,R22,RM1,RM2,RM3,RM4 |
+| Resilience & HA | 27 | `../pillars/resilience.md` | R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11,R12,R13,R14,R15,R16,R17,R18,R19,R20,R21,R22,R23,RM1,RM2,RM3,RM4 |
 | Security | 46 | `../pillars/security.md` | S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11,S12,S13,S14,S15,S16,S17,S18,S19,S20,S21,S22,S23,S24,S25,S26,S27,S28,S29,S30,S31,S32,S33,S34,S35,S36,SM1,SM2,SM3,SM4,SM5,SM6,SM7,S37,S38,S39 |
 | Scalability | 30 | `../pillars/scalability.md` | Sc1,Sc2,Sc3,Sc4,Sc5,Sc6,Sc7,Sc8,Sc9,Sc10,Sc11,Sc12,Sc22,Sc16,Sc17,Sc18,Sc19,Sc20,Sc21,Sc23,Sc13,Sc14,Sc15,ScM1,ScM2,ScM3,ScM4,ScM5,ScM6,ScM7 |
 | Performance | 19 | `../pillars/performance.md` | P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12,P13,P14,P15,P16,PM1,PM2,PM3 |
@@ -15,7 +15,7 @@ This compact identity manifest is authoritative for scorecard membership and cou
 | Cost / Architecture | 33 | `../pillars/cost-architecture.md` | A1,A2,A5,A6,A7,A8,A13,A14,A15,A23,A3,A4,A12,A16,A17,A18,A9,A10,A11,A19,A20,A21,A22,A24,A25,A26,AM1,AM2,AM3,AM4,AM5,AM6,AM7 |
 | Control Plane Health | 20 | `../pillars/control-plane.md` | CP1,CP2,CP3,CP4,CP5,CP6,CP7,CP8,CP9,CP10,CP11,CP-M1,CP-M2,CP-M3,CP-M4,CP-M5,CP-M6,CPM1,CPM2,CPM3 |
 | AWS API / Insights | 14 | `../aws-api-checks.md` | AX1,AX2,AX3,AX4,AX8,AX5,AX6,AX9,AX7,AX10,AX11,AX12,AX13,AX14 |
-| **Core total** | **288** | | |
+| **Core total** | **289** | | |
 
 ## Conditional manifests
 
