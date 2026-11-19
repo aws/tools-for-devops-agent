@@ -57,6 +57,7 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableSageMakerAIOpsReview` | `sagemaker-ai-ops-review` | `savingsplans:DescribeSavingsPlans` |
 | `EnableLiveStreamingEventReadinessReview` | `live-streaming-event-readiness-review` | `mediatailor:ListPlaybackConfigurations`, `mediatailor:GetPlaybackConfiguration`, `mediatailor:ListPrefetchSchedules`, `route53-recovery-cluster:ListRoutingControls` |
 | `EnableEosCostAnalysis` | `eos-cost-analysis` | `pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`. Resource discovery is already covered by the managed policy |
+| `EnableBedrockKbDiagnosis` | `bedrock-kb-diagnosis` | `bedrock:GetIngestionJob` on this account's knowledge bases; `s3:ListBucket` on the buckets in `BedrockKbSourceBucketArns` (if set) |
 | `EnableEksOperationReview` | `aws-eks-operations-review` | None — already covered by the managed policy |
 | `EnableEnrichWithSecurityAgent` | `enrich-with-aws-security-agent` | None — already covered by the managed policy |
 | `EnableCrmInvestigationGuidelines` | `crm-production-investigation-guidelines` | None — already covered by the managed policy |
@@ -84,6 +85,7 @@ role has no `s3:PutObject`; without the add-on the skill falls back to
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `AllowedRegions` | `''` | Comma-delimited Region list. Empty means all Regions. When set, adds a `Deny` on every action outside those Regions, excepting the global services `health`, `support`, and `ce`. |
+| `BedrockKbSourceBucketArns` | `''` | Comma-delimited S3 data source bucket ARNs for `bedrock-kb-diagnosis` staleness/file checks. Empty omits the `s3:ListBucket` grant. |
 
 ## Always applied
 
