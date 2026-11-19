@@ -375,7 +375,7 @@ mcp = FastMCP(
 
 @mcp.tool()
 def execute_health_query(cluster_identifier: str, category: str, query_id: str,
-                         database: str = None, secret_arn: str = None) -> str:
+                         database: str | None = None, secret_arn: str | None = None) -> str:
     """
     Run a predefined health check query against an Aurora cluster.
     Engine and credentials are auto-detected from the cluster — no config needed.
@@ -428,7 +428,7 @@ def list_health_queries(engine: str = "mysql") -> str:
 
 @mcp.tool()
 def run_category_check(cluster_identifier: str, category: str,
-                       database: str = None, secret_arn: str = None) -> str:
+                       database: str | None = None, secret_arn: str | None = None) -> str:
     """
     Run all health checks in a category against an Aurora cluster (engine auto-detected).
 
@@ -457,7 +457,7 @@ def run_category_check(cluster_identifier: str, category: str,
 
 @mcp.tool()
 def run_full_health_check(cluster_identifier: str,
-                          database: str = None, secret_arn: str = None) -> str:
+                          database: str | None = None, secret_arn: str | None = None) -> str:
     """
     Run key queries from all categories against an Aurora cluster (engine auto-detected).
 
