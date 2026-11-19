@@ -1,10 +1,12 @@
 ---
 name: postgresql-dba
-description: "Provides read-only diagnostic guidance for Amazon RDS for PostgreSQL and Aurora PostgreSQL through the companion PostgreSQL DBA diagnostic server's 9 tools and 55 predefined queries. Use for health checks, on-screen customer-shareable reports, shared_buffers and memory sizing, parameter tuning, vacuum and transaction ID analysis, index review, SQL plans, query fingerprints, replication, connections, and lock investigation. Health-check requests call MCP report_format=markdown and the complete validated report is presented on screen in the AWS DevOps Agent Output panel."
+description: "Use this skill when investigating or health-checking Amazon RDS for PostgreSQL and Aurora PostgreSQL through the companion PostgreSQL DBA diagnostic server's 9 tools and 55 predefined queries. Use for health checks, on-screen customer-shareable reports, shared_buffers and memory sizing, parameter tuning, vacuum and transaction ID analysis, index review, query fingerprints, replication, connections, and lock investigation. Health-check requests call MCP report_format=markdown and the complete validated report is presented on screen in the AWS DevOps Agent Output panel."
 metadata:
-  version: "1.18.0"
+  version: "1.19.0"
   author: "viveksingh112"
-  aws-devops-agent-skills.technical-domains: rds,aurora,postgresql,database,performance,memory,shared_buffers,cache-sizing,parameter-tuning,vacuum,indexes,replication
+  summary: "Read-only, allowlisted diagnostic guidance for Amazon RDS for PostgreSQL and Aurora PostgreSQL that interprets evidence from the companion PostgreSQL DBA MCP server (health checks, memory and parameter sizing, vacuum/XID, indexes, replication, connections, and locks) under fail-closed evidence and recommendation rules."
+  aws-devops-agent-skills.agent-types: "Chat tasks, Incident RCA"
+  aws-devops-agent-skills.technical-domains: "Databases, Operations"
 ---
 
 # PostgreSQL DBA diagnostic guidance
@@ -225,8 +227,8 @@ its trend and business impact instead of applying a universal threshold.
 
 ## Workflow 2: vacuum, dead tuples, and transaction ID age
 
-For vacuum, dead-tuple, transaction-ID, index, SQL-plan, replication, connection,
-lock, or pre-upgrade investigations, retrieve and follow the applicable procedure
+For vacuum, dead-tuple, transaction-ID, index, statement-performance, replication,
+connection, lock, or pre-upgrade investigations, retrieve and follow the applicable procedure
 from the reference artifact titled
 `postgresql-dba: investigation-workflows` (source file
 `references/investigation-workflows.md`). The safety, evidence, query-preview,
@@ -403,8 +405,8 @@ AWS reference:
 
 ## Workflows 4-8: targeted investigations
 
-For index, SQL-plan, replication, connection/lock, and pre-upgrade procedures,
-retrieve and follow the reference artifact titled
+For index, statement-performance, replication, connection/lock, and pre-upgrade
+procedures, retrieve and follow the reference artifact titled
 `postgresql-dba: investigation-workflows` (source file
 `references/investigation-workflows.md`). Do not claim a fingerprint is
 reversible, broaden database privileges for convenience, drop an index or

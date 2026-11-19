@@ -37,7 +37,7 @@ that a new chat is required for an independent snapshot.
 5. If a change is separately approved, assess concurrent-DDL limitations, replication,
    lock behavior, storage, validation, and rollback before execution.
 
-## Statement performance and plan-only EXPLAIN
+## Statement performance
 
 1. Use category 6 when `pg_stat_statements` is enabled and access is approved. Query
    6.1 ranks cumulative `total_exec_time`; this is elapsed execution duration, not CPU
@@ -50,19 +50,10 @@ that a new chat is required for an independent snapshot.
    preview is bounded and redacted, not complete SQL and not a source of bind values.
    Fingerprints are not reversible. Full normalized SQL requires an explicit approved
    lookup outside the current MCP surface.
-4. Call `explain_query` only with one approved complete `SELECT`; never pass a truncated
-   preview. State that plan-only `EXPLAIN` was executed and the underlying `SELECT` was
-   not executed.
-5. Follow the guardrails returned by the MCP:
-   - costs and rows are estimates, not observed runtime facts;
-   - a stable-expression range boundary is not automatically non-sargable;
-   - nested loops are not inherently unscalable;
-   - a sequential scan can be appropriate for a small or nonselective relation;
-   - do not generalize one node's row estimate to other nodes;
-   - indexes and rewrites are proposals requiring representative workload validation;
-   - `ANALYZE` is not read-only because it updates statistics.
-6. PostgreSQL planning may evaluate trusted `IMMUTABLE` or `STABLE` expressions. Keep
-   least-privilege object/EXECUTE access and do not broaden privileges for convenience.
+4. Treat `pg_stat_statements` rankings and previews as supporting evidence only.
+   Indexes, rewrites, and other query changes are proposals requiring representative
+   workload validation, and `ANALYZE` is not a read-only follow-up because it updates
+   planner statistics.
 
 ## Replication visibility
 

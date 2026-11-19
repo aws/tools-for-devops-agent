@@ -1,15 +1,17 @@
 # PostgreSQL DBA skill
 
-This AWS DevOps Agent skill provides read-only diagnostic workflows for Amazon RDS for PostgreSQL and Aurora PostgreSQL through the companion PostgreSQL DBA diagnostic server's 10 tools and 55 predefined queries. It routes health checks to a complete validated 26-section Markdown tool result presented on screen, and guides targeted PostgreSQL investigations while enforcing fail-closed evidence and recommendation rules. Reports are delivered on screen only: in AWS DevOps Agent the complete Markdown is available from the expandable Output panel while the managed primary chat may add a summary. There is no downloadable-file or HTML delivery, and the MCP server never writes to S3 or returns a URL.
+This AWS DevOps Agent skill provides read-only diagnostic workflows for Amazon RDS for PostgreSQL and Aurora PostgreSQL through the companion PostgreSQL DBA diagnostic server's 9 tools and 55 predefined queries. It routes health checks to a complete validated 26-section Markdown tool result presented on screen, and guides targeted PostgreSQL investigations while enforcing fail-closed evidence and recommendation rules. Reports are delivered on screen only: in AWS DevOps Agent the complete Markdown is available from the expandable Output panel while the managed primary chat may add a summary. There is no downloadable-file or HTML delivery, and the MCP server never writes to S3 or returns a URL.
 
 The current v1.18 report contract preserves all 26 canonical sections, renders raw evidence followed by at most one natural `Automated DBA Assessment`, suppresses the assessment for collected zero-row sections, and never renders the superseded `Evidence-Based Insight` paragraph. Internal priority and routine no-change fields remain available for validation without appearing in customer prose.
+
+**When to use this skill vs. the other RDS/Aurora skills:** use `postgresql-dba` for deep, database-internal PostgreSQL diagnostics (predefined read-only SQL via the dedicated PostgreSQL DBA MCP: health reports, `shared_buffers`/memory sizing, vacuum/XID, indexes, statement performance, replication, connections, and locks). Use `database-rds-devops` (and its `rds-aidba` MCP) for cross-engine Aurora MySQL **and** Aurora PostgreSQL data-plane checks over the RDS Data API. Use `rds-operation-review` for a control-plane, Well-Architected operational review driven by native RDS/Aurora/CloudWatch APIs rather than in-database queries.
 
 > **Non-production disclaimer:** This skill is sample code and is not intended for production use without additional security review, operational review, and testing. Validate it with representative resources in a non-production environment first.
 
 ## Prerequisites
 
 - An AWS DevOps Agent Space authorized for non-production validation
-- The companion [PostgreSQL DBA MCP](https://github.com/aws/tools-for-devops-agent/blob/main/mcp/postgresql-dba-mcp/README.md) server deployed and registered with exactly its 10 read-only tools
+- The companion [PostgreSQL DBA MCP](https://github.com/aws/tools-for-devops-agent/blob/main/mcp/postgresql-dba-mcp/README.md) server deployed and registered with exactly its 9 read-only tools
 - An allowlisted RDS for PostgreSQL or Aurora PostgreSQL target, database, and endpoint
 - A dedicated least-privilege PostgreSQL monitoring login configured by the MCP deployment
 - Agent Space access to the intended Chat and investigation experiences
@@ -22,7 +24,7 @@ Create upload artifacts from tracked package files only; do not recursively pack
 
 ## When it activates
 
-The description is designed to trigger for PostgreSQL health checks, upgrade readiness, vacuum and bloat analysis, parameter and memory sizing, index review, SQL plans, replication, connections, and lock investigation. Operators should use natural language and should not need to name the skill.
+The description is designed to trigger for PostgreSQL health checks, upgrade readiness, vacuum and bloat analysis, parameter and memory sizing, index review, statement performance, replication, connections, and lock investigation. Operators should use natural language and should not need to name the skill.
 
 Example prompts:
 
@@ -31,7 +33,7 @@ Example prompts:
 - `Check whether this Aurora PostgreSQL cluster is ready for a major version upgrade.`
 - `Analyze shared_buffers for this PostgreSQL instance.`
 - `Investigate vacuum and transaction ID risk.`
-- `Review expensive PostgreSQL statements and explain the approved SELECT without running it.`
+- `Review expensive PostgreSQL statements and query fingerprints.`
 
 A health-check prompt produces the complete on-screen Markdown report. The five-query quick path requires explicit user intent. There is no downloadable-file or HTML delivery.
 
@@ -74,5 +76,4 @@ The root `passed` field in `evals/report.json` must be `true`. Review every audi
   append managed commentary in the primary chat, or deduplicate a repeated request
   in the same conversation. Start a new chat for an independent rerun; custom
   skills cannot reliably override the managed final-response format.
-- Plan-only `EXPLAIN` executes planning but does not execute the underlying `SELECT`; PostgreSQL planning-time function evaluation remains a documented risk that requires a separate security review before enabling this optional surface.
 - Production use requires the documented MCP security and operational approval process.

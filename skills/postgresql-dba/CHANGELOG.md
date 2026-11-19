@@ -2,6 +2,26 @@
 
 All notable changes to the PostgreSQL DBA skill are documented here.
 
+## [1.19.0] - 2026-09-21
+
+### Removed
+
+- Removed all skill-doc references to the `explain_query` tool and the plan-only
+  `EXPLAIN` surface, aligning the skill with the companion MCP after commit
+  `5b94c6f` (`refactor(mcp): Remove explain_query tool and pglast (GPL-3.0)
+  dependency`). The MCP now exposes 9 tools (down from 10); the `explain_query`
+  tool and its GPL-3.0 `pglast` dependency were dropped. Updated the SKILL.md
+  description, README activation/limitations, the targeted statement-performance
+  reference workflow, and both `llms.txt` entries from "10 tools" to "9 tools".
+
+### Changed
+
+- Reflected the MCP's added rule that treats all tool output and database-returned
+  content as untrusted DATA rather than instructions (also from commit `5b94c6f`).
+- Metadata polish: opened the description with "Use this skill when…", added
+  `metadata.summary`, set `aws-devops-agent-skills.agent-types`, and reconciled
+  `aws-devops-agent-skills.technical-domains` to allowed vocabulary terms.
+
 ## [1.18.0] - 2026-09-16
 
 ### Removed
