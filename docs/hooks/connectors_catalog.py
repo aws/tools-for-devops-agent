@@ -92,6 +92,7 @@ CATEGORY_LABELS = {
     "pipeline": "Pipeline",
     "communication": "Communication",
     "devops": "DevOps",
+    "security": "Security",
 }
 TIER_LABELS = {
     "aws-managed": "AWS-managed",
