@@ -134,17 +134,17 @@ statistic, period and window stated.
 ## Scope and related skills
 
 This skill covers Bedrock spend, Provisioned Throughput, quotas, throttling capacity and the cost of
-invocation-log storage. Questions outside that scope are routed to the skill that owns them:
+invocation-log storage. Questions outside that scope belong to these skills. Related skills are optional: when one is installed this skill uses it for that part, otherwise it runs a short fallback check and recommends installing it.
 
 | Question | Skill |
 |---|---|
-| Bedrock configuration, invocation logging setup, IAM scope of `InvokeModel` | `llmops-bedrock-configuration` |
-| Guardrails configuration (Guardrail spend stays with this skill) | `llmops-guardrails` |
-| Knowledge bases and RAG | `llmops-rag-knowledge` |
-| Bedrock Agents and AgentCore | `llmops-agent-runtime` |
-| SageMaker endpoints, training, batch, evaluation and model registry | the `llmops-sagemaker-*` skills |
-| Throttling or errors happening right now | `llmops-incident-triage` |
-| Model quality after a model change | `llmops-quality-evaluation` |
+| Bedrock configuration, invocation logging setup, IAM scope of `InvokeModel`, knowledge bases and RAG | `opsai-bedrock-review` |
+| Guardrails configuration (Guardrail spend stays with this skill) | `opsai-bedrock-security` |
+| Bedrock Agents and AgentCore | `opsai-bedrock-agentcore` |
+| SageMaker endpoints, batch and endpoint cost | `opsai-sagemaker-inference` |
+| SageMaker training and model registry | `opsai-sagemaker-training` |
+| Throttling or errors happening right now | `opsai-incident-triage` |
+| Model quality after a model change | `opsai-ml-eval-check` |
 | Price quotes for future usage | [AWS Pricing Calculator](https://calculator.aws/) |
 
 ## Prerequisites

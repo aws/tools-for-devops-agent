@@ -57,9 +57,11 @@ The first two fire most often:
 - **A failure with no LLM in the failing path**, however the symptom was phrased.
 - The **compute beneath a self-hosted model** — instances, containers, cluster scheduling → the host
   investigation. This library has no check for it.
-- Configuration **posture reviews** → `llmops-bedrock-configuration` (+ the focused `llmops-*` skills).
-- **Access-denied** diagnosis (IAM/SCP/marketplace) → `llmops-bedrock-configuration`.
-- **Quality regressions** / eval gating → `llmops-quality-evaluation`.
+- Configuration **posture reviews** → `opsai-bedrock-review` (+ the other `opsai-*` skills).
+- **Access-denied** diagnosis (IAM/SCP/marketplace) → `opsai-bedrock-review`.
+- **Quality regressions** / eval gating → `opsai-ml-eval-check`.
+
+Related skills are optional: when one is installed this skill uses it for that part, otherwise it runs a short fallback check and recommends installing it.
 
 ## Prerequisites
 
@@ -97,8 +99,8 @@ the repo-management files excluded.
   or ours?" → binds `bedrock`, runs the classifier, checks AWS Health + server-error rate across
   models, returns `locus=PROVIDER transience=TRANSIENT`.
 - "Throttling is spiking but our config looks right." → signature match on climbing throttles,
-  Step 6 confirms client-error dominance → `locus=APPLICATION`, names `llmops-capacity-cost` as the
-  quota-posture owner.
+  Step 6 confirms client-error dominance → `locus=APPLICATION`, names `capacity-and-quota` as the
+  quota-posture owner track.
 - "Our agent is returning empty responses." → **binds first.** On `agentcore`: resolve alias→version,
   check guardrail `InvocationsIntervened` and `stopReason`. On a self-hosted loop there is no alias,
   and the loop's own logs are the source.

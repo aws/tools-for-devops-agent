@@ -25,18 +25,18 @@ It resolves which service is actually in play first (the diagnosis diverges), th
 ordered procedure. Every finding carries an AWS-documented `check-id` (LLM-AGT-### / LLM-AC-###), a
 severity, and a citation. The skill never invents a threshold and never mutates a resource.
 
-This is a skill for the `llmops-agent` custom agent and is fully self-contained — it depends on no other
-skill.
+This skill works on its own: it depends on no other skill.
 
 ### When NOT to use it
 
-- Bedrock model configuration & invocation logging → `llmops-bedrock-configuration`
-- Guardrail policy content → `llmops-guardrails`
-- Quota & cost → `llmops-capacity-cost`
-- Knowledge bases / RAG → `llmops-rag-knowledge`
-- SageMaker for LLMs → the `llmops-sagemaker-*` skills: `llmops-sagemaker-inference-endpoints` (real-time endpoints), `llmops-sagemaker-training`, `llmops-sagemaker-serverless-async`, `llmops-sagemaker-batch`, `llmops-sagemaker-evaluation`, `llmops-sagemaker-model-registry`.
-- Is-this-AWS-or-mine incident triage → `llmops-incident-triage`
-- Model-output quality / evaluation → `llmops-quality-evaluation`
+Related skills are optional: when one is installed this skill uses it for that part, otherwise it runs a short fallback check and recommends installing it.
+
+- Bedrock model configuration, invocation logging and knowledge bases → `opsai-bedrock-review`
+- Guardrail policy content → `opsai-bedrock-security`
+- Quota & cost → `opsai-capacity-cost`
+- SageMaker → `opsai-sagemaker-inference`, `opsai-sagemaker-training`
+- Is-this-AWS-or-mine incident triage → `opsai-incident-triage`
+- Model-output quality / evaluation → `opsai-ml-eval-check`
 
 ## Prerequisites
 
@@ -94,8 +94,8 @@ top level, with the repo-management files excluded.
   (LLM-AC-003) and gateway target config (LLM-AC-004).
 - "No traces are coming from my agent." → checks stage-level OTLP telemetry and trace propagation
   (LLM-AC-005, LLM-AC-006) and structured logs (LLM-AC-007).
-- "Does my agent even have a guardrail attached?" → LLM-AGT-001 (attachment only; policy content routes
-  to `llmops-guardrails`).
+- "Does my agent even have a guardrail attached?" → LLM-AGT-001 (attachment only; policy content is
+  `opsai-bedrock-security`).
 
 ## Author
 

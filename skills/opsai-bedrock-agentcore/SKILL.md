@@ -122,21 +122,21 @@ maintenance-mode coverage.
 |---|---|---|
 | AgentCore runtime will not start / cannot invoke | `ListAgentRuntimes` / `GetAgentRuntime` for status, version, role ARN | `references/checks-agentcore.md` (LLM-AC-001) |
 | Runtime role permission denied | `iam:SimulatePrincipalPolicy` for every action the runtime exercises | `references/checks-agentcore.md` (LLM-AC-001), `references/api-quirks.md` |
-| It is denied even though the role looks right (for example an admin role) | How the caller got its credentials: an assumed-role session can carry a **session policy** passed on `AssumeRole` (`Policy` / `PolicyArns`, visible in the CloudTrail `AssumeRole` event, not in IAM), and the role can have a **permissions boundary** (`iam:GetRole` `PermissionsBoundary`); then effective SCPs via `organizations:ListPoliciesForTarget` / `DescribePolicy` | [Session policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session), `references/checks-agentcore.md` (LLM-AC-002) |
-| An SCP denies `InvokeModel` only when the call goes through an application inference profile, while direct model calls succeed | The SCP `Deny` statement itself (`DescribePolicy`): whether a broad `Resource` wildcard also matches the profile ARN, and whether its `Condition` uses a negated operator (`StringNotEquals`, `StringNotLike`, `ArnNotLike`) on a model-identifying key that is absent or holds a different value for profile requests. A negated operator on an absent key evaluates true, so the deny fires; do not explain it as the SCP failing to cover profile ARNs. Fix: split the deny into narrowly scoped statements per resource type (foundation models, system and application profiles, regions) and test both an approved and a blocked call afterwards | [Condition operators](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html), `references/checks-agentcore.md` (LLM-AC-002) |
+| It is denied even though the role looks right (for example an admin role) | How the caller got its credentials: Full method: [`references/router-details.md`](references/router-details.md) §1 | [Session policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session), `references/checks-agentcore.md` (LLM-AC-002) |
+| An SCP denies `InvokeModel` only when the call goes through an application inference profile, while direct model calls succeed | The SCP `Deny` statement itself (`DescribePolicy`): Full method: [`references/router-details.md`](references/router-details.md) §2 | [Condition operators](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html), `references/checks-agentcore.md` (LLM-AC-002) |
 | Missing VPC endpoint / no private path | `ec2:DescribeVpcEndpoints` for bedrock-runtime, bedrock-agent-runtime, S3, logs, monitoring | `references/checks-agentcore.md` (LLM-AC-003) |
 | Gateway target is failing | `GetAgentGateway` / `ListAgentGateways` and each target's endpoint/credential/schema | `references/checks-agentcore.md` (LLM-AC-004, LLM-AC-008) |
-| A call through a gateway returns 403 / `insufficient_scope` or another token error | The gateway's `authorizerConfiguration.customJWTAuthorizer`: `allowedScopes` is checked only if configured (at least one token scope must match), and the same holds for `allowedClients`. If those lists are empty, the gateway is not enforcing scopes or clients, so do not name its scope check as the cause: the likely sources are the target's own authorization (the MCP server or API behind it) or a stale or different token. Ask the operator to mint a fresh token and decode it (`iss`, `aud`, `client_id`, `scope`, `exp`) against the authorizer config, label the cause a hypothesis until that test separates them, and say a support case may be needed to confirm | [Inbound JWT authorizer](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/inbound-jwt-authorizer.html), `references/checks-agentcore.md` (LLM-AC-004) |
+| A call through a gateway returns 403 / `insufficient_scope` or another token error | The gateway's `authorizerConfiguration.customJWTAuthorizer`: Full method: [`references/router-details.md`](references/router-details.md) §3 | [Inbound JWT authorizer](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/inbound-jwt-authorizer.html), `references/checks-agentcore.md` (LLM-AC-004) |
 | Deploy, create or update of a runtime fails with a credentials or AccessDenied error, while model calls with the same identity work | The deploying identity's policies for `bedrock-agentcore:*` control-plane actions and `iam:PassRole` on the execution role (`bedrock:*` does not cover the `bedrock-agentcore` prefix) | [Runtime permissions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html), `references/checks-agentcore.md` (LLM-AC-001) |
 | Access denied / 403 on an S3 bucket in another account (runtime code artifact or gateway target schema) | Which account owns the bucket vs the runtime/gateway, and the exact S3 field used | `references/api-quirks.md` §15 |
 | HTTP 429 / throttling on invoke, under parallel or load tests, or requests slow down when sent concurrently to one session | Which layer throttled (`InvokeAgentRuntime` 429 with no runtime log line, vs the agent's own model call, gateway or memory) and the call rate vs the documented quota; whether callers mint a new session ID per call; whether concurrent requests share one session | `references/checks-agentcore.md` (LLM-AC-011), `references/api-quirks.md` §16 |
-| A principal in another account cannot invoke, stop sessions on, or use a runtime, gateway or memory; or 429s and active sessions pile up while a cross-account caller stops sessions | For **each action** the caller uses (`InvokeAgentRuntime`, `StopRuntimeSession`, `InvokeGateway`, Memory actions): the caller's identity policy in its own account and the resource-based policy on the resource (`get-resource-policy`; for a runtime both the runtime and the endpoint ARN), plus the error the caller's code got from the call. A missing allow is the cause until read otherwise; do not invent a session-ownership or account-scoping mechanism | `references/checks-agentcore.md` (LLM-AC-014), `references/api-quirks.md` §19 |
-| Cold start, or lost in-memory state between calls | Which session ID the client sends, and in which header for the runtime's protocol | *Runtime sessions* below |
+| A principal in another account cannot invoke, stop sessions on, or use a runtime, gateway or memory; or 429s and active sessions pile up while a cross-account caller stops sessions | For **each action** the caller uses (`InvokeAgentRuntime`, `StopRuntimeSession`, `InvokeGateway`, Memory actions): Full method: [`references/router-details.md`](references/router-details.md) §4 | `references/checks-agentcore.md` (LLM-AC-014), `references/api-quirks.md` §19 |
+| Cold start, or lost in-memory state between calls | Which session ID the client sends, and in which header for the runtime's protocol | [`references/runtime-sessions.md`](references/runtime-sessions.md) |
 | The agent (or an orchestrator and its sub-agents) forgets earlier turns although the session ID is stable; memory branches, long-term records or Memory latency behave unexpectedly | Whether the code writes (`CreateEvent`) and reads (`ListEvents`) memory events per turn, on which memory resource and actor/session scope; for latency, the Memory metrics over the window | `references/checks-agentcore.md` (LLM-AC-012), `references/api-quirks.md` §17 |
 | A Browser tool (or Code Interpreter) session crashes, slows or changes size after running for a while; or a console page or dashboard stays loading in the operator's own web browser | Which browser it is: the managed Browser tool (session age, task count, recording on or off, `viewPort`) or the operator's own browser (does it load in a private window, another browser, for a colleague) | `references/checks-agentcore.md` (LLM-AC-013), `references/api-quirks.md` §18 |
 | No traces from my agent | OTLP / AgentCore Observability config and trace propagation | `references/checks-agentcore.md` (LLM-AC-005, 006, 007), `references/metrics-and-logs.md` |
 | My bedrock agent returns nothing (legacy, Classic) | `GetAgent` for guardrail, model, prompt-override config | `references/checks-agents.md` (LLM-AGT-001) |
-| Agent output changes between turns with the same prompt and config, for example citation or formatting style flips (legacy, Classic) | Treat it as orchestration nondeterminism until a trace shows otherwise: compare `InvokeAgent` traces (`enableTrace`) of a good and a bad turn before naming a mechanism, and say the cause is unconfirmed without them. First lever: pin `temperature` to 0 in the ORCHESTRATION prompt override's `inferenceConfiguration`. Do not blame the knowledge base's citation metadata or the foundation model unless the trace points there | [Advanced prompts](https://docs.aws.amazon.com/bedrock/latest/userguide/advanced-prompts.html), `references/checks-agents.md` (LLM-AGT-005) |
+| Agent output changes between turns with the same prompt and config, for example citation or formatting style flips (legacy, Classic) | Treat it as orchestration nondeterminism until a trace shows otherwise: Full method: [`references/router-details.md`](references/router-details.md) §5 | [Advanced prompts](https://docs.aws.amazon.com/bedrock/latest/userguide/advanced-prompts.html), `references/checks-agents.md` (LLM-AGT-005) |
 | Which agent version is live (legacy, Classic) | `ListAgentAliases` / `GetAgentAlias` resolved to the served version | `references/checks-agents.md` (LLM-AGT-007), `references/api-quirks.md` |
 | Action group lambda is failing (legacy, Classic) | `GetAgentActionGroup` and the executor Lambda role scope | `references/checks-agents.md` (LLM-AGT-002, LLM-AGT-006) |
 | Agent looks idle / is this still used (legacy, Classic) | `AWS/Bedrock/Agents` invocation metrics over the window | `references/checks-agents.md` (LLM-AGT-004), `references/metrics-and-logs.md` |
@@ -297,27 +297,6 @@ Non-negotiable, at every step:
 - "There is a guardrail configured somewhere, so the agent is protected." This skill only checks that a guardrail **is attached** to the agent (LLM-AGT-001); strength is out of scope. An unattached guardrail protects nothing — for strength, follow *Related skills (optional)*.
 - "I'll write the new AgentCore check against `bedrock-agentcore-control`." That namespace is being superseded by `agent-registry-control` for registry operations and is labelled "to be deprecated"; account for the newer namespace before adding checks.
 
-## Runtime sessions (documented facts)
-
-Use these before guessing at session behaviour; cite the pages.
-[Sessions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-sessions.html),
-[Quotas](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/bedrock-agentcore-limits.html).
-
-- Each session gets its own microVM. A new session (and microVM) is created on the first invoke with a
-  new `runtimeSessionId`; reusing the same ID routes later calls to the same microVM and keeps context.
-- The session header depends on the runtime's protocol: **MCP → `Mcp-Session-Id`**; HTTP, A2A and
-  AG-UI → `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`. A wrong or missing header on an MCP runtime
-  means requests are not routed to the same microVM (cold starts, lost in-memory state).
-- Quotas (new session creation 25 TPS, data plane 1,000 TPS, active sessions 5,000 in us-east-1/
-  us-west-2, 2 vCPU / 8 GB per Runtime session) and how to tell which one a 429 hit: **LLM-AC-011**. Throttling
-  with a fresh session ID per call points at the session-creation rate; recommend a stable ID per
-  user/conversation and an alarm below the quota.
-- Idle timeout 15 min (default), maximum lifetime 8 h on microVMs; the next invoke with the same ID
-  provisions a new microVM. A brief retryable HTTP 409 can occur while a session is being provisioned.
-- A session ID only routes calls to the same microVM; the runtime does not store conversation history.
-  In-process state is lost on idle timeout, lifetime end or a new microVM, and is never shared between
-  runtimes. Forgotten turns with a stable session ID: **LLM-AC-012** (AgentCore Memory).
-
 ## Severity Definitions
 
 | Severity | Meaning | Response SLA (derived) |
@@ -368,6 +347,8 @@ reaches into an area listed under *When NOT to Use*, read `references/related-sk
    that skill would have changed the answer, and only once.
 
 ## Appendix — Reference Links
+- [`references/router-details.md`](references/router-details.md): the full first-read method for the longer Router rows.
+- [`references/runtime-sessions.md`](references/runtime-sessions.md): documented AgentCore session facts (microVMs, session headers, quotas, timeouts).
 
 Catalogs and references under `references/`:
 
