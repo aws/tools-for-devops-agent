@@ -27,7 +27,7 @@ One row per FAIL, CIS first then AWS-n. "Fix" is one sentence naming the setting
 ## 4. CIS Amazon EKS Benchmark v1.8.0
 | ID | Type | Control | Status | Evidence |
 |---|---|---|---|---|
-Every control from the controls file, in its order, including the 13 Section 3 rows as Not covered.
+Every control from the controls file, in its order, one row per control ID. Write the 13 Section 3 controls as 13 separate Not covered rows (3.1.1 to 3.1.4, then 3.2.1 to 3.2.9), never as a range.
 
 ## 5. Supplementary AWS checks
 | ID | Check | Status | Evidence |
