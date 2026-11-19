@@ -1,0 +1,145 @@
+{
+  "skill_name": "aws-eks-compliance-checker",
+  "evals": [
+    {
+      "id": "eks-compliance-smoke-test",
+      "should_trigger": false,
+      "prompt": "List the cluster names and regions in this context. No analysis needed.\n\n```json\n{\"clusters\": [{\"name\": \"demo-cluster\", \"region\": \"us-east-1\"}]}\n```",
+      "expected_output": "Lists demo-cluster in us-east-1 exactly as given.",
+      "assertions": [
+        "The response lists demo-cluster with region us-east-1"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-cis-542-restricted-cidr",
+      "should_trigger": true,
+      "prompt": "Run an EKS compliance check on prod-cluster from these values, which I already read with describe-cluster: endpointPrivateAccess=true, endpointPublicAccess=true, publicAccessCidrs=[\"203.0.113.0/24\"]. Give the status of CIS Amazon EKS Benchmark 5.4.1 and 5.4.2 and say which framework rows they feed. No cluster access required.",
+      "expected_output": "CIS 5.4.1 PASS because public access is restricted to 203.0.113.0/24. CIS 5.4.2 FAIL because public access is still enabled, even with restricted CIDRs. Both feed the NIST AC-3/AC-4/AC-6/AC-21/SC-7 and PCI DSS 1.4.4 rows with Security Hub basis (EKS.1).",
+      "assertions": [
+        "The response gives CIS 5.4.1 as PASS",
+        "The response gives CIS 5.4.2 as FAIL because endpointPublicAccess is true, even though the CIDRs are restricted",
+        "The response names PCI DSS 1.4.4 or Security Hub EKS.1 as a framework row fed by these controls",
+        "The response labels the PCI DSS 1.4.4 or NIST EKS.1 mapping basis as Security Hub rather than indicative"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-audit-log-api-only",
+      "should_trigger": true,
+      "prompt": "Run an EKS compliance check for CIS and PCI DSS from this cluster logging config: the api and authenticator log types are enabled and audit is disabled. Give the statuses of CIS 2.1.1, supplementary check AWS-1, and the PCI DSS 10.2.1 row. No cluster access required.",
+      "expected_output": "CIS 2.1.1 FAIL because the audit log type is not enabled; api alone does not satisfy it. AWS-1 (Security Hub EKS.8) FAIL. PCI DSS 10.2.1 FAIL, derived from 2.1.1 and AWS-1, basis Security Hub. Mapping is not an attestation.",
+      "assertions": [
+        "The response gives CIS 2.1.1 as FAIL and says the api log type does not satisfy it",
+        "The response gives AWS-1 as FAIL and links it to Security Hub EKS.8",
+        "The response gives PCI DSS 10.2.1 as FAIL derived from the mapped checks",
+        "The response states the result is not a certification, audit, or attestation"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-denied-read",
+      "should_trigger": true,
+      "prompt": "Run an EKS compliance check for CIS and SOC 2. My reads `kubectl get clusterrolebindings -o json` and `kubectl get clusterroles -o json` both returned Forbidden. What status do CIS 4.1.1 and 4.1.3 get, and what does the SOC 2 CC6.1 row show if every other mapped control passed? No cluster access required.",
+      "expected_output": "CIS 4.1.1 and 4.1.3 are Not assessed with the Forbidden error, never PASS. SOC 2 CC6.1 is Not assessed because a mapped control is Not assessed. The report points to the access entry with AmazonEKSAdminViewPolicy at cluster scope.",
+      "assertions": [
+        "The response gives CIS 4.1.1 and 4.1.3 as Not assessed rather than PASS",
+        "The response gives SOC 2 CC6.1 as Not assessed rather than PASS",
+        "The response recommends an EKS access entry with AmazonEKSAdminViewPolicy at cluster scope"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-section3-not-covered",
+      "should_trigger": true,
+      "prompt": "Run an EKS compliance check and tell me whether CIS 3.2.1 (kubelet anonymous auth) passes on my managed node groups. Just run kube-bench as a Job to find out. What does the compliance check report, and will you run the Job? No cluster access required.",
+      "expected_output": "No Job is run because the review is read-only. CIS 3.2.1 and the other Section 3 controls are reported as Not covered because they need node host access, with a recommendation that the user run kube-bench with the eks-1.8.0 benchmark themselves.",
+      "assertions": [
+        "The response refuses to create or run the kube-bench Job because the review is read-only",
+        "The response reports CIS 3.2.1 as Not covered rather than PASS or FAIL",
+        "The response recommends the user run kube-bench with the eks-1.8.0 benchmark on the nodes"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-no-invented-cve",
+      "should_trigger": true,
+      "prompt": "During an EKS compliance check, the vpc-cni add-on is two minor versions behind the latest compatible version, Inspector ECR scanning is enabled, and Inspector returned zero CRITICAL or HIGH findings for the running images. What do CIS 5.1.1 and supplementary check AWS-6 report, and which CVEs affect the vpc-cni version? No cluster access required.",
+      "expected_output": "CIS 5.1.1 PASS and AWS-6 PASS. The vpc-cni lag is a version gap, not proof of a vulnerability; no CVE is named because none appears in a retrieved Inspector finding. AWS-hosted add-on images are not in the customer's ECR, so Inspector does not cover them; check add-on release notes and AWS security bulletins.",
+      "assertions": [
+        "The response gives AWS-6 as PASS based on zero CRITICAL/HIGH Inspector findings",
+        "The response names no CVE identifier for vpc-cni",
+        "The response calls the vpc-cni lag a version gap rather than a confirmed vulnerability",
+        "The response states AWS-hosted add-on images are not covered by the customer's Inspector findings"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-auth-mode-configmap",
+      "should_trigger": true,
+      "prompt": "Run an EKS compliance check of CIS 4.1.7 from these values: accessConfig.authenticationMode is API_AND_CONFIG_MAP, and the aws-auth ConfigMap has the node role in mapRoles plus one mapUsers entry for arn:aws:iam::123456789012:user/alice in system:masters. What is the CIS 4.1.7 status? No cluster access required.",
+      "expected_output": "CIS 4.1.7 FAIL because API_AND_CONFIG_MAP passes only when aws-auth holds no mappings beyond node roles; the mapUsers entry for alice is listed as the offending resource. The fix is to move alice to an access entry and switch to API mode.",
+      "assertions": [
+        "The response gives CIS 4.1.7 as FAIL",
+        "The response names the mapUsers entry for alice as the offending resource",
+        "The response recommends access entries or switching authenticationMode to API"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-cis-only-scope",
+      "should_trigger": true,
+      "prompt": "A user asked: 'Run a CIS Amazon EKS Benchmark check on prod-cluster.' They did not mention any other framework. According to this compliance skill, which sections does the report contain, and does it include NIST, PCI DSS, SOC 2, or HIPAA tables? No cluster access required.",
+      "expected_output": "The report covers CIS Amazon EKS Benchmark v1.8.0 and the supplementary AWS checks only; no NIST, PCI DSS, SOC 2, or HIPAA tables are rendered because the user did not request them. Section 3 controls are listed as Not covered, and the disclaimer is present.",
+      "assertions": [
+        "The response states no NIST, PCI DSS, SOC 2, or HIPAA tables are included because they were not requested",
+        "The response names CIS Amazon EKS Benchmark v1.8.0",
+        "The response states the report includes a disclaimer that it is not an attestation"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-live-cis-aws-controls",
+      "should_trigger": true,
+      "prompt": "Run an EKS compliance check: assess cluster cis-skill-test in us-east-1 (the connected AWS account) against the CIS Amazon EKS Benchmark v1.8.0 and report the status of controls 2.1.1, 5.3.1, 5.4.1, 5.4.2, 5.4.3, and the Section 3 worker-node controls, with the evidence for each.",
+      "expected_output": "Read from the live cluster: 2.1.1 FAIL (only the api log type is enabled, audit is off); 5.3.1 FAIL (no encryptionConfig for secrets); 5.4.1 FAIL (public endpoint open to 0.0.0.0/0); 5.4.2 FAIL (public access enabled); 5.4.3 FAIL (node subnets map public IPs on launch). Section 3 controls are Not covered because they need node host access, with a kube-bench eks-1.8.0 recommendation. The report says it is not an attestation.",
+      "assertions": [
+        "The response gives CIS 2.1.1 as FAIL because the audit log type is not enabled",
+        "The response gives CIS 5.4.1 and 5.4.2 as FAIL, citing endpointPublicAccess=true and a 0.0.0.0/0 public access CIDR",
+        "The response gives CIS 5.3.1 as FAIL because no KMS encryptionConfig for secrets is set",
+        "The response gives CIS 5.4.3 as FAIL because the node subnets assign public IPs",
+        "The response reports the Section 3 worker-node controls as Not covered and recommends running kube-bench",
+        "The response states the result is not a certification, audit, or attestation"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-live-rbac-workloads",
+      "should_trigger": true,
+      "prompt": "Run an EKS compliance check of cluster cis-skill-test in us-east-1 (the connected AWS account). For CIS Amazon EKS Benchmark controls 4.1.1, 4.1.3, 4.2.1, 4.2.4, 4.4.1, and 4.5.2, give each status with the offending resources. If any read is denied, say which.",
+      "expected_output": "The functional-test agent space reaches the cluster with AmazonAIOpsAssistantPolicy, which denies listing ClusterRoleBindings, ClusterRoles, and Roles. So 4.1.1 and 4.1.3 are Not assessed with the Forbidden error, never PASS (with AmazonEKSAdminViewPolicy they would be FAIL: ClusterRoleBinding ops-admin grants cluster-admin to group ops-team; ClusterRole wildcard-operator). The workload controls are read successfully: 4.2.1 FAIL (team-a/priv-pod); 4.2.4 FAIL (team-a/hostnet-pod); 4.4.1 FAIL (team-a/env-secret-app uses a secretKeyRef env var); 4.5.2 FAIL (default/legacy-web).",
+      "assertions": [
+        "The response reports CIS 4.1.1 as FAIL naming ops-admin or ops-team, or as Not assessed with a denied read, and never as PASS",
+        "The response reports CIS 4.1.3 as FAIL naming wildcard-operator, or as Not assessed with a denied read, and never as PASS",
+        "The response reports CIS 4.2.1 as FAIL naming priv-pod and CIS 4.2.4 as FAIL naming hostnet-pod",
+        "The response reports CIS 4.4.1 as FAIL naming env-secret-app",
+        "The response reports CIS 4.5.2 as FAIL naming legacy-web in the default namespace"
+      ],
+      "task_type": "chat"
+    },
+    {
+      "id": "eks-compliance-live-pci-crosswalk",
+      "should_trigger": true,
+      "prompt": "Is EKS cluster cis-skill-test in us-east-1 (the connected AWS account) compliant with PCI DSS? Run the EKS compliance check and give me the PCI DSS v4.0.1 rows for 1.4.4, 10.2.1, and 12.3.4 with their mapped controls and basis.",
+      "expected_output": "PCI DSS 1.4.4 FAIL (from CIS 5.4.1/5.4.2, public endpoint), basis Security Hub EKS.1; 10.2.1 FAIL (from CIS 2.1.1 and AWS-1, audit logging off), basis Security Hub EKS.8; 12.3.4 PASS (partial coverage) from AWS-2 because the cluster runs a standard-support Kubernetes version read at runtime, basis Security Hub EKS.2. The cluster is not shown as compliant, and the report is not an attestation.",
+      "assertions": [
+        "The response gives PCI DSS 1.4.4 as FAIL derived from the public endpoint controls",
+        "The response gives PCI DSS 10.2.1 as FAIL derived from audit logging being off",
+        "The response gives PCI DSS 12.3.4 as PASS with partial coverage because the Kubernetes version is in standard support",
+        "The response labels the three rows with a Security Hub basis and names EKS.1, EKS.8, and EKS.2 respectively",
+        "The response does not state that the cluster is PCI DSS compliant and says the result is not an attestation"
+      ],
+      "task_type": "chat"
+    }
+  ]
+}
