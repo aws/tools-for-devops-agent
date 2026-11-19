@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.4.5] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (4 files). Agent type: **On-demand** (`CHAT`), or **Generic** with a zip upload for the aws-operation-review custom agent. The zip is now built from `skills/` with the standard command, so `SKILL.md` sits under a `firehose-operation-review/` folder in the archive. The Agent Types section says **On-demand** and **Generic** instead of "Chat tasks" and "All agents", and links the custom agent with an absolute URL.
+
 ## [1.4.4] - 2026-11-10
 - `metadata.author` is the contributor's GitHub username, `shinutharol2ext`, so catalogs link to their profile.
 

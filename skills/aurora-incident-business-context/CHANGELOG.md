@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.1] - 2026-11-19
+### Changed
+- README: added "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (2 files). Agent types: **Incident RCA** (`INCIDENT_RCA`) and **On-demand** (`CHAT`).
+
 ## [1.0.0] - 2026-11-09
 ### Added
 - Initial release. Adapted from the business-context MCP prototype

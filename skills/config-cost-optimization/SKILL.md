@@ -14,7 +14,7 @@ description: Identify and quantify AWS Config cost optimization opportunities.
   of savings.
 metadata:
   author: kaiserschmarm
-  version: "1.5.4"
+  version: "1.5.5"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "AWS Config"
   aws-devops-agent-skills.technical-domains: "Governance, Cost Optimization"

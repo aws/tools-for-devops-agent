@@ -302,15 +302,7 @@ Agent attempts: get_prometheus_metrics (no label filter, 7d range, 60s step)
 "Limit PromQL range queries to 1 hour maximum"
 ```
 
-## How to Use the Skill
-
-Add the skill to your Agent Space and adjust the threshold to match your organization's requirements:
-
-**Option A:** Fork or copy the skill into your own GitHub repository and import it directly into your Agent Space via the GitHub integration. This lets you version and customize the skill independently.
-
-**Option B:** Download the `.zip` directly from the [repository](https://github.com/aws/tools-for-devops-agent/tree/main/skills/investigation-cost-guardrail) and upload it as a skill in your Agent Space.
-
-### Required IAM Permissions
+## Required IAM Permissions
 
 The skill calls the AWS Price List Query API to resolve per-Region rates. Grant the role your Agent Space assumes:
 
@@ -333,6 +325,67 @@ The call is always sent to `us-east-1`, so a Region-scoped tool policy needs to 
 
 Your Agent Space tool policy must also permit the call. This permission is required, not optional: the skill carries no baseline rates to fall back on, so if the lookup is unavailable it halts before the paid operation instead of estimating.
 
+## Uploading to AWS DevOps Agent
+
+Grant the [required IAM permission](#required-iam-permissions) first, or add the skill as **Inactive** until it's done. Also add the space-level instruction from the activation requirement above so the skill loads for every investigation. You can add this skill in two ways:
+
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **Incident RCA** (`INCIDENT_RCA`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **Incident RCA** recommended | Yes: files and agent types | Re-upload a new zip |
+
+The skill guards the paid queries an investigation makes, so target **Incident RCA** only. **Generic** would load it for every agent type, on-demand chat and evaluation included, and add context those agents don't need.
+
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `investigation-cost-guardrail`.
+4. Choose **Details** and check that the agent type is **Incident RCA**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to adjust the default per-investigation budget in `SKILL.md` to match your organization's requirements, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/investigation-cost-guardrail/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f investigation-cost-guardrail.zip
+   zip -r investigation-cost-guardrail.zip investigation-cost-guardrail/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l investigation-cost-guardrail.zip | tail -1   # expect 2 files
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   investigation-cost-guardrail.zip
+   └── investigation-cost-guardrail/
+       ├── SKILL.md                          # required: frontmatter with name and description
+       └── references/
+           └── pricing-reference.md
+   ```
+
+   The zip leaves out `evals/`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `investigation-cost-guardrail.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **Incident RCA**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## Known Limitations
 

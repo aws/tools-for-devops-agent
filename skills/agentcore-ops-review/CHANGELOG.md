@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.5] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (7 files, `SKILL.md` inside the `agentcore-ops-review/` folder). Agent types: **On-demand** (`CHAT`). The Agent Types section uses **On-demand** and **Generic** instead of the stale `Chat tasks` and `All agents` labels.
+
 ## [1.0.4] - 2026-11-17
 - Added `Amazon Bedrock` to `aws-services`, so a filter for Bedrock lists the skill as well as one for AgentCore.
 - `technical-domains` uses `AI/ML` instead of `Machine Learning` and `GenAI`, so catalogs list every AI skill under one domain.

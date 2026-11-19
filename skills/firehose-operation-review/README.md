@@ -28,9 +28,9 @@ All data is gathered through native AWS APIs (`firehose`, `cloudwatch`, `service
 
 This skill is intended for the following agent types (selected in the Operator Web App at upload time):
 
-- **Chat tasks** — conversational invocation in Chat ("review my Firehose streams", "why is my Firehose lagging").
+- **On-demand** — conversational invocation in Chat ("review my Firehose streams", "why is my Firehose lagging").
 
-Select **All agents** instead if you want the skill available to all agent types. When using this skill through the [aws-operation-review custom agent](../../custom-agents/aws-operation-review/), select **All agents** so the custom agent can load it.
+Select **Generic** instead if you want the skill available to all agent types. When using this skill through the [aws-operation-review custom agent](https://github.com/aws/tools-for-devops-agent/tree/main/custom-agents/aws-operation-review), select **Generic** so the custom agent can load it.
 
 ## Prerequisites
 
@@ -54,55 +54,68 @@ Most CloudWatch-based checks rely on `AWS/Firehose` metrics, which only exist fo
 
 ## Uploading to AWS DevOps Agent
 
-> Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
+Complete the [prerequisites](#prerequisites) first (the Agent Space with the target account, and the IAM permissions), or add the skill as **Inactive** until it's done. You can add this skill in two ways:
 
-### 1. Package the skill
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended, or **Generic** for the custom agent | Yes: files and agent types | Re-upload a new zip |
 
-Build the zip from **inside** the skill directory so `SKILL.md` sits at the archive root (not nested under a `firehose-operation-review/` parent), and exclude development-only files:
+This skill is built for on-demand reviews and isn't meant for active incident investigation, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add context those agents don't need. The exception is the [aws-operation-review custom agent](https://github.com/aws/tools-for-devops-agent/tree/main/custom-agents/aws-operation-review): to use the skill through it, upload the zip (Option B) and leave **Generic** selected so the custom agent can load it.
 
-```bash
-cd skills/firehose-operation-review
-zip -r ../firehose-operation-review.zip . \
-  -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' '.skilleval.yml' 'evals/*'
-```
+### Option A: Add from the Skills Catalog (recommended)
 
-The resulting `firehose-operation-review.zip` contains `SKILL.md` at the root:
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
 
-```
-SKILL.md              # frontmatter + skill instructions (required)
-references/
-├── best-practices-checklist.md
-└── metrics-thresholds.md
-assets/
-└── report-template.md
-```
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `firehose-operation-review`, or filter by AWS service **Amazon Data Firehose**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
 
-> **Important:** `SKILL.md` must sit at the **archive root**, not nested under a
-> `firehose-operation-review/` parent folder. `read_skill_resource` resolves resource
-> paths (`references/…`, `assets/…`) relative to that root, so a nested zip makes every
-> resource fetch fail with *"Failed to get skill resource."* Always build the zip from
-> **inside** the skill directory (as shown above), and confirm with
-> `unzip -l firehose-operation-review.zip` that the first entry is `SKILL.md` and the
-> resources appear as `references/…` and `assets/…` (no leading directory).
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
 
-`SKILL.md`, `references/`, and `assets/` are the runtime skill payload and **must** be in
-the zip. `README.md`, `CHANGELOG.md`, `.skilleval.yaml`, and `evals/` are development-only
-files excluded from the upload.
+### Option B: Upload as a zip file (customizable)
 
-Constraints (enforced at upload time):
+Use this option to change the skill, for example to adjust thresholds in `references/metrics-thresholds.md`, or to choose different agent types.
 
-- Total zip size ≤ **6 MB**.
-- `SKILL.md` is required and must include `name` and `description` frontmatter.
-- A `scripts/` directory is **not** allowed — uploads containing scripts are rejected.
+1. Clone the repository, make your changes under `skills/firehose-operation-review/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
 
-### 2. Upload via the Operator Web App
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f firehose-operation-review.zip
+   zip -r firehose-operation-review.zip firehose-operation-review/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l firehose-operation-review.zip | tail -1   # expect 4 files
+   ```
 
-1. Navigate to the **Skills** page in your Agent Space Operator Web App.
-2. Click **Add skill** → **Upload skill**.
-3. Drag and drop `firehose-operation-review.zip` (or browse to it).
-4. Select agent types: **Chat tasks** (or leave **All agents** to make it available to all agent types).
-5. Review the validation results.
-6. Click **Upload**.
+2. Check that the zip has this structure:
+
+   ```text
+   firehose-operation-review.zip
+   └── firehose-operation-review/
+       ├── SKILL.md                          # required: frontmatter with name and description
+       ├── references/
+       │   ├── best-practices-checklist.md
+       │   └── metrics-thresholds.md
+       └── assets/
+           └── report-template.md
+   ```
+
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `firehose-operation-review.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**. To use the skill through the aws-operation-review custom agent, leave **Generic** selected instead.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## How to Use This Skill
 

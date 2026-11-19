@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.1.3
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (2 files). Agent types: **Incident RCA** (`INCIDENT_RCA`). Removed the "How to Use the Skill" section and its GitHub import and download options; "Required IAM Permissions", which was under it, is now its own section, followed by the new upload section.
+
 ## 2.1.2
 - Removed the `aws-services` value `All`. It isn't an AWS service, and catalog filters showed it as one. The skill still covers every service.
 - `metadata.author` uses the co-authors' GitHub usernames, `tipuq, inesttia`, so catalogs link to their profiles.

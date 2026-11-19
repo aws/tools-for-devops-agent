@@ -202,53 +202,73 @@ Once the MCP server is deployed and you've confirmed it works (Step 1's **Test t
 
 ## Step 3: Create the redshift-support-specialist Skill
 
-> Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
+Complete [Step 1](#step-1-mcp-server-deployment) and [Step 2](#step-2-connect-the-mcp-server-to-your-agent-space) first, or add the skill as **Inactive** until they're done. You can add this skill in two ways:
 
-You can upload this skill in one of two ways:
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
 
-**Option A: Upload as a zip file**
+This skill answers the Redshift questions and reviews you ask for in chat, and the custom agent you create in Step 4 selects it directly, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add context those agents don't need.
 
-1. Package the skill. From the `skills/` directory in this repo:
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `redshift-support-specialist`, or filter by AWS service **Amazon Redshift**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to adjust signal thresholds in `assets/config/thresholds.yaml`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/redshift-support-specialist/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
 
    ```bash
-   cd skills
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f redshift-support-specialist.zip
    zip -r redshift-support-specialist.zip redshift-support-specialist/ \
-     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.html' \
-     -x '*/evals/*' '*/.skilleval.yaml' '*/CHANGELOG.md' '*/README.md'
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l redshift-support-specialist.zip | tail -1   # expect 16 files
    ```
 
-   The zip must contain, at minimum:
+2. Check that the zip has this structure:
 
    ```text
-   redshift-support-specialist/
-   ├── SKILL.md                                       (required)
-   ├── assets/
-   │   ├── config/thresholds.yaml
-   │   ├── queries/*.md                               (6 files)
-   │   └── templates/detailed-operational-review.{html,md}
-   └── references/*.md                                (5 files)
+   redshift-support-specialist.zip
+   └── redshift-support-specialist/
+       ├── SKILL.md                          # required: frontmatter with name and description
+       ├── assets/
+       │   ├── config/
+       │   │   └── thresholds.yaml
+       │   ├── queries/                      # 6 files: diagnostic SQL templates
+       │   └── templates/
+       │       ├── detailed-operational-review.html
+       │       └── detailed-operational-review.md
+       ├── images/
+       │   └── architecture.png
+       └── references/                       # 5 files: best practices, system tables, review signals, sizing
    ```
 
-   Constraints (enforced at upload time):
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
 
-   - Total zip size ≤ 6 MB.
-   - `SKILL.md` is required and must include `name` and `description` frontmatter.
-   - A `scripts/` directory is not allowed; this skill does not include one.
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `redshift-support-specialist.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
 
-2. In the AWS DevOps Agent web app, go to **Knowledge** → **Skills**.
-3. Click **Add Skill** → **Upload skill**.
-4. Drag and drop the zip file (or browse to it).
-5. Select agent type: **Chat tasks** (or leave **All agents** to make it available to all agent types).
-6. Review the validation results.
-7. Click **Upload**.
-
-**Option B: Import from GitHub**
-
-This requires a GitHub connection on your Agent Space, set up in two steps:
-
-1. **Register GitHub at the account level** - in the AWS Management Console, go to **Capability Providers** (account-level, not inside a specific Agent Space) → find **GitHub** → **Register**. Choose User or Organization, pick GitHub App permissions, submit, then authorize and install the app on GitHub. Full steps: [Connecting GitHub](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html).
-2. **Attach it to your Agent Space** - open your Agent Space's own console page (not the DevOps Agent web app) → **Capabilities** tab → **Pipeline** section → **Add** → select the GitHub registration from step 1 → choose the repository (this one, if importing this skill) → **Add**.
-3. **Import the skill** - in the DevOps Agent web app, go to **Knowledge** → **Skills** → **Add Skill** → Import from repository, then point to the `skills/redshift-support-specialist` directory. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## Step 4: Create the Custom Agent
 
@@ -347,9 +367,9 @@ Only `SKILL.md`, `references/`, `assets/`, and `evals/` are part of the [Agent S
 
 This skill is intended for:
 
-- **Chat tasks** - conversational invocation ("why is this Redshift query slow?", "run a Redshift health check on my cluster").
+- **On-demand** - conversational invocation ("why is this Redshift query slow?", "run a Redshift health check on my cluster").
 
-Select **All agents** at upload time if you want the skill available to all agent types.
+Select **Generic** at upload time if you want the skill available to all agent types.
 
 ## Architecture
 

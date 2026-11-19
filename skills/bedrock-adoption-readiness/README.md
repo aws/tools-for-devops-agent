@@ -32,14 +32,74 @@ Additional permissions that may be needed beyond the managed policy:
 - At least one Bedrock model must have been invoked in the last 7 days for metrics-based analysis
 - Organization-level SCP assessment requires the account to have Organizations API access (management account or delegated admin)
 
+## Uploading to AWS DevOps Agent
+
+Add the IAM permissions in [Prerequisites](#prerequisites) to the DevOps Agent role first, or add the skill as **Inactive** until they're in place. You can add this skill in two ways:
+
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
+
+This skill runs on-demand readiness assessments and isn't meant for active incident investigation, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add context those agents don't need.
+
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `bedrock-adoption-readiness`, or filter by AWS service **Amazon Bedrock**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to change the alarm and metric thresholds the observability dimension checks in `SKILL.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/bedrock-adoption-readiness/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f bedrock-adoption-readiness.zip
+   zip -r bedrock-adoption-readiness.zip bedrock-adoption-readiness/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l bedrock-adoption-readiness.zip | tail -1   # expect 1 file
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   bedrock-adoption-readiness.zip
+   └── bedrock-adoption-readiness/
+       └── SKILL.md                      # required: frontmatter with name and description
+   ```
+
+   The zip leaves out `evals/`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `bedrock-adoption-readiness.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
+
 ## How to Use with DevOps Agent
 
 1. Upload this skill to your DevOps Agent Space
-2. Select the "Chat tasks" subagent
+2. Select the **On-demand** agent type
 3. Ensure the DevOps Agent role has the IAM permissions listed above
 4. Ask natural language questions about Bedrock readiness
 
-**Agent types:** Chat tasks
+**Agent types:** On-demand
 
 ## Output
 

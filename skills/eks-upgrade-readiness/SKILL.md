@@ -17,7 +17,7 @@ description: Use this skill when a user asks to assess, plan, or validate an
   clusters.
 metadata:
   author: LearningNewbie
-  version: "2.0.2"
+  version: "2.0.3"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon EKS"
   aws-devops-agent-skills.technical-domains: "Containers"

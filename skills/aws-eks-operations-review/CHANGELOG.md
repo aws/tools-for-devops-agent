@@ -1,4 +1,12 @@
 # Changelog
+## [1.10.1] - 2026-11-19
+- README: new "Uploading to AWS DevOps Agent" section. Option A (recommended) adds the skill from the
+  Skills Catalog; Option B uploads a zip for customization, with the zip command and the expected zip
+  structure (75 files). Both options state the agent type: **On-demand** (`CHAT`).
+- README: the zip build moved out of "Maintainer-only validation"; the stale **Chat tasks** / **All agents**
+  labels were replaced with the current **On-demand** / **Generic** labels. No change to `SKILL.md`
+  instructions or references.
+
 ## [1.10.0] - 2026-11-18
 Optional overlays, contributed from the `eks-guardian` proposal (PR #85) instead of adding a
 fourth EKS review skill. Overlays are opt-in derived views: they add no check, discovery area,

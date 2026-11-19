@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.1] - 2026-11-19
+### Changed
+- README: added "Uploading to AWS DevOps Agent", after Prerequisites: Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (3 files). Agent types: On-demand (`CHAT`).
+
 ## [1.0.0] - 2026-11-03
 ### Added
 - Initial public release: two-direction BGP prefix coverage assessment for

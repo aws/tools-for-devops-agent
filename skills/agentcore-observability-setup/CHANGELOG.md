@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.4
+- README: added "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (6 files). Agent types: **On-demand** (`CHAT`). The Agent Types section uses **On-demand** and **Generic** instead of the stale `Chat tasks` and `All agents` labels.
+
 ## 1.0.3
 - Added `Amazon Bedrock` to `aws-services`, so a filter for Bedrock lists the skill as well as one for AgentCore.
 - `metadata.author` is the contributor's GitHub username, `vipulg1993`, so catalogs link to their profile.

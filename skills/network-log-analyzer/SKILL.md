@@ -2,7 +2,7 @@
 name: network-log-analyzer
 description: 'Use this skill when a user is troubleshooting AWS network connectivity: a connection times out, is refused, or resets; traffic flows only one way; flow logs show REJECT and they need to know whether a security group or network ACL caused it; TCP handshakes fail; transfers are slow or retransmit; large packets hang; idle connections drop; or they want top talkers or the real source behind a NAT gateway or EKS pod. Also use it whenever the user shares or describes VPC Flow Logs or a packet capture (tcpdump, Wireshark, tshark), including traffic that is missing from flow logs or unexpected packet sizes in a capture, even if they don''t name the problem. Not for name-resolution failures such as NXDOMAIN, SERVFAIL, or a name resolving to the wrong address; use the VPC DNS investigation skill for those.'
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   author: midakin
   summary: "Troubleshoots connectivity from VPC Flow Logs and packet captures: SG vs NACL rejects, TCP handshake and retransmission analysis, MTU, idle resets."
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"

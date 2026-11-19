@@ -34,39 +34,70 @@ When operational issues arise from hitting AWS service limits, or when recommend
 
 This skill is used by the following agent types:
 
-- **Chat tasks** — conversational quota lookup, capacity planning, and proactive checks
+- **On-demand** — conversational quota lookup, capacity planning, and proactive checks
 - **Incident RCA** — quota exhaustion as root cause during active incidents
 
 ## Uploading to AWS DevOps Agent
 
-To deploy this skill to your Agent Space, you can use any of three ways:
+Grant the [Service Quotas and CloudWatch permissions](#prerequisites) first, or add the skill as **Inactive** until it's done. You can add this skill in two ways:
 
-**Option A: Import from GitHub (recommended)**
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`) and **Incident RCA** (`INCIDENT_RCA`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** and **Incident RCA** recommended | Yes: files and agent types | Re-upload a new zip |
 
-If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html) in your Agent Space, you can import this skill directly from the repository. In the DevOps Agent web app, go to Settings -> Add Skill -> Import from repository, then point to the `skills/service-quota-check` directory. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
+Quota checks help in chat, for capacity planning before you provision, and in root cause analysis, when quota exhaustion causes an incident, so target **On-demand** and **Incident RCA**. **Generic** would load it for every agent type, incident triage included, and add context those agents don't need.
 
-> **Note:** You cannot connect the `aws` GitHub organization directly because the GitHub connection setup requires admin rights on the organization. Instead, connect your personal GitHub account and select any repository from it during the connection setup. Once a GitHub connection is established, you can import skills from any public repository — including this one — even if it wasn't selected during the connection setup.
+### Option A: Add from the Skills Catalog (recommended)
 
-**Option B: Upload as a zip file**
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent types.
 
-1. Zip the `service-quota-check/` directory (only including allowed extensions):
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `service-quota-check`, or filter by AWS service **AWS Service Quotas**.
+4. Choose **Details** and check that the agent types are **On-demand** and **Incident RCA**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to add quota codes your team checks often to `references/common-quota-codes.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/service-quota-check/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
 
    ```bash
-   cd skills
-   zip -r service-quota-check.zip service-quota-check/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' '*/CHANGELOG.md' '*/evals/*'
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f service-quota-check.zip
+   zip -r service-quota-check.zip service-quota-check/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l service-quota-check.zip | tail -1   # expect 2 files
    ```
 
-2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
-3. Click **Add skill** -> **Upload skill**.
-4. Drag and drop the `service-quota-check.zip` file (max 6 MB).
-5. Select the agent types: **Chat tasks** and **Incident RCA**.
-6. Click **Upload**.
+2. Check that the zip has this structure:
 
-**Option C: Upload via the Asset API**
+   ```text
+   service-quota-check.zip
+   └── service-quota-check/
+       ├── SKILL.md                    # required: frontmatter with name and description
+       └── references/
+           └── common-quota-codes.md   # quota codes for common services
+   ```
 
-Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT` and `INCIDENT_RCA` agent types. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
 
-For more details, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) in the AWS DevOps Agent User Guide.
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `service-quota-check.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand** and **Incident RCA**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## How to Use This Skill
 

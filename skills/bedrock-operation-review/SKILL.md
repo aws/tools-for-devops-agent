@@ -10,7 +10,7 @@ description: Comprehensive Amazon Bedrock review aligned with the AWS
   optimization review", or "ORR for Bedrock".
 metadata:
   author: sean-nixon
-  version: "1.0.3"
+  version: "1.0.4"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock"
   aws-devops-agent-skills.technical-domains: "AI/ML"

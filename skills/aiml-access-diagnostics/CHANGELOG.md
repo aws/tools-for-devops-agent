@@ -2,6 +2,9 @@
 
 All notable changes to this skill are documented here. New entries go at the top.
 
+## [1.2.6] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (7 files, `SKILL.md` inside the `aiml-access-diagnostics/` folder). Agent types: **On-demand** (`CHAT`) and **Incident RCA** (`INCIDENT_RCA`). The Agent Types section uses **On-demand** and **Generic** instead of the stale `Chat tasks` and `All agents` labels. Removed the GitHub import and Asset API options.
+
 ## [1.2.5] - 2026-11-10
 - Added the `AI/ML` technical domain, and changed `Amazon SageMaker` to `Amazon SageMaker AI` in `aws-services`: the training jobs and endpoints this skill diagnoses are SageMaker AI.
 - `metadata.author` is the contributor's GitHub username, `ams-thakkar`, so catalogs link to their profile.
