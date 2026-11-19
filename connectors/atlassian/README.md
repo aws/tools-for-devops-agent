@@ -11,11 +11,11 @@ permissions and your organization's policies.
    projects and spaces needed for investigations. Grant only the permissions needed;
    search and investigation do not require permission to create or edit content.
 2. Ask your organization administrator to review the **Atlassian MCP server** settings in
-   Atlassian Administration. For OAuth access, the client's redirect domain must be allowed.
-   For API-key access, authentication via API token must be enabled.
-3. If your organization uses app IP allowlists, ask the administrator to permit the
-   required AWS DevOps Agent outbound addresses. A successful sign-in alone does
-   not establish access to every app or site.
+   Atlassian Administration. For OAuth access, allow the AWS DevOps Agent redirect domain
+   `api.prod.cp.aidevops.<region>.api.aws`, using the AWS Region of your Agent Space,
+   such as `us-east-1`. For API-key access, authentication via API token must be enabled.
+3. If your organization uses app IP allowlists, tool calls from AWS DevOps Agent can be
+   blocked. A successful sign-in alone does not establish access to every app or site.
 
 ## OAuth sign-in (recommended)
 
