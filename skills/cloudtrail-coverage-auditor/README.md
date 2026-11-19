@@ -71,16 +71,21 @@ and attribution notes, and a rating an auditor can quote.
   `GetEventSelectors` command for the operator
 - Per resource coverage state for every S3 bucket, Lambda function and DynamoDB
   table in scope: `Covered`, `CoveredByOrgTrail-Unverified`, `Uncovered`,
-  `Unknown`, `NotApplicable`, with the covering trail and selector note
+  `Unknown`, `NotApplicable`, with the covering trail and selector note; a
+  `Covered` row keeps its narrowing in the state, for example `Covered (write
+  only)` or `Covered (excludes service-initiated events)` when the covering
+  data event selector drops AWS service and service linked role activity
 - Basic and advanced event selector semantics (type wide values, bucket and
   prefix ARNs, `StartsWith`, `NotStartsWith`, `readOnly`, `eventName`
   allowlists including the multipart upload and `DeleteObjects` gap)
 - Fixed 20 check matrix: management scope, global services, read and write,
-  source and service event exclusions, data events per type, selector
-  precision, Insights, stopped trails that removed coverage, delivery errors
-  and recency, log file validation, KMS, destination bucket posture,
-  organization trail readability and management coverage, Event history and
-  attribution notes
+  source and service event exclusions (evaluated on data event selectors, the
+  only place a trail accepts them), data events per type, selector precision,
+  Insights, stopped trails that removed coverage, delivery errors and recency,
+  log file validation, KMS, destination bucket posture, organization trail
+  readability and whether it reaches this member (including an organization
+  trail homed in an opt in Region the member has not enabled), Event history
+  and attribution notes
 - Required list mode: the user names buckets, functions and tables; each is
   reported as captured, not captured, or not found
 - Inline data mode: paste trail, selector or status output with no account
@@ -95,7 +100,7 @@ An AWS DevOps Agent Space with the target account configured as a cloud source.
 **No additional IAM permissions are required.** Every call is a read and every
 one is granted by the AWS managed
 [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html)
-(checked against policy version v12, October 2026):
+(checked against policy version v16 on 2026-11-18; every action below is present):
 
 - `cloudtrail:DescribeTrails`, `cloudtrail:ListTrails`,
   `cloudtrail:GetTrailStatus`, `cloudtrail:GetEventSelectors`,
@@ -108,7 +113,9 @@ one is granted by the AWS managed
   guardrail cancels `dynamodb:DescribeTable` as mutative and `lambda:GetFunction`
   is denied, neither is needed)
 - `organizations:DescribeOrganization`,
-  `organizations:ListDelegatedAdministrators`, `ec2:DescribeRegions`
+  `organizations:ListDelegatedAdministrators`, `ec2:DescribeRegions` (with
+  `AllRegions=true`, which also returns each Region's opt in status;
+  `account:ListRegions` is not in the policy and is not needed)
 - Optional context: `kms:DescribeKey`, `logs:DescribeLogGroups`, `iam:GetRole`
 - Only when a required list names them: `sns:GetTopicAttributes`,
   `sns:ListTopics`, `sqs:ListQueues`, `sqs:GetQueueAttributes`
@@ -250,12 +257,14 @@ what was not assessed, and next steps.
 - Inside DevOps Agent the report is rendered by the Context Gatherer subagent.
   The chat agent may relay a summary; the full report (Resource Coverage table,
   20 row Check Matrix, Not Assessed) is in the subagent's output. Ask "show the
-  full report" to get it unchanged. The report's second line is a relay note
-  asking the parent to deliver it unchanged.
+  full report" to get it unchanged. The relay rule is in SKILL.md; the report
+  itself carries no note to the parent.
 - Pasted data (no account access) prompts are answered by the chat agent
   directly, so the skill applies only if the chat agent can load it. The chat
   agent's `skill_read` may report the skill as not found (observed when the
-  asset had just been uploaded); the answer is then the base agent's.
+  asset had just been uploaded); the answer is then the base agent's. In this
+  mode the account id comes from the supplied ARNs or is reported as not
+  supplied; it is never invented.
 - Cross account S3 buckets touched by this account's principals are logged by
   an `arn:aws:s3` selector but are not in this account's inventory and are not
   listed.
@@ -267,51 +276,46 @@ what was not assessed, and next steps.
   page states it as a caveat.
 - Point in time: the report is valid for the configuration at evaluation time.
 
-## Open questions for SME review
+## Design decisions
 
-1. Organization trail readability: `GetEventSelectors` with the full trail ARN
-   works from a member account from the CLI, but inside DevOps Agent the AWS
-   tool rejects the cross account ARN before the call reaches AWS (observed on
-   every live run, "ARN account ... not in target accounts"). Is that
-   restriction expected to stay? If it can be lifted for CloudTrail
-   organization trail ARNs, `CoveredByOrgTrail-Unverified` becomes rare; until
-   then the operator resolves it from the CLI or the management account.
-2. Does an organization trail selector `arn:aws:s3` (all buckets) cover member
-   account buckets, or only the management account's? The documentation says
-   member resource ARNs can be added and the console lists only management
-   account resources; it does not state the wildcard's scope across accounts.
-   The model assumes "all buckets in every account the trail logs".
-3. Baseline type set: S3 objects, Lambda functions, DynamoDB tables only (basic
-   selector types). Should SNS topics or SQS queues join the baseline, or stay
-   request only?
-4. Severity of `Uncovered` in baseline mode: HIGH (rating `Attention`) is
-   proposed, CRITICAL only in required list mode. Agree?
-5. Delivery age thresholds for L3 (1 h INFO, 24 h HIGH) given "about every 5
-   minutes, not guaranteed" and quiet Regions.
-6. CloudTrail Lake event data stores as coverage sources: include (proposed) or
-   report separately?
-7. Insights at LOW in the baseline, or INFO only?
-8. E2 destination bucket posture: keep as INFO context, or drop to avoid
-   overlap with `storage-s3-resiliency-expertise`?
-9. Multipart event name gap (D4) is derived from the S3 event name list, not
-   from a stated AWS caveat. Is that the right reading of "multipart operation
-   filtering"?
-10. `cloudtrail:LookupEvents` is in the policy. The skill does not call it (log
-    analysis is out of scope). Agree, or should one lookup confirm that Event
-    history is reachable?
-11. Catalog vocabulary: `aws-services: "AWS CloudTrail"`, `technical-domains:
-    "Security, Governance"`, `agent-types: "CHAT"`. OK? (`AWS Organizations` is
-    not an approved `aws-services` value in this repository.)
-12. Management account mode: single account view with "covers resources outside
-    this account" notes for this version; organization wide sweep later. OK?
-13. Why does the chat agent's `skill_read` fail for a skill the Context Gatherer
-    loads in the same session? Is skill registration scoped to the subagent
-    profile for `agent-types: CHAT`? Measured: in the functional harness the
-    parent's `skill_read` returned "Skill not found" in 32 of 32 with_skill
-    runs while the Context Gatherer loaded it every time (upload, ACTIVE, 45 s
-    settle, then the task); on a standing agent space the parent loaded the
-    same asset after a longer wait following upload. The harness now probes
-    until the parent's own load succeeds before running the task.
+- Organization trail wildcard data selectors (`arn:aws:s3`, `arn:aws:lambda`,
+  `arn:aws:dynamodb`) cover resources in every member account; explicit ARN
+  selectors cover only the named resource. An organization trail logs events
+  for the management account and all member accounts, and the "all current and
+  future" selector form is evaluated per account ([organization
+  trails](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/creating-trail-organization.html),
+  [logging data events](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/logging-data-events-with-cloudtrail.html)).
+- Service initiated event exclusions (`eventType`, `userIdentity.arn`) are
+  evaluated on data event selectors for trails, because that is the only
+  selector type on which a trail accepts those fields; only event data stores
+  accept them on management selectors
+  ([AdvancedFieldSelector](https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_AdvancedFieldSelector.html)).
+  A covered resource under such a selector is labelled `Covered (excludes
+  service-initiated events)` and D1 to D3 are `PASS (narrowed)`, not `PASS`.
+- An organization trail homed in an opt in Region contributes nothing to a
+  member that has not enabled that Region; the skill reads the member's
+  `OptInStatus` with `ec2:DescribeRegions AllRegions=true` and downgrades the
+  trail's rows ([organization trails](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/creating-trail-organization.html),
+  [opt in Regions](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html)).
+- The baseline type set is S3 objects, Lambda functions and DynamoDB tables,
+  the three types basic event selectors support; advanced only types (SNS,
+  SQS, Cognito, EKS and others) are evaluated only when the user names them
+  ([DataResource](https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_DataResource.html)).
+- `Uncovered` is HIGH in baseline mode and CRITICAL only in required list mode,
+  where the user has stated the resource must be logged; blind spots
+  (`Unknown`, `CoveredByOrgTrail-Unverified`) cap the rating at `Attention`
+  and are never written as gaps.
+- CloudTrail Lake event data stores with status `ENABLED` count as coverage
+  sources, labelled `(event data store)` so an auditor can tell a trail from
+  Lake; log file validation and delivery checks apply to trails only
+  ([GetEventDataStore](https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_GetEventDataStore.html)).
+- Delivery recency uses 1 hour (INFO) and 24 hours (HIGH); CloudTrail delivers
+  about every 5 minutes but does not guarantee it, so a quiet Region is a note,
+  not a failure ([how CloudTrail works](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/how-cloudtrail-works.html)).
+- The multipart upload and `DeleteObjects` gap in `eventName` allowlists is
+  derived from the S3 event name list and is reported as a consequence of that
+  list, not as an AWS stated caveat
+  ([S3 CloudTrail events](https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudtrail-logging-s3-info.html)).
 
 ## Non-production disclaimer
 
