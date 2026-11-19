@@ -4,7 +4,8 @@ Load this file when a call returns `AccessDenied` or when the user asks what
 the skill needs. Every action the skill calls is a read, and every one of them
 is granted by the AWS managed policy
 [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html)
-(checked against policy version v12, October 2026). No inline policy, no
+(checked against policy version v16 on 2026-11-18; every action below is
+present). No inline policy, no
 `--additional-permissions-file` for the skill evaluation tool, and no
 CloudFormation delta policy are needed.
 
@@ -20,7 +21,7 @@ CloudFormation delta policy are needed.
 | `lambda:ListFunctions` | `lambda:List*` | Function inventory and ARNs (`GetFunction` is not used) |
 | `dynamodb:ListTables` | `dynamodb:List*` | Table inventory; ARNs are built from Region, account and name (`DescribeTable` is not used) |
 | `organizations:DescribeOrganization`, `organizations:ListDelegatedAdministrators` | `organizations:Describe*`, `organizations:List*` | Account role resolution |
-| `ec2:DescribeRegions` | `ec2:Describe*` | Enabled Regions |
+| `ec2:DescribeRegions` (`AllRegions=true`) | `ec2:Describe*` | Enabled Regions and each Region's `OptInStatus` (`account:ListRegions` is not in the policy, so this call supplies the opt in status used by O2) |
 | `kms:DescribeKey`, `logs:DescribeLogGroups`, `iam:GetRole` | explicit or `Describe*` | Optional context: key state, log group exists, `AWSServiceRoleForCloudTrail` present |
 | `sns:GetTopicAttributes`, `sns:ListTopics` | explicit, `sns:List*` | Only when the user's required list names an SNS topic |
 | `sqs:ListQueues`, `sqs:GetQueueAttributes` | `sqs:List*`, explicit | Only when the user's required list names an SQS queue; if denied, the row is `Unknown` |
@@ -45,6 +46,9 @@ CloudFormation delta policy are needed.
   management account.
 - `cloudtrail:LookupEvents` is in the policy but the skill never calls it;
   reading Event history content is log analysis, which is out of scope.
+- `account:ListRegions` and `account:GetRegionOptStatus` are not in the
+  policy. The skill does not need them: `ec2:DescribeRegions` with
+  `AllRegions=true` returns every Region with its `OptInStatus`.
 
 ## Forbidden actions (never called)
 

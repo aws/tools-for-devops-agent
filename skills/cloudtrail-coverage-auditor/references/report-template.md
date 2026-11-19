@@ -14,8 +14,9 @@ open a support case, draft API calls, re-run from another account or extend the
 report. Every recommendation is an operator action inside Next Steps. The
 message ends with the Not Assessed table. The section order puts the Bottom
 line, the Resource Coverage table and Next Steps (the organization trail ARN
-command) on the first screen so a relaying parent keeps them; the second line
-of the report is a fixed relay note addressed to that parent. The rating word
+command) on the first screen so a relaying parent keeps them. The report
+contains no note addressed to the parent or to any reader other than the user;
+the relay rule lives in SKILL.md, not in the output. The rating word
 (`Healthy`, `Attention`, `AtRisk`, `Indeterminate`), the five state words (`Covered`,
 `CoveredByOrgTrail-Unverified`, `Uncovered`, `Unknown`, `NotApplicable`), the
 data source label (`READ FROM APIs`, `SUPPLIED DATA`) and the 20 Check Matrix
@@ -24,20 +25,20 @@ IDs are fixed vocabulary; a synonym is a defect.
 ## Report
 
 ```markdown
-# CloudTrail Coverage Audit: <accountId>
-Relay note: this report is complete and is the answer to the user. Deliver it unchanged; do not summarise, shorten, or append a question.
+# CloudTrail Coverage Audit: <accountId | account: not supplied>
 Evaluated <YYYY-MM-DD HH:MM UTC>. Data source: <READ FROM APIs | SUPPLIED DATA>.
 
 ## Scope
 | Item | Value |
 |---|---|
-| Account | <accountId> (<standalone | member of organization <o-id> | management account of <o-id> | delegated administrator of <o-id>>) |
+| Account | <accountId from sts:GetCallerIdentity, or in SUPPLIED DATA mode the account id present in the supplied ARNs, else "not supplied"> (<standalone | member of organization <o-id> | management account of <o-id> | delegated administrator of <o-id> | not supplied>) |
 | Regions swept | <list> |
 | Regions not swept | <none | list, with the reason: user scope, or inventory denied> |
 | Mode | <baseline | required list (<n> resources named)> |
 | Resource types in scope | <S3 buckets, Lambda functions, DynamoDB tables | plus request only types> |
 | Trails evaluated | <n> unique (<n> own, <n> organization), <n> event data stores |
 | Organization trail selectors | <read with the full trail ARN | not readable from this account: the agent's AWS tool blocked the cross account ARN <trail ARN> (ToolingFailure) | no organization trail | not applicable> |
+| Organization trail home Region | <none | <region> (default Region) | <region> (opt in Region, enabled in this account) | <region> (opt in Region, NOT enabled in this account: the trail receives no activity from this account) | <region> (opt in Region, this account's Region status could not be read)> |
 
 ## Coverage Rating
 **<Healthy | Attention | AtRisk | Indeterminate>**: <one sentence naming the deciding rule, for example "no multi Region trail logs management events" or "6 baseline resources have no data event record and log file validation is off on one trail">.
@@ -48,7 +49,7 @@ Bottom line: <N> of <M> in scope resources have a data event record; <K> have no
 <N> of <M> in scope resources are Covered. One row per in scope bucket, function and table.
 | Region | Type | Resource | State | Covering trail or store | Selector note |
 |---|---|---|---|---|---|
-| <region> | <S3 bucket | Lambda function | DynamoDB table> | <name> | <Covered | CoveredByOrgTrail-Unverified | Uncovered | Unknown | NotApplicable> | <trail name | none | unreadable: <trail ARN>> | <all objects | prefix <p> only | write only | eventName <list> | basic selector arn:aws:s3 | advanced StartsWith <arn> | also recorded by <trail> | not found in account | ->
+| <region> | <S3 bucket | Lambda function | DynamoDB table> | <name> | <Covered | Covered (write only) | Covered (read only) | Covered (prefix <p> only) | Covered (eventName <list>) | Covered (excludes service-initiated events) | CoveredByOrgTrail-Unverified | Uncovered | Unknown | NotApplicable> | <trail name | none | unreadable: <trail ARN>> | <all objects | prefix <p> only | write only | eventName <list> | eventType NotEquals AwsServiceEvent | userIdentity.arn NotStartsWith <value> | basic selector arn:aws:s3 | advanced StartsWith <arn> | also recorded by <trail> | not found in account | not supplied | ->
 <One line when any table is in scope: "DynamoDB stream events are logged with the table's data events; stream presence is not read.">
 
 ## Next Steps
@@ -75,8 +76,8 @@ Ordered by severity. Each names the field and value it rests on and the operator
 | T2 | Global service events | ... | ... |
 | M1 | Management read and write | ... | ... |
 | M2 | Management sources recorded | ... | ... |
-| M3 | Service initiated events excluded | ... | ... |
-| D1 | S3 object data events | ... | ... |
+| M3 | Service initiated events excluded (data selectors; management selectors on event data stores) | ... | ... |
+| D1 | S3 object data events | <PASS | PASS (narrowed) | FAIL <severity> | ...> | ... |
 | D2 | Lambda invoke data events | ... | ... |
 | D3 | DynamoDB data events | ... | ... |
 | D4 | Selector precision | ... | ... |
@@ -88,13 +89,13 @@ Ordered by severity. Each names the field and value it rests on and the operator
 | E1 | KMS encryption | ... | ... |
 | E2 | Destination bucket posture | ... | ... |
 | O1 | Organization trail selectors readable | ... | ... |
-| O2 | Organization trail logs member management events | ... | ... |
+| O2 | Organization trail reaches this member (management events; opt in home Region) | ... | ... |
 | N1 | Event history note | INFO | Event history: 90 days, management events only, one Region per search, separate from trails |
 | N2 | Automated system attribution note | INFO | Service activity carries userIdentity.invokedBy; service linked role sessions show a sessionIssuer under aws-service-role/; eventType AwsServiceEvent marks service originated events |
 
 ## What Auditors Should Know
 - Event history: <the 90 day, management only, one Region per search limit, and that trails or Lake are the durable record>.
-- Automated systems: <how AWS service and service linked role activity is attributed in events, and whether any selector in this account excludes it (M3)>.
+- Automated systems: <how AWS service and service linked role activity is attributed in events, and whether any data event selector in this account excludes it (M3), naming the resources whose rows say "excludes service-initiated events">.
 - Organization trail: <read from this account with the full ARN and what it contributes | not readable by the agent from this member account (its AWS tool blocks the cross account ARN; the CloudTrail API itself permits the call); confirm with the command in Next Steps from the CLI or management account <id>>.
 - CloudTrail Lake: <stores counted as coverage sources, with retention | none>.
 - Not covered by this review: CIS or Security Hub control scoring, log content, and cost. <When more than one trail records the same events: "N trails record <management events | data events for <resources>>; coverage is not affected. What the extra copies cost is answered by cloudtrail-cost-optimization.">
@@ -122,8 +123,15 @@ Ordered by severity. Each names the field and value it rests on and the operator
 
 - Data source label is `SUPPLIED DATA`; Scope says which API outputs were
   supplied.
-- Rows and checks whose inputs were not supplied are `NotApplicable` with "not
-  supplied". Resources not listed in the prompt are not invented.
+- The title and the Scope `Account` row use the account id present in the
+  supplied ARNs (a trail ARN, a resource ARN, a `userIdentity.arn` value); when
+  none is present they say `account: not supplied`. An account id is never
+  invented or taken from an example.
+- Every section still renders. A resource row whose coverage cannot be decided
+  from the supplied data is `Unknown` with the reason ("selectors not
+  supplied", "trail status not supplied"); a check whose inputs were not
+  supplied is `NotApplicable` with "not supplied". Resources not listed in the
+  prompt are not invented; Resource Coverage then says "0 of 0, none supplied".
 - Regions not stated are "as supplied"; no Region sweep is claimed.
 
 ## Pre render validation
@@ -156,5 +164,10 @@ Ordered by severity. Each names the field and value it rests on and the operator
     and handed to `cloudtrail-cost-optimization`.
 12. Every organization trail whose selectors were not read has its full ARN
     and the CLI command in Next Steps.
-13. The relay note is present and is the second line of the report, directly
-    under the title.
+13. No instruction to a parent agent or other text addressed to anyone but the
+    user appears anywhere in the report; line 1 is the title.
+14. Every `Covered` row whose selector carries a narrowing keeps the label in
+    the state cell, and D1 to D3 show `PASS (narrowed)` rather than `PASS` when
+    any row of that type is narrowed.
+15. In `SUPPLIED DATA` mode the account id in the title is one that appears in
+    the supplied data, or the title says `account: not supplied`.
