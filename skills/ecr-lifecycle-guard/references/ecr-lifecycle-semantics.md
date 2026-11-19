@@ -318,8 +318,10 @@ workflow checks layers (`BatchCheckLayerAvailability`), uploads them
 (`InitiateLayerUpload`, `CompleteLayerUpload`), puts the manifest (`PutImage`,
 which sets `imagePushedAt`), and the client then reads the manifest back
 (`BatchGetImage`). All of these land in CloudTrail from the pushing principal
-within a few seconds of `imagePushedAt`. On 2026-10-27, 26 of 26 images in the
-test repository carried a `BatchGetImage` event 1 to 2 seconds after their push,
+within a few seconds of `imagePushedAt`, before or after it. On 2026-10-27, 26
+of 26 images in the test repository carried a `BatchGetImage` event within a few
+seconds of their push (a second or two after in that run; the Containers SME's
+independent live test on 6 pushes saw it about a second before `imagePushedAt`),
 every one from the same role that pushed, and ECR's own `lastRecordedPullTime`
 was set on one image only. Counting those events as pulls marked 11 of 11
 expiring images `Expiring-InUse`, a 100 percent false positive rate, and would
@@ -330,8 +332,9 @@ The push correlation rule:
 1. Any `BatchGetImage`, `GetDownloadUrlForLayer`, `PutImage`,
    `InitiateLayerUpload`, `CompleteLayerUpload` or `BatchCheckLayerAvailability`
    event whose `eventTime` is within 60 seconds of that image's `imagePushedAt`
-   is part of the push workflow and MUST NOT count as a consumer pull. Sixty
-   seconds is deliberately wide compared with the observed 1 to 4 seconds; a
+   on either side (|eventTime - imagePushedAt| <= 60 s) is part of the push
+   workflow and MUST NOT count as a consumer pull. Sixty seconds is deliberately
+   wide compared with the observed 1 to 4 seconds on either side of the push; a
    genuine consumer that pulls within a minute of a push is rare, and
    `lastRecordedPullTime` would still catch it in tier (a).
 2. Any event whose `userIdentity` matches the principal that performed the push
@@ -341,9 +344,10 @@ The push correlation rule:
    (`sessionContext.sessionIssuer.arn`) when present so that two sessions of the
    same CI role are treated as the same principal. A push pipeline that re-reads
    its own image hours later is still not a consumer.
-3. What remains is a qualifying pull. One qualifying pull more than 60 seconds
-   after push makes the image `Expiring-InUse` on tier (c), and the evidence
-   string names the event, time, principal and gap from push.
+3. What remains is a qualifying pull. One qualifying pull outside the 60 second
+   window around the push (|eventTime - imagePushedAt| > 60 s) makes the image
+   `Expiring-InUse` on tier (c), and the evidence string names the event, time,
+   principal and gap from push.
 4. Count the excluded events per image and in total. The total is reported in
    check U8 (LOW, informational) so the operator can see the filter worked. The
    count never changes a verdict or the rating.

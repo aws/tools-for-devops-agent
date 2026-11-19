@@ -204,7 +204,8 @@ the image `Expiring-InUse`. Absence of events is not evidence of non use.
   1. every `BatchGetImage`, `GetDownloadUrlForLayer`, `PutImage`,
      `InitiateLayerUpload`, `CompleteLayerUpload` or
      `BatchCheckLayerAvailability` event whose `eventTime` is within 60
-     seconds of that image's `imagePushedAt`; the push workflow reads the
+     seconds of that image's `imagePushedAt` on either side
+     (|eventTime - imagePushedAt| <= 60 s); the push workflow reads the
      manifest and checks layers, and these events are the push, not a pull;
   2. every event whose `userIdentity` matches the principal that performed the
      push. Take that principal from the `PutImage` event for the same digest
@@ -213,7 +214,8 @@ the image `Expiring-InUse`. Absence of events is not evidence of non use.
      when present, else on `arn`.
   Count the dropped events per image and in total; the total is reported in
   check U8. An image is `Expiring-InUse` on tier (c) only when at least one
-  event remains more than 60 seconds after `imagePushedAt`. The evidence string
+  event remains outside the 60 second window around `imagePushedAt`
+  (|eventTime - imagePushedAt| > 60 s). The evidence string
   names the event, its time, the principal, and the gap from push, for example
   `tier (c) CloudTrail BatchGetImage 2026-10-25 14:02 UTC by role
   batch-worker-instance-role, 4 days after push`. When every matched event was
@@ -227,9 +229,12 @@ the image `Expiring-InUse`. Absence of events is not evidence of non use.
   under Not Assessed.
 
 Observed 2026-10-27 on a 26 image fixture: every image had a `BatchGetImage`
-event 1 to 2 seconds after its `imagePushedAt` from the pushing principal, and
-`lastRecordedPullTime` was set on exactly one image. Without the rule above
-every expiring image would be reported in use.
+event within a few seconds of its `imagePushedAt` from the pushing principal,
+and `lastRecordedPullTime` was set on exactly one image. The event lands before
+or after `imagePushedAt` depending on the run: our test saw it a second or two
+after, and the Containers SME's independent live test on 6 pushes saw it about
+a second before. The window is therefore applied symmetrically. Without the
+rule above every expiring image would be reported in use.
 
 ## 7. Source status enum
 
@@ -260,8 +265,8 @@ README repeats these as open questions for SME review.
 | Claim | Where used | What to confirm | Source to check |
 |---|---|---|---|
 | Preview results are retained briefly and then return `EXPIRED` | section 3, step 4 | the retention period | ECR User Guide lifecycle policy preview page (did not render during authoring), or a live test |
-| `BatchGetImage` and `GetDownloadUrlForLayer` pulls appear in `LookupEvents` as management events for ordinary pulls | section 6 | that pulls by EC2 hosts and CI appear with `requestParameters.imageIds`. Confirmed 2026-10-27 only for the push side: every push produced a `BatchGetImage` event 1 to 2 seconds later from the pushing principal, which is why the push correlation rule exists | https://docs.aws.amazon.com/AmazonECR/latest/userguide/logging-using-cloudtrail.html shows a `BatchGetImage` event example; confirm for consumer pulls in the target account |
-| 60 seconds is a wide enough push correlation window | section 6 | observed gap was 1 to 2 seconds (up to 4 in one run); a slow multi layer push could exceed 60 seconds between `imagePushedAt` and the last layer event, though `imagePushedAt` is set when the manifest is put, which is the end of the push | live test transcripts 2026-10-27; SME judgement |
+| `BatchGetImage` and `GetDownloadUrlForLayer` pulls appear in `LookupEvents` as management events for ordinary pulls | section 6 | that pulls by EC2 hosts and CI appear with `requestParameters.imageIds`. Confirmed 2026-10-27 only for the push side: every push produced a `BatchGetImage` event within a few seconds of `imagePushedAt` (before or after) from the pushing principal, which is why the push correlation rule exists | https://docs.aws.amazon.com/AmazonECR/latest/userguide/logging-using-cloudtrail.html shows a `BatchGetImage` event example; confirm for consumer pulls in the target account |
+| 60 seconds is a wide enough push correlation window, applied symmetrically (abs(eventTime - imagePushedAt) <= 60 s) | section 6 | observed gap was a few seconds on either side of `imagePushedAt` (a second or two after in our runs, up to 4 in one run; about a second before in the SME's run); a slow multi layer push could exceed 60 seconds between `imagePushedAt` and the last layer event, though `imagePushedAt` is set when the manifest is put, which is the end of the push | live test transcripts 2026-10-27; SME live test 2026-11-17; SME judgement |
 | The agent guardrail classifies `StartLifecyclePolicyPreview` as mutative in every Agent Space | section 3, step 2 | whether the platform can allowlist it | observed in gap transcripts on 2026-10-21; service reference marks the action `IsWrite: true` |
 | `ListTaskDefinitions status=ACTIVE` with 200 ARNs is a reasonable bound | section 5 | tool call budget in the Agent Space | SME judgement |
 | Batch job definition image fields cover every job type | section 1 | `ecsProperties` and `eksProperties` shapes | https://docs.aws.amazon.com/batch/latest/APIReference/API_JobDefinition.html |
@@ -307,4 +312,4 @@ table is the lookup form.
 | Lifecycle actions appear in CloudTrail as `PolicyExecutionEvent`, previews as `DryRunEvent` | Use `LookupEvents` on these names for "why did my image disappear" |
 | `batch:DescribeJobDefinitions` and `lambda:GetFunction` are not in the managed policy | Expect `AccessDenied` until the delta policy is attached; report Unknown, not Unused |
 | The guardrail has cancelled the whole `cloudtrail` namespace in other skills | The pull probe is optional; a cancellation is listed under Not Assessed and changes no verdict |
-| An image push emits `BatchGetImage` (and layer events) 1 to 2 seconds after `imagePushedAt`, from the pushing principal (observed 2026-10-27 on 26 of 26 images) | The push correlation rule drops these events; they are counted in U8 and never make an image `Expiring-InUse` |
+| An image push emits `BatchGetImage` (and layer events) within a few seconds of `imagePushedAt`, before or after, from the pushing principal (observed 2026-10-27 on 26 of 26 images, a second or two after; the Containers SME's independent live test on 6 pushes saw it about a second before) | The push correlation rule drops these events with a symmetric 60 second window (abs(eventTime - imagePushedAt) <= 60 s); they are counted in U8 and never make an image `Expiring-InUse` |

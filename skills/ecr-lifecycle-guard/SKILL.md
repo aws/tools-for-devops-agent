@@ -167,14 +167,16 @@ The decision tree for every run. Table form with weights and rationale:
 
 - A `BatchGetImage`, `GetDownloadUrlForLayer`, `PutImage`, `InitiateLayerUpload`,
   `CompleteLayerUpload` or `BatchCheckLayerAvailability` event within 60 seconds
-  of that image's `imagePushedAt` is part of the push and MUST NOT count as a
-  consumer pull.
+  of that image's `imagePushedAt`, before or after it
+  (|eventTime - imagePushedAt| <= 60 s), is part of the push and MUST NOT count
+  as a consumer pull. The push's own events land within a few seconds of
+  `imagePushedAt` on either side, so the window is symmetric.
 - Any event whose `userIdentity` matches the pushing principal is also excluded.
   Take the principal from the `PutImage` event for the same digest when one is
   available, otherwise from the events inside the 60 second window.
-- Tier (c) yields `Expiring-InUse` only when a qualifying pull remains more than
-  60 seconds after push. Record per image how many events were excluded; the
-  total feeds check U8.
+- Tier (c) yields `Expiring-InUse` only when a qualifying pull remains outside
+  the 60 second window around the push (|eventTime - imagePushedAt| > 60 s).
+  Record per image how many events were excluded; the total feeds check U8.
 
 **Per image verdict, first match wins.**
 

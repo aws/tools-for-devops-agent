@@ -48,8 +48,9 @@ every run, a fixed verdict table that leaves no room for "safe" prose, and a
 hard rule that the skill reports and never remediates.
 
 Live test round 1 (2026-10-27, skill on) exposed a flaw in the skill itself:
-every expiring image had a CloudTrail `BatchGetImage` event 1 to 2 seconds after
-its own `imagePushedAt`, emitted by the push, and the skill counted all of them
+every expiring image had a CloudTrail `BatchGetImage` event within a few seconds
+of its own `imagePushedAt` (before or after; both have been observed), emitted by
+the push, and the skill counted all of them
 as consumer pulls (11 of 11 `Expiring-InUse`, 100 percent false positive) while
 `lastRecordedPullTime` showed one real pull in the repository. The evidence
 hierarchy and push correlation rule in `SKILL.md` are the fix.
@@ -67,8 +68,8 @@ hierarchy and push correlation rule in `SKILL.md` are the fix.
 - In use cross reference by digest and tag: `lastRecordedPullTime`, running ECS
   tasks, ECS services and ACTIVE task definitions, Batch ACTIVE job definitions,
   Lambda container image functions, App Runner services, EKS cluster presence,
-  optional CloudTrail pull events (events within 60 seconds of the push or from
-  the pushing principal are excluded as push correlated)
+  optional CloudTrail pull events (events within 60 seconds of the push, before
+  or after, or from the pushing principal are excluded as push correlated)
 - Fixed per image verdict: `Safe`, `Expiring-Unused`, `Expiring-InUse`,
   `Expiring-Unknown`; fixed repository rating: `Healthy`, `Attention`,
   `AtRisk`, `Indeterminate`
