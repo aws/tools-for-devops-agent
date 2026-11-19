@@ -13,7 +13,7 @@ All notable changes to the PostgreSQL DBA MCP server are documented here.
 
 ### Changed
 
-- Replaced the GPL-3.0-or-later `pglast` SQL parser with the MIT-licensed `sqlglot` parser for `normalized_query_preview` report redaction, clearing the AWS AppSec licensing condition on SIM V2371889010 while preserving literal, comment, and bind-parameter redaction.
+- Replaced the GPL-3.0-or-later `pglast` SQL parser with the MIT-licensed `sqlglot` parser for `normalized_query_preview` report redaction, removing the only GPL-licensed dependency and its license-compatibility concern while preserving literal, comment, and bind-parameter redaction.
 - Database names in the allowlist are now matched case-sensitively.
 
 ### Removed
