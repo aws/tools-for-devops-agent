@@ -77,6 +77,8 @@ With Container Insights enabled (namespace `ContainerInsights`, dimensions `Clus
 | ConcurrentExecutions | Maximum | Compare with reserved concurrency or the account limit |
 | IteratorAge | Maximum | Stream consumers falling behind |
 
+With Lambda Insights enabled (extension layer; namespace `LambdaInsights`, dimension `function_name`, optionally `version`): `cpu_total_time` (ms), `init_duration` (ms), `memory_utilization` (percent), `used_memory_max` and `total_memory` (MB), `rx_bytes`, `tx_bytes`, `tmp_used`. `cpu_total_time` against `Duration` separates CPU-bound from wait-bound work for the memory-sets-CPU rule; `init_duration` quantifies cold starts without parsing `REPORT` lines. Absent means the extension is not installed on that function: report it as a telemetry gap (`telemetry-sources.md`).
+
 ## Amazon RDS and Aurora (namespace `AWS/RDS`)
 
 Instance dimension `DBInstanceIdentifier`, cluster dimension `DBClusterIdentifier`.
@@ -95,7 +97,7 @@ Instance dimension `DBInstanceIdentifier`, cluster dimension `DBClusterIdentifie
 | BufferCacheHitRatio | Minimum | Aurora cache effectiveness |
 | CommitLatency | Average, Maximum | Aurora write path |
 
-Performance Insights: `pi.GetResourceMetrics` with metric `db.load.avg`, grouped by `db.wait_event` and `db.sql_tokenized`. Requires Performance Insights or Database Insights to be enabled.
+Database Insights (`pi` API): `pi.GetResourceMetrics` with metric `db.load.avg`, grouped by `db.wait_event` and `db.sql_tokenized`. Requires Database Insights (Standard or Advanced) on the instance or cluster. Performance Insights reached end of life in 2026 and its users were migrated to Database Insights; the `pi` API still serves the same data, so the call names are unchanged.
 
 ## Amazon DynamoDB (namespace `AWS/DynamoDB`, dimension `TableName`, optionally `GlobalSecondaryIndexName`)
 
@@ -116,6 +118,8 @@ Performance Insights: `pi.GetResourceMetrics` with metric `db.load.avg`, grouped
 | DatabaseMemoryUsagePercentage | Maximum | Memory utilization |
 | CurrConnections, NewConnections | Maximum, Sum | Connection churn (no pooling) |
 | NetworkBandwidthOutAllowanceExceeded | Sum | Network saturation at the node |
+
+Node-based Valkey replication groups also emit ElastiCache OpenTelemetry metrics (the ElastiCache Insights dashboard reads them), queried with PromQL: `valkey.memory.used` against `valkey.memory.max`, `valkey.commands.processed` by shard, `valkey.command.calls` and `valkey.command.duration` by `valkey.command` (duration divided by calls gives per-command latency), `process.cpu.time` with `thread.type="main"` for engine CPU, `system.network.io` and the `system.network.io.rate` histogram for one-second bursts. The vended set is emitted at 60 seconds with nothing to enable; Redis OSS, Memcached and serverless caches do not emit them.
 
 ## Amazon SQS (namespace `AWS/SQS`, dimension `QueueName`)
 
@@ -160,6 +164,47 @@ Read min, max and desired with `autoscaling:DescribeAutoScalingGroups` and the l
 
 `AWS/Usage` publishes current usage for many quotas (dimensions `Type`, `Resource`, `Service`, `Class`), charted against the applied quota from `servicequotas:GetServiceQuota` / `ListServiceQuotas`. Which quotas publish here is to verify against "AWS usage metrics". Usage near the quota with throttle errors in client logs is a hidden-limit finding, not resource saturation.
 
+## AWS Trusted Advisor (performance pillar)
+
+A read-only evidence source next to Compute Optimizer, not a metric namespace. `trustedadvisor:ListRecommendations` with `pillar=performance`, once with `status=error` and once with `status=warning`, lists the account's flagged performance checks; `GetRecommendation` gives the check text and `ListRecommendationResources` the flagged resources. Keep only resources on the request path as hypotheses for Step 4.6 and confirm each with the workload's own metrics; report off-path flags separately, like Compute Optimizer off-path findings. The API needs a Business Support+, Enterprise Support or Unified Operations plan (existing Business Support and Enterprise On-Ramp plans keep access until they end on 2027-01-01); on AccessDenied or a support-plan error report the source as unavailable, naming the four actions and the plan requirement.
+
+## Amazon Bedrock model invocation (namespace `AWS/Bedrock`, dimension `ModelId`)
+
+Metrics are also published without the `ModelId` dimension; filtering by `ModelId` can undercount errors, so read the account-level series too.
+
+| Metric | Statistic | Use |
+|---|---|---|
+| Invocations | Sum | Rate of served requests; throttled requests are not included |
+| InvocationThrottles | Sum | Quota rejections; arriving load = `Invocations` + `InvocationThrottles` (same rule as Lambda `Throttles`) |
+| InvocationClientErrors, InvocationServerErrors | Sum | Errors (client errors include quota rejections) |
+| InvocationLatency | p50, p90, p99 | ms from request to last token |
+| TimeToFirstToken | p50, p90, p99 | ms, streaming calls; service-side queueing shows here before it shows in total latency |
+| InputTokenCount, OutputTokenCount | Sum | Load in tokens; OTPS = OutputTokenCount / (InvocationLatency - TimeToFirstToken) x 1000 (same statistic and period for all three; streaming calls only, since TimeToFirstToken exists only for them) |
+| EstimatedTPMQuotaUsage | Maximum | Approximate tokens per minute against the model's TPM quota; an approximation, never the only input to capacity planning |
+| CacheReadInputTokenCount, CacheWriteInputTokenCount | Sum | Prompt caching effect on input tokens |
+
+## Amazon SageMaker AI real-time endpoints (namespace `AWS/SageMaker`, dimensions `EndpointName`, `VariantName`; `InstanceId` with enhanced metrics)
+
+| Metric | Statistic | Use |
+|---|---|---|
+| Invocations, InvocationsPerInstance | Sum | Rate; per-instance rate against the measured per-instance capacity |
+| ModelLatency | p50, p90, p99 | Microseconds inside the container (the model) |
+| OverheadLatency | Average, Maximum | Microseconds added by SageMaker outside the container (no percentile statistics); compare with `ModelLatency` to place the time |
+| Invocation4XXErrors, Invocation5XXErrors, InvocationModelErrors | Sum | Errors; model errors are the container's own failures |
+| ConcurrentRequestsPerModel | Maximum | In-flight requests per model (inference components) |
+| ModelSetupTime | p50, p99 | Serverless endpoints: cold-start time to load the model (microseconds) |
+| FirstChunkLatency | p50, p99 | Streaming responses |
+
+Inference component metrics (namespace `/aws/sagemaker/InferenceComponents`): `CPUUtilizationNormalized`, `MemoryUtilizationNormalized`, `GPUUtilizationNormalized`, `GPUMemoryUtilizationNormalized`. SageMaker AI Insights (CloudWatch) adds Performance, Capacity and Reliability views on top of these when detailed observability with OpenTelemetry enrichment is on.
+
+## GPU inference on EKS (Accelerated Compute Insights)
+
+NVIDIA GPU telemetry arrives as CloudWatch OpenTelemetry metrics from the DCGM exporter (`DCGM_FI_DEV_GPU_UTIL`, framebuffer memory, temperature, power, `DCGM_FI_PROF_*` profiling metrics) resolved to the pod and container, queried with PromQL, for example `avg by ("@resource.k8s.pod.name") (DCGM_FI_DEV_GPU_UTIL{"@resource.k8s.namespace.name"="<namespace>"})`. Inference workloads are recognised from engine metrics such as `vllm:num_requests_running`. Requires the `amazon-cloudwatch-observability` EKS add-on (v7.0.0 or later) with OTel Container Insights; absent series mean the add-on or mode is off (telemetry gap).
+
+## Amazon Bedrock AgentCore runtime (namespace `AWS/Bedrock-AgentCore`)
+
+Runtime metrics, batched per minute: invocations, throttles (`ThrottlingException`, 429), system errors, user errors, `Latency` (request to final response token), `OverheadLatency` (platform time until the agent's first response byte, platform version V2), `SessionCount`, `ActiveSessionCount` (dimension `Service`). `Latency` minus `OverheadLatency` is the agent's own processing. Spans (`InvokeAgentRuntime`, attributes `latency_ms`, `error_type`) exist only when observability is enabled on the agent and CloudWatch Transaction Search is set up. Verify exact metric names in the CloudWatch console for the account before alarming on them; the documentation lists some as display names.
+
 ## Breaking metrics down by dimension
 
 The aggregate hides a degraded slice; read key metrics broken down before trusting the total.
@@ -179,10 +224,15 @@ Verify metric names and dimensions against the CloudWatch metrics documentation 
 
 Run only the checks that apply to the suspect hop.
 
-- **Databases (RDS, Aurora).** If Performance Insights is enabled, call `pi.GetResourceMetrics` with `db.load.avg` grouped by `db.wait_event` and by `db.sql_tokenized`, then `pi.DescribeDimensionKeys` for the top statements. Compare `db.load.avg` with the instance vCPU count. Check connections against the configured maximum, replica lag and storage throughput limits. If the top-statement call fails, apply the failed-call rule in `diagnosis-rules.md` and fall back to trace data (SQL spans or database segments); keep the cause Likely until the statement is read from either source.
+- **Databases (RDS, Aurora).** If Database Insights is enabled, call `pi.GetResourceMetrics` with `db.load.avg` grouped by `db.wait_event` and by `db.sql_tokenized`, then `pi.DescribeDimensionKeys` for the top statements. Compare `db.load.avg` with the instance vCPU count. Check connections against the configured maximum, replica lag and storage throughput limits. If the top-statement call fails, apply the failed-call rule in `diagnosis-rules.md` and fall back to trace data (SQL spans or database segments); keep the cause Likely until the statement is read from either source.
 - **Lambda.** Read `MemorySize` and `Timeout` with `lambda:GetFunctionConfiguration`, reserved concurrency with `lambda:GetFunctionConcurrency`, and provisioned concurrency with `lambda:ListProvisionedConcurrencyConfigs`. If the configuration read fails, take the memory size from the `Memory Size` field of the `REPORT` log lines, which also carry `Duration`, `Billed Duration`, `Max Memory Used` and `Init Duration`. Compare Duration p50 and p99 with the timeout. When p99 nears the timeout, treat memory as the CPU setting (see `hidden-limits.md`, Lambda memory sets CPU share) and apply the Lambda magnitude check and the cold-start check in `diagnosis-rules.md`. Low `Max Memory Used` is not headroom on a CPU-bound function. Check `ConcurrentExecutions` and `Throttles` against reserved and account concurrency.
 - **Other compute (EC2, ECS, EKS).** Scaling configuration against observed demand: Auto Scaling group min, max and desired over the window, scaling activities, target tracking targets, ECS desired versus running count.
 - **Caches and NoSQL.** Confirm the cache exists in configuration or code first. Then ElastiCache hit ratio, evictions and engine CPU; DynamoDB throttled requests per table and per index, and on-demand or provisioned capacity mode.
 - **Queues and streams.** Age of the oldest message or iterator age against the processing SLA; backlog against arrival and completion rate; catch-up rate and drain time during recovery; whether consumers scale with backlog; per-consumer throughput; visibility timeout and long polling, and whether a slow consumer holds messages in flight (see `hidden-limits.md`). For an event source mapping, compare effective concurrency (completion rate x duration) with its maximum concurrency and with the function's reserved concurrency.
 - **Callers and retries.** Read client timeout and retry settings from the caller's configuration or environment. Compare the timeout with the dependency's p99 at single-attempt load (a busy-window p99 can be inflated by retries) and with the caller's own deadline, count attempts received against requests originated, and apply the magnitude test (see `diagnosis-rules.md`, Retry amplification).
 - **Network path.** Cross-AZ calls on the hot path, NAT gateway port allocation errors and dropped packets, load balancer rejected connections.
+- **AI and ML workloads.** The model, endpoint, GPU cluster or agent runtime is one hop measured from its caller, with the same RED, USE, twin, magnitude and hand-off discipline as any other hop. The dedicated skills `bedrock-operation-review`, `sagemaker-ai-ops-review`, `agentcore-ops-review` and `aiml-gpu-training-cluster-investigation` review the workload itself (configuration posture, quotas, cost, resilience, GPU node health). Hand-off rule for all four cases: when the evidence places the bottleneck inside the model, the training job or the agent runtime rather than in the caller, the quota or the capacity in front of it, name the matching skill as the next step and keep this review's measurement of the hop (latency share, attempts per request, quota headroom) as its input.
+  - **Amazon Bedrock model invocation.** RED: `Invocations` + `InvocationThrottles` as arriving rate (throttles are excluded from `Invocations`, the same rule as Lambda), `InvocationClientErrors` and `InvocationServerErrors`, `InvocationLatency` and `TimeToFirstToken` p50 and p99. USE: there is no utilization metric for a shared model; the limit is the per-model, per-Region quota (tokens per minute, and requests per minute where the model has one) for on-demand and cross-Region profiles, or the model units of a Provisioned Throughput (`bedrock:GetProvisionedModelThroughput`). Read the applied quotas with `servicequotas:ListServiceQuotas` for service code `bedrock` and compare with `InputTokenCount` + `OutputTokenCount` per minute and `EstimatedTPMQuotaUsage`. Read the inference profile with `bedrock:GetInferenceProfile` to know which Regions serve the traffic. Magnitude: OTPS = `OutputTokenCount` / (`InvocationLatency` - `TimeToFirstToken`) x 1000, computable only for streaming calls; a latency rise with flat OTPS and longer answers is more output tokens, not a slower service, while OTPS falling at the same answer length is service-side slowdown or queueing (`TimeToFirstToken` rising confirms queueing). Throttles with client retries present as latency at the caller; compute attempts per originating request = (`Invocations` + `InvocationThrottles`) / caller requests (`diagnosis-rules.md`, Retry amplification). Twin: the same model in another Region or through another inference profile, or another application on the same model. Hand-off: `bedrock-operation-review` when the finding is model choice, prompt or token shape, guardrails, or a quota and capacity posture across the account.
+  - **SageMaker AI real-time endpoints.** RED: `Invocations`, `Invocation4XXErrors`, `Invocation5XXErrors`, `InvocationModelErrors`, `ModelLatency` p50 and p99 and `OverheadLatency` Average and Maximum (microseconds). USE: `InvocationsPerInstance` against the per-instance capacity measured in the healthy baseline (invocations per instance at which `ModelLatency` p99 was still flat), `ConcurrentRequestsPerModel`, and from `/aws/sagemaker/InferenceComponents` or SageMaker AI Insights the normalized CPU, memory, GPU and GPU memory utilization. Read `sagemaker:DescribeEndpoint` and `DescribeEndpointConfig` for instance type and count per variant and the auto scaling policy; instance-type quotas per Region ("<instance type> for endpoint usage") cap scale-out (`hidden-limits.md`). `ModelSetupTime` on serverless endpoints is the cold start; apply the cold-start magnitude rule from `diagnosis-rules.md`. Magnitude: `ModelLatency` share of caller-observed p99 places the time in the model; `OverheadLatency` share places it in SageMaker; neither explains the rest, so look at the caller and the network. Twin: another variant or endpoint on the same model container. Hand-off: `sagemaker-ai-ops-review` when the bottleneck is the model container, the instance type choice for the model, or endpoint posture across the account.
+  - **GPU inference clusters on EKS.** USE through Accelerated Compute Insights: `DCGM_FI_DEV_GPU_UTIL` and framebuffer memory per pod, power and temperature per node, with PromQL grouped by pod and namespace; RED from the serving engine's own metrics (for example `vllm:num_requests_running`) or from the caller. Low GPU utilization with high request latency points at the input pipeline, CPU pre-processing or batching, not the accelerator; GPU utilization pinned high with queueing points at too few replicas or too small a batch budget. Twin: another node group or replica set with the same image. Hand-off: `aiml-gpu-training-cluster-investigation` when the question is node health (Xid errors, health-agent detections, replace or reboot verdicts), training job progress or pre-flight capacity for a long run; training clusters have no Accelerated Compute Insights view today.
+  - **Amazon Bedrock AgentCore.** RED from `AWS/Bedrock-AgentCore`: invocations, throttles, system and user errors, `Latency` p50 and p99; split `OverheadLatency` (platform) from the remainder (the agent's own tools and model calls). USE: `ActiveSessionCount` against the session quota, throttles as the saturation signal. The agent's internals are visible only in spans when observability and Transaction Search are enabled; without them, measure the hop from the caller and report the gap. Hand-off: `agentcore-ops-review` when the time is inside the agent runtime, memory, gateway or tool calls.

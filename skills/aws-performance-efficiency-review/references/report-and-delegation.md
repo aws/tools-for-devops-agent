@@ -39,7 +39,8 @@ Why the first fix ranks above any capacity change.
 | Rank | Change | Expected effect | Effort | Cost direction | Risk | Verification metric | PERF ID |
 
 ## Telemetry gaps
-What could not be measured, which call failed with which error class, and how to enable it.
+| Capability to enable | What the review could then measure | Cost direction (pricing page link) | Change needed (enable step; agent read permission) | PERF ID |
+One row per source on the request path that could not be read, with the call that failed and its error class in the second column when a call failed. Columns and per-capability text: `telemetry-sources.md`.
 
 ## Next review
 Validating test and alarm changes.
@@ -52,6 +53,7 @@ Validating test and alarm changes.
 - **Ranking.** Rank recommendations by impact on the target and effort. The change that removes a Confirmed cause ranks first. Masking or capacity changes (raising the slow component's own execution timeout, such as a function timeout; provisioned or reserved concurrency; a larger instance, more instances or tasks, autoscaling, read replicas; a larger downstream limit) rank below it, labelled interim or masking, with the reason in the Risk column. Resizing a caller's client timeout from the dependency's measured p99 is the fix for retry amplification, not masking. When the Confirmed cause is a capacity shortfall at legitimate load, the capacity change is the fix; when cold starts are Confirmed, provisioned concurrency is the fix; when a credit or burst cap is Confirmed, changing the instance class or credit mode to remove it is the fix, not masking. Each recommendation is its own row and its own command; never combine a masking change with the real fix (see `diagnosis-rules.md`, Masking fixes). Cutting the business workload is never a row.
 - **Intake answers.** When intake answers were given, the Assumptions line states the target, the peak and the constraints, and the Bottleneck or Recommendations section shows the sizing arithmetic against the target (for example required concurrency = target rate x per-request duration, plus headroom for stated growth). Flag any recommendation that would break a stated constraint.
 - **Labels.** Each cause has exactly one label, the same in every section.
+- **Telemetry gaps.** Every row names a concrete metric or dimension the capability would add, carries a cost direction (included, neutral, adds cost) with the pricing page link and never a price, and names both the enable step for the customer and the read permission the agent needs. Rank by how much of the open question the gap would close; a capability the path does not use is not a row. Investigation experiences (CloudWatch investigations, CloudWatch Omni) are not telemetry and appear, ranked last, only when the customer has no investigation workflow (`telemetry-sources.md`).
 
 ### Severity
 

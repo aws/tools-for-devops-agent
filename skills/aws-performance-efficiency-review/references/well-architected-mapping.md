@@ -9,7 +9,7 @@ How do you select appropriate cloud resources and architecture for your workload
 | ID | Best practice | Typical findings |
 |---|---|---|
 | PERF01-BP01 | Learn about and understand available cloud services and features | Self-managed component on the hot path where a managed or purpose-built service fits the access pattern |
-| PERF01-BP02 | Use guidance from your cloud provider or an appropriate partner to learn about architecture patterns and best practices | Synchronous chain where a queue or event pattern would decouple a slow dependency; retries amplifying load across layers (work amplification) with no backpressure or decoupling |
+| PERF01-BP02 | Use guidance from your cloud provider or an appropriate partner to learn about architecture patterns and best practices | Synchronous chain where a queue or event pattern would decouple a slow dependency; retries amplifying load across layers (work amplification) with no backpressure or decoupling; a Trusted Advisor performance check flagged on a path resource and confirmed by the workload's metrics; Trusted Advisor unavailable on the support plan |
 | PERF01-BP03 | Factor cost into architectural decisions | Recommendation raises cost; state the trade-off |
 | PERF01-BP04 | Evaluate how trade-offs impact customers and architecture efficiency | Consistency or durability settings that add latency without a stated requirement; no load shedding, so goodput collapses under overload |
 | PERF01-BP05 | Use policies and reference architectures | Inconsistent configuration across similar services |
@@ -24,10 +24,10 @@ How do you select and use compute resources in your workload?
 |---|---|---|
 | PERF02-BP01 | Select the best compute options for your workload | Compute type mismatched to the workload shape (for example, steady load on Lambda at high concurrency, or spiky load on fixed EC2) |
 | PERF02-BP02 | Understand the available compute configuration and features | Burstable instance with exhausted credits; older generation family; Lambda memory set low, which also limits its CPU |
-| PERF02-BP03 | Collect compute-related metrics | Memory not published for EC2; Container Insights off |
+| PERF02-BP03 | Collect compute-related metrics | Memory not published for EC2; Container Insights off; Lambda Insights not installed on a CPU-bound function; no GPU or inference component metrics for a SageMaker AI endpoint |
 | PERF02-BP04 | Configure and right-size compute resources | Compute Optimizer Underprovisioned on the hot path; Overprovisioned off the hot path |
-| PERF02-BP05 | Scale your compute resources dynamically | Auto Scaling at maximum during the peak; no scaling policy; target too high; ECS desired below demand; queue or stream consumers that do not scale with backlog; a single degraded member in a shared-queue consumer fleet that the aggregate hides; scaling on CPU when users feel latency or queue age; Auto Scaling group pinned at GroupMaxSize; slow scaling against a sudden spike |
-| PERF02-BP06 | Use optimized hardware-based compute accelerators | Compute-bound ML or media work on general-purpose CPUs |
+| PERF02-BP05 | Scale your compute resources dynamically | Auto Scaling at maximum during the peak; no scaling policy; target too high; ECS desired below demand; queue or stream consumers that do not scale with backlog; a single degraded member in a shared-queue consumer fleet that the aggregate hides; scaling on CPU when users feel latency or queue age; Auto Scaling group pinned at GroupMaxSize; slow scaling against a sudden spike; SageMaker AI endpoint at its instance-type quota or without a scaling policy; Bedrock tokens per minute at the applied quota with no inference profile or Provisioned Throughput |
+| PERF02-BP06 | Use optimized hardware-based compute accelerators | Compute-bound ML or media work on general-purpose CPUs; GPU utilization low while inference latency is high (input pipeline or batching, not the accelerator); no accelerator telemetry on a GPU cluster |
 
 ## PERF 3. Data management
 
@@ -37,7 +37,7 @@ How do you store, manage, and access data in your workload?
 |---|---|---|
 | PERF03-BP01 | Use a purpose-built data store that best supports your data access and storage requirements | Key-value access on a relational database at high rate; analytics queries on the transactional primary |
 | PERF03-BP02 | Evaluate available configuration options for data store | EBS or RDS storage at its IOPS or throughput limit; gp2 burst exhausted; DynamoDB capacity mode wrong for the traffic shape |
-| PERF03-BP03 | Collect and record data store performance metrics | Performance Insights or Database Insights disabled; no slow query log |
+| PERF03-BP03 | Collect and record data store performance metrics | Database Insights disabled (the `pi` API returns no data); no slow query log; ElastiCache OpenTelemetry metrics unavailable because the engine is not node-based Valkey |
 | PERF03-BP04 | Implement strategies to improve query performance in data store | Top SQL by load dominates DBLoad; read traffic on the writer that a replica could serve |
 | PERF03-BP05 | Implement data access patterns that utilize caching | No cache in front of repeated reads; low hit ratio; evictions; cold-cache latency spikes after a restart or deploy; bimodal latency from cache hit versus miss |
 
@@ -62,8 +62,8 @@ How do your organizational practices and culture contribute to performance effic
 | ID | Best practice | Typical findings |
 |---|---|---|
 | PERF05-BP01 | Establish key performance indicators (KPIs) to measure workload health and performance | No latency objective or SLO defined; no error budget or burn rate derived from the SLO |
-| PERF05-BP02 | Use monitoring solutions to understand the areas where performance is most critical | No tracing or Application Signals on the hot path; no percentile alarms; metrics not broken down per operation, instance, Availability Zone or caller; no client-side view (Synthetics or RUM) |
-| PERF05-BP03 | Define a process to improve workload performance | Repeated regressions after deployments with no performance check; no performance regression gate in CI/CD |
+| PERF05-BP02 | Use monitoring solutions to understand the areas where performance is most critical | No tracing or Application Signals on the hot path; no percentile alarms; metrics not broken down per operation, instance, Availability Zone or caller; no client-side view (Synthetics or RUM); Bedrock model invocation logging off; AgentCore spans not enabled; every other telemetry gap in `telemetry-sources.md` without a more specific ID |
+| PERF05-BP03 | Define a process to improve workload performance | Repeated regressions after deployments with no performance check; no performance regression gate in CI/CD; no investigation workflow at all (CloudWatch investigations or Omni, ranked last) |
 | PERF05-BP04 | Load test your workload | Capacity for a known peak unverified; no stress, soak or spike test to find the breaking point, slow leaks or spike behaviour |
 | PERF05-BP05 | Use automation to proactively remediate performance-related issues | Manual scaling ahead of events; raw-threshold alarms instead of SLO burn-rate and per-fault-boundary alarms; alarms without a runbook |
 | PERF05-BP06 | Keep your workload and services up-to-date | Older engine versions or instance generations with known performance improvements available |

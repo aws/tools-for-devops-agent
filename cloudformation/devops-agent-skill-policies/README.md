@@ -57,7 +57,7 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableSageMakerAIOpsReview` | `sagemaker-ai-ops-review` | `savingsplans:DescribeSavingsPlans` |
 | `EnableLiveStreamingEventReadinessReview` | `live-streaming-event-readiness-review` | `mediatailor:ListPlaybackConfigurations`, `mediatailor:GetPlaybackConfiguration`, `mediatailor:ListPrefetchSchedules`, `route53-recovery-cluster:ListRoutingControls` |
 | `EnableEosCostAnalysis` | `eos-cost-analysis` | `pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`. Resource discovery is already covered by the managed policy |
-| `EnableAwsPerformanceEfficiencyReview` | `aws-performance-efficiency-review` | `compute-optimizer:GetEnrollmentStatus`, `compute-optimizer:GetEC2InstanceRecommendations`, `compute-optimizer:GetAutoScalingGroupRecommendations`, `compute-optimizer:GetEBSVolumeRecommendations`, `compute-optimizer:GetLambdaFunctionRecommendations`, `compute-optimizer:GetECSServiceRecommendations`, `compute-optimizer:GetRDSDatabaseRecommendations`, `lambda:GetFunctionConcurrency` |
+| `EnableAwsPerformanceEfficiencyReview` | `aws-performance-efficiency-review` | `compute-optimizer:GetEnrollmentStatus`, `compute-optimizer:GetEC2InstanceRecommendations`, `compute-optimizer:GetAutoScalingGroupRecommendations`, `compute-optimizer:GetEBSVolumeRecommendations`, `compute-optimizer:GetLambdaFunctionRecommendations`, `compute-optimizer:GetECSServiceRecommendations`, `compute-optimizer:GetRDSDatabaseRecommendations`, `lambda:GetFunctionConcurrency`, `trustedadvisor:ListChecks`, `trustedadvisor:ListRecommendations`, `trustedadvisor:GetRecommendation`, `trustedadvisor:ListRecommendationResources` (Trusted Advisor needs a Business or higher Support plan) |
 | `EnableEksOperationReview` | `aws-eks-operations-review` | None — already covered by the managed policy |
 | `EnableEnrichWithSecurityAgent` | `enrich-with-aws-security-agent` | None — already covered by the managed policy |
 | `EnableCrmInvestigationGuidelines` | `crm-production-investigation-guidelines` | None — already covered by the managed policy |
@@ -66,8 +66,9 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 The last four parameters exist so the skill list stays complete and self-documenting;
 toggling them changes nothing in the stack.
 
-`EnableAwsHealthEvents` and `EnableSupportCases` need an AWS Business or Enterprise
-Support plan for the underlying APIs to return data.
+`EnableAwsHealthEvents`, `EnableSupportCases` and the Trusted Advisor actions of
+`EnableAwsPerformanceEfficiencyReview` need an AWS Business or Enterprise Support
+plan for the underlying APIs to return data.
 
 ### Optional add-on permissions
 

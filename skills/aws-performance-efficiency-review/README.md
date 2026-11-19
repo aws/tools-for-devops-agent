@@ -10,9 +10,11 @@ A skill for AWS DevOps Agent that finds where an application spends its time, wh
 - Measures p50, p90 and p99 latency, request rate and errors at each hop, and computes each hop's share of end-to-end latency.
 - Checks the slowest hop's resources for utilization, saturation and errors: CPU, memory, IOPS, connections, concurrency, throttles, queue age, cache hit ratio.
 - Correlates latency changes with deployments, configuration changes and traffic.
-- Runs service-specific checks: RDS Performance Insights top waits and SQL, scaling configuration, Lambda concurrency and timeouts, DynamoDB throttling, ElastiCache evictions, NAT gateway port allocation.
+- Runs service-specific checks: Database Insights top waits and SQL (through the `pi` API), scaling configuration, Lambda concurrency and timeouts, DynamoDB throttling, ElastiCache evictions, NAT gateway port allocation.
+- Covers AI and ML hops as part of the path: Amazon Bedrock model invocation (token and request quotas, Provisioned Throughput, output tokens per second), SageMaker AI real-time endpoints (model against overhead latency, invocations per instance, instance quotas), GPU inference on EKS through Accelerated Compute Insights, and Bedrock AgentCore runtime metrics. When the bottleneck is inside the model, the training job or the agent runtime, the report names the dedicated skill as the next step: `bedrock-operation-review`, `sagemaker-ai-ops-review`, `agentcore-ops-review` or `aiml-gpu-training-cluster-investigation`.
+- Reads AWS Trusted Advisor performance checks as a second evidence source next to Compute Optimizer; a flagged resource on the path is a hypothesis to confirm with the workload's own metrics.
 - Reads Compute Optimizer recommendations and separates hot-path findings (performance) from off-path findings (cost).
-- Produces a report: verdict, request path, bottleneck with evidence, findings mapped to Well-Architected best-practice IDs, ranked recommendations with cost direction and a verification metric, and telemetry gaps.
+- Produces a report: verdict, request path, bottleneck with evidence, findings mapped to Well-Architected best-practice IDs, ranked recommendations with cost direction and a verification metric, and a telemetry gaps table (capability to enable, what it would measure, cost direction with the pricing page, the enable and read-permission change).
 
 The skill only reads. It does not change resources, run code, or connect to databases.
 
@@ -26,15 +28,15 @@ If you also want a custom agent to load this skill, select **All agents** as the
 ## Prerequisites
 
 - An AWS DevOps Agent Space with the application's accounts associated.
-- For the best results: CloudWatch Application Signals or AWS X-Ray on the services in the request path, RDS Performance Insights or Database Insights on databases, the CloudWatch agent publishing memory on EC2, Container Insights on ECS and EKS, and Compute Optimizer opted in. The skill works without them and reports each missing source as a telemetry gap.
+- For the best results: CloudWatch Application Signals or AWS X-Ray on the services in the request path, Database Insights on RDS and Aurora, the CloudWatch agent publishing memory on EC2, Container Insights on ECS and EKS, Lambda Insights on CPU-bound functions, Compute Optimizer opted in, a Business or higher support plan for Trusted Advisor, and for AI hops Bedrock model invocation logging, SageMaker AI detailed observability, Accelerated Compute Insights on GPU clusters and AgentCore observability. The skill works without them and reports each missing source as a telemetry gap with the cost direction and the change needed.
 
 ### IAM permissions
 
 The DevOps Agent role needs **read-only** permissions for the review to produce complete results.
 
-#### Required: eight actions to add
+#### Required: twelve actions to add
 
-`AIDevOpsAgentAccessPolicy` (default version v12) covers every action this skill uses except these eight, which must be added:
+`AIDevOpsAgentAccessPolicy` (default version v16) covers every action this skill uses except these twelve, which must be added:
 
 ```
 compute-optimizer:GetEnrollmentStatus
@@ -45,7 +47,13 @@ compute-optimizer:GetLambdaFunctionRecommendations
 compute-optimizer:GetECSServiceRecommendations
 compute-optimizer:GetRDSDatabaseRecommendations
 lambda:GetFunctionConcurrency
+trustedadvisor:ListChecks
+trustedadvisor:ListRecommendations
+trustedadvisor:GetRecommendation
+trustedadvisor:ListRecommendationResources
 ```
+
+The four `trustedadvisor` actions return data only on a Business Support+, Enterprise Support or Unified Operations plan (existing Business Support and Enterprise On-Ramp plans keep access until they end on 2027-01-01); on other plans the API returns AccessDenied and the skill reports Trusted Advisor as unavailable.
 
 Deploy them with the `EnableAwsPerformanceEfficiencyReview` parameter in
 [cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
@@ -62,7 +70,7 @@ aws cloudformation deploy \
 
 Most of the template's other `Enable*` parameters default to `true`. Set the ones you do not want to `false`, or you will also attach the other skills' policies, some of which grant write actions such as `servicequotas:RequestServiceQuotaIncrease`.
 
-**The skill still runs without these eight.** For a denied call it names the missing permission, uses a fallback, and reports the gap. What you lose is the Compute Optimizer right-sizing input and the Lambda reserved-concurrency value.
+**The skill still runs without these twelve.** For a denied call it names the missing permission, uses a fallback, and reports the gap. What you lose is the Compute Optimizer right-sizing input, the Lambda reserved-concurrency value and the Trusted Advisor performance checks.
 
 #### Full action list (reference)
 
@@ -89,6 +97,10 @@ compute-optimizer:GetEBSVolumeRecommendations
 compute-optimizer:GetLambdaFunctionRecommendations
 compute-optimizer:GetECSServiceRecommendations
 compute-optimizer:GetRDSDatabaseRecommendations
+trustedadvisor:ListChecks
+trustedadvisor:ListRecommendations
+trustedadvisor:GetRecommendation
+trustedadvisor:ListRecommendationResources
 pi:GetResourceMetrics
 pi:DescribeDimensionKeys
 elasticloadbalancing:Describe*
@@ -118,6 +130,16 @@ sqs:GetQueueAttributes
 sqs:ListQueues
 servicequotas:GetServiceQuota
 servicequotas:ListServiceQuotas
+bedrock:GetProvisionedModelThroughput
+bedrock:GetInferenceProfile
+bedrock:GetModelInvocationLoggingConfiguration
+bedrock:ListProvisionedModelThroughputs
+bedrock:ListInferenceProfiles
+sagemaker:DescribeEndpoint
+sagemaker:DescribeEndpointConfig
+sagemaker:ListEndpoints
+application-autoscaling:DescribeScalableTargets
+application-autoscaling:DescribeScalingActivities
 ```
 
 Why some of these actions are listed:
@@ -132,6 +154,10 @@ Why some of these actions are listed:
 - `lambda:ListProvisionedConcurrencyConfigs`: read provisioned concurrency for the Lambda deep check and the cold-start and masking-fix rules.
 - `ec2:DescribeVolumes`: read volume type, size, provisioned IOPS and provisioned throughput for the storage hidden-limits checks (gp2 burst baseline, gp3 provisioned limits).
 - `cloudtrail:LookupEvents`: read configuration-change events in the window for the change rule-out (timing, scope, history), and as a fallback source for a configuration value when a describe call fails.
+- `trustedadvisor:ListChecks`, `ListRecommendations`, `GetRecommendation`, `ListRecommendationResources`: performance-pillar checks and their flagged resources as a second evidence source (Step 5).
+- `bedrock:GetProvisionedModelThroughput`, `GetInferenceProfile`, `GetModelInvocationLoggingConfiguration` and the matching `List*` actions: model units, inference profile Regions and logging state for the Bedrock deep check; `servicequotas:ListServiceQuotas` with service code `bedrock` gives the applied tokens-per-minute and requests-per-minute quotas.
+- `sagemaker:DescribeEndpoint`, `DescribeEndpointConfig`, `ListEndpoints`, `application-autoscaling:DescribeScalableTargets`, `DescribeScalingActivities`: instance type and count per variant, scaling policy and failed scaling activities for the SageMaker AI deep check.
+- `cloudwatch:GetMetricData` also covers the `AWS/Bedrock`, `AWS/SageMaker`, `/aws/sagemaker/InferenceComponents`, `AWS/Bedrock-AgentCore` and `LambdaInsights` namespaces; Accelerated Compute Insights and ElastiCache OpenTelemetry metrics are read through CloudWatch PromQL queries (IAM action to verify; the managed policy includes cloudwatch:StartTelemetryQuery and cloudwatch:GetTelemetryQueryResults).
 
 All of them are read-only. If the agent role uses a custom policy instead of `AIDevOpsAgentAccessPolicy`, grant the full list above.
 
@@ -161,7 +187,8 @@ aws-performance-efficiency-review/
 │   ├── logs-and-statistics.md             # Logs Insights patterns; baselines, SLOs, async RED, Little's law
 │   ├── diagnosis-rules.md                 # Confidence labels, differential, magnitude arithmetic, twins, masking fixes
 │   ├── report-and-delegation.md           # Report template, hygiene, sub-agent task text
-│   └── well-architected-mapping.md        # PERF01 to PERF05 best-practice IDs and typical findings
+│   ├── well-architected-mapping.md        # PERF01 to PERF05 best-practice IDs and typical findings
+│   └── telemetry-sources.md               # Capabilities to enable per telemetry gap: measure, detect, cost direction, permissions
 ├── evals/
 │   ├── evals.json                         # Chat, investigation and negative test cases with assertions
 │   ├── additional-permissions.json        # Extra read permissions for the functional test spaces
@@ -179,7 +206,8 @@ aws-performance-efficiency-review/
 - [AWS Compute Optimizer User Guide](https://docs.aws.amazon.com/compute-optimizer/latest/ug/what-is-compute-optimizer.html)
 - [CloudWatch Application Signals](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Application-Monitoring-Sections.html)
 - [AWS X-Ray Developer Guide](https://docs.aws.amazon.com/xray/latest/devguide/aws-xray.html)
-- [Amazon RDS Performance Insights](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PerfInsights.html)
+- [CloudWatch Database Insights](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Database-Insights.html)
+- [AWS Trusted Advisor API](https://docs.aws.amazon.com/awssupport/latest/user/get-started-with-aws-trusted-advisor-api.html)
 
 ## Further reading
 
@@ -214,3 +242,31 @@ AWS documentation for the metrics and limits the references cite (confirm figure
 - Amazon EC2 Auto Scaling group metrics: https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-cloudwatch-monitoring.html
 - Lambda function memory configuration (memory sets CPU share; 1,769 MB is one vCPU): https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html
 - Lambda function metrics (`Duration` does not include cold start time): https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html
+- Lambda Insights: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Lambda-Insights.html
+- Container Insights: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContainerInsights.html
+- CloudWatch Database Insights (modes, Performance Insights end of life): https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Database-Insights.html
+- ElastiCache OpenTelemetry metrics and ElastiCache Insights: https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/otel-metrics.html and https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ElastiCache-Insights.html
+- CloudWatch Network Monitoring performance monitors: https://aws.amazon.com/about-aws/whats-new/2026/11/cloudwatch-network-path-monitoring/
+- CloudWatch investigations and Amazon CloudWatch Omni (investigation experiences, not telemetry): https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Investigations.html, https://aws.amazon.com/cloudwatch/omni/, https://aws.amazon.com/cloudwatch/omni/pricing/, https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/omni-ai-inference-insights.html
+
+Trusted Advisor:
+
+- ListRecommendations (pillar, status and awsService filters): https://docs.aws.amazon.com/trustedadvisor/latest/APIReference/API_ListRecommendations.html
+- Getting started with the Trusted Advisor API (support plan requirement): https://docs.aws.amazon.com/awssupport/latest/user/get-started-with-aws-trusted-advisor-api.html
+- IAM actions for Trusted Advisor: https://docs.aws.amazon.com/service-authorization/latest/reference/list_trustedadvisor.html
+- AWS Support plans: https://aws.amazon.com/premiumsupport/plans/
+
+AI and ML:
+
+- Amazon Bedrock runtime metrics (`AWS/Bedrock`): https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html
+- Amazon Bedrock quotas for the bedrock-runtime endpoint (tokens per minute, requests per minute): https://docs.aws.amazon.com/bedrock/latest/userguide/quotas-runtime.html
+- Amazon Bedrock Provisioned Throughput: https://docs.aws.amazon.com/bedrock/latest/userguide/prov-throughput.html
+- Amazon Bedrock cross-Region inference: https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html
+- Amazon Bedrock model invocation logging: https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html
+- SageMaker AI endpoint metrics (`AWS/SageMaker`, inference components): https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html
+- SageMaker AI Insights: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/SageMaker-Insights.html and https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/SageMaker-AI-Insights-Metrics.html
+- SageMaker endpoint instance quotas ("for endpoint usage"): https://docs.aws.amazon.com/general/latest/gr/sagemaker.html
+- Accelerated Compute Insights (GPU telemetry on EKS, PromQL): https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Accelerated-Compute-Insights.html
+- Amazon Bedrock AgentCore runtime observability data: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-runtime-metrics.html
+
+Pricing pages linked from telemetry gaps (direction only, never a price): https://aws.amazon.com/cloudwatch/pricing/, https://aws.amazon.com/xray/pricing/, https://aws.amazon.com/lambda/pricing/, https://aws.amazon.com/bedrock/pricing/, https://aws.amazon.com/compute-optimizer/pricing/

@@ -1,12 +1,12 @@
 ---
 name: aws-performance-efficiency-review
-description: Cross-service performance analysis of an AWS application, aligned with the Performance Efficiency pillar of the AWS Well-Architected Framework. Use this skill when a user asks why an application or service is slow, where the latency comes from, what the bottleneck is, whether resources are right-sized, or whether the workload will scale for a peak, or asks for a performance review. Also use it in an investigation when the symptom is high latency, rising p99, timeouts, throttling, retries, queue backlog, or saturation of CPU, memory, IOPS, connections or concurrency. Traces the path from the entry point (load balancer, queue, stream or schedule) through its dependencies, finds the constraining resource with the USE and RED methods, and returns ranked fixes mapped to Well-Architected best practices. Covers Lambda, ECS, EKS, EC2, EBS, RDS and Aurora, DynamoDB, ElastiCache, SQS, ALB and API Gateway. Triggers on "performance review", "why is it slow", "bottleneck", "backlog", "p99".
+description: Cross-service performance analysis of an AWS application, aligned with the Performance Efficiency pillar of the AWS Well-Architected Framework. Use this skill when a user asks why an application or service is slow, where the latency comes from, what the bottleneck is, whether resources are right-sized, or whether the workload will scale for a peak. Also use it in an investigation when the symptom is high latency, rising p99, timeouts, throttling, retries, queue backlog, or saturated CPU, memory, IOPS, connections or concurrency. Traces the path from the entry point (load balancer, queue, stream or schedule) through its dependencies, finds the constraining resource with the USE and RED methods, and returns ranked fixes mapped to Well-Architected best practices. Covers Lambda, ECS, EKS, EC2, EBS, RDS and Aurora, DynamoDB, ElastiCache, SQS, ALB, API Gateway, Bedrock, SageMaker AI endpoints, AgentCore and GPU clusters. Triggers on "performance review", "why is it slow", "bottleneck", "backlog", "p99".
 metadata:
   author: kshtepa
   version: "1.0.0"
   summary: "Finds where an AWS application spends its time and which resource limits it, then ranks fixes against the Well-Architected Performance Efficiency pillar. Read-only."
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
-  aws-devops-agent-skills.aws-services: "Amazon CloudWatch, AWS X-Ray, Amazon EC2, Amazon ECS, Amazon EKS, Amazon RDS, AWS Service Quotas"
+  aws-devops-agent-skills.aws-services: "Amazon CloudWatch, AWS X-Ray, Amazon EC2, Amazon ECS, Amazon EKS, Amazon RDS, AWS Service Quotas, Amazon Bedrock, Amazon Bedrock AgentCore, Amazon SageMaker AI"
   aws-devops-agent-skills.technical-domains: "Capacity Planning, Observability, Databases"
 ---
 
@@ -14,7 +14,7 @@ metadata:
 
 Find where an application spends its time, which resource limits it, and what to change. Every conclusion cites the metric, the resource, the window and the value that supports it.
 
-Native AWS read APIs only: CloudWatch, CloudWatch Logs, X-Ray, Application Signals, Compute Optimizer, RDS Performance Insights and the describe APIs of the services on the path. Read-only: recommend changes, never apply them.
+Native AWS read APIs only: CloudWatch, CloudWatch Logs, X-Ray, Application Signals, Compute Optimizer, Trusted Advisor, Database Insights (`pi` API) and the describe APIs of the services on the path. Read-only: recommend changes, never apply them.
 
 ## Instructions
 
@@ -72,7 +72,7 @@ Full rule and worked arithmetic for each gotcha: `references/diagnosis-rules.md`
 - A finding states metric, dimension, statistic, window, value with unit, and the threshold it crossed. Confirm units and compute utilization against the real limit (`references/metrics-by-service.md`).
 - Label every cause **Confirmed** (two independent signals, onset and magnitude match), **Likely** (one signal, or a failed read) or **Unconfirmed** (never listed as a cause). One label per cause, used everywhere.
 - Separate the bottleneck from its symptoms. A pool or concurrency limit at its maximum behind a slow dependency is a consequence (in-flight = rate x latency) unless it saturated first.
-- Missing telemetry is a finding. For a failed call, report the error class, retry once if on-path, name the missing permission for access denied, and use a fallback.
+- Missing telemetry is a finding. For a failed call, report the error class, retry once if on-path, name the missing permission for access denied, and use a fallback. Every source on the request path that could not be read (capability off, call denied, namespace empty) is a telemetry gap; the report's Telemetry gaps section lists per gap the capability to enable, what the review could then measure (a concrete metric), the cost direction with the pricing page link (never a price), and the change needed to enable it and for the agent to read it (`references/telemetry-sources.md`).
 - Give each recommendation a cost direction (saves, neutral, adds cost) and say when a performance fix raises cost.
 - Keep API calls bounded: one `GetMetricData` call per resource with all its metrics. Stop expanding once the bottleneck is Confirmed and end-to-end time is accounted for.
 
@@ -112,7 +112,10 @@ Exclude one-minute transients at deployments or scaling events from the steady-s
 
 ## Step 5: Service deep checks
 
-Run only those that apply to the suspect: databases (Performance Insights load by wait and statement), Lambda (memory, timeout, concurrency, `REPORT` lines, cold starts), other compute scaling, caches and NoSQL, queues and streams, callers and retries, network path. Read `references/metrics-by-service.md` (Deep checks by service) for the calls and comparisons.
+Run only those that apply to the suspect: databases (Database Insights load by wait and statement through the `pi` API), Lambda (memory, timeout, concurrency, `REPORT` lines, cold starts), other compute scaling, caches and NoSQL, queues and streams, callers and retries, network path, AI and ML workloads (Bedrock model invocation, SageMaker AI endpoints, GPU clusters, AgentCore). Read `references/metrics-by-service.md` (Deep checks by service) for the calls and comparisons.
+
+- **AI and ML hop.** Read the "AI and ML workloads" section of `references/metrics-by-service.md`: token-rate and request-rate quotas are hidden limits, `InvocationThrottles` are excluded from `Invocations`, and when the bottleneck is inside the model, the training job or the agent runtime, name the dedicated skill (`bedrock-operation-review`, `sagemaker-ai-ops-review`, `agentcore-ops-review`, `aiml-gpu-training-cluster-investigation`) as the next step while this review keeps measuring the hop from the caller.
+- **Trusted Advisor.** Next to Compute Optimizer, call `trustedadvisor:ListRecommendations` with `pillar=performance`, once with `status=error` and once with `status=warning`, then `GetRecommendation` and `ListRecommendationResources` for resources on the request path. A flagged resource is a hypothesis to confirm with the workload's own metrics, never the root cause by itself; off-path flags are reported separately, like Compute Optimizer off-path findings. On AccessDenied or a support-plan error, report the source as unavailable, naming the four actions (`ListChecks`, `ListRecommendations`, `GetRecommendation`, `ListRecommendationResources`) and the Business or higher support plan the API requires.
 
 ## Step 6: Right-sizing
 
@@ -147,3 +150,4 @@ A sub-agent does not read this file. Copy the delegation block from `references/
 | `references/hidden-limits.md` | A resource looks under-used but the symptom persists |
 | `references/logs-and-statistics.md` | Baselines, windows, SLOs, async RED, Logs Insights queries, outlier statistics, Little's law |
 | `references/well-architected-mapping.md` | Assigning a PERF ID to each finding and recommendation |
+| `references/telemetry-sources.md` | Writing the Telemetry gaps section: per capability, what it measures, how to detect it is off, cost direction, permissions, PERF ID |

@@ -183,7 +183,10 @@ Parameters:
     Description: >
       AWS Performance Efficiency Review skill (adds compute-optimizer:GetEnrollmentStatus,
       compute-optimizer:Get*Recommendations for EC2, Auto Scaling groups, EBS, Lambda,
-      ECS and RDS, and lambda:GetFunctionConcurrency).
+      ECS and RDS, lambda:GetFunctionConcurrency, and the four trustedadvisor read
+      actions ListChecks, ListRecommendations, GetRecommendation and
+      ListRecommendationResources; the Trusted Advisor API needs a Business or higher
+      Support plan).
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -768,15 +771,20 @@ Resources:
             Resource: '*'
 
   # aws-performance-efficiency-review: only the read actions NOT already granted by
-  # AIDevOpsAgentAccessPolicy (checked against default version v12): the seven
-  # Compute Optimizer reads and lambda:GetFunctionConcurrency. Every other API the
-  # skill calls (CloudWatch, Logs Insights, X-Ray, Application Signals, Performance
-  # Insights, ELB, EC2, Auto Scaling, ECS, EKS, Lambda, RDS, DynamoDB, ElastiCache,
-  # SQS, Service Quotas, CloudTrail describes and reads) is covered by the managed
-  # policy. Strictly read-only; no Put*, Create*, Update*, or Delete* is granted.
-  # Without this policy the skill names the missing permission for the Compute
-  # Optimizer and reserved-concurrency reads, uses a fallback, and the rest of the
-  # review runs normally. compute-optimizer:GetECSServiceRecommendations is also in
+  # AIDevOpsAgentAccessPolicy (checked against default version v16): the seven
+  # Compute Optimizer reads, lambda:GetFunctionConcurrency and four Trusted Advisor
+  # reads. Every other API the skill calls (CloudWatch, Logs Insights, X-Ray,
+  # Application Signals, Database Insights through the pi API, ELB, EC2, Auto Scaling,
+  # ECS, EKS, Lambda, RDS, DynamoDB, ElastiCache, SQS, Service Quotas, CloudTrail,
+  # Bedrock Get*/List*, SageMaker Describe*/List* describes and reads) is covered by
+  # the managed policy. Strictly read-only; no Put*, Create*, Update*, or Delete* is
+  # granted. Without this policy the skill names the missing permission for the
+  # Compute Optimizer, reserved-concurrency and Trusted Advisor reads, uses a
+  # fallback, and the rest of the review runs normally. The Trusted Advisor API also
+  # needs a Business Support+, Enterprise Support or Unified Operations plan (existing
+  # Business Support and Enterprise On-Ramp plans keep access until they end on
+  # 2027-01-01); on other plans it returns AccessDenied and the skill reports the
+  # source as unavailable. compute-optimizer:GetECSServiceRecommendations is also in
   # PolicyEcsOperationReview; it is repeated here so this skill does not depend on
   # EnableEcsOperationReview.
   PolicyAwsPerformanceEfficiencyReview:
@@ -810,6 +818,19 @@ Resources:
             Action:
               - lambda:GetFunctionConcurrency
             Resource: !Sub 'arn:${AWS::Partition}:lambda:*:${AWS::AccountId}:function:*'
+          # The Trusted Advisor service authorization reference defines no resource
+          # types for these four actions (the Resource types column is empty), so
+          # they do not support resource-level permissions and need Resource '*'.
+          # ListChecks, ListRecommendations and ListRecommendationResources are List
+          # access level, GetRecommendation is Read; none has resource-level scoping.
+          - Sid: PerformanceEfficiencyTrustedAdvisorRead
+            Effect: Allow
+            Action:
+              - trustedadvisor:ListChecks
+              - trustedadvisor:ListRecommendations
+              - trustedadvisor:GetRecommendation
+              - trustedadvisor:ListRecommendationResources
+            Resource: '*'
 
 Outputs:
   DevOpsAgentRoleArn:
@@ -844,7 +865,7 @@ Outputs:
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
-        - aws-performance-efficiency-review: ${EnableAwsPerformanceEfficiencyReview} (compute-optimizer:GetEnrollmentStatus, compute-optimizer:Get*Recommendations for EC2/ASG/EBS/Lambda/ECS/RDS, lambda:GetFunctionConcurrency)
+        - aws-performance-efficiency-review: ${EnableAwsPerformanceEfficiencyReview} (compute-optimizer:GetEnrollmentStatus, compute-optimizer:Get*Recommendations for EC2/ASG/EBS/Lambda/ECS/RDS, lambda:GetFunctionConcurrency, trustedadvisor:ListChecks/ListRecommendations/GetRecommendation/ListRecommendationResources)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)

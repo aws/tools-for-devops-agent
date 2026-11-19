@@ -31,6 +31,8 @@ Start with RED on the request path to find the slow hop, then USE on that hop's 
 | SQS | ApproximateAgeOfOldestMessage | growing over the window, or above the processing SLA |
 | ALB | RejectedConnectionCount, TargetConnectionErrorCount | any non-zero value |
 | NAT gateway | ErrorPortAllocation | any non-zero value |
+| Bedrock model invocation | InvocationThrottles | any non-zero value on the hot path; then read tokens per minute against the model's applied quota |
+| SageMaker AI endpoint | InvocationsPerInstance | above the per-instance rate at which ModelLatency p99 was flat in the baseline |
 
 ## Patterns: symptom to likely cause
 
@@ -38,7 +40,7 @@ Start with RED on the request path to find the slow hop, then USE on that hop's 
 |---|---|---|
 | Latency rises with request rate; CPU of the tier near 100% | Capacity: tier too small or not scaling | Auto Scaling activity, max size reached, ECS desired versus running |
 | Latency step change at flat traffic | A change: deployment, configuration, query plan, dependency | Change history and deployments at the step time; per-edge latency before and after |
-| p99 high, p50 normal | Tail effects: cold starts, garbage collection, lock contention, a slow subset of keys or queries, retries | Slow trace samples; Performance Insights wait events. For cold starts, compute init share x mean `Init Duration` and compare it with the shift in caller-observed end-to-end latency; Lambda `Duration` excludes init time, so a `Duration` p50 shift cannot come from initialization (see `diagnosis-rules.md`, Cold starts); a whole-distribution shift is not a tail effect |
+| p99 high, p50 normal | Tail effects: cold starts, garbage collection, lock contention, a slow subset of keys or queries, retries | Slow trace samples; Database Insights wait events. For cold starts, compute init share x mean `Init Duration` and compare it with the shift in caller-observed end-to-end latency; Lambda `Duration` excludes init time, so a `Duration` p50 shift cannot come from initialization (see `diagnosis-rules.md`, Cold starts); a whole-distribution shift is not a tail effect |
 | Periodic latency spikes | Batch jobs, cron, backups, cache expiry at the same time (thundering herd), scaling cooldown | Align spikes with scheduled events and backup windows |
 | Database DBLoad above vCPU, waits dominated by CPU | Expensive queries or missing indexes | Top `db.sql_tokenized` by load |
 | DBLoad high: is it one costly statement per request or many small ones (N+1)? | One expensive statement versus N+1 chatty access | Load check: average active sessions ≈ request rate × per-request database time. If one statement's time accounts for the load, it is one expensive statement per request; if the load only adds up across many small statements per request, it is N+1 |
@@ -64,6 +66,8 @@ Start with RED on the request path to find the slow hop, then USE on that hop's 
 | Client timeout is below the dependency's p99 | Timeouts fire on normal tail latency and trigger retries | Compare the configured client timeout with the dependency's measured p99 at single-attempt load; size the caller's client timeout from that p99, inside the caller's own deadline (this is the fix, not masking) |
 | Lambda Duration near the timeout, low memory used, a same-code twin with more memory is healthy | CPU share too small for the work (memory sets CPU) | Memory ratio against the measured compute-time ratio; predicted post-change duration (see `diagnosis-rules.md`, Lambda memory and CPU) |
 | Only one of two peers is degraded after a change applied to both | The change is not the cause (ruled out by scope) | Diff configuration and request shape between the peers instead |
+| Caller latency to a Bedrock model rises while `InvocationLatency` p50 is flat and `InvocationThrottles` is non-zero | Token-rate or request-rate throttling presenting as latency: the client retries into the per-model quota (see `hidden-limits.md`, Bedrock token and request quotas) | Attempts per originating request = (`Invocations` + `InvocationThrottles`) / caller requests, above 1; tokens per minute at the applied quota in the same minutes; OTPS flat (the service is not slower, the caller waits through retries) |
+| Bedrock `InvocationLatency` rises with `OutputTokenCount` per request; OTPS flat | Longer answers, not a slower service | OTPS = `OutputTokenCount` / (`InvocationLatency` - `TimeToFirstToken`) x 1000 unchanged against baseline (streaming calls only); compare `TimeToFirstToken`, which stays flat when only the answer length grew |
 
 ## Overload and dependency behaviour
 
@@ -74,4 +78,4 @@ Start with RED on the request path to find the slow hop, then USE on that hop's 
 
 ## When the evidence is incomplete
 
-Say which link in the chain is unverified and what would close it, for example: "Database CPU and latency rose at the same minute as the deployment, but no traces exist to confirm the new code path calls the database more often. Enable X-Ray or Application Signals on the service, or compare query counts in Performance Insights before and after the deployment."
+Say which link in the chain is unverified and what would close it, for example: "Database CPU and latency rose at the same minute as the deployment, but no traces exist to confirm the new code path calls the database more often. Enable X-Ray or Application Signals on the service, or compare query counts in Database Insights before and after the deployment."
