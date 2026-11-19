@@ -1,0 +1,119 @@
+{
+  "version": "v2",
+  "iteration": 3,
+  "eval_id": "new-stack-create",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'iac-change-cost-preview' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response matches the expected output closely. It correctly: (1) prices in eu-west-1 based on deploy.yml's AWS_REGION; (2) treats base branch as having no template, so all resources are Added, with Removed and Resized both _None._; (3) runs the topology check against stack name payments-ledger, finds it doesn't exist, resulting in $0.00 adjustment; (4) correctly computes LedgerDb instance 0.500 x 730 = $365.00, discarding the 0.000 UnusedBox reservation SKU; (5) LedgerDb storage 0.250 x 200 = $50.00; (6) NAT gateway hours 0.050 x 730 = $36.50; (7) NAT EIP public IPv4 0.005 x 730 = $3.65; (8) ALB hours 0.025 x 730 = $18.25, discarding the TS- trust store row; (9) arrives at the +$480.70 total (the accepted alternative total per the expected output, which explicitly says either $473.40 or $480.70 is accepted) by including the 2 public IPv4 addresses for the internet-facing ALB at $7.30, explicitly noting this charge isn't declared in the template; (10) lists usage-dependent items without a figure: ArchiveBucket, ReconcilerFunction, NAT data processing bytes, and ALB LCU-hours; (11) notes subnet group, security group, and IAM role have no charge. All key computations, discarded SKUs, caveats, and structure align with the expected output description. This is a comprehensive pass.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"LedgerDb \u00b7 instance hours ... +$365.00 | P1\" ; \"LedgerDb \u00b7 storage ... +$50.00 | P2\"; \"ReconcilerNatGateway \u00b7 hourly ... +$36.50 | P3\"; \"ReconcilerNatEip ... +$3.65 | P4\"; \"ApiLoadBalancer \u00b7 hourly ... +$18.25 | P6\"; \"ApiLoadBalancer \u00b7 implied public IPs ... 2 | $0.005 / Hrs | +$7.30 | P5\"; \"Net monthly change | \u2248 +$480.70 / month\"; \"that charge isn't declared in the template\" (implied via caveats); \"ArchiveBucket (S3) and ReconcilerFunction (Lambda) have no fixed monthly cost\"; \"LedgerDbSubnetGroup | ... no billable component\"; \"AlbSecurityGroup | ... no billable component\"; \"ReconcilerRole | ... no billable component\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Response reports a net monthly change of about +$473.40 (LedgerDb instance $365.00 + storage $50.00 + NAT hours $36.50 + NAT EIP $3.65 + ALB hours $18.25), or about +$480.70 if it also prices the two public IPv4 addresses the internet-facing ALB gets from its two subnets. Accept $473.00-$481.50.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Net monthly change reported as '\u2248 +$480.70 / month', composed of $365.00 (instance) + $50.00 (storage) + $36.50 (NAT hours) + $3.65 (NAT EIP) + $18.25 (ALB hours) + $7.30 (two public IPs) = $480.70, within the accepted range.",
+          "reasoning": "The total matches the upper accepted value including the two public IPv4 addresses for the ALB.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response states that the pricing Region eu-west-1 was taken from the deploy workflow (AWS_REGION), and does not ask the user which Region to use.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Pricing Region | eu-west-1 \u00b7 from `deploy.yml`'s `AWS_REGION` env var / `--region` flag' and in caveats: 'Pricing Region is eu-west-1, taken from `deploy.yml`'s `AWS_REGION` and the `--region` flag on the deploy command.'",
+          "reasoning": "The agent explicitly states the region source and never asks the user to specify a region.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every resource is classified as Added, and the Removed and Resized sections are present but empty.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'\u2795 Added | 7 resources \u00b7 +$480.70' and '\u2796 Removed resources _None._' and '\ud83d\udd01 Resized resources _None._' sections are present but empty.",
+          "reasoning": "All resources classified as Added; Removed and Resized sections exist with zero entries.",
+          "confidence": "high"
+        },
+        {
+          "text": "LedgerDb is priced as two lines, instance $365.00 and storage $50.00, using the 0.500 Multi-AZUsage row and not the 0.000 UnusedBox row.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Table rows 'A1 | LedgerDb \u00b7 instance hours ... $0.500 / Hrs | +$365.00 | P1' and 'A1b | LedgerDb \u00b7 storage ... $0.250 / GB-Mo | +$50.00 | P2', using SKU FX-RDS-01 (Multi-AZUsage) not FX-RDS-09 (UnusedBox).",
+          "reasoning": "Correct rows used, matching assertion requirements.",
+          "confidence": "high"
+        },
+        {
+          "text": "The load balancer hours are priced at $18.25 using the LoadBalancerUsage row (0.025 x 730), not the TS- trust-store row.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'A4 | ApiLoadBalancer \u00b7 hourly ... $0.025 / Hrs | +$18.25 | P6' referencing 'AWSELB, usagetype=EU-LoadBalancerUsage, productFamily=Load Balancer-Application (SKU FX-ALB-01)'.",
+          "reasoning": "Uses correct LoadBalancerUsage row, not trust-store row (FX-ALB-03).",
+          "confidence": "high"
+        },
+        {
+          "text": "If the response prices the load balancer's public IPv4 addresses (a charge the template does not declare; it follows from Scheme: internet-facing and two subnets), it shows them as their own line at $7.30 (0.005 x 730 x 2) using the PublicIPv4:InUseAddress row. Omitting this line is not a failure.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'A5 | ApiLoadBalancer \u00b7 implied public IPs ... 2 | $0.005 / Hrs | +$7.30 | P5' with trace row 'P5 | A5 | AmazonVPC, usagetype=EU-PublicIPv4:InUseAddress (SKU FX-IP-01), qty 2 | 0.005 | USD/Hrs | $7.30'.",
+          "reasoning": "Response prices the implied public IPs as its own line at $7.30 using the PublicIPv4:InUseAddress row, matching the assertion's conditional requirement.",
+          "confidence": "high"
+        },
+        {
+          "text": "ArchiveBucket, ReconcilerFunction, NAT gateway data processing and load balancer LCU-hours are listed as usage-dependent with no dollar figure.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Usage-dependent table lists 'ArchiveBucket | AWS::S3::Bucket | GB-month stored + request count | \u2014', 'ReconcilerFunction | AWS::Lambda::Function | invocations + GB-seconds... | \u2014', 'ReconcilerNatGateway | ... GB data processed... | A2', 'ApiLoadBalancer | ... LCU-hours... | A4' \u2014 none show dollar figures in the 'not in total' section.",
+          "reasoning": "All four items are listed as usage-dependent without a dollar figure (fixed portions already priced separately are referenced via A2/A4 but variable component has no $ value).",
+          "confidence": "high"
+        },
+        {
+          "text": "Response does not introduce any rate other than the fixture rates (for example it does not show $0.504/hr or $367.92 for the database).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "All rates shown match fixture values: $0.500/Hrs, $0.250/GB-Mo, $0.050/Hrs, $0.005/Hrs, $0.025/Hrs \u2014 no $0.504 or $367.92 or other altered rate appears anywhere in the output.",
+          "reasoning": "No introduced rates outside the fixture data were found.",
+          "confidence": "high"
+        },
+        {
+          "text": "Every dollar amount in the Added table references a Pricing trace row that names the SKU (FX-...).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Each Added row has a 'Price ref' column (P1-P6) that maps to the Pricing trace table rows, each of which names a SKU, e.g. 'P1 | A1 | AmazonRDS, ... (SKU FX-RDS-01) | 0.500 | USD/Hrs | $365.00'.",
+          "reasoning": "Every priced line in the Added table cross-references a trace row with an explicit SKU identifier.",
+          "confidence": "high"
+        },
+        {
+          "text": "Response uses the cost dashboard layout: a Summary table, an Added resources table and a Pricing trace section, in that order",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'Summary\\n| Metric | Value |\\n|---|---|\\n| **Net monthly change** | **\u2248 +$480.70 / month** |\\n| Repo-based net (first check) | +$480.70 |\\n| Topology adjustment (second check) | +$0.00 \u00b7 0 resources |\\n| \u2795 A\u2026'"
+        }
+      ],
+      "summary": {
+        "passed": 10,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 10,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "2m28s",
+    "cost": "$1.23",
+    "context_window": {
+      "utilization": "5.6%",
+      "compaction_count": 0
+    }
+  }
+}
