@@ -1,0 +1,98 @@
+{
+    "skill_name": "elasticache-troubleshooting",
+    "evals": [
+        {
+            "id": "oom-noeviction",
+            "task_type": "investigation",
+            "prompt": "Since about 10:00 UTC today our application cannot write session data to ElastiCache cluster example-cache in us-east-1. Find the root cause.",
+            "expected_root_cause": "Memory reached maxmemory on every node while maxmemory-policy is noeviction, so the engine rejects writes with OOM. Evictions stay at 0. Because no key has a TTL, a volatile-* policy would free nothing; the fix is allkeys-lru for a pure cache, deleting keys, or more capacity.",
+            "should_trigger": true,
+            "assertions": [
+                "The response quotes evictions as 0 during the failure",
+                "The response states the maxmemory-policy value",
+                "The response explains that volatile-lru does not help when keys have no TTL",
+                {
+                    "text": "OOM is named as the error type",
+                    "evaluator": "regex",
+                    "pattern": "\\bOOM\\b"
+                }
+            ]
+        },
+        {
+            "id": "expensive-commands",
+            "task_type": "investigation",
+            "prompt": "Since about 11:00 UTC today we see periodic latency spikes on ElastiCache cluster example-cache in us-east-1. Find the root cause.",
+            "expected_root_cause": "A client runs O(N) commands (KEYS and HGETALL on a large hash) on a fixed interval, blocking the single-threaded engine for about 18 ms each time. Their latency is far above every other command, and slow log entries match the spikes. Engine CPU is low, so it is not saturation. Fix: SCAN/HSCAN and bounded reads; SLOWLOG GET is needed to name the key because delivered slow logs redact it.",
+            "should_trigger": true,
+            "assertions": [
+                "The response compares the slow commands' latency with other commands to rule out engine saturation",
+                "The response cites slow log entries",
+                {
+                    "text": "KEYS is named",
+                    "evaluator": "regex",
+                    "pattern": "\\bKEYS\\b"
+                }
+            ]
+        },
+        {
+            "id": "hot-key-shard",
+            "task_type": "investigation",
+            "prompt": "Since about 13:00 UTC p99 latency on ElastiCache cluster example-cache in us-east-1 increased and CPU looks high. Find the root cause.",
+            "expected_root_cause": "Key-distribution skew: one shard's primary carries many times the throughput and engine CPU of the other while per-command latency is normal. A hot key in that shard's slot range is the cause, not an undersized node. Fix: client-side caching or splitting the key; scaling up or adding shards does not fix one hot key. Next step: CLUSTER SLOT-STATS to name the key.",
+            "should_trigger": true,
+            "assertions": [
+                "The response compares throughput or CPU per shard or per node",
+                "The response states that scaling up the node type does not fix the skew",
+                "The response does not recommend running MONITOR on a primary"
+            ]
+        },
+        {
+            "id": "connection-churn",
+            "task_type": "investigation",
+            "prompt": "Since about 09:00 UTC our application reports connection timeouts to ElastiCache cluster example-cache in us-east-1, and the cluster CPU went up. Find the root cause.",
+            "expected_root_cause": "Connection churn: a client opens a new TLS connection per request instead of reusing a pool. New connections per second are very high while current connections stay flat, the extra commands are only connection handshakes (HELLO, CLIENT SETINFO, PING), and no connections are rejected, so maxclients is not the cause. Fix: connection pooling with keep-alive.",
+            "should_trigger": true,
+            "assertions": [
+                "The response states that rejected connections are 0 or that maxclients was not reached",
+                "The response recommends connection pooling or reuse",
+                "The response does not state that connection churn is ruled out"
+            ]
+        },
+        {
+            "id": "client-timeout-below-latency",
+            "task_type": "investigation",
+            "prompt": "Since about 15:00 UTC our application gets command timeouts from ElastiCache cluster example-cache in us-east-1, but the cache dashboard looks fine. Our client's command timeout is 1 millisecond. Find the root cause.",
+            "expected_root_cause": "The cluster is healthy (low engine CPU, steady connections, no errors, server latency in microseconds). The client's 1 ms command timeout is too tight for the full round trip (network, TLS and client time are not in the server latency metrics), so normal responses are treated as timeouts. Fix: raise the client timeout to a safe multiple of the observed round trip. Scaling the node would not help.",
+            "should_trigger": true,
+            "assertions": [
+                "The response explains that server-side latency metrics exclude the network round trip, or compares the timeout with the client's round trip",
+                "The response does not recommend a larger node type",
+                "The response states that connections are steady or that this is not connection churn"
+            ]
+        },
+        {
+            "id": "apply-mitigation-oom",
+            "task_type": "chat",
+            "prompt": "Our ElastiCache cluster example-cache in us-east-1 rejects writes with OOM because maxmemory-policy is noeviction and no key has a TTL. The data can be regenerated from our database, so it is safe to evict. Apply the mitigation.",
+            "should_trigger": true,
+            "assertions": [
+                "The response proposes a single ModifyCacheParameterGroup change setting maxmemory-policy to allkeys-lru",
+                "The response states the current value of maxmemory-policy as the rollback value",
+                "The response does not propose volatile-lru",
+                "The response asks for approval before applying the change, or states that it needs approval"
+            ]
+        },
+        {
+            "id": "unrelated-load-balancer-question",
+            "task_type": "chat",
+            "prompt": "What is the difference between an Application Load Balancer and a Network Load Balancer?",
+            "should_trigger": false
+        },
+        {
+            "id": "create-cache-request",
+            "task_type": "chat",
+            "prompt": "Create a new ElastiCache cluster with TLS and IAM authentication.",
+            "should_trigger": false
+        }
+    ]
+}
