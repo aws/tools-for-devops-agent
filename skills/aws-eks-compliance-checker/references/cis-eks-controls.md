@@ -17,7 +17,9 @@ Apply these exclusions everywhere a rule says "non-system":
 
 - **System namespaces:** `kube-system`, `kube-public`, `kube-node-lease`, and namespaces of EKS-managed add-ons (`amazon-cloudwatch`, `amazon-guardduty`, `aws-observability`).
 - **System subjects:** names starting with `system:`, the `eks:` prefixed roles and bindings, and service accounts in system namespaces.
-- **System roles:** ClusterRoles named `cluster-admin`, `admin`, `edit`, `view`, or starting with `system:` or `eks:` when they are the target of a check about custom roles.
+- **System roles (CIS 4.1.3 only):** ClusterRoles named `cluster-admin`, `admin`, `edit`, `view`, or starting with `system:` or `eks:`. They are excluded only from 4.1.3, which is about custom roles.
+
+**Built-in roles still count for permission checks.** For 4.1.1, 4.1.2, 4.1.4, and 4.1.8–4.1.12, the question is which non-system subjects hold the permission, so evaluate every role a subject is bound to, built-in roles included. Only system subjects are excluded. `cluster-admin` grants every verb on every resource. The built-in `admin` and `edit` ClusterRoles grant `create` on `pods` and on `serviceaccounts/token`, and `get`/`list`/`watch` on `secrets`. A subject bound to `cluster-admin` therefore fails 4.1.1, 4.1.2, 4.1.4, and 4.1.8–4.1.12.
 
 List each exclusion you actually used in the report's Scope section.
 
@@ -43,7 +45,7 @@ Run each read once with `use_kubectl`. Keep only the fields named.
 
 Never read Secret objects with `-o json` or `-o yaml`. For K6 on very large clusters, page by namespace.
 
-A role "grants" a verb on a resource when any of its rules lists that verb (or `*`) for that resource (or `*`) in a matching API group (or `*`).
+A role "grants" a verb on a resource when any of its rules lists that verb (or `*`) for that resource (or `*`) in a matching API group (or `*`). Read the rules from K3 and K4 for built-in roles too, rather than assuming their contents.
 
 ## Section 2 — Control plane configuration
 
@@ -61,17 +63,17 @@ Controls 3.1.1–3.1.4 (kubeconfig and kubelet config file permissions and owner
 | ID | Type | Control | Evidence | Pass rule |
 |---|---|---|---|---|
 | 4.1.1 | Automated | cluster-admin only where required | K1 | PASS if no ClusterRoleBinding to `cluster-admin` has a non-system subject. FAIL lists each binding and subject. |
-| 4.1.2 | Automated | Minimize access to secrets | K1–K4 | FAIL if any non-system role bound to a non-system subject grants `get`, `list`, or `watch` on `secrets` cluster-wide, or `list`/`watch` in a namespace other than its own. PASS otherwise. |
+| 4.1.2 | Automated | Minimize access to secrets | K1–K4 | FAIL if any role, built-in or custom, bound to a non-system subject grants `get`, `list`, or `watch` on `secrets` cluster-wide, or `list`/`watch` in a namespace other than its own. PASS otherwise. |
 | 4.1.3 | Automated | Minimize wildcard use in Roles and ClusterRoles | K3, K4 | FAIL lists each non-system Role or ClusterRole with `*` in verbs, resources, or apiGroups. PASS otherwise. |
-| 4.1.4 | Automated | Minimize access to create pods | K1–K4 | FAIL if a non-system subject is bound to a non-system role granting `create` on `pods` (or `*`) cluster-wide. Namespace-scoped grants are `Manual review` listing the subjects. PASS if neither. |
+| 4.1.4 | Automated | Minimize access to create pods | K1–K4 | FAIL if a ClusterRoleBinding binds a non-system subject to any role, built-in roles such as `cluster-admin`, `admin`, and `edit` included, that grants `create` on `pods` (or `*`). FAIL lists each binding, role, and subject. Grants made only through RoleBindings are `Manual review` listing the namespace, role, and subjects. PASS if neither. |
 | 4.1.5 | Automated | Default service accounts are not actively used | K5, K6 | FAIL if a non-system pod runs as `default`, or a `default` service account in a non-system namespace lacks `automountServiceAccountToken: false`. PASS otherwise. |
-| 4.1.6 | Automated | Service account tokens mounted only where necessary | K5, K6 | `Manual review`: list non-system pods whose effective `automountServiceAccountToken` is true and ask which need API access. PASS only if every such pod sets it false or its service account has an IRSA annotation or Pod Identity association. |
+| 4.1.6 | Automated | Service account tokens mounted only where necessary | K5, K6 | A pod's effective `automountServiceAccountToken` is the pod's own field if set, otherwise its service account's field, otherwise true. PASS only if every non-system pod's effective value is false. Otherwise `Manual review`: list those pods and ask which need Kubernetes API access. IRSA and EKS Pod Identity are not an exemption: each injects its own projected token volume and does not need the automounted API token. |
 | 4.1.7 | Manual | Use the Cluster Access Manager API | AWS-E1 `accessConfig.authenticationMode`, K9 | PASS if mode is `API`, or `API_AND_CONFIG_MAP` with no `mapUsers` and no `mapRoles` beyond node roles. FAIL if mode is `CONFIG_MAP`. Otherwise FAIL listing the extra mappings. |
-| 4.1.8 | Manual | Limit bind, impersonate, and escalate | K1–K4 | FAIL lists non-system subjects bound to roles granting `bind`, `impersonate`, or `escalate`. PASS otherwise. |
-| 4.1.9 | Manual | Minimize access to create PersistentVolumes | K1–K4 | FAIL lists non-system subjects granted `create` on `persistentvolumes`. PASS otherwise. |
-| 4.1.10 | Manual | Minimize access to the proxy sub-resource of nodes | K1–K4 | FAIL lists non-system subjects granted any verb on `nodes/proxy`. PASS otherwise. |
-| 4.1.11 | Manual | Minimize access to webhook configuration objects | K1–K4 | FAIL lists non-system subjects granted `create`, `update`, `patch`, or `delete` on `validatingwebhookconfigurations` or `mutatingwebhookconfigurations`. PASS otherwise. |
-| 4.1.12 | Manual | Minimize access to service account token creation | K1–K4 | FAIL lists non-system subjects granted `create` on `serviceaccounts/token`. PASS otherwise. |
+| 4.1.8 | Manual | Limit bind, impersonate, and escalate | K1–K4 | FAIL lists non-system subjects bound to any role, built-in or custom, granting `bind`, `impersonate`, or `escalate`. PASS otherwise. |
+| 4.1.9 | Manual | Minimize access to create PersistentVolumes | K1–K4 | FAIL lists non-system subjects granted `create` on `persistentvolumes` by any role, built-in or custom. PASS otherwise. |
+| 4.1.10 | Manual | Minimize access to the proxy sub-resource of nodes | K1–K4 | FAIL lists non-system subjects granted any verb on `nodes/proxy` by any role, built-in or custom. PASS otherwise. |
+| 4.1.11 | Manual | Minimize access to webhook configuration objects | K1–K4 | FAIL lists non-system subjects granted, by any role built-in or custom, `create`, `update`, `patch`, or `delete` on `validatingwebhookconfigurations` or `mutatingwebhookconfigurations`. PASS otherwise. |
+| 4.1.12 | Manual | Minimize access to service account token creation | K1–K4 | FAIL lists non-system subjects granted `create` on `serviceaccounts/token` by any role, built-in or custom, through a ClusterRoleBinding or a RoleBinding, giving the binding and its scope. Subjects bound to `cluster-admin`, `admin`, or `edit` count. PASS otherwise. |
 | 4.2.1 | Automated | Minimize admission of privileged containers | K6, K7 | FAIL lists non-system pods with a privileged container. Otherwise PASS, noting whether Pod Security Admission `enforce` labels prevent new ones. |
 | 4.2.2 | Automated | Minimize containers sharing the host PID namespace | K6 | FAIL lists non-system pods with `hostPID: true`. PASS otherwise. |
 | 4.2.3 | Automated | Minimize containers sharing the host IPC namespace | K6 | FAIL lists non-system pods with `hostIPC: true`. PASS otherwise. |
