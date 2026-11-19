@@ -12,14 +12,14 @@ user.
 | Call | Scope | Fields to keep | Pagination | Purpose |
 |---|---|---|---|---|
 | `sts:GetCallerIdentity` | once | `Account` | none | Account under review |
-| `ec2:DescribeRegions` (`AllRegions=false`) | once | `RegionName` | none | Enabled Regions; never ask the user |
+| `ec2:DescribeRegions` (`AllRegions=true`) | once | `RegionName`, `OptInStatus` (`opt-in-not-required`, `opted-in`, `not-opted-in`) | none | Enabled Regions are `opt-in-not-required` or `opted-in`; `not-opted-in` Regions are not swept and decide the opt in home Region rule for an organization trail (O2). `account:ListRegions` is not in the managed policy, so this call carries both facts. Never ask the user |
 | `organizations:DescribeOrganization` | once | `Organization.MasterAccountId`, `Organization.Id` | none | Standalone, member or management account |
 | `organizations:ListDelegatedAdministrators` (`ServicePrincipal=cloudtrail.amazonaws.com`) | once | `DelegatedAdministrators[].Id` | `NextToken` | Delegated administrator detection; `AccessDeniedException` from a member is expected |
 | `cloudtrail:ListTrails` | once per Region or once (it lists every trail with `HomeRegion`) | `TrailARN`, `Name`, `HomeRegion` | `NextToken` | Trail inventory [S10] |
 | `cloudtrail:DescribeTrails` (`includeShadowTrails=true`, **no `trailNameList`**) | once per Region, de duplicate by `TrailARN` | `Name`, `TrailARN`, `HomeRegion`, `IsMultiRegionTrail`, `IsOrganizationTrail`, `IncludeGlobalServiceEvents`, `HasCustomEventSelectors`, `HasInsightSelectors`, `LogFileValidationEnabled`, `S3BucketName`, `S3KeyPrefix`, `KmsKeyId`, `CloudWatchLogsLogGroupArn`, `SnsTopicARN` | none | Trail fields [S9][S11] |
 | `cloudtrail:GetTrail` | **never called** | none | none | `DescribeTrails` already returns every field used; a `GetTrail` on the organization trail ARN is blocked by the tool like any cross account ARN |
 | `cloudtrail:GetTrailStatus` | per trail, `Name` = **full TrailARN** | `IsLogging`, `LatestDeliveryTime`, `LatestDeliveryError`, `LatestDigestDeliveryTime`, `LatestDigestDeliveryError`, `LatestCloudWatchLogsDeliveryError`, `StartLoggingTime`, `StopLoggingTime` | none | L1, L2, L3, E2 [S7] |
-| `cloudtrail:GetEventSelectors` | per trail, `TrailName` = **full TrailARN** | `EventSelectors[]` (`ReadWriteType`, `IncludeManagementEvents`, `DataResources[]`, `ExcludeManagementEventSources`), `AdvancedEventSelectors[]` (`Name`, `FieldSelectors[]`) | none | Coverage mapping, T1, M1, M2, M3, D1 to D4 [S4][S5] |
+| `cloudtrail:GetEventSelectors` | per trail, `TrailName` = **full TrailARN** | `EventSelectors[]` (`ReadWriteType`, `IncludeManagementEvents`, `DataResources[]`, `ExcludeManagementEventSources`), `AdvancedEventSelectors[]` (`Name`, `FieldSelectors[]`; `eventType` and `userIdentity.arn` appear on Data selectors only for trails) | none | Coverage mapping, T1, M1, M2, M3, D1 to D4 [S4][S5] |
 | `cloudtrail:GetInsightSelectors` | per trail, `TrailName` = full TrailARN | `InsightSelectors[].InsightType` | none | I1; `InsightNotEnabledException` means not enabled |
 | `cloudtrail:ListEventDataStores` | once (stores are listed account wide) | `EventDataStoreArn`, `Name`, `Status`, `MultiRegionEnabled`, `OrganizationEnabled` | `NextToken` | Lake stores as coverage sources |
 | `cloudtrail:GetEventDataStore` | per store | `Status`, `AdvancedEventSelectors`, `MultiRegionEnabled`, `OrganizationEnabled`, `RetentionPeriod` | none | Selector evaluation for stores |
@@ -33,9 +33,9 @@ user.
 | `iam:GetRole` (`AWSServiceRoleForCloudTrail`) | optional, member account | `Role.Arn` | none | Organization trail service linked role present [S8] |
 | `sns:GetTopicAttributes`, `sns:ListTopics`, `sqs:ListQueues`, `sqs:GetQueueAttributes` | only when the user's required list names a topic or queue | ARN | provider tokens | Request only types |
 
-Every action above is in `AIDevOpsAgentAccessPolicy` v12, including
-`sqs:GetQueueAttributes` (explicit) and `sqs:ListQueues` (`sqs:List*`); see
-[permissions.md](permissions.md). The skill never lists objects in any bucket.
+Every action above is in `AIDevOpsAgentAccessPolicy` v16 (checked 2026-11-18),
+including `sqs:GetQueueAttributes` (explicit) and `sqs:ListQueues` (`sqs:List*`);
+see [permissions.md](permissions.md). The skill never lists objects in any bucket.
 
 ## 2. Hard denials (never called)
 
@@ -136,9 +136,14 @@ A denied or cancelled read is never reported as an empty result.
 When the prompt pastes `DescribeTrails`, `GetEventSelectors`, `GetTrailStatus`
 or an inventory list and says there is no account or console access, evaluate
 from the supplied values alone. Make no API call. Label the report `SUPPLIED
-DATA`. Fields the prompt does not supply are `NotApplicable` with "not
-supplied", never guessed. Resources the prompt does not list are not invented;
-say "no functions or tables supplied" rather than asserting coverage for them.
+DATA`. The account under review is the account id present in the supplied ARNs
+(trail ARN, resource ARN, `userIdentity.arn` value); when none is present the
+title and Scope say `account: not supplied`. Never invent an account id or
+reuse one from an example. Fields the prompt does not supply are
+`NotApplicable` with "not supplied", never guessed; a resource row that cannot
+be decided is `Unknown` with the reason. Resources the prompt does not list are
+not invented; say "no functions or tables supplied" rather than asserting
+coverage for them. Every report section still renders.
 
 ## 7. Known quirks
 
@@ -157,6 +162,8 @@ say "no functions or tables supplied" rather than asserting coverage for them.
 | `InsightNotEnabledException` from `GetInsightSelectors` | Normal for a trail without Insights; not an error |
 | Selecting `AWS::DynamoDB::Table` also logs stream events by default [S3] | No separate stream row; one line note that stream events follow the table's data events |
 | A `ReadWriteType` of `ReadOnly` or `WriteOnly` on a basic selector applies to both management and data events in that selector [S4] | Narrow both the management checks (M1) and the data rows (D4) |
+| On a trail, `eventType` and `userIdentity.arn` are valid only on Data selectors (`userIdentity.arn` also on NetworkActivity); only an event data store accepts them on a Management selector [S5] | M3 is evaluated on Data selectors for trails (and Management selectors for stores); a covered row under such a selector is `Covered (excludes service-initiated events)` and D1 to D3 show `PASS (narrowed)` |
+| An organization trail homed in an opt in Region receives no activity from a member that has not enabled that Region [S8]; `DescribeRegions AllRegions=true` reports the member's `OptInStatus` [S16] | O2: `not-opted-in` means the trail covers nothing in this account; unreadable status keeps rows `CoveredByOrgTrail-Unverified` with the reason |
 
 ## Sources
 
@@ -171,3 +178,4 @@ say "no functions or tables supplied" rather than asserting coverage for them.
 - [S10] ListTrails: https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_ListTrails.html
 - [S11] Trail object: https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_Trail.html
 - [S14] How CloudTrail works: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/how-cloudtrail-works.html
+- [S16] Opt in Regions and `OptInStatus`: https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html and https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Region.html

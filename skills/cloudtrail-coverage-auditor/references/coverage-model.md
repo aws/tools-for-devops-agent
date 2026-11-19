@@ -12,8 +12,8 @@ are numbered [S#] and listed at the end; every behaviour claim carries one.
 |---|---|---|---|
 | 1 | `NotApplicable` | The resource is outside the user's requested scope (Region or type), or its type is not auditable by this skill. | Never counted |
 | 2 | `Unknown` | The inventory call for the type, or the selector read for a trail that could cover it, returned `AccessDenied`, was cancelled by the agent guardrail, or failed. Also used for a required list name that does not resolve in inventory (note "not found in account"). | Caps rating at `Attention` |
-| 3 | `Covered` | At least one logging trail (`IsLogging` true) or `ENABLED` event data store whose selectors match the resource (section 3) and whose Region scope includes the resource (section 4). The row names the covering trail or store. An organization trail whose selectors were read (possible from the management account, or from the CLI; inside the agent a member's read is blocked by the AWS tool) gives `Covered` with the trail marked `(organization trail)`; a Lake store is marked `(event data store)`. Narrowing conditions are recorded on the row: `Covered (write only)`, `Covered (read only)`, `Covered (prefix <p> only)`, `Covered (eventName <list>)`. | None by itself; narrowing raises D4 |
-| 4 | `CoveredByOrgTrail-Unverified` | An organization trail is visible (`IsOrganizationTrail` true) with `HasCustomEventSelectors` true and `GetEventSelectors` with the **full trail ARN** failed or was blocked by the agent's AWS tool (the normal result from a member account inside the agent; `ToolingFailure`), so its selectors cannot be read. The resource may be covered. | Caps rating at `Attention`; O1 fires; Next Steps gives the full ARN and the `get-event-selectors` command to run from the CLI or the management account |
+| 3 | `Covered` | At least one logging trail (`IsLogging` true) or `ENABLED` event data store whose selectors match the resource (section 3) and whose Region scope includes the resource (section 4). The row names the covering trail or store. An organization trail whose selectors were read (possible from the management account, or from the CLI; inside the agent a member's read is blocked by the AWS tool) gives `Covered` with the trail marked `(organization trail)`; a Lake store is marked `(event data store)`. Narrowing conditions stay in the state cell: `Covered (write only)`, `Covered (read only)`, `Covered (prefix <p> only)`, `Covered (eventName <list>)`, and `Covered (excludes service-initiated events)` when the covering **data event selector** has `eventType NotEquals AwsServiceEvent`, or a `userIdentity.arn` exclusion (`NotStartsWith` or `NotEquals`) whose value matches a service principal (`.../aws-service-role/`, `assumed-role/AWSServiceRole...`): AWS service and service linked role activity on that resource has no record in that source [S5][S3]. A narrowed row is counted as covered in N but makes D1 to D3 `PASS (narrowed)`, never plain `PASS`. | None by itself; narrowing raises D4 (read or write only, prefix, eventName) or M3 (service initiated events) |
+| 4 | `CoveredByOrgTrail-Unverified` | An organization trail is visible (`IsOrganizationTrail` true) with `HasCustomEventSelectors` true and `GetEventSelectors` with the **full trail ARN** failed or was blocked by the agent's AWS tool (the normal result from a member account inside the agent; `ToolingFailure`), so its selectors cannot be read. Also used when the trail's `HomeRegion` is an opt in Region and this account's `OptInStatus` for it could not be read (section 4). The resource may be covered. | Caps rating at `Attention`; O1 fires (O2 for the opt in Region case); Next Steps gives the full ARN and the `get-event-selectors` command to run from the CLI or the management account |
 | 5 | `Uncovered` | Every readable trail and event data store was evaluated and none matches. | D1 to D3 finding (HIGH baseline, CRITICAL in required list mode) |
 
 Rules that follow from the order:
@@ -42,7 +42,8 @@ Rules that follow from the order:
 | `AWS::SNS::Topic`, `AWS::SQS::Queue`, `AWS::Cognito::IdentityPool`, `AWS::EKS::Cluster`, other advanced only types in [S3] | By request only | The type's List call, only when the user's required list names one | Advanced selectors only. Evaluate the selector match the same way; never enumerate them unasked. |
 
 The baseline type set is the three types that basic event selectors support
-[S4]. Widening it is an open question for SME review (README).
+[S4]; advanced only types are evaluated on request so the sweep never enumerates
+services the user did not ask about (README, Design decisions).
 
 ## 3. Selector interpretation (per trail, per resource)
 
@@ -89,8 +90,8 @@ M2, M3).
 | Wildcards | Not supported in `resources.ARN` values [S5]; treat a literal `*` as a character |
 | `readOnly Equals true` or `false` | Narrows the row to read only or write only; raise D4 |
 | `eventName Equals [...]` | Allowlist. Row is `Covered (eventName <list>)`; raise D4 when the list is incomplete for an audit (section 3.3) |
-| `eventType NotEquals AwsServiceEvent` | Excludes service initiated events; raise M3 [S3] |
-| `userIdentity.arn NotStartsWith .../aws-service-role/` | Excludes service linked role sessions; raise M3 |
+| `eventType NotEquals AwsServiceEvent` on a **Data** selector | Excludes service initiated events for the resources the selector covers; row is `Covered (excludes service-initiated events)`; raise M3 [S3][S5]. On a trail this field is valid only on Data selectors [S5]; an event data store also accepts it on a Management selector (then M3 fires for management events, no row label) |
+| `userIdentity.arn NotStartsWith .../aws-service-role/` (or `NotEquals` a service role ARN) on a **Data** selector | Excludes service linked role sessions for the covered resources; row is `Covered (excludes service-initiated events)`; raise M3. On a trail `userIdentity.arn` is valid on Data and NetworkActivity selectors only [S5]; a NetworkActivity exclusion narrows network activity events, not data events, and is INFO. An event data store also accepts it on a Management selector. A `userIdentity.arn` exclusion naming a non service principal (a scanner role, a user) narrows the row to `Covered (excludes <principal>)` and raises D4, not M3 |
 | `sessionCredentialFromConsole` | Narrows to console or non console sessions; record on the row, raise D4 |
 | `eventSource NotEquals kms.amazonaws.com` or `rdsdata.amazonaws.com` | Management source exclusion; raise M2 [S12] |
 
@@ -118,7 +119,7 @@ consequence of the list, not as an AWS warning.
 |---|---|
 | Multi Region trail (`IsMultiRegionTrail` true) | Matches resources in every enabled Region [S3] |
 | Single Region trail | Matches only resources in `HomeRegion`. Lambda functions and DynamoDB tables are Regional; S3 bucket names are global but a single Region trail logs only buckets located in its Region [S3]. Use `GetBucketLocation` for the bucket Region (an empty or null `LocationConstraint` means `us-east-1`). |
-| Organization trail | Scope of the trail (multi or single Region) across every account in the organization [S8]; from a member account it covers that member's resources when its selectors match |
+| Organization trail | Scope of the trail (multi or single Region) across every account in the organization [S8]; from a member account it covers that member's resources when its selectors match. **Opt in home Region:** when `HomeRegion` is an opt in Region (`OptInStatus` not `opt-in-not-required` [S16]), a member sends activity to the trail only if it has enabled that Region [S8]. Member `OptInStatus` `not-opted-in`: the trail covers nothing in this account; evaluate the next source or `Uncovered`; O2 fires. `OptInStatus` unreadable: rows the trail could cover are `CoveredByOrgTrail-Unverified` with the reason "home Region <r> is an opt in Region; this account's Region status could not be read". Default Region home (`opt-in-not-required`): no effect |
 | Event data store | `MultiRegionEnabled` true matches every enabled Region; false matches only the store's Region. `OrganizationEnabled` sets organization scope. |
 
 Multi Region trails and organization trails appear in `DescribeTrails` of every
@@ -132,8 +133,9 @@ coverage source when `Status` is `ENABLED`. Its `AdvancedEventSelectors` are
 evaluated with section 3.2. Rows covered by a store say `(event data store)` so
 an auditor can tell a trail from Lake; a store cannot satisfy L4 (log file
 validation is a trail feature) and has no delivery status fields, so L2 and L3
-are evaluated on trails only. Including stores as coverage sources is an open
-question for SME review (README).
+are evaluated on trails only. Stores count as coverage sources because an
+auditor asks whether a record exists, not where; the row label keeps the two
+distinguishable (README, Design decisions).
 
 ## 6. Worked examples
 
@@ -165,6 +167,26 @@ question for SME review (README).
    single Lambda data resource in another account: it contributes no coverage
    to this account; rows stay `Uncovered` unless another source matches; O2
    fires only if no own trail passes T1.
+6. Advanced Data selector on a logging trail: `eventCategory Equals Data;
+   resources.type Equals AWS::S3::Object; resources.ARN StartsWith
+   ["arn:aws:s3:::finance-reports/"]; eventType NotEquals [AwsServiceEvent];
+   userIdentity.arn NotStartsWith [".../assumed-role/aws-service-role/"]`:
+   bucket `finance-reports` is `Covered (excludes service-initiated events)` by
+   that trail, M3 fires MEDIUM naming the selector and the bucket, D1 shows
+   `PASS (narrowed)` (not plain `PASS`) if every other bucket is covered, and
+   What Auditors Should Know states that replication, lifecycle, Backup and
+   other AWS service activity on `finance-reports` has no record in that trail.
+   Every other bucket is `Uncovered` unless another source matches.
+7. Organization trail `HomeRegion` `eu-south-2` (an opt in Region [S16]),
+   multi Region, `HasCustomEventSelectors` true, selector read blocked by the
+   agent's tool; this account's `DescribeRegions AllRegions=true` reports
+   `eu-south-2` `not-opted-in`: the trail receives nothing from this account
+   [S8], so no row is attributed to it; rows fall to the account's own trails
+   or `Uncovered`; O2 fires (HIGH if no own trail passes T1, else INFO) and
+   Next Steps gives `aws account enable-region --region-name eu-south-2` or an
+   organization trail homed in a default Region as the operator change. If
+   `DescribeRegions` had failed, the rows would instead be
+   `CoveredByOrgTrail-Unverified` with the Region status reason.
 
 ## Sources
 
@@ -175,3 +197,4 @@ question for SME review (README).
 - [S8] Organization trails: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/creating-trail-organization.html
 - [S9] DescribeTrails (`includeShadowTrails`): https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_DescribeTrails.html
 - [S12] Logging management events (KMS and RDS Data API exclusion, readOnly): https://docs.aws.amazon.com/awscloudtrail/latest/userguide/logging-management-events-with-cloudtrail.html
+- [S16] Opt in Regions list and `OptInStatus` values: https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html and https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Region.html
