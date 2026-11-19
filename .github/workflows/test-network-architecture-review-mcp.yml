@@ -1,0 +1,56 @@
+name: Test network-architecture-review MCP
+
+# Runs the offline security and transport tests for
+# mcp/aws-network-architecture-review-mcp/ on every pull request. These tests
+# guard the server's read-only IAM policy, the AWS_IAM (SigV4) Function URL,
+# output sanitization, error masking and the local DNS-rebinding guard, so a
+# change that weakens any of them fails before it reaches `main`, which
+# customers clone and deploy.
+#
+# NOTE: like validate-skills, a red check does not block merging until an admin
+# adds the job name ("test-network-architecture-review-mcp") to the required
+# status checks for `main`.
+
+on:
+  pull_request:
+    # Deliberately NOT filtered with `paths:`: a required status check that never
+    # runs is reported as pending forever. The tests take a few seconds.
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-network-architecture-review-mcp-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test-network-architecture-review-mcp:
+    name: test-network-architecture-review-mcp
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp/aws-network-architecture-review-mcp
+    steps:
+      # Actions are pinned to the same full commit SHAs as validate-skills.yml.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned dependencies
+        run: python3 -I -m pip install -r layers/dependencies/requirements.txt pytest==9.1.1 pyyaml==6.0.3
+
+      - name: Run the tests
+        run: python3 -I -m pytest -q tests/
+
+      # Fails the check if any resolved dependency has a known vulnerability
+      # (PyPI advisory database). Resolves the same requirements file the layer
+      # build uses, including transitive dependencies.
+      - name: Audit dependencies for known vulnerabilities
+        run: |
+          python3 -I -m pip install pip-audit==2.10.1
+          python3 -I -m pip_audit -r layers/dependencies/requirements.txt
