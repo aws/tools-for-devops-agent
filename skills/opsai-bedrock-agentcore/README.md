@@ -1,4 +1,4 @@
-# llmops-agent-runtime
+# opsai-bedrock-agentcore
 
 > **Non-production disclaimer.** This skill is an operational aid for reviewing the health of Amazon
 > Bedrock Agents and Bedrock AgentCore runtimes. It performs **read-only** analysis and reports
@@ -8,7 +8,7 @@
 
 ## What It Does
 
-`llmops-agent-runtime` reviews the **agent layer** on AWS across two services operators frequently
+`opsai-bedrock-agentcore` reviews the **agent layer** on AWS across two services operators frequently
 conflate:
 
 - **Amazon Bedrock Agents** (family **LLM-AGT**) — managed agents with action groups and aliases. Checks
@@ -72,10 +72,10 @@ Package the skill as a zip with `SKILL.md` at the **archive root** (not nested u
 **inside** the skill directory:
 
 ```bash
-cd skills/llmops-agent-runtime && zip -r ../llmops-agent-runtime.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
+cd skills/opsai-bedrock-agentcore && zip -r ../opsai-bedrock-agentcore.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
 ```
 
-This produces `skills/llmops-agent-runtime.zip` containing `SKILL.md`, `references/`, and `assets/` at the
+This produces `skills/opsai-bedrock-agentcore.zip` containing `SKILL.md`, `references/`, and `assets/` at the
 top level, with the repo-management files excluded.
 
 > **CRITICAL:** When uploading, select **All agents** as the Agent Type. The custom `llmops-agent` can

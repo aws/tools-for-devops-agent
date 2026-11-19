@@ -12,6 +12,7 @@ description: Review Amazon Bedrock Guardrails posture (is a production model pat
 metadata:
   author: cswingchan
   version: "1.0.0"
+  tier: "aws-support-managed"
   summary: "Reviews and troubleshoots Amazon Bedrock Guardrails: coverage of production paths, leaks, false blocks, limits and latency."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock"

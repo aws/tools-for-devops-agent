@@ -4,6 +4,7 @@ description: Review the health of Amazon Bedrock Knowledge Bases and the RAG ret
 metadata:
   author: iamankur
   version: "1.0.0"
+  tier: "aws-support-managed"
   summary: "Reviews Amazon Bedrock Knowledge Bases and the RAG retrieval path: empty or stale answers, poor retrieval and failed ingestion."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon OpenSearch Service, Amazon S3"

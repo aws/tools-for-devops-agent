@@ -1,4 +1,4 @@
-# llmops-incident-triage
+# opsai-incident-triage
 
 > **Non-production disclaimer.** This skill is an operational aid for triaging the LLM layer of an
 > incident on AWS. It performs **read-only** analysis and returns a fault-locus assessment; it does
@@ -9,7 +9,7 @@
 
 ## What It Does
 
-`llmops-incident-triage` triages the **LLM layer** of a live failure on AWS and answers the question
+`opsai-incident-triage` triages the **LLM layer** of a live failure on AWS and answers the question
 customers ask during an incident — **"is this an AWS problem or mine?"** — with evidence instead of a
 guess.
 
@@ -81,10 +81,10 @@ Package the skill as a zip with `SKILL.md` at the **archive root** (not nested u
 from **inside** the skill directory:
 
 ```bash
-cd skills/llmops-incident-triage && zip -r ../llmops-incident-triage.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
+cd skills/opsai-incident-triage && zip -r ../opsai-incident-triage.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
 ```
 
-This produces `skills/llmops-incident-triage.zip` containing `SKILL.md` and `references/` at the top level, with
+This produces `skills/opsai-incident-triage.zip` containing `SKILL.md` and `references/` at the top level, with
 the repo-management files excluded.
 
 > **CRITICAL:** When uploading, select **All agents** as the Agent Type. The custom `llmops-agent` can

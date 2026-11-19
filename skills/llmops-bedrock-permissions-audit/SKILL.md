@@ -4,6 +4,7 @@ description: Audit which IAM users and long-lived credentials can invoke Amazon 
 metadata:
   author: cswingchan
   version: "1.0.0"
+  tier: "aws-support-managed"
   summary: "Audits which IAM users and long-lived credentials, including Bedrock API keys, can invoke Amazon Bedrock models."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, AWS IAM, Amazon GuardDuty"

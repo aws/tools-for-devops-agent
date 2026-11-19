@@ -32,14 +32,14 @@ self-contained by design and consumes no skill from outside this repository.
 
 | What the operator raises | Skill loaded |
 |---|---|
-| Live model-call failures: 5xx, throttling, timeouts, latency, empty responses (Bedrock, SageMaker, AgentCore, self-hosted) | [`llmops-incident-triage`](../../skills/llmops-incident-triage/) |
+| Live model-call failures: 5xx, throttling, timeouts, latency, empty responses (Bedrock, SageMaker, AgentCore, self-hosted) | [`opsai-incident-triage`](../../skills/opsai-incident-triage/) |
 | Quality regression, eval jobs, quality gates, truncated outputs | [`llmops-quality-evaluation`](../../skills/llmops-quality-evaluation/) |
 | Invocation logging, model access, inference profiles, a failing call denied by IAM, SCP or marketplace | [`llmops-bedrock-configuration`](../../skills/llmops-bedrock-configuration/) |
 | Who can invoke Bedrock: IAM users, long-term API keys, dormant or root keys, GuardDuty AI Protection findings | [`llmops-bedrock-permissions-audit`](../../skills/llmops-bedrock-permissions-audit/) |
 | Content filters, PII, denied topics, grounding, version pinning | [`llmops-guardrails`](../../skills/llmops-guardrails/) |
-| Spend, cost attribution, pricing tiers, quota headroom, provisioned throughput | [`llmops-capacity-cost`](../../skills/llmops-capacity-cost/) |
+| Spend, cost attribution, pricing tiers, quota headroom, provisioned throughput | [`opsai-capacity-cost`](../../skills/opsai-capacity-cost/) |
 | Knowledge bases, ingestion health, chunking, embedding model | [`llmops-rag-knowledge`](../../skills/llmops-rag-knowledge/) |
-| Bedrock Agents, action groups, AgentCore runtimes and gateways | [`llmops-agent-runtime`](../../skills/llmops-agent-runtime/) |
+| Bedrock Agents, action groups, AgentCore runtimes and gateways | [`opsai-bedrock-agentcore`](../../skills/opsai-bedrock-agentcore/) |
 | SageMaker real-time inference endpoints — posture, scaling, cost, right-sizing, monitoring, VPC/CMK, lineage | [`llmops-sagemaker-inference-endpoints`](../../skills/llmops-sagemaker-inference-endpoints/) |
 | SageMaker training/customization (Nova, JumpStart) job failures | [`llmops-sagemaker-training`](../../skills/llmops-sagemaker-training/) |
 | SageMaker serverless/async inference — cold start, concurrency, notifications, backlog scaling, fit | [`llmops-sagemaker-serverless-async`](../../skills/llmops-sagemaker-serverless-async/) |
@@ -70,9 +70,9 @@ at the archive root.
 
 ```bash
 cd ../../skills
-for skill in llmops-incident-triage llmops-quality-evaluation llmops-bedrock-configuration \
-             llmops-guardrails llmops-capacity-cost llmops-rag-knowledge \
-             llmops-agent-runtime llmops-sagemaker-inference-endpoints llmops-sagemaker-training \
+for skill in opsai-incident-triage llmops-quality-evaluation llmops-bedrock-configuration \
+             llmops-guardrails opsai-capacity-cost llmops-rag-knowledge \
+             opsai-bedrock-agentcore llmops-sagemaker-inference-endpoints llmops-sagemaker-training \
              llmops-sagemaker-serverless-async llmops-sagemaker-batch llmops-sagemaker-evaluation \
              llmops-sagemaker-model-registry llmops-bedrock-permissions-audit; do
   (cd "$skill" && zip -r "../$skill.zip" . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*')

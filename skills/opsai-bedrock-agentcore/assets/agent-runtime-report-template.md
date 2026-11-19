@@ -1,4 +1,4 @@
-# LLMOps Agent & Runtime Health Report
+# OpsAI Agent & Runtime Health Report
 
 Fill in every `<placeholder>`. Delete a row only when the check genuinely does not apply, and when you
 do, say why in **Scope not covered**. Never leave a placeholder unresolved in a delivered report.

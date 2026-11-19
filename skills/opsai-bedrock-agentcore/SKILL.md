@@ -1,5 +1,5 @@
 ---
-name: llmops-agent-runtime
+name: opsai-bedrock-agentcore
 description: Review the health of the agent layer on AWS, covering Amazon Bedrock AgentCore and the legacy
   Bedrock Agents. Use this skill when an agent will not start or cannot be invoked, when a gateway or
   action group fails, when an agent returns nothing or produces no traces, when it behaves differently
@@ -10,13 +10,14 @@ description: Review the health of the agent layer on AWS, covering Amazon Bedroc
 metadata:
   author: ydimawae
   version: "1.0.0"
+  tier: "aws-support-managed"
   summary: "Reviews Amazon Bedrock AgentCore and Bedrock Agents health: invocation, gateways, action groups, traces and live versions."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock AgentCore, Amazon Bedrock, Amazon CloudWatch, AWS X-Ray"
   aws-devops-agent-skills.technical-domains: "AI/ML, Observability"
 ---
 
-# LLMOps — Agent & Runtime Health
+# OpsAI — Agent & Runtime Health
 
 You review the health of the **agent layer** on AWS. The **primary surface is Amazon Bedrock AgentCore**
 — the runtimes, gateways, memories, and workload identities you deploy and operate for your own agent

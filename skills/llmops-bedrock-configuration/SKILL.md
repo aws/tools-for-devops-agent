@@ -14,6 +14,7 @@ description: >
 metadata:
   author: iamankur
   version: "1.0.0"
+  tier: "aws-support-managed"
   summary: "Reviews Amazon Bedrock setup: invocation logging, model access and lifecycle, inference profiles, and why calls are denied."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, AWS IAM, Amazon CloudWatch"

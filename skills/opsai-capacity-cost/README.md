@@ -1,4 +1,4 @@
-# llmops-capacity-cost
+# opsai-capacity-cost
 
 A skill for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that reviews Amazon Bedrock
 spend and capacity in your AWS account. It answers three questions: where your Bedrock spend goes,
@@ -185,7 +185,7 @@ Build the archive so that `SKILL.md` sits at the root of
 the zip:
 
 ```bash
-cd skills/llmops-capacity-cost && zip -r ../llmops-capacity-cost.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
+cd skills/opsai-capacity-cost && zip -r ../opsai-capacity-cost.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
 ```
 
 The archive contains `SKILL.md`, `references/` and `assets/`. In the Agent Space console, open

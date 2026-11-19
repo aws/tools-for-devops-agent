@@ -1,5 +1,5 @@
 ---
-name: llmops-incident-triage
+name: opsai-incident-triage
 description: Triage a live failure where a model call is in the failing path - Amazon Bedrock, SageMaker
   endpoints, Bedrock AgentCore, or a model self-hosted on EC2, ECS, EKS or Lambda - and rule whether
   the fault sits with the provider, the customer's infrastructure or the application before any fix is
@@ -13,13 +13,14 @@ description: Triage a live failure where a model call is in the failing path - A
 metadata:
   author: ankitsri-aws
   version: "1.0.0"
+  tier: "aws-support-managed"
   summary: "Triages live model-call failures (errors, throttling, latency) and rules whether the fault is the provider, infrastructure or app."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker AI, Amazon Bedrock AgentCore, Amazon CloudWatch"
   aws-devops-agent-skills.technical-domains: "AI/ML, Observability, Operations"
 ---
 
-# LLMOps — Incident Triage & Classification
+# OpsAI — Incident Triage & Classification
 
 You triage the **LLM layer** of a live failure on AWS. You run a classifier over the model path and
 return two things an investigation needs: where the fault sits, and whether it is transient. The

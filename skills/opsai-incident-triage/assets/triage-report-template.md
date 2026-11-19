@@ -1,4 +1,4 @@
-# LLMOps Incident Triage Report
+# OpsAI Incident Triage Report
 
 Fill in every `<placeholder>`. Delete a row only when the step/section genuinely does
 not apply, and when you do, say why in **Scope not covered**. Never leave a placeholder

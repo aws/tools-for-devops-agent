@@ -1,4 +1,4 @@
-# LLMOps Capacity & Cost Report
+# OpsAI Capacity & Cost Report
 
 Fill in every `<placeholder>`. Delete a row only when it genuinely does not apply, and when you
 do, say why in **Scope not covered**. Never leave a placeholder unresolved in a delivered report.
