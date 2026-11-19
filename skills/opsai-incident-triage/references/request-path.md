@@ -55,7 +55,7 @@ walk establishes how far in the failure reaches. Three rules:
 | "returns nothing", "empty answer" | 3, then 7, then 5 | an empty body with a successful call is assembly, filtering or missing context — not an error |
 | "errors", "5xx", "429" | 4 | the only stage that emits a provider-shaped error code |
 | "slow" | 4, then 6 | tool latency is routinely mistaken for model latency |
-| "wrong or stale answers" | 5 | retrieval before the model; this is also where `llmops-quality-evaluation` takes over |
+| "wrong or stale answers" | 5 | retrieval before the model; this is also where the `output-quality` track takes over |
 | "blocked", "refused to answer" | 7 | a working filter presents as an outage |
 | "worked in test, not in production" | 3, then 4 | configuration divergence between environments, not a service fault |
 
@@ -63,24 +63,22 @@ walk establishes how far in the failure reaches. Three rules:
 body on a successful call is not an error**, so it starts at the assembly and filtering stages rather
 than the model.
 
-## Stage to peer skill
-
-Depth on one stage is another skill's job. This table is the *request* triage makes of the host
-investigation, which owns the loading; it is not a dispatch this skill performs itself.
-
-| Stage | Binding | Skill that owns depth | Returns |
+## Stage to owner track
+Depth on one stage is optional. This table names the owner track for each stage; `related-skills.md`
+maps each track to the skill that covers it and the fallback to run when that skill isn't installed.
+| Stage | Binding | Owner track | Returns (only from that skill) |
 |---|---|---|---|
-| 3 agent loop | `agentcore` | `llmops-agent-runtime` | `LLM-AGT` rows |
-| 3 agent loop | self-hosted | none in this library — investigate the compute with general tools | — |
-| 4 model endpoint | `bedrock` | `llmops-bedrock-configuration` | `LLM-INV` rows |
-| 4 model endpoint | `sagemaker` | `llmops-sagemaker-inference-endpoints` | `LLM-SM` rows |
-| 4 model endpoint | any, capacity or quota | `llmops-capacity-cost` | quota and spend rows |
-| 5 retrieval | `bedrock` knowledge base | `llmops-rag-knowledge` | `LLM-KB` rows |
-| 7 output filter | Bedrock Guardrails | `llmops-guardrails` | `LLM-GRD` rows |
-| output quality, truncation | any | `llmops-quality-evaluation` | `LLM-EVAL` rows |
-| who may call the model | `bedrock` | `llmops-bedrock-permissions-audit` | access rows |
+| 3 agent loop | `agentcore` | `agent-runtime` | `LLM-AGT` rows |
+| 3 agent loop | self-hosted | `host-investigation`: investigate the compute with general tools | — |
+| 4 model endpoint | `bedrock` | `bedrock-configuration` | `LLM-INV` rows |
+| 4 model endpoint | `sagemaker` | `sagemaker-serving` | `LLM-SM` rows |
+| 4 model endpoint | any, capacity or quota | `capacity-and-quota` | quota and spend rows |
+| 5 retrieval | `bedrock` knowledge base | `retrieval` | `LLM-KB` rows |
+| 7 output filter | Bedrock Guardrails | `guardrails` | `LLM-GRD` rows |
+| output quality, truncation | any | `output-quality` | `LLM-EVAL` rows |
+| who may call the model | `bedrock` | `caller-identities` | access rows |
 
-Two rows are deliberately empty of a skill. A self-hosted agent loop and the compute beneath it are
+Two kinds of row have no skill behind them. A self-hosted agent loop and the compute beneath it are
 investigated with general tools, not with this library. Saying so is more useful than
 stretching a Bedrock-shaped check over a container.
 

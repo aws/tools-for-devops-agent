@@ -121,7 +121,7 @@ Optionally note that adopting a cross-region inference profile (see `LLM-INV-002
 
 ### INFRASTRUCTURE
 
-Signals point to the customer's own serving or network layer: an endpoint not scaling or under-provisioned, a container failing, a broken VPC endpoint or egress path, ingress 5xx before the loop runs, or quota posture too low for real demand. Distinguished from `APPLICATION` by the request-path stage the evidence sits at, not by severity — stage 2 and the serving half of stage 4 are `INFRASTRUCTURE` (`request-path.md`). Name the owner: `llmops-capacity-cost` for quota posture, the `llmops-sagemaker-*` skill for endpoint sizing, general investigation for compute, container and network.
+Signals point to the customer's own serving or network layer: an endpoint not scaling or under-provisioned, a container failing, a broken VPC endpoint or egress path, ingress 5xx before the loop runs, or quota posture too low for real demand. Distinguished from `APPLICATION` by the request-path stage the evidence sits at, not by severity — stage 2 and the serving half of stage 4 are `INFRASTRUCTURE` (`request-path.md`). Name the owner: `capacity-and-quota` for quota posture, `sagemaker-serving` for endpoint sizing, general investigation for compute, container and network.
 
 ### APPLICATION
 

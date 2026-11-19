@@ -41,8 +41,9 @@ the one investigating and the one answering the operator. This skill is the proc
   what the evidence supports, including "the evidence does not support a service incident", and give
   the single next step that would confirm or fix it. A locus with no conclusion and no next step is
   an incomplete answer.
-- **Depth on another stage comes from another skill.** Name the stage and the skill that owns it
-  (`references/request-path.md`), and load it when the evidence points there, one at a time.
+- **Depth on another stage is optional.** Name the stage and its owner track
+  (`references/request-path.md`). When the evidence points there, follow *Related skills (optional)*:
+  load the track's skill if it is available, one at a time, otherwise run its fallback check.
 
 **Commit to the most likely cause; do not leave it a hypothesis.** "Confirmed" and "most likely" are
 both conclusions. When the evidence fits one cause and contradicts the alternatives, state it as the
@@ -135,8 +136,8 @@ the same phrasings about a non-LLM component are not this skill's.
 A question on this list that reaches a different skill, or is answered with no `TRIAGE:` line, is a
 routing failure and not a style choice. Two exclusions:
 
-- Truncated or cut-off model output is **not** on this list — finish-reason work belongs to
-  `llmops-quality-evaluation`.
+- Truncated or cut-off model output is **not** on this list — finish-reason work is the
+  `output-quality` track (see *Related skills (optional)*).
 - None of these rows fires before the load condition holds. "Do you see any errors" about a workload
   with no model call identified in its failing path is a general investigation question, not this
   skill's.
@@ -150,14 +151,13 @@ most often:
   model call named. Localize first; this skill starts after.
 - **A failure with no LLM in the failing path**, however the symptom was phrased.
 - **Configuration posture reviews** ("is my Bedrock set up correctly?") — this is incident triage, not
-  a standing review. For Bedrock configuration posture use **llmops-bedrock-configuration**; for
-  guardrail posture **llmops-guardrails**; for quota and spend **llmops-capacity-cost**; for
-  quality and eval posture **llmops-quality-evaluation**.
+  a standing review. Bedrock configuration, guardrail, quota and spend,
+  and quality posture are other tracks; follow *Related skills (optional)*.
 - **Access-denied diagnosis** (`AccessDeniedException`, IAM/SCP/marketplace, model access not
-  granted) — use **llmops-bedrock-configuration**. Triage names it as the owner when the locus lands
+  granted) — the `bedrock-configuration` track. Triage names it as the owner when the locus lands
   `APPLICATION` on a 4xx access code.
 - **Quality regressions / model-output evaluation** (answers got worse, hallucinations, eval gates) —
-  use **llmops-quality-evaluation**.
+  the `output-quality` track.
 - **The compute beneath a self-hosted model** — instance health, container restarts, cluster
   scheduling. Investigate it with your general tools; this library has no check for it, and stretching a
   Bedrock-shaped check over a container is worse than declining.
@@ -557,8 +557,8 @@ never one row per error class:
 | `errorCode` | Class | What it means — and what it does NOT mean | check-id | Remediation owner |
 |---|---|---|---|---|
 | `ValidationException` | 4xx | Malformed request, unsupported parameter, context too long, or a **model id that does not exist**. Not an entitlement problem. | LLM-INV-011 | caller's request shape / model id |
-| `ResourceNotFoundException` | 4xx | The named resource (model, agent, alias, KB) **does not resolve in this region**. Distinct from being entitled-but-denied. | LLM-INV-003 | model/alias lifecycle → `llmops-bedrock-configuration` |
-| `AccessDeniedException` | 4xx | The model or action **exists** but the caller is **not entitled** — IAM, SCP, or model access not granted. Never a service fault. | LLM-INV-004 | access → `llmops-bedrock-configuration` |
+| `ResourceNotFoundException` | 4xx | The named resource (model, agent, alias, KB) **does not resolve in this region**. Distinct from being entitled-but-denied. | LLM-INV-003 | `bedrock-configuration` (model/alias lifecycle) |
+| `AccessDeniedException` | 4xx | The model or action **exists** but the caller is **not entitled** — IAM, SCP, or model access not granted. Never a service fault. | LLM-INV-004 | `bedrock-configuration` (access) |
 | `ThrottlingException` | 4xx | Quota or capacity pressure. Check backoff before quota. | LLM-INV-007 | quota/backoff |
 | `ModelNotReadyException` | 5xx-like | Model warm-up; clusters at cold start. | LLM-INV-005 | retry/backoff |
 | `ServiceUnavailableException` / `InternalServerException` | 5xx | Service-side transient. | LLM-INV-007 | retry/backoff/failover |
@@ -603,9 +603,9 @@ set `transience=UNKNOWN`, and name the vendor's status page as the evidence you 
 **`locus=APPLICATION`** — client-error dominance, single-model/single-account blast radius, onset
 aligned with a customer deploy or IAM/model-ID change, no provider event. Name the owning
 remediation track rather than performing it: access/IAM, model lifecycle, wrong model ID, inference
-profiles → `llmops-bedrock-configuration`; quota posture → `llmops-capacity-cost`; empty output from
-the loop → `llmops-agent-runtime` on an `agentcore` binding, or the loop's own logs on a
-self-hosted one; retrieval → `llmops-rag-knowledge`. The host offers the load.
+profiles → `bedrock-configuration`; quota posture → `capacity-and-quota`; empty output from the loop
+→ `agent-runtime` on an `agentcore` binding, or the loop's own logs on a self-hosted one; retrieval →
+`retrieval`. Then follow *Related skills (optional)* for that track.
 
 **`locus=INFRASTRUCTURE`** — the customer's own serving or network layer: endpoint under-provisioned
 or not scaling, container failing, VPC endpoint or egress path broken, ingress returning 5xx before
@@ -866,13 +866,25 @@ for a feature**, record it as a disclosed assumption, not a finding. On **thrott
 calls**, back off and paginate. On **ambiguous scope**, ask or default to the caller's current region
 and say so.
 
+## Related skills (optional)
+
+This skill works on its own and loads nothing outside its own `references/` and `assets/`. When a question
+reaches into an area listed under *When NOT to Use*, read `references/related-skills.md` and:
+
+1. If the skill named there is in your available skills, load it and use it for that part.
+2. If it isn't, cover that part yourself with the fallback check in that file and general AWS knowledge.
+   Label anything that comes from general knowledge, and give it no check-id: this skill's check-ids are
+   only for checks this skill runs.
+3. End the answer with one line recommending the missing skill and what it would add. Add it only when
+   that skill would have changed the answer, and only once.
+
 ## Appendix — Reference Links
 
 Triage references under `references/`:
 
 - `references/hosting-bindings.md` — **Step 0**: the signal triple, the binding table, which locus
   members each binding can reach, and what to say when the path leaves AWS
-- `references/request-path.md` — the seven stages, symptom → first stage, stage → owning skill
+- `references/request-path.md` — the seven stages, symptom → first stage, stage → owner track
 - `references/transient-vs-config-classifier.md` — the full classifier decision procedure (primary)
 - `references/incident-signatures.md` — symptom → first signal → APIs → likely locus → traps
 - `references/checks-telemetry.md` — LLM-TEL-001..008 telemetry-readiness checks

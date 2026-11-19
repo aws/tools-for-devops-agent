@@ -1,6 +1,6 @@
 ---
 name: opsai-capacity-cost
-description: Use this skill when the user wants to understand or cut Amazon Bedrock spend, or check Bedrock capacity, even if they don't call it a cost review, for example why the bill is high or suspiciously low, which model costs the most; tokens billed at $0, or CloudWatch tokens that don't match Cost Explorer; token-spend drift, runaway output or missing prompt caching; pricing tier (Standard, Flex, Priority, Batch); cost per team, app or IAM caller, or missing cost allocation tags; budgets and cost alerts; idle, oversized or end-of-life Provisioned Throughput, or a request to delete or resize it; moving to PT or a cheaper model (Haiku, Nova); what a us., eu. or global. profile costs and whether it stays in one region; quota headroom (per-minute, per-day or bedrock-mantle quotas), throttling capacity, token and quota alarms; latency from how many tokens are generated; invocation-log retention cost; pasted CloudWatch or Cost Explorer output about Bedrock. Not for outages happening now (use llmops-incident-triage).
+description: Use this skill when the user wants to understand or cut Amazon Bedrock spend, or check Bedrock capacity, even if they don't call it a cost review, for example why the bill is high or suspiciously low, which model costs the most; tokens billed at $0, or CloudWatch tokens that don't match Cost Explorer; token-spend drift, runaway output or missing prompt caching; pricing tier (Standard, Flex, Priority, Batch); cost per team, app or IAM caller, or missing cost allocation tags; budgets and cost alerts; idle, oversized or end-of-life Provisioned Throughput, or a request to delete or resize it; moving to PT or a cheaper model (Haiku, Nova); what a us., eu. or global. profile costs and whether it stays in one region; quota headroom (per-minute, per-day or bedrock-mantle quotas), throttling capacity, token and quota alarms; latency from how many tokens are generated; invocation-log retention cost; pasted CloudWatch or Cost Explorer output about Bedrock. Not for outages happening now.
 metadata:
   author: inesttia
   version: "1.0.0"
@@ -13,8 +13,9 @@ metadata:
 
 # OpsAI — Capacity & Cost
 
-You review Amazon Bedrock capacity and GenAI cost, read-only, with evidence for every number. Route
-out-of-scope questions ("When NOT to Use"); never call another skill to do this one's work.
+You review Amazon Bedrock capacity and GenAI cost, read-only, with evidence for every number. Handle
+out-of-scope areas ("When NOT to Use") with *Related skills (optional)*; never call another skill to do
+this one's work.
 
 ## Rules for every answer
 
@@ -45,18 +46,15 @@ They apply to every answer, however short. Details: "Guardrails — details" nea
 
 ## When NOT to Use
 
-Route these out:
-
+These areas are out of scope. For each, follow *Related skills (optional)*:
 - **Bedrock configuration and invocation logging** (is logging enabled, IAM scoping, Converse
-  migration) → `llmops-bedrock-configuration`.
-- **Guardrails** posture → `llmops-guardrails` (Guardrail *cost* stays in scope here).
-- **Knowledge bases / RAG** ingestion and retrieval → `llmops-rag-knowledge`.
-- **Agents and AgentCore** runtime → `llmops-agent-runtime`.
-- **SageMaker for LLMs** (idle endpoints, auto-scaling, GPU utilization, training/transform jobs) →
-  the `llmops-sagemaker-*` skills: `llmops-sagemaker-inference-endpoints` (real-time endpoints), `llmops-sagemaker-training`, `llmops-sagemaker-serverless-async`, `llmops-sagemaker-batch`, `llmops-sagemaker-evaluation`, `llmops-sagemaker-model-registry`.
-- **Live throttling / availability incidents** ("is this an AWS problem or mine?") →
-  `llmops-incident-triage`.
-- **Model quality / evaluation** (did the cheaper model regress?) → `llmops-quality-evaluation`.
+  migration).
+- **Guardrails** posture (Guardrail *cost* stays in scope here).
+- **Knowledge bases / RAG** ingestion and retrieval.
+- **Agents and AgentCore** runtime.
+- **SageMaker** (idle endpoints, auto-scaling, GPU utilization, endpoint cost, training/transform jobs).
+- **Live throttling / availability incidents** ("is this an AWS problem or mine?").
+- **Model quality / evaluation** (did the cheaper model regress?).
 - **Future price quotes** → the [AWS Pricing Calculator](https://calculator.aws/) and the
   [Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/).
 
@@ -254,7 +252,7 @@ those files (GRD, KB, AGT, SM, EVAL, AC, TEL, other INV) are never raised here.
 | LLM-COST-003 | Large latency-tolerant jobs on-demand instead of Batch | MEDIUM |
 | LLM-COST-004 | A high-cost model on simple high-volume tasks (validate a smaller one first) | MEDIUM |
 | LLM-COST-005 | Cross-region profile with its billed rate and data transfer unconfirmed (geographic: source-region rate; `global.`: a usage type containing `global`, own rate) | INFO |
-| LLM-COST-006 | Invocation-log destination with no retention or lifecycle policy. Give `aws logs put-retention-policy --log-group-name <log-group> --retention-in-days <N>` (N workload-specific); data-delivery flags belong to `llmops-bedrock-configuration` | MEDIUM |
+| LLM-COST-006 | Invocation-log destination with no retention or lifecycle policy. Give `aws logs put-retention-policy --log-group-name <log-group> --retention-in-days <N>` (N workload-specific); data-delivery flags are configuration, out of scope here | MEDIUM |
 | LLM-INV-002 | Direct model ID while a cross-region profile exists for that model (none: don't raise) | HIGH |
 | LLM-INV-007 | Sustained throttles or quota rejections (> 0) with no backoff retry and no profile spreading | MEDIUM |
 
@@ -331,6 +329,18 @@ free-text quota names), §19 (`storedBytes` lags), §22 (exclusive `End`).
   exists. Read the date from the error, fall back to `USAGE_TYPE` grouping and say so.
 - **Unsupported region:** a disclosed assumption, not a finding. **Throttled list calls:** back off
   and paginate. **Ambiguous scope:** ask, or use the current region and say so.
+
+## Related skills (optional)
+
+This skill works on its own and loads nothing outside its own `references/` and `assets/`. When a question
+reaches into an area listed under *When NOT to Use*, read `references/related-skills.md` and:
+
+1. If the skill named there is in your available skills, load it and use it for that part.
+2. If it isn't, cover that part yourself with the fallback check in that file and general AWS knowledge.
+   Label anything that comes from general knowledge, and give it no check-id: this skill's check-ids are
+   only for checks this skill runs.
+3. End the answer with one line recommending the missing skill and what it would add. Add it only when
+   that skill would have changed the answer, and only once.
 
 ## References
 

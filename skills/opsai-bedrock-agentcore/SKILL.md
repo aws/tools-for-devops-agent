@@ -26,9 +26,7 @@ covered as **legacy, maintenance-mode** surface. Your job is to find the configu
 gaps that make an agent fail to invoke, fail a tool call, run unguarded, or become impossible to debug —
 and to report each gap with evidence, a stable check-id, and a severity, before anyone prescribes a fix.
 
-This skill belongs to the `llmops-agent` custom agent. It is **fully self-contained**: it depends on no
-other skill and loads nothing outside its own `references/` and `assets/`. The handoffs under *When NOT
-to Use* are routing suggestions, not dependencies.
+This skill works on its own. Other skills are optional; see *Related skills (optional)*.
 
 Every finding is grounded in the catalogs under `references/`: `checks-agentcore.md` (LLM-AC-001..014,
 the primary AgentCore family) and `checks-agents.md` (LLM-AGT-001..011, Bedrock Agents Classic). Each
@@ -103,18 +101,15 @@ Activate this skill when the user:
 
 ## When NOT to Use
 
-Route elsewhere when the question is not about the agent/runtime layer itself:
-
+These areas are outside the agent/runtime layer. For each, follow *Related skills (optional)*:
 - **Bedrock model configuration & invocation logging** (model lifecycle, invocation-logging config,
-  inference profiles) → `llmops-bedrock-configuration`.
-- **Guardrail policy content** (what the guardrail blocks/masks, strength of filters) →
-  `llmops-guardrails`. This skill only checks that a guardrail *is attached* (LLM-AGT-001).
-- **Quota, throttling economics, and cost** → `llmops-capacity-cost`.
-- **Knowledge bases / RAG ingestion and retrieval quality** → `llmops-rag-knowledge`.
-- **SageMaker for LLMs** → the `llmops-sagemaker-*` skills: `llmops-sagemaker-inference-endpoints` (real-time endpoints), `llmops-sagemaker-training`, `llmops-sagemaker-serverless-async`, `llmops-sagemaker-batch`, `llmops-sagemaker-evaluation`, `llmops-sagemaker-model-registry`.
-- **Is-this-AWS-or-mine incident triage** (live failure, service-vs-config ruling) →
-  `llmops-incident-triage`.
-- **Model-output quality / evaluation** (answers got worse, eval gating) → `llmops-quality-evaluation`.
+  inference profiles), and **knowledge bases / RAG** ingestion and retrieval quality.
+- **Guardrail policy content** (what the guardrail blocks/masks, strength of filters). This skill only
+  checks that a guardrail *is attached* (LLM-AGT-001).
+- **Quota, throttling economics, and cost.**
+- **SageMaker** endpoints, batch, training and Model Registry.
+- **Is-this-AWS-or-mine incident triage** (live failure, service-vs-config ruling).
+- **Model-output quality / evaluation** (answers got worse, eval gating).
 - **Future price quotes** — direct to the [AWS Pricing Calculator](https://calculator.aws/).
 
 ## Router
@@ -209,8 +204,8 @@ production runs until the alias is resolved (Step 2) — a prepared DRAFT is not
   treat that version — not the latest prepared DRAFT — as production behaviour (LLM-AGT-007). *(Alias /
   prepared-version concepts are Bedrock Agents Classic, maintenance mode.)*
 - [ ] Step 3: Check the guardrail attachment — no `guardrailIdentifier`/`guardrailVersion` on a prod
-  agent is **LLM-AGT-001 (CRITICAL)**. (Guardrail *strength* is out of scope — route to
-  `llmops-guardrails`.)
+  agent is **LLM-AGT-001 (CRITICAL)**. (Guardrail *strength* is out of scope; see *Related skills
+  (optional)*.)
 - [ ] Step 4: Inspect each action group (`ListAgentActionGroups` / `GetAgentActionGroup`); read the
   executor Lambda's role (`lambda:GetPolicy` / `iam:GetRolePolicy`) for over-broad scope
   (LLM-AGT-002); note Code Interpreter enablement and its surrounding controls (LLM-AGT-006). *(Action
@@ -299,7 +294,7 @@ Non-negotiable, at every step:
 - "The AgentCore read returned AccessDenied, so no runtime exists." The standard `AIDevOpsAgentAccessPolicy` does **not** include the `bedrock-agentcore` namespace, so an AgentCore read that is denied is a **disclosed permission gap**, not an absent resource. Report "grant `bedrock-agentcore` read permissions separately."
 - "The Classic agent still works, so we can skip the migration advisory." Bedrock Agents Classic is in maintenance mode — closed to new customers, no new features. A still-working agent is **not** a reason to skip LLM-AGT-011; raise it anyway as advisory.
 - "CloudWatch returned no datapoints, so the agent is idle — decommission it." No datapoints and a measured zero are different (`api-quirks.md` §10). Confirm a measured zero over the window before calling an agent abandoned (LLM-AGT-004).
-- "There is a guardrail configured somewhere, so the agent is protected." This skill only checks that a guardrail **is attached** to the agent (LLM-AGT-001); strength is out of scope. An unattached guardrail protects nothing — route strength questions to `llmops-guardrails`.
+- "There is a guardrail configured somewhere, so the agent is protected." This skill only checks that a guardrail **is attached** to the agent (LLM-AGT-001); strength is out of scope. An unattached guardrail protects nothing — for strength, follow *Related skills (optional)*.
 - "I'll write the new AgentCore check against `bedrock-agentcore-control`." That namespace is being superseded by `agent-registry-control` for registry operations and is labelled "to be deprecated"; account for the newer namespace before adding checks.
 
 ## Runtime sessions (documented facts)
@@ -359,6 +354,18 @@ you could not read, continue with the rest, and list the gap — never guess. On
 for a feature**, record it as a disclosed assumption, not a finding. On **throttling of describe/list
 calls**, back off and paginate. On **ambiguous scope** (which agent? which region? AgentCore or Agents
 Classic?), ask or default to the caller's current region and say so.
+
+## Related skills (optional)
+
+This skill works on its own and loads nothing outside its own `references/` and `assets/`. When a question
+reaches into an area listed under *When NOT to Use*, read `references/related-skills.md` and:
+
+1. If the skill named there is in your available skills, load it and use it for that part.
+2. If it isn't, cover that part yourself with the fallback check in that file and general AWS knowledge.
+   Label anything that comes from general knowledge, and give it no check-id: this skill's check-ids are
+   only for checks this skill runs.
+3. End the answer with one line recommending the missing skill and what it would add. Add it only when
+   that skill would have changed the answer, and only once.
 
 ## Appendix — Reference Links
 

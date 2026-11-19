@@ -77,8 +77,8 @@ dropped from the gatherer's report: <row or cell> — because <reason>
 
 > **All eight columns are mandatory and the first seven are the gate.** The observed-value cell
 > begins with one of `measured `, `no-datapoints`, `not-queried`; a bare number there is malformed.
-> `Remediation owner` names the skill that owns the fix, and keeping a remediation you attributed to
-> another skill is the contradiction that column exists to expose. The `check-id` and its
+> `Remediation owner` names the track that owns the fix (`references/related-skills.md`), and keeping a
+> remediation you attributed to another track is the contradiction that column exists to expose. The `check-id` and its
 > `Severity` must sit in the **same row**; a severity gathered into a trailing summary is detached
 > and does not count. A row that cannot name its window, the read-only API that produced the value,
 > and an AWS doc URL is not ready to present — fill it, or move the signal to **Scope not covered**
@@ -96,12 +96,12 @@ investigation offers the load and the operator applies the change.
   read, and say the locus rests on the absence of a customer-side signal rather than on a
   provider-side one.
 - **`INFRASTRUCTURE`:** `<the serving or network gap>`; owner is
-  `<llmops-capacity-cost for quota posture / the llmops-sagemaker-* skill for endpoint sizing /
+  `<capacity-and-quota for quota posture / sagemaker-serving for endpoint sizing /
   host-investigation for compute, container and network>`.
-- **`APPLICATION`:** `<the specific change>`; owner is `<llmops-bedrock-configuration for access,
-  model lifecycle and inference profiles / llmops-agent-runtime for an agentcore loop /
-  llmops-rag-knowledge for retrieval / llmops-guardrails for filter behaviour /
-  llmops-quality-evaluation for output quality / caller for request shape>`.
+- **`APPLICATION`:** `<the specific change>`; owner is `<bedrock-configuration for access,
+  model lifecycle and inference profiles / agent-runtime for an agentcore loop /
+  retrieval for retrieval / guardrails for filter behaviour /
+  output-quality for output quality / caller for request shape>`.
 - **`UNDETERMINED`:** name the entrance and the missing fact. Do not assert the configuration is
   broken and do not pick a binding to make the report feel complete.
 
