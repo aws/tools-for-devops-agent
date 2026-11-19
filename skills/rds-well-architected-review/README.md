@@ -85,7 +85,7 @@ fails or data is unavailable, it reports that explicitly rather than estimating.
 
 ```bash
 cd "RDS Well Architected Review Skills"
-zip -r rds-war.zip rds-war/ -x '*.DS_Store'
+zip -r rds-well-architected-review.zip rds-well-architected-review/ -x '*.DS_Store'
 ```
 
 Upload the zip via the Operator Web App **Skills** page → **Add skill** → **Upload skill**.
@@ -93,7 +93,7 @@ Upload the zip via the Operator Web App **Skills** page → **Add skill** → **
 ## Skill Contents
 
 ```
-rds-war/
+rds-well-architected-review/
 ├── SKILL.md                                # combined skill instructions (all 5 pillars, data-plane folded in)
 ├── README.md                               # this file
 └── references/

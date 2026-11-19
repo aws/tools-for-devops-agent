@@ -1,7 +1,7 @@
 # RDS WAR — Combined Report Structure (authoritative template)
 
 This file defines the **exact structure** of the consolidated RDS/Aurora
-Well-Architected Review report produced by the `rds-war` skill. The agent MUST open
+Well-Architected Review report produced by the `rds-well-architected-review` skill. The agent MUST open
 and follow this template when generating the report (see Step 8 in `SKILL.md`). Do not
 improvise a different layout, and do not drop any section or table.
 
@@ -79,8 +79,8 @@ Reliability ✅ HEALTHY / ⚠️ WARNINGS / ❌ CRITICAL · Security ✅ SECURE 
 - Finding counts by severity: CRITICAL <n> / HIGH <n> / MEDIUM <n> / LOW <n> / INFO <n>
 - Estimated monthly spend: $<X> | Total potential savings: $<Y>/month
 
-![Pillar scorecard](rds-war-<scope-label>-<YYYY-MM-DD>-scorecard.png)
-![Findings by severity](rds-war-<scope-label>-<YYYY-MM-DD>-findings-by-severity.png)
+![Pillar scorecard](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-scorecard.png)
+![Findings by severity](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-findings-by-severity.png)
 
 ## Scope Covered
 - Resources reviewed: <ids/engines/regions>
@@ -137,8 +137,8 @@ Reliability Status: ✅ HEALTHY / ⚠️ WARNINGS / ❌ CRITICAL
 |---------|-------|------------|
 
 ### Reliability Visualizations
-![Replica lag](rds-war-<scope-label>-<YYYY-MM-DD>-replica-lag.png)
-![Backup retention vs target](rds-war-<scope-label>-<YYYY-MM-DD>-backup-retention.png)
+![Replica lag](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-replica-lag.png)
+![Backup retention vs target](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-backup-retention.png)
 
 ### Reliability Findings
 | # | Finding | Severity | Pillar Area | Evidence |
@@ -178,8 +178,8 @@ Security Status: ✅ SECURE / ⚠️ WARNINGS / ❌ CRITICAL ISSUES
 |-----------|---------------|-------------|----------|
 
 ### Security Visualizations
-![Network exposure](rds-war-<scope-label>-<YYYY-MM-DD>-network-exposure.png)
-![Encryption posture](rds-war-<scope-label>-<YYYY-MM-DD>-encryption-posture.png)
+![Network exposure](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-network-exposure.png)
+![Encryption posture](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-encryption-posture.png)
 
 ### Security Findings
 | # | Finding | Severity | Evidence |
@@ -278,8 +278,8 @@ MySQL:
 | EOL risk | — |
 
 ### Operational Excellence Visualizations
-![Alarm coverage](rds-war-<scope-label>-<YYYY-MM-DD>-alarm-coverage.png)
-![Log export coverage](rds-war-<scope-label>-<YYYY-MM-DD>-log-exports.png)
+![Alarm coverage](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-alarm-coverage.png)
+![Log export coverage](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-log-exports.png)
 
 ### Operational Excellence Findings
 | # | Finding | Severity | Evidence |
@@ -328,9 +328,9 @@ Performance Status: ✅ HEALTHY / ⚠️ DEGRADED / ❌ CRITICAL
 | Top SQL | — | — |
 
 ### Performance Visualizations
-![CPU / memory / IOPS](rds-war-<scope-label>-<YYYY-MM-DD>-cpu-mem-iops.png)
-![DB load vs vCPU](rds-war-<scope-label>-<YYYY-MM-DD>-db-load-vs-vcpu.png)
-![Read/Write latency](rds-war-<scope-label>-<YYYY-MM-DD>-latency.png)
+![CPU / memory / IOPS](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-cpu-mem-iops.png)
+![DB load vs vCPU](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-db-load-vs-vcpu.png)
+![Read/Write latency](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-latency.png)
 
 ### Performance Findings
 | # | Finding | Severity | Evidence (specific metric values) |
@@ -387,8 +387,8 @@ Estimated monthly spend: $X | Total potential savings: $Y/month
 - Database Savings Plans — verify current term(s), payment option(s), covered services, and savings % from the authoritative docs (see `references/cost-optimization-reference.md`); give per-instance-type estimates. Do not hardcode terms.
 
 ### Cost Visualizations
-![Spend breakdown](rds-war-<scope-label>-<YYYY-MM-DD>-spend-breakdown.png)
-![Savings opportunities](rds-war-<scope-label>-<YYYY-MM-DD>-savings-opportunities.png)
+![Spend breakdown](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-spend-breakdown.png)
+![Savings opportunities](rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-savings-opportunities.png)
 
 ### Cost Findings
 | # | Finding | Severity | Current Cost Impact | Potential Savings |
@@ -416,8 +416,8 @@ Overall score (average of the five pillar scores): <n>/100
 Rationale: <cite the per-pillar scores and the dominant findings driving them>
 
 ## Artifacts
-- Report: `rds-war-review-<scope-label>-<YYYY-MM-DD>.md`
-- Charts: list every generated `rds-war-<scope-label>-<YYYY-MM-DD>-<chart>.png` (scorecard, findings-by-severity, and the per-pillar charts produced)
+- Report: `rds-well-architected-review-review-<scope-label>-<YYYY-MM-DD>.md`
+- Charts: list every generated `rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-<chart>.png` (scorecard, findings-by-severity, and the per-pillar charts produced)
 
 ## Implementation Roadmap
 Group the actionable recommendations into phases (each item: resources affected,
@@ -477,7 +477,7 @@ section. Generate the images with a local plotting library (e.g., Python matplot
 and save them alongside the report artifact, then reference each with a markdown image
 link `![alt](<file>.png)` in the pillar section it belongs to.
 
-Naming: `rds-war-<scope-label>-<YYYY-MM-DD>-<chart>.png`. At minimum produce these
+Naming: `rds-well-architected-review-<scope-label>-<YYYY-MM-DD>-<chart>.png`. At minimum produce these
 charts (skip only when the underlying data is unavailable, and say so in Scope Covered):
 
 | Pillar | Chart (PNG) | Data source |

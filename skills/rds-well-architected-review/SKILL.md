@@ -1,19 +1,15 @@
 ---
-name: rds-war
+name: rds-well-architected-review
 description: >-
-  Well-Architected Review (WAR) for Amazon RDS and Aurora across all five pillars —
-  Reliability, Security, Operational Excellence, Performance Efficiency, and Cost
-  Optimization. Each pillar combines AWS control-plane, CloudWatch, and CloudWatch
-  Database Insights checks with parameter-group configuration; a few catalog-only
-  checks use the read-only RDS Data API where no API source exists. Use for a full
-  RDS/Aurora WAR, a multi-pillar assessment, or any single-pillar review (HA/backup/DR;
-  security/encryption/network; monitoring/logging/alarms; performance/query/index
-  tuning; cost/right-sizing/RI-SP), and for database-internal health checks (buffer
-  pool, connections, locks, replication, storage, index efficiency, autovacuum,
-  transaction-ID wraparound). Triggers on "RDS Well-Architected Review", "RDS WAR",
-  "Aurora WAR", "database HA/DR audit", "RDS security review", "RDS ops excellence
-  check", "RDS performance review", "RDS cost optimization", "check RDS buffer pool /
-  locks / connections".
+  Run a Well-Architected Review (WAR) of Amazon RDS and Aurora across the five pillars
+  (Reliability, Security, Operational Excellence, Performance Efficiency, Cost
+  Optimization), or any single pillar, plus database-internal health checks (connections,
+  locks, replication lag, buffer cache, autovacuum, transaction-ID wraparound). Read-only:
+  uses RDS, CloudWatch, Database Insights and parameter-group data, with the RDS Data API
+  only for catalog-only checks. Produces a scored report with charts. Use when the user asks
+  for an "RDS Well-Architected Review", "RDS WAR", "Aurora WAR", "RDS security review",
+  "RDS HA/DR audit", "RDS performance review", "RDS cost optimization", or to check RDS
+  backups, alarms, buffer pool, locks or connections.
 metadata:
   author: aws-samples
   version: "1.1.0"
@@ -107,12 +103,29 @@ combined report.
 - This skill operates in **read-only** mode — it never modifies resources, data, schema, or configuration. Never execute DDL/DML/DCL; never expose credentials. Database-internal checks are read-only `SELECT`/`SHOW` statements only.
 - **Cost pillar specifics:**
   - When referring to Savings Plans, consider **Database Savings Plans** — distinct from Compute Savings Plans (which cover EC2/Fargate/Lambda, not databases).
-  - Do NOT hardcode Database Savings Plans terms, payment options, coverage, or savings percentages — verify the current values from the authoritative docs referenced in `references/cost-optimization-reference.md` (these change over time and differ by service/engine/Region).
+  - Do NOT hardcode Database Savings Plans terms, payment options, coverage, or savings percentages — verify the current values from the authoritative docs referenced in [`references/cost-optimization-reference.md`](references/cost-optimization-reference.md) (these change over time and differ by service/engine/Region).
   - Savings percentages vary by instance type. Do NOT assume a flat percentage — look up actual savings for the specific instance type/Region.
   - All cost savings must be quantified with dollar amounts or percentages where data permits.
   - Scope cost analysis to the specific cluster/instance being reviewed.
 
 ---
+
+## Workflow Checklist
+
+Copy this checklist and tick each step as you complete it. Steps are ordered and each
+depends on the previous one. Steps 3–7 are the pillars; run only the pillars in scope
+(all five by default) and skip the rest, but always finish with Step 8.
+
+```
+- [ ] Step 1: Identify target resources (databases, regions, pillars in scope)
+- [ ] Step 2: Discover RDS / Aurora resources, parameter groups (2b) and log exports (2c)
+- [ ] Step 3: Reliability pillar (3a–3e)
+- [ ] Step 4: Security pillar (4a–4e)
+- [ ] Step 5: Operational Excellence pillar (5a–5f)
+- [ ] Step 6: Performance Efficiency pillar (6a–6d)
+- [ ] Step 7: Cost Optimization pillar (7a–7e)
+- [ ] Step 8: Generate the combined WAR report (return scorecard + key findings in chat, save artifact, charts)
+```
 
 ## Step 1: Identify Target Resources
 
@@ -185,8 +198,7 @@ per-object sizes). Runtime state — session activity, replication lag, buffer/c
 top queries, transaction-ID/transaction-age signals — comes from Database Insights /
 CloudWatch (see each pillar's data-plane subsection), NOT the Data API. Extract and
 carry these parameter-group values into the pillar sections:
-- **PostgreSQL:** `rds.force_ssl`, `ssl_min_protocol_version`, `password_encryption`, `log_connections`, `log_disconnections`, `log_checkpoints`, `log_statement`, `log_min_duration_statement`, `log_autovacuum_min_duration`, `shared_preload_libraries` (pg_stat_statements/pgaudit/auto_explain), the `autovacuum*` family, `max_connections`, memory/planner params (`shared_buffers`, `work_mem`, `effective_cache_size`).
-- **MySQL/MariaDB:** `require_secure_transport`, `slow_query_log`, `long_query_time`, `general_log`, `log_output`, `innodb_print_all_deadlocks`, `innodb_buffer_pool_size`, `max_connections`, `innodb_flush_log_at_trx_commit`, audit plugin params.
+Parameters to extract per engine (PostgreSQL and MySQL/MariaDB lists): read [`references/parameter-lists.md`](references/parameter-lists.md) → "Step 2b parameters to extract".
 - **Also record:** whether the group is custom or a `default.*` group, and any parameters with `ApplyType=static` that are pending a reboot.
 
 ### Step 2c: Confirm engine-log exports & log groups (always)
@@ -212,8 +224,7 @@ rds.DescribeEventSubscriptions
 ```
 
 ### 3b. CloudWatch metrics (15-day window, `Period=21600` / 6h)
-**RDS Instances** (dim `DBInstanceIdentifier`): DatabaseConnections (Max), FreeStorageSpace (Min), ReplicaLag (Max), MaximumUsedTransactionIDs (Maximum — PostgreSQL XID wraparound signal).
-**Aurora Clusters** (dim `DBClusterIdentifier`): AuroraReplicaLag (Max), DatabaseConnections (Max), Deadlocks (Sum), EngineUptime (Min), MaximumUsedTransactionIDs (Maximum — Aurora PostgreSQL), TransactionAgeMaximum (Maximum — oldest active transaction age, Aurora MySQL 3.08+) and/or RollbackSegmentHistoryListLength (Maximum — InnoDB purge backlog, Aurora MySQL).
+Metrics to retrieve (RDS instances and Aurora clusters): [`references/metric-lists.md`](references/metric-lists.md) → "Step 3b metrics".
 
 ### 3c. Version lifecycle assessment
 - Check current engine version against the AWS RDS/Aurora release calendar.
@@ -221,26 +232,9 @@ rds.DescribeEventSubscriptions
 - Use `rds.DescribeDBEngineVersions` to compare current vs latest available.
 
 ### 3d. Reliability best-practice checks
-| Check | Condition | Severity |
-|-------|-----------|----------|
-| Multi-AZ (production) | Single-AZ production instance | HIGH |
-| Aurora readers | Cluster with no reader in different AZ | MEDIUM |
-| Backup retention | `BackupRetentionPeriod=0` | CRITICAL |
-| Backup retention | < 7 days for production | HIGH |
-| Deletion protection | Production with `DeletionProtection=false` | HIGH |
-| Subnet AZ spread | Subnets span < 2 AZs | HIGH |
-| Auto minor upgrade | `AutoMinorVersionUpgrade=false` (non-prod) | MEDIUM |
-| Custom parameter group | Using `default.*` parameter group | MEDIUM |
-| Pending maintenance | Required actions not applied within window | MEDIUM |
-| Replication lag | `ReplicaLag` 7-day max > 30s | HIGH |
-| Replication lag | `ReplicaLag` 7-day max > 300s | CRITICAL |
-| Cross-region DR | No cross-region replica or Global DB for tier-1 | MEDIUM |
-| Engine version | Major version within 6 months of EOL | HIGH |
-| Engine version | Minor version not latest | LOW |
-| Transaction ID wraparound | Database age > 1 billion transactions remaining | HIGH |
-| Connection capacity | `max_connections` utilization > 80% | HIGH |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Reliability best-practice checks (Step 3d)" before evaluating this step.
 
-Full checklist: `references/reliability-checklist.md`.
+Full checklist: [`references/reliability-checklist.md`](references/reliability-checklist.md).
 
 > Record **every** matched check (any severity, per resource) as a row in the
 > Reliability Findings table — see the completeness contract in Step 8c-bis.
@@ -250,17 +244,7 @@ Each check names its source. Prefer the stated source exactly; only the checks m
 **RDS Data API (catalog-only)** need `rds-data execute-statement`, and those are marked
 **NOT VERIFIED** if the Data API is unavailable.
 
-**PostgreSQL:**
-- **Connection capacity** — **CloudWatch only:** `DatabaseConnections` vs `max_connections` (from the parameter group, Step 2b). Look for utilization > 80%. Active/idle-in-transaction session mix comes from **Database Insights** active sessions.
-- **Replication health** — **CloudWatch only:** `AuroraReplicaLag` (Aurora) / `ReplicaLag` (RDS) per reader (dim `DBInstanceIdentifier`); look for lag growing or a replica not streaming.
-- **Transaction ID wraparound** — **CloudWatch only:** `MaximumUsedTransactionIDs` (namespace `AWS/RDS`, dimension `DBInstanceIdentifier`). This is a **per-instance** metric that already reports the maximum transaction-ID age across all databases on the instance — the correct, sufficient wraparound signal (risk is instance-level; the engine shuts down near 2^31). Warn > 1B, critical > 1.5B. No per-database query is needed.
-- **Autovacuum keeping frozen xids in check** — **RDS Data API (catalog-only):** `pg_stat_user_tables` `last_autovacuum` and dead-vs-live tuples for aged tables. No DBI/CloudWatch equivalent — mark **NOT VERIFIED** if the Data API is unavailable.
-
-**MySQL / Aurora MySQL:**
-- **Connection capacity** — **CloudWatch only:** `DatabaseConnections` vs `max_connections` (parameter group); look for utilization > 80%. Active sessions from **Database Insights**.
-- **Aurora replica lag** — **CloudWatch only:** `AuroraReplicaLag` per reader (dim `DBInstanceIdentifier`); warn > 100 ms, critical > 1000 ms.
-- **Long-running transactions** — **Database Insights + CloudWatch only:** long-running statements / active sessions from DBI top-SQL, corroborated by `TransactionAgeMaximum` / `RollbackSegmentHistoryListLength`. This is the actionable signal (a long transaction blocking purge / extending failover); exact locked-row counts are not needed.
-- **Transaction age / purge backlog** — **CloudWatch only:** `TransactionAgeMaximum` (oldest active transaction age, Aurora MySQL 3.08+) and `RollbackSegmentHistoryListLength` (InnoDB undo/purge backlog). InnoDB has no PostgreSQL-style XID wraparound; a rising oldest-transaction age / HLL indicates purge is blocked by long transactions (bloat, replica lag, storage growth). Alarm on sustained growth.
+Per-engine check list (PostgreSQL and MySQL/Aurora MySQL, with each check's source): read [`references/database-internal-checks.md`](references/database-internal-checks.md) → "Reliability database-internal checks (Step 3e)" and run every check listed.
 
 ---
 
@@ -276,43 +260,21 @@ kms.ListAliases               # key alias for readability
 ### 4b. Audit logging
 Check `EnabledCloudwatchLogsExports` against expected log types:
 
-| Engine | Expected Log Exports |
-|--------|---------------------|
-| PostgreSQL | `postgresql` (error/slow), `upgrade` |
-| MySQL/MariaDB | `audit`, `error`, `general`, `slowquery` |
-| Oracle | `alert`, `audit`, `listener`, `trace` |
-| SQL Server | `agent`, `error` |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Expected audit log exports by engine (Step 4b)" before evaluating this step.
 
 ```
 logs.DescribeLogGroups  # prefix: /aws/rds/instance/<name>/ or /aws/rds/cluster/<name>/
 ```
 
 ### 4c. Log-event security patterns (`logs.FilterLogEvents`, 7-day window)
-| Pattern | Indicates |
-|---------|-----------|
-| `authentication failed` | Credential issues or brute-force attempts |
-| `password authentication failed` | Failed login attempts |
-| `connection refused` | Network/access issues |
-| `SSL connection required` | Non-SSL connection attempts |
-| `permission denied` | Unauthorized access attempts |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Security log-event patterns (Step 4c)" before evaluating this step.
 
 Record occurrence counts per pattern.
 
 ### 4d. Security best-practice checks
-| Check | Condition | Severity |
-|-------|-----------|----------|
-| Public access | `PubliclyAccessible=true` | CRITICAL |
-| Open security groups | `0.0.0.0/0` ingress on DB port | CRITICAL |
-| Encryption at rest | `StorageEncrypted=false` | HIGH |
-| Encryption in transit | `rds.force_ssl` / `require_secure_transport` not enabled | MEDIUM |
-| IAM authentication | `IAMDatabaseAuthenticationEnabled=false` | MEDIUM |
-| Audit logging | Engine audit logs not in `EnabledCloudwatchLogsExports` | MEDIUM |
-| KMS key type | AWS-managed key instead of CMK | LOW |
-| CMK rotation | KMS key without automatic rotation | LOW |
-| Secrets Manager | Master password not managed by Secrets Manager | MEDIUM |
-| Password encryption | Using MD5 instead of SCRAM-SHA-256 (PostgreSQL) | MEDIUM |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Security best-practice checks (Step 4d)" before evaluating this step.
 
-Full checklist and compliance mapping (PCI-DSS, HIPAA, SOC 2, GDPR): `references/security-checklist.md`.
+Full checklist and compliance mapping (PCI-DSS, HIPAA, SOC 2, GDPR): [`references/security-checklist.md`](references/security-checklist.md).
 
 > Record **every** matched check (any severity, per resource) as a row in the
 > Security Findings table — see the completeness contract in Step 8c-bis.
@@ -322,17 +284,7 @@ Security data-plane checks split into config (read from the parameter group, Ste
 no Data API) and catalog-only checks (RDS Data API; **NOT VERIFIED** if unavailable).
 There is no Database Insights equivalent for these.
 
-**PostgreSQL:**
-- **TLS / encryption in transit** — **parameter group:** `ssl`, `ssl_min_protocol_version`, `ssl_max_protocol_version`, `ssl_ciphers`, `rds.force_ssl`; flag SSL off, TLS < 1.2, weak ciphers.
-- **Password storage** — **parameter group:** `password_encryption`; flag `md5` (should be `scram-sha-256`).
-- **Security logging** — **parameter group:** `log_connections`, `log_disconnections`, `log_statement`; confirm `pgaudit` in `shared_preload_libraries`.
-- **Roles & privileges** — **RDS Data API (catalog-only):** `pg_roles`; flag app roles with `rolsuper`/`rds_superuser`, `CREATEROLE`/`CREATEDB`, or broad membership.
-- **Authentication rules** — **RDS Data API (catalog-only):** `pg_hba_file_rules`; flag `trust`/`password` methods or overly broad address rules.
-
-**MySQL / Aurora MySQL:**
-- **TLS enforcement** — **parameter group:** `require_secure_transport` (should be `ON`).
-- **Audit plugin** — **parameter group:** audit plugin params.
-- **Users & privileges** — **RDS Data API (catalog-only):** `mysql.user` accounts/grants; flag `%` host wildcards, `SUPER`/`ALL PRIVILEGES`, weak auth.
+Per-engine check list (PostgreSQL and MySQL/Aurora MySQL, with each check's source): read [`references/database-internal-checks.md`](references/database-internal-checks.md) → "Security database-internal checks (Step 4e)" and run every check listed.
 
 ---
 
@@ -341,85 +293,21 @@ There is no Database Insights equivalent for these.
 ### 5a. Monitoring & alerting
 Use `cloudwatch.DescribeAlarmsForMetric` for each resource:
 
-| Metric | Expected Alarm Threshold |
-|--------|-------------------------|
-| CPUUtilization | > 80% for 5 minutes |
-| FreeStorageSpace | < 10% allocated |
-| FreeableMemory | < 256 MB or < 10% of class |
-| DatabaseConnections | > 80% of `max_connections` |
-| ReadLatency / WriteLatency | > 20 ms |
-| ReplicaLag (read replicas) | > 60 s |
-| AuroraReplicaLag (Aurora) | > 100 ms |
-| BufferCacheHitRatio (Aurora) | < 95% |
-| Deadlocks | > 0 sustained |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Expected CloudWatch alarm thresholds (Step 5a)" before evaluating this step.
 
 ```
 rds.DescribeEventSubscriptions   # verify resource is covered
 ```
 
 ### 5b. Logging configuration
-**PostgreSQL** — from the **parameter group** (Step 2b): `log_connections`, `log_disconnections`, `log_checkpoints`, `log_statement`, `log_min_duration_statement`, `log_temp_files`, `log_autovacuum_min_duration`; `shared_preload_libraries` (verify `pg_stat_statements`, `auto_explain`).
-**MySQL** — from the **parameter group**: `general_log`, `slow_query_log`, `log_output`, `long_query_time`, audit plugin status.
+Logging parameters to read from the parameter group (PostgreSQL and MySQL): [`references/parameter-lists.md`](references/parameter-lists.md) → "Step 5b logging parameters".
 Verify expected log exports (same engine matrix as Step 4b) and log groups.
 
 ### 5c. Log-event operational patterns (`logs.FilterLogEvents`, 7-day window)
-| Pattern | Indicates |
-|---------|-----------|
-| `ERROR` / `FATAL` | Engine errors |
-| `Out of memory` / `OOM` | Memory pressure |
-| `too many connections` | Connection saturation |
-| `deadlock` / `lock wait timeout` | Contention |
-| `slow query` / `duration:` (Postgres) | Query performance |
-| `aborted connection` (MySQL) | Client/network issues |
-| `checkpoint` warnings | I/O / WAL issues |
-| `autovacuum` warnings | Maintenance issues |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Operational log-event patterns (Step 5c)" before evaluating this step.
 
 #### CloudWatch Logs Insights example queries (deeper analysis)
-Beyond `FilterLogEvents` pattern counts, run these against the resource's log groups
-(`logs:StartQuery` / `logs:GetQueryResults`) for correlation. Adjust the log group and
-7-day time range.
-
-**Top slow queries by time (MySQL slow-query log):**
-```
-fields @timestamp, @message
-| filter @message like /Query_time/
-| parse @message "# Query_time: * Lock_time: * Rows_sent: * Rows_examined: *" as qt, lt, rs, re
-| filter qt > 5
-| sort qt desc
-| limit 20
-```
-
-**Slow / long-duration statements (PostgreSQL log):**
-```
-fields @timestamp, @message
-| filter @message like /duration:/
-| parse @message "duration: * ms" as dur_ms
-| filter dur_ms > 1000
-| sort dur_ms desc
-| limit 20
-```
-
-**Error rate by hour (both engines):**
-```
-fields @timestamp, @message
-| filter @message like /ERROR|FATAL|Warning/
-| stats count(*) as errors by bin(1h)
-| sort errors desc
-```
-
-**Deadlock frequency (MySQL error log):**
-```
-fields @timestamp, @message
-| filter @message like /Deadlock found/
-| stats count(*) as deadlocks by bin(1h)
-```
-
-**Connection / auth failures (both engines):**
-```
-fields @timestamp, @message
-| filter @message like /Too many connections|Aborted connection|Access denied|authentication failed/
-| stats count(*) by bin(15m)
-```
+Example queries (MySQL slow-query, PostgreSQL duration, error rate, deadlocks, connection/auth failures): read [`references/check-tables.md`](references/check-tables.md) → "CloudWatch Logs Insights example queries (Step 5c)". Run against the resource's log groups via `logs:StartQuery` / `logs:GetQueryResults`, 7-day range.
 
 Cross-reference spikes with the CloudWatch metrics at the same timestamp (CPU, IOPS,
 connections) to confirm cause.
@@ -430,25 +318,9 @@ connections) to confirm cause.
 **Engine version currency:** `rds.DescribeDBEngineVersions` (minor not latest → LOW; major EOL/within 6 months → HIGH).
 
 ### 5e. Operational Excellence best-practice checks
-| Check | Condition | Severity |
-|-------|-----------|----------|
-| Missing CloudWatch alarms | No alarm on CPU, Storage, Memory, Connections, or Latency | MEDIUM (each) |
-| No event subscriptions | Resource not covered by any event subscription | MEDIUM |
-| Engine version outdated | Major version approaching EOL | HIGH |
-| Engine version outdated | Minor version not latest | LOW |
-| Log exports missing | Engine logs not exported to CloudWatch | MEDIUM |
-| Database Insights | Standard mode not enabled, or Advanced mode not enabled where deeper analysis is needed | MEDIUM |
-| Performance Insights migration | Still relying on standalone Performance Insights (EOL 2026-06-30) instead of Database Insights Advanced mode | MEDIUM |
-| Enhanced Monitoring | Disabled or interval > 60s for production | MEDIUM |
-| Maintenance window | Overlaps business hours | LOW |
-| Maintenance window | Not configured (uses default) | LOW |
-| Operational tags | Missing `Environment`, `Owner`, `Runbook`, `OnCall` | LOW |
-| Default parameter group | Using `default.*` parameter group | MEDIUM |
-| pg_stat_statements | Not in `shared_preload_libraries` (PostgreSQL) | MEDIUM |
-| Autovacuum disabled | `autovacuum=off` | HIGH |
-| Slow query log | Not enabled (MySQL) | MEDIUM |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Operational Excellence best-practice checks (Step 5e)" before evaluating this step.
 
-Full checklist: `references/ops-excellence-checklist.md`.
+Full checklist: [`references/ops-excellence-checklist.md`](references/ops-excellence-checklist.md).
 
 > Record **every** matched check (any severity, per resource) as a row in the
 > Operational Excellence Findings table — see the completeness contract in Step 8c-bis.
@@ -458,26 +330,14 @@ Context/uptime from CloudWatch, all configuration from the parameter group (Step
 and only autovacuum effectiveness needs the RDS Data API (**NOT VERIFIED** if
 unavailable).
 
-**PostgreSQL:**
-- **Server/environment context** — **CloudWatch only:** `EngineUptime` (short uptime + recent issues → restart/failover); engine version from `rds.DescribeDBClusters`.
-- **Logging configuration** — **parameter group:** `log_connections`, `log_disconnections`, `log_checkpoints`, `log_statement`, `log_min_duration_statement`, `log_temp_files`, `log_autovacuum_min_duration`, `log_lock_waits`.
-- **Instrumentation** — **parameter group:** `shared_preload_libraries` includes `pg_stat_statements` (and optionally `auto_explain`); Database Insights enablement/mode from `rds.DescribeDBInstances`.
-- **Autovacuum tuning** — **parameter group:** the `autovacuum*` family (workers, naptime, thresholds/scale factors, cost delay/limit); flag `autovacuum=off` (critical) or defaults on large tables.
-- **Autovacuum effectiveness** — **RDS Data API (catalog-only):** `pg_stat_user_tables` `last_autovacuum`/`last_autoanalyze` and dead-tuple ratios for aged tables.
-
-**MySQL / Aurora MySQL:**
-- **Server/environment context** — **CloudWatch only:** `EngineUptime`; engine + Aurora/RDS from `rds.DescribeDBClusters`/`DescribeDBInstances`.
-- **Logging configuration** — **parameter group:** `slow_query_log`, `long_query_time`, `log_output`, `general_log`, `innodb_print_all_deadlocks`.
-- **Instrumentation** — **parameter group:** `performance_schema` = ON.
-- **Critical / maintenance variables** — **parameter group:** `max_connections`, `innodb_flush_log_at_trx_commit`, `sync_binlog`, `innodb_file_per_table`, character set/collation, `innodb_stats_auto_recalc`, `innodb_stats_persistent`, event-scheduler.
+Per-engine check list (PostgreSQL and MySQL/Aurora MySQL, with each check's source): read [`references/database-internal-checks.md`](references/database-internal-checks.md) → "Operational Excellence database-internal checks (Step 5f)" and run every check listed.
 
 ---
 
 ## Step 6: Performance Efficiency Pillar
 
 ### 6a. CloudWatch metrics (15-day window, `Period=21600` / 6h)
-**RDS Instances** (dim `DBInstanceIdentifier`): CPUUtilization (Avg), FreeableMemory (Min), FreeStorageSpace (Min), ReadIOPS (Avg), WriteIOPS (Avg), ReadLatency (Avg), WriteLatency (Avg), DatabaseConnections (Max), SwapUsage (Avg), NetworkReceiveThroughput (Avg), NetworkTransmitThroughput (Avg).
-**Aurora Clusters** (dim `DBClusterIdentifier`): CPUUtilization (Avg), FreeableMemory (Min), DatabaseConnections (Max), AuroraReplicaLag (Max), BufferCacheHitRatio (Avg), CommitLatency (Avg), ReadLatency (Avg), WriteLatency (Avg), VolumeReadIOPs (Sum), VolumeWriteIOPs (Sum), ServerlessDatabaseCapacity (Avg).
+Metrics to retrieve (RDS instances and Aurora clusters): [`references/metric-lists.md`](references/metric-lists.md) → "Step 6a metrics".
 
 ### 6b. Database Insights — DB load analysis (if enabled)
 Use **Amazon CloudWatch Database Insights** for database load (DB Load) analysis
@@ -488,53 +348,22 @@ Insights API (the metrics interface Database Insights is built on):
 pi.GetResourceMetrics     # db.load.avg vs vCPU count
 pi.DescribeDimensionKeys  # top wait events by category, top SQL by DB load
 ```
-Focus on: DB load vs vCPU (overloaded if load > vCPU sustained), top wait events (CPU/IO/Lock/Network), top SQL by average active sessions, queries with high db.load or frequent I/O waits. Note: standalone Performance Insights reaches EOL 2026-06-30 — prefer Database Insights (Advanced mode) going forward. See the Observability Stack references in `references/ops-excellence-checklist.md`.
+Focus on: DB load vs vCPU (overloaded if load > vCPU sustained), top wait events (CPU/IO/Lock/Network), top SQL by average active sessions, queries with high db.load or frequent I/O waits. Note: standalone Performance Insights reaches EOL 2026-06-30 — prefer Database Insights (Advanced mode) going forward. See the Observability Stack references in [`references/ops-excellence-checklist.md`](references/ops-excellence-checklist.md).
 
 ### 6c. Database-internal checks (Database Insights / CloudWatch; parameter group for config; Data API only for catalog-only residuals)
 Load, activity, top SQL and cache come from Database Insights / CloudWatch;
 configuration from the parameter group (Step 2b); only bloat, per-table sizes, and
 index inventory need the RDS Data API (**NOT VERIFIED** if unavailable).
 
-**PostgreSQL:**
-- **Top queries** — **Database Insights only:** DBI / PI `DescribeDimensionKeys` for top SQL by DB load (and top wait events); this replaces `pg_stat_statements`.
-- **DB load & wait events** — **Database Insights only:** `pi.GetResourceMetrics` `db.load.avg` vs vCPU; top wait categories (CPU/IO/Lock).
-- **Lock contention** — **Database Insights (Advanced mode) only:** DBI SQL lock analysis (blocking vs waiting sessions, lock tree, 15-month retention) — PostgreSQL only. Fully replaces catalog lock-wait queries; no Data API needed.
-- **Connections / activity** — **CloudWatch + Database Insights:** `DatabaseConnections` and DBI active sessions (active vs idle-in-transaction, long-running).
-- **Buffer cache efficiency** — **CloudWatch only:** `BufferCacheHitRatio` (Aurora); look for < ~99%.
-- **Config baselines** — **parameter group:** `shared_buffers`, `effective_cache_size`, `work_mem`, `maintenance_work_mem`, `random_page_cost`, `checkpoint_timeout`, `max_wal_size`, `default_statistics_target`, `log_temp_files`, and Aurora `apg_*`/`aurora_*`.
-- **Table bloat** — **RDS Data API (catalog-only):** `pg_stat_user_tables` dead-vs-live tuple ratio + `last_autovacuum`.
-- **Indexes (unused/duplicate)** — **RDS Data API (catalog-only):** `pg_stat_user_indexes`/`pg_index`.
-- **Object sizes** — **RDS Data API (catalog-only):** `pg_relation_size`/`pg_total_relation_size` for largest DBs/tables (volume totals available via CloudWatch `VolumeBytesUsed`/`FreeStorageSpace`).
+Per-engine check list (PostgreSQL and MySQL/Aurora MySQL, with each check's source): read [`references/database-internal-checks.md`](references/database-internal-checks.md) → "Performance Efficiency database-internal checks (Step 6c)" and run every check listed.
 
-**MySQL / Aurora MySQL:**
-- **Top queries** — **Database Insights only:** DBI / PI top SQL by load; replaces `events_statements_summary_by_digest`.
-- **DB load & wait events** — **Database Insights only:** `db.load.avg` vs vCPU, top waits.
-- **Connections / activity** — **CloudWatch + Database Insights:** `DatabaseConnections` and DBI active sessions / thread states.
-- **InnoDB buffer pool** — **CloudWatch only:** `BufferCacheHitRatio` (Aurora MySQL); look for < ~99%.
-- **Config baselines** — **parameter group:** `innodb_buffer_pool_size`, `innodb_log_file_size`, `max_connections`, `table_open_cache` (avoid deprecated `query_cache_type` on 8.0+).
-- **Active transactions & lock waits** — **Database Insights + CloudWatch only:** DBI top-SQL / active sessions identify the blocking or long-running statement, corroborated by `TransactionAgeMaximum` / `RollbackSegmentHistoryListLength`. (DBI SQL lock analysis is PostgreSQL-only, so for MySQL there is no blocking-vs-waiting lock graph — the exact `innodb_lock_waits` chain is not needed; the hotspot statement is the actionable signal.)
-- **Index usage (unused/redundant)** — **RDS Data API (catalog-only):** `table_io_waits_summary_by_index_usage` + `mysql.innodb_index_stats`; `sys.schema_redundant_indexes`.
-- **Storage / fragmentation** — **RDS Data API (catalog-only):** `information_schema.tables` sizes + `data_free` (> ~20% fragmentation); volume totals via CloudWatch.
-
-Compare parameter-group baselines against `references/performance-metrics-thresholds.md`
+Compare parameter-group baselines against [`references/performance-metrics-thresholds.md`](references/performance-metrics-thresholds.md)
 sizing guidance.
 
 ### 6d. Performance thresholds
-| Metric | Warning | Critical | Action |
-|--------|---------|----------|--------|
-| CPUUtilization avg | > 70% | > 90% | Right-size or add read replica |
-| FreeableMemory min | < 10% class memory | < 5% class memory | Upgrade instance class |
-| SwapUsage avg | > 0 sustained | > 100 MB sustained | Memory undersized |
-| FreeStorageSpace min | < 20% allocated | < 10% allocated | Enable autoscaling |
-| ReadLatency avg | > 10 ms | > 20 ms | Check IOPS, working set |
-| WriteLatency avg | > 10 ms | > 20 ms | Check IOPS, sync settings |
-| DatabaseConnections max | > 80% max_connections | > 95% | Add pooling (RDS Proxy) |
-| BufferCacheHitRatio avg (Aurora) | < 95% | < 90% | Larger instance class |
-| ReplicaLag max | > 30 s | > 300 s | Investigate write rate |
-| Database Insights | not enabled | — | Enable (Standard default; Advanced for deep analysis) |
-| Enhanced Monitoring | disabled or > 60s | — | Enable for production |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Performance thresholds (Step 6d)" before evaluating this step.
 
-Full thresholds & config baselines: `references/performance-metrics-thresholds.md`.
+Full thresholds & config baselines: [`references/performance-metrics-thresholds.md`](references/performance-metrics-thresholds.md).
 
 > Record **every** threshold breach or check result (any severity, per resource) as a
 > row in the Performance Findings table — see the completeness contract in Step 8c-bis.
@@ -549,7 +378,7 @@ costexplorer.GetCostAndUsage
   # Last 2 months, GroupBy: USAGE_TYPE
   # Filter: Service = "Amazon Relational Database Service"
 ```
-Relevant usage types: `Aurora:ServerlessV2Usage`, `Aurora:StorageIOUsage`, `Aurora:StorageUsage`, `Aurora:BackupUsage`, `RDS:ChargedBackupUsage`, `RDS:GP3-Storage`, `RDS:GP3-PIOPS`, `RDS:Multi-AZUsage`, `InstanceUsage`, `Multi-AZUsage`.
+Relevant usage types: [`references/cost-usage-types.md`](references/cost-usage-types.md).
 
 **Commitment coverage:**
 ```
@@ -560,7 +389,7 @@ rds.DescribeReservedDBInstances         # RI inventory
 Check for expiring RIs or underutilized Savings Plans.
 
 ### 7b. CloudWatch metrics (15-day window)
-CPUUtilization (Avg), FreeableMemory (Min), DatabaseConnections (Max), ReadIOPS/WriteIOPS (Avg), VolumeBytesUsed (Avg), ServerlessDatabaseCapacity (Avg).
+Metrics to retrieve: [`references/metric-lists.md`](references/metric-lists.md) → "Step 7b metrics".
 
 ### 7c. I/O cost optimization
 1. Get ACTUAL monthly Read/Write I/O counts from Cost Explorer or CloudWatch.
@@ -570,21 +399,9 @@ CPUUtilization (Avg), FreeableMemory (Min), DatabaseConnections (Max), ReadIOPS/
 - **I/O-Optimized (`aurora-iopt1`):** if equivalent standard I/O would be < 25% of total → recommend switching back.
 
 ### 7d. Cost Optimization best-practice checks
-| Check | Condition | Severity |
-|-------|-----------|----------|
-| Stopped instances | `DBInstanceStatus=stopped` (still pays storage) | HIGH |
-| Previous-gen classes | `db.m4`, `db.r4`, `db.t2` | MEDIUM |
-| gp2 storage | `StorageType=gp2` (gp3 is ~20% cheaper) | MEDIUM |
-| Over-provisioned IOPS | io1/io2 with avg IOPS used < 50% provisioned | MEDIUM |
-| No RI coverage | Production On-Demand without RIs | MEDIUM |
-| Storage autoscaling | `MaxAllocatedStorage` not set | LOW |
-| Idle databases | Connections max < 5 + CPU avg < 5% (7 days) | MEDIUM |
-| Old manual snapshots | Snapshots > 90 days old | LOW |
-| Missing cost tags | No `Environment`, `Owner`, `CostCenter` tags | LOW |
-| Graviton eligible | x86 (`db.r5`, `db.m5`, `db.t3`) where Graviton available | MEDIUM |
-| Serverless v2 ACU | Sustained at max ACU ceiling | MEDIUM |
+**Table:** read [`references/check-tables.md`](references/check-tables.md) → "Cost Optimization best-practice checks (Step 7d)" before evaluating this step.
 
-Full reference (instance-gen/storage comparison, Savings Plans details, right-sizing, backup cost): `references/cost-optimization-reference.md`.
+Full reference (instance-gen/storage comparison, Savings Plans details, right-sizing, backup cost): [`references/cost-optimization-reference.md`](references/cost-optimization-reference.md).
 
 > Record **every** matched check (any severity, per resource) as a row in the Cost
 > Findings table, each with its cost impact / potential savings — see the completeness
@@ -599,9 +416,18 @@ Full reference (instance-gen/storage comparison, Savings Plans details, right-si
 
 ## Step 8: Generate the Combined WAR Report
 
-### 8a. Save the report as an artifact (mandatory)
-You MUST persist the report to a file — do not only print it in the chat. Write the
-full markdown report to an artifact.
+### 8a. Deliver the report in chat AND save it as an artifact (both mandatory)
+You MUST do both, in the same turn:
+1. **Save** the full markdown report to an artifact (details below).
+2. **Return in the chat response** the overall scorecard (score per pillar in scope),
+   the key findings for each pillar (at least every CRITICAL/HIGH finding, naming the
+   affected resource), the top prioritized recommendations, any checks marked
+   **NOT VERIFIED**, and the saved artifact path(s).
+
+Run the checks yourself and finish the review within this turn. Do NOT hand the review
+off to background or asynchronous tasks, and do NOT reply with a status message such as
+"the review is running, I'll send results when it finishes" — the user's reply must
+contain the findings.
 
 **The artifact is ALWAYS produced — partial or blocked data never suppresses it.**
 If the RDS Data API is blocked/unavailable mid-review (or any tool call fails) and a
@@ -620,10 +446,10 @@ report that looks complete but silently hides missing evidence is NOT acceptable
 - The reconciliation check in Step 8c-bis still applies: `NOT VERIFIED` items are
   counted and shown, not removed.
 
-- **Single resource:** name it `rds-war-review-<resource-name>-<YYYY-MM-DD>.md`.
+- **Single resource:** name it `rds-well-architected-review-review-<resource-name>-<YYYY-MM-DD>.md`.
 - **Multiple resources / whole account (fleet review):** produce **one consolidated
   report** covering all in-scope resources named
-  `rds-war-<scope-label>-<YYYY-MM-DD>.md` (e.g. `AllClusters`), with per-cluster
+  `rds-well-architected-review-<scope-label>-<YYYY-MM-DD>.md` (e.g. `AllClusters`), with per-cluster
   comparison tables in each pillar (one column per resource) — do NOT emit a separate
   file per cluster. This matches the fleet health-check format.
 
@@ -632,17 +458,17 @@ Also generate the PNG charts described in 8e and save them alongside the report
 individual pillar skills' runs produce. Use the available file-writing / plotting
 capability to create these files (e.g., write to the working directory / artifacts
 location), then confirm every saved path (the `.md` and each `.png`) to the user.
-After saving, you may also summarize the Executive Summary inline, but the
-authoritative deliverable is the saved `.md` report plus its `.png` charts.
+The saved `.md` report plus its `.png` charts is the complete deliverable; the chat
+response carries the scorecard and key findings per pillar described in step 2 above.
 
 **Format adaptivity:** the `.md` + `.png` deliverable above is the default (and the
 format for file-artifact runtimes like AWS DevOps Agent). On a runtime that composes
 **structured artifacts** instead of files, render the equivalent native elements
 (`text` for narrative, `data_table` for every table, `chart` for the visualizations) in
 the same order — do NOT force a markdown file if the runtime doesn't support one. Either
-way, preserve the section order in `references/report-structure.md`, every table and
+way, preserve the section order in [`references/report-structure.md`](references/report-structure.md), every table and
 finding, and the 8c-bis reconciliation. See "Format adaptivity" in
-`references/report-structure.md`.
+[`references/report-structure.md`](references/report-structure.md).
 
 ### 8b. Scoring is mandatory and per-pillar
 Every pillar section MUST end with its own score line in the exact form used by the
@@ -711,7 +537,7 @@ final report.** The report is the complete record of the review, not a curated s
   a roadmap item (or be explicitly noted as accepted risk).
 
 ### 8d. Report structure (follow the reference — mandatory)
-Before writing the report, you MUST open **`references/report-structure.md`** and
+Before writing the report, you MUST open **[`references/report-structure.md`](references/report-structure.md)** and
 follow it **exactly** — same section order, headings, and tables. It is the
 authoritative layout for the consolidated report: title/header, Executive Summary
 (Overview, Resources in Scope, weighted Overall Health Score, Per-Cluster Health
@@ -727,7 +553,7 @@ the reference.
 
 ### 8e. Visualizations (PNG charts)
 Produce the PNG charts described in the "Visualizations" section of
-`references/report-structure.md` (overall scorecard + findings-by-severity, and the
+[`references/report-structure.md`](references/report-structure.md) (overall scorecard + findings-by-severity, and the
 per-pillar metric/coverage/spend charts), save them alongside the report, embed each
 with a markdown image link in the pillar section it belongs to, and list every `.png`
 under the report's **Artifacts** line. Charts supplement — never replace — the detail
@@ -738,22 +564,22 @@ tables; if the plotting library or data is unavailable, note it in Scope Covered
 Applies to all pillars. Where a pillar-specific nuance exists it is noted; the SLAs
 are common.
 
-| Severity | Definition | SLA |
-|----------|------------|-----|
-| CRITICAL | Immediate risk to availability, data integrity, or security; or major cost waste (> 50% savings available) | 24–48 hours |
-| HIGH | Significant gap that could lead to outages, exploitation, delayed incident response, or overspend > 30% | 1 week |
-| MEDIUM | Notable improvement opportunity (operational maturity, performance, cost 10–30%) | 30 days |
-| LOW | Minor hardening / optimization (< 10%) | When convenient |
-| INFO | Observation, no action required | N/A |
+Severity levels (CRITICAL / HIGH / MEDIUM / LOW / INFO), definitions and SLAs: [`references/severity-definitions.md`](references/severity-definitions.md). Use them consistently when scoring and ranking findings in Step 8.
 
 ## References
 
-- `references/reliability-checklist.md` — Reliability pillar best-practices checklist
-- `references/security-checklist.md` — Security pillar checklist + compliance mapping
-- `references/ops-excellence-checklist.md` — Operational Excellence checklist
-- `references/performance-metrics-thresholds.md` — Performance metrics thresholds & config baselines
-- `references/cost-optimization-reference.md` — Cost optimization reference tables
-- `references/report-structure.md` — **authoritative combined report template** (Step 8 output) + PNG chart catalog
+- [`references/reliability-checklist.md`](references/reliability-checklist.md) — Reliability pillar best-practices checklist
+- [`references/security-checklist.md`](references/security-checklist.md) — Security pillar checklist + compliance mapping
+- [`references/ops-excellence-checklist.md`](references/ops-excellence-checklist.md) — Operational Excellence checklist
+- [`references/performance-metrics-thresholds.md`](references/performance-metrics-thresholds.md) — Performance metrics thresholds & config baselines
+- [`references/cost-optimization-reference.md`](references/cost-optimization-reference.md) — Cost optimization reference tables
+- [`references/database-internal-checks.md`](references/database-internal-checks.md) — per-engine database-internal check lists for Steps 3e, 4e and 5f
+- [`references/parameter-lists.md`](references/parameter-lists.md) — parameter-group parameters to extract (Steps 2b, 5b)
+- [`references/metric-lists.md`](references/metric-lists.md) — CloudWatch metrics per step (3b, 6a, 7b)
+- [`references/cost-usage-types.md`](references/cost-usage-types.md) — Cost Explorer usage types (Step 7a)
+- [`references/severity-definitions.md`](references/severity-definitions.md) — severity levels and SLAs
+- [`references/check-tables.md`](references/check-tables.md) — best-practice check tables, alarm/log-pattern/performance thresholds, Logs Insights queries
+- [`references/report-structure.md`](references/report-structure.md) — **authoritative combined report template** (Step 8 output) + PNG chart catalog
 
 Database-internal (data-plane) checks are described inline within each pillar, each
 naming its source — Database Insights / CloudWatch, parameter group, or (for a few
