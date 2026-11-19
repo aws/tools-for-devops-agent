@@ -885,6 +885,27 @@ def _parse_frontmatter(frontmatter: str, report: _Report, *, strict: bool = True
     return root
 
 
+def read_skill_tier(skill_md: bytes) -> str | None:
+    """`metadata.tier` of a SKILL.md, or None when it sets none.
+
+    Raises ValueError when the frontmatter or the tier can't be read, so a
+    caller never takes an unreadable tier for an absent one.
+    """
+    try:
+        match = FRONTMATTER_PATTERN.match(skill_md.decode("utf-8"))
+    except UnicodeDecodeError:
+        raise ValueError("SKILL.md is not valid UTF-8") from None
+    root = _parse_frontmatter(match.group(1) or "", _Report([])) if match else None
+    if not isinstance(root, MappingNode):
+        raise ValueError("the SKILL.md frontmatter can't be read as a mapping")
+    tier = _last_value(_last_value(root, "metadata"), "tier")
+    if tier is None:
+        return None
+    if not (isinstance(tier, ScalarNode) and tier.tag == STR_TAG):
+        raise ValueError('"metadata.tier" is not text')
+    return tier.value
+
+
 def _mapping_items(node: MappingNode) -> dict[str, tuple[ScalarNode, Node]]:
     """The key and value nodes by key. read_yaml has already refused keys that aren't text or that repeat."""
     return {key_node.value: (key_node, value_node) for key_node, value_node in node.value}
