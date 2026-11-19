@@ -111,6 +111,15 @@ Check the response draft itself, not the ledger. A missing, empty, renamed, or o
 - ☐ When appends were used, the final state was read back and reconciled element-by-element against the plan: every planned element present exactly once, in order, none dropped by an overwriting call and none duplicated.
 - ☐ No inventory, checkpoint, or sidecar file is written or claimed; no other report-format source overrode this contract's section set, order, or delivery.
 
+## 8a — Requested overlays
+
+Skip this section with `overlays: none` when no overlay was requested.
+
+- ☐ Each requested overlay is recorded with its trigger, and no unrequested overlay is rendered.
+- ☐ Overlay output is derived from exact ledger verdicts or already-collected evidence. No verdict, severity, count, or membership changed. No extra discovery was run.
+- ☐ Delta: the prior report's identity matches the current cluster. FAIL→N/A is `Unverified`, never Resolved.
+- ☐ Comparison/fleet: at most one cluster was reviewed live, with its own QA PASS and complete report; every other cluster comes from a supplied report. Clusters not compared are listed. The comparison is a separate deliverable.
+
 ## 9 — No-file runtime compliance
 
 - ☐ No inventory JSON, review-state sidecar, Markdown report, checkpoint, Amazon S3 object, or other runtime file/object was created or requested.
@@ -125,6 +134,7 @@ Check the response draft itself, not the ledger. A missing, empty, renamed, or o
 - Conditional IDs graded: ___ / expected ___
 - FAIL blocks complete: ___ / ___
 - Mandatory report sections present and in order: ___ / 8 (plus header ☐)
+- Requested overlays rendered per contract: ___ / ___ (or `none`)
 - Load/ledger deviations: ___
 - Runtime file violations: ___
 - **Compliance:** ☐ PASS / ☐ FAIL

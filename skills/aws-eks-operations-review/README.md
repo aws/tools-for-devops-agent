@@ -24,13 +24,27 @@ Read-only EKS best-practices review for AWS DevOps Agent. It uses the MCP tool `
 
 Canonical coverage: 49 discovery areas; 288 core checks (41 Operations, 26 Resilience, 46 Security, 30 Scalability, 19 Performance, 26 Observability, 33 Networking, 33 Cost, 20 Control Plane, 14 AWS API); 81 gated checks (35 Upgrade, 18 Windows, 12 Hybrid, 16 AI/ML). Control Plane scorecard IDs are CP1–CP11, CP-M1–CP-M6, and CPM1–CPM3; CP1–CP25 in query shards are query IDs only; Cluster Insights is AX1.
 
+## Optional overlays
+
+These views run only when the user asks for them. Guardrails for vulnerability claims (version lag is a version gap; a CVE is named only when a retrieved Inspector finding or AWS security bulletin contains it) apply to every review, through guard FP13 in `references/runtime/grading-guards.md`. They are derived from the graded ledger and never add checks, change verdicts or severity, or alter the eight-section report. Activation, inputs, and rules live in `references/runtime/overlays.md`. This skill does not map findings to compliance frameworks such as CIS, NIST 800-53, or PCI DSS.
+
+| Overlay | Ask for it with | Output |
+|---|---|---|
+| Historical delta | Paste a previous report from this skill and ask "what changed" | §1 New / Regressed / Persisting / Resolved / Unverified, matched by finding fingerprint. The prior report is used from the conversation only. |
+| Comparison, drift, fleet | Paste reports from earlier reviews and ask to "compare dev and prod" or "check for drift" | A separate `EKS Fleet Comparison` with drift classes on parity checks. It compares reports: at most one cluster is reviewed live in the conversation, and every other cluster comes from a report you supply, so review each cluster in its own conversation first. |
+
+Example prompts:
+
+- "Here is last month's review of `prod-cluster`. Re-run the review and show what changed."
+- "Here are last week's reviews of `dev-cluster` and `staging-cluster`. Review `prod-cluster` now and compare all three for configuration drift."
+
 ## Package layout
 
 ```text
 aws-eks-operations-review/
 ├── SKILL.md
 └── references/
-    ├── runtime/                 # manifests, gates, guards, QA, report contract
+    ├── runtime/                 # manifests, gates, guards, QA, report contract, overlays
     ├── pillars/                 # nine canonical pillar definitions
     ├── remediations/            # generated FAIL-only index and size-capped (≤12 KiB) shards
     ├── control-plane-health/    # source detection, four query shards, thresholds/playbooks
@@ -67,7 +81,7 @@ zip -r aws-eks-operations-review.zip aws-eks-operations-review/ \
      '*/README.md' '*/EKS_SKILL_OPTIMIZATION_REPORT.md' '*.DS_Store'
 ```
 
-Upload constraints: root entry `aws-eks-operations-review/SKILL.md`, ZIP ≤6 MB and ≤100 regular files, no `scripts/`, eval files, README, changelog, optimization report, `.DS_Store`, TSV, or runtime sidecars. The intended payload currently contains 74 files (26 below the limit); `check-consistency.sh` prints the remaining headroom. In the Agent Space Operator Web App choose **Skills → Add skill → Upload skill**, select **Chat tasks** (or **All agents** to apply the skill to all agent types), review validation, and upload. The shared `operations-review-report-format` skill is optional; `references/runtime/report-contract.md` is the complete EKS fallback/adapter.
+Upload constraints: root entry `aws-eks-operations-review/SKILL.md`, ZIP ≤6 MB and ≤100 regular files, no `scripts/`, eval files, README, changelog, optimization report, `.DS_Store`, TSV, or runtime sidecars. The intended payload currently contains 75 files (25 below the limit); `check-consistency.sh` prints the remaining headroom. In the Agent Space Operator Web App choose **Skills → Add skill → Upload skill**, select **Chat tasks** (or **All agents** to apply the skill to all agent types), review validation, and upload. The shared `operations-review-report-format` skill is optional; `references/runtime/report-contract.md` is the complete EKS fallback/adapter.
 
 ## Contributing a check
 

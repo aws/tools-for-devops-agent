@@ -30,6 +30,7 @@ Both workflows install `mkdocs-material==9.6.14`. The dependencies of that packa
 |---|---|
 | `index.md` | Home page. It uses HTML blocks styled by `stylesheets/extra.css`. |
 | `getting-started.md` | Hand-written page. |
+| `blogs/` | The Blogs page and its data. See [Blogs page](#blogs-page). |
 | `skills/index.md`, `custom-agents/index.md`, `mcp-servers/index.md` | Catalog pages. Each holds an empty `<div>` that `javascripts/catalog.js` fills with cards. |
 | `hooks/*.py` | MkDocs hooks that generate the catalog data and pages at build time. |
 | `javascripts/catalog.js` | Reads the generated JSON and renders the catalog cards and group-by buttons. Output is sanitised with DOMPurify, which loads from jsDelivr. |
@@ -57,6 +58,50 @@ The generated files are listed in `.gitignore`. Do not commit them. Do not edit 
 The hooks write a file only when its content changes, so `mkdocs serve` does not rebuild in a loop.
 
 For the rules that control how a tool shows on the site (display names, acronyms, skill tags on agent cards, link formats), see "Common Review Findings" in [CONTRIBUTING.md](../CONTRIBUTING.md) and [`.kiro/steering/project-conventions.md`](../.kiro/steering/project-conventions.md).
+
+### Leaving out `aws-support-managed` skills
+
+While `extra.skills_catalog.show_aws_support_managed` in `mkdocs.yml` is `false`, `hooks/skills_catalog.py` leaves out every skill whose `metadata.tier` is `aws-support-managed`, and any skill whose front matter can't be read, since its tier is unknown. They get no catalog card, page or navigation entry, so the site search doesn't find them either. The build log names each one and says why. A page that an earlier local build wrote for one is removed. The skills stay in the repository.
+
+The setting keeps that tier off the site until it launches. To list the skills, set it to `true`. The build fails if it is missing or isn't `true` or `false`.
+
+While it's `false`, the strict build fails if another page names one of these skills, such as a custom agent that needs one or a connector that lists one, and the log names the page. The check reads each page's Markdown and front matter, links included. A page names `my-skill` with its folder name in any case (`my-skill`, `_my-skill_`, `My-Skill`), or with its display name with each word capitalized (`My Skill`, `MY SKILL`), even across a line break. Lowercase words such as "my skill" don't count, since they're usually just words. A name counts only as a whole word, so `my-skill-report` and `my-skills` don't name `my-skill`, and nor does `My Skill Report` when `my-skill-report` is another skill, custom agent, connector or MCP server.
+
+## Blogs page
+
+The Blogs page lists blog posts, videos and audio about AWS DevOps Agent. Its content is data, not Markdown:
+
+| File | Purpose |
+|---|---|
+| `blogs/posts.json` | One entry per post. |
+| `blogs/tags.json` | The tags a post can use, the source-site spellings each tag replaces (`aliases`), and source-site tags that are not used (`ignored_platform_tags`). |
+| `blogs/index.md` | The page introduction and notice. The hook puts the posts where `<!-- blog-posts -->` is. |
+| `hooks/blogs_catalog.py` | Checks both JSON files and renders the posts as static HTML, one section per format. |
+| `javascripts/blogs.js` | Adds the search box and the tag, source, publisher and date filters. Filters are kept in the URL query, so a filtered view can be shared. |
+
+To add a post, add an entry to `blogs/posts.json`:
+
+```json
+{
+  "title": "Title as shown on the post",
+  "url": "https://example.com/post",
+  "authors": ["Author Name"],
+  "date": "2026-01-31",
+  "source": "AWS Builder Center",
+  "official": false,
+  "format": "written",
+  "description": "One sentence, 25 words or fewer, on what the post shows.",
+  "tags": ["Investigations", "Amazon EKS"]
+}
+```
+
+- `official` is `true` only for posts on the [AWS Blogs](https://aws.amazon.com/blogs/). It describes the site, not the author. Anyone with an AWS Builder ID can publish on [AWS Builder Center](https://builder.aws.com/), so a Builder Center post is `false`, even when an AWS employee wrote it.
+- `format` is `written`, `video` or `audio`.
+- Use the date shown on the post, not a search engine's date.
+- Use one to five tags from `blogs/tags.json`. To pick them, find the post's tags on its own site in the `aliases` lists. Add a new tag only when no tag fits, and add the source-site spelling to its `aliases`.
+- Copy the title exactly as the post shows it.
+
+The build fails if an entry has a missing field, a tag that is not in `blogs/tags.json`, a URL that does not start with `https://`, a duplicate URL or a bad date. `tests/test_blogs_catalog.py` tests these checks, and also fails if a tag in `blogs/tags.json` is not used by any post.
 
 ## Add a hand-written page
 

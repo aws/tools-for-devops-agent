@@ -2,10 +2,9 @@
 name: investigation-cost-guardrail
 description: Cost guardrail for AWS DevOps Agent that covers ALL AWS services and native agent tools. Before the agent makes any paid API call, this skill estimates cost, enforces budgets per investigation, detects expensive operations across all services (Athena queries, S3 scans, DynamoDB scans, SageMaker inference, PromQL, etc.), enforces time window requirements, monitors cumulative call volume, and cancels if thresholds are exceeded. This skill applies to ALL investigations regardless of which services are involved.
 metadata:
-  author: tqquresh, inesttia
-  version: "2.1.1"
+  author: tipuq, inesttia
+  version: "2.1.2"
   aws-devops-agent-skills.agent-types: "INCIDENT_RCA"
-  aws-devops-agent-skills.aws-services: "All"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
 ---
 # Investigation Cost Guardrail Skill
