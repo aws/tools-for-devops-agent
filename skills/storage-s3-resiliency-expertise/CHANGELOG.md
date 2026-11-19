@@ -2,6 +2,9 @@
 
 All notable changes to this skill are documented here. New entries go at the top.
 
+## [1.0.4] - 2026-11-10
+- `metadata.author` is the contributor's GitHub username, `howard-m-k`, so catalogs link to their profile.
+
 ## [1.0.3] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

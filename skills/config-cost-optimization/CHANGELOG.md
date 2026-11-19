@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.5.4] - 2026-11-10
+- `metadata.author` is the contributor's GitHub username, `kaiserschmarm`, so catalogs link to their profile.
+
 ## [1.5.3] - 2026-10-22
 - Updated the link to the skill IAM policies template, which moved to `cloudformation/devops-agent-skill-policies/`.
 

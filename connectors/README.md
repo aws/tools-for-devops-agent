@@ -14,4 +14,6 @@ A connector is the definition of an MCP server that a partner hosts, for custome
 
 `contact_email` is where AWS reaches the partner about the connector, including security notices. It is a corporate work email address. Every new or changed connector sets it, which the pull request checklist enforces; the schema will require it once every connector on `main` has one.
 
+`tier` is the badge customers see. A partner's connector declares `partner-managed`. `aws-managed` is only for a connector an AWS team builds and supports, listed in [`.github/aws-managed-connectors.json`](../.github/aws-managed-connectors.json) on `main`; the pull request checklist enforces this (see "Partner Connectors" in [CONTRIBUTING.md](../CONTRIBUTING.md)).
+
 A partner accepts the [AWS DevOps Agent Partner Connector Terms and Conditions](TERMS.md) in the pull request that adds or changes its connector; see "Partner Connectors" in [CONTRIBUTING.md](../CONTRIBUTING.md). A full guide to writing a connector will be added to [CONTRIBUTING.md](../CONTRIBUTING.md).

@@ -68,11 +68,11 @@ Skills on `main` are published automatically, so a pull request check ([`.github
 | `metadata.version` | Required. `MAJOR.MINOR.PATCH`, such as `"1.2.0"`, with no prefix, suffix or leading zeros, at most 32 characters and at most 10 digits in each part. |
 | `metadata.summary` | One line, at most 200 characters, shown as the skill's card text in catalogs. A missing or empty summary is a warning for now; it becomes required once every skill has one. |
 | `metadata.deprecated` | Optional. `"true"` or `"false"`. |
-| `metadata.tier` | Optional. `"aws-managed"` or `"partner-managed"`: who maintains the skill. |
+| `metadata.tier` | Optional. `"aws-managed"`, `"aws-support-managed"` or `"partner-managed"`: who maintains the skill. Use `aws-support-managed` only for a skill whose named owner or team has accepted ongoing AWS Support maintenance. The check can't verify that, so before merge a maintainer confirms it through AWS Support's internal ownership process, then adds the `aws-support-managed-verified` label or a comment saying it was verified. Who opened the pull request isn't the test. Until that tier launches, the docs site leaves these skills out, and the strict build fails if another page names one; see [docs/README.md](docs/README.md#leaving-out-aws-support-managed-skills). Skills only: connector tiers are separate. |
 | `metadata.aws-devops-agent-skills.agent-types` | The agents that load the skill, as comma-separated values from [`agent-types.json`](.github/scripts/skill-rules/agent-types.json), such as `"INCIDENT_RCA"`. An unknown value is an error, because this key decides which agents load the skill rather than only how catalogs filter it. `GENERIC` loads the skill for every agent, so it is an error to combine it with another value. Without the key the skill installs as `GENERIC` and loads for every agent, which is a warning. |
 | `metadata.aws-devops-agent-skills.*` | Only `agent-types`, `aws-services` and `technical-domains`, each a comma-separated list. Any other key under this prefix, or a misspelling of the prefix, is an error, so a typo can't drop the skill from a filter. For `aws-services` and `technical-domains`, a value not in [`vocabulary.json`](.github/scripts/skill-rules/vocabulary.json) is a warning, with the approved spelling when there is one. |
 
-The frontmatter must be plain YAML that every parser reads the same way. These are rejected: tabs; a byte order mark at the start of the file; line breaks other than newlines (U+0085, U+2028, U+2029); `---` anywhere but the closing line; anchors (`&`), aliases (`*`), tags (`!`), directives (`%`) and document markers; flow collections (`[...]` or `{...}`); keys that aren't plain text, and duplicate keys, at any depth; and unquoted values that some parsers read as numbers, such as `1e3`. A top-level key other than the Agent Skills specification's fields and `title` is a warning.
+The frontmatter must be plain YAML that every parser reads the same way. These are rejected: tabs; a byte order mark anywhere; line breaks other than newlines (U+0085, U+2028, U+2029, or a carriage return without a line feed); `---` anywhere but the closing line; anchors (`&`), aliases (`*`), tags (`!`), directives (`%`) and document markers; flow collections (`[...]` or `{...}`); keys that aren't plain text, `<<` keys, and duplicate keys, at any depth; nesting more than 64 levels deep; unquoted values that some parsers read as another type, such as `1e3`, `yes`, `y` or `2026-11-08`; in a double-quoted value, an escaped UTF-16 surrogate such as `\uD83D`, or an escaped line break before a blank line; a block scalar indentation indicator, such as `|2`; a block scalar whose `|` or `>` isn't indented past its key or list item; a block scalar whose first line is indented less than a blank line before it; a `#` right after a closing quote or bracket; a quoted value whose next line isn't indented past its key or list item with spaces; and a block scalar as the last key, unless it is `|-` or `>-`. A top-level key other than the Agent Skills specification's fields and `title` is a warning.
 
 A `SKILL.md` body over 500 lines is a warning, as it is in the skill evaluation tool: move reference material into `references/` and link to it.
 
@@ -106,13 +106,13 @@ Identity and versions, compared with the base branch:
 - A new skill starts at `1.0.0`.
 - When the version goes up, add a `CHANGELOG.md` entry for it. A bump without one is a warning.
 
-Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list. A `connector.yaml` that can't be read is a warning.
+Connectors: a skill that a connector recommends, in the `skills:` list of a `connectors/<name>/connector.yaml`, can't be deprecated unless the same pull request removes it from that list. Each `connector.yaml`, at most 32 KiB, and `connectors/releases.yaml` must be UTF-8 YAML that every parser reads the same way, by the frontmatter's rules, except that a flow collection on one line, a `---` line at the start, `---` inside a value, and a tab inside a quoted value, block scalar or comment are allowed. A flow collection can't span lines, and an unquoted entry in one can't start with `?` or `:`, hold a `?`, or be a lone `-` that no `:` follows. [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json) has a case for each rule. A `connector.yaml` that isn't a mapping, or whose `skills:` isn't a list of skill names, is a warning.
 
 The check is exact only for the base commit it ran on. Two pull requests that each pass on an older base can break the rules together, for example by both bumping a skill to the same version, so a later push to `main` can still fail. [`validate-skills-main.yml`](.github/workflows/validate-skills-main.yml) runs the check again after every push to `main` and reports such a break.
 
 If the check is wrong about a pull request, a maintainer can add the `skip-validate-skills` label: the check still runs and reports, but it no longer blocks the merge. If the check itself breaks and blocks every pull request, an admin removes `validate-skills` from the required status checks for `main` until the fix merges, then adds it back.
 
-Once branch protection requires it, changes under `.github/` and `tests/`, and to the root `.gitattributes`, need a code owner's approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)). A separate check, `build-docs`, runs `mkdocs build --strict` on every pull request; to run it locally, in the virtual environment below, `python3 -m pip install mkdocs-material==9.6.14 && mkdocs build --strict`.
+Once branch protection requires it, changes under `.github/` and `tests/`, and to the root `.gitattributes`, need a code owner's approval ([`.github/CODEOWNERS`](.github/CODEOWNERS)). A separate check, `build-docs`, runs `mkdocs build --strict` on every pull request; to run it locally, in the virtual environment below, `python3 -m pip install --require-hashes -r .github/scripts/docs/requirements.txt && mkdocs build --strict`.
 
 Run the check locally before you push. It reads your commits, not your working tree, so commit first. In a clone of a fork, add this repository as the `upstream` remote:
 
@@ -124,7 +124,7 @@ git fetch upstream main
 python3 .github/scripts/validate_skills.py --base-ref upstream/main
 ```
 
-Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
+Before it checks any skill, the script runs the cases in [`conformance-cases.json`](.github/scripts/skill-rules/conformance-cases.json) through the same rules. When you change a rule, add or update a case for it in the same pull request; the YAML rules also have cases in [`yaml-conformance-cases.json`](.github/scripts/skill-rules/yaml-conformance-cases.json), which the unit tests run. `python3 .github/scripts/validate_skills.py --self-check-only` runs only the cases, and `python3 -m unittest discover -s tests -v` runs the check's unit tests.
 
 #### Test Your Skill
 
@@ -485,7 +485,7 @@ MCP server" names three types at once, so they cannot decide it.
 | Anything under `skills/` | Every item in Required before review, Security and safety, License confirmation, and the Skills section |
 | Anything under `mcp/` | The same, with the MCP servers section instead of Skills |
 | Anything under `custom-agents/` | The same, with the Custom agents section |
-| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
+| Anything in a `connectors/<name>/` directory | The two items that apply to every contribution and the Connectors section's terms box, and a `contact_email` and `tier: partner-managed` in each changed `connector.yaml` (see [Partner Connectors](#partner-connectors)) |
 
 So a PR that only edits `CONTRIBUTING.md` or a workflow is not asked for a README,
 a CHANGELOG or an SME sign-off, because none of it means anything for that change.
@@ -584,6 +584,18 @@ partner, as an exception, they link the partner's written authorization in the
 pull request description, and a maintainer approves the exception before review.
 A partner whose connector merged before the terms existed accepts them, and adds
 `contact_email`, in a new pull request.
+
+`tier` is the badge customers see next to a connector, so a partner's connector
+declares `tier: partner-managed`. Only a connector that an AWS team builds and
+supports may declare `aws-managed`, and it needs an entry in the AWS ownership
+record, [`.github/aws-managed-connectors.json`](.github/aws-managed-connectors.json),
+which maps each such connector's name to its owning AWS team. The checklist check
+fails a pull request whose changed `connector.yaml` declares any other tier, or a
+tier it cannot read as a single top-level line, unless the record on `main` lists
+that connector. It reads the record from `main`, not from the pull request, so a
+maintainer adds an entry in its own pull request first; that file is under
+`/.github/`, which code owners approve. The check also fails a pull request that is
+otherwise only reported on, such as one a bot opened, except a draft.
 
 The box names the version of the terms, the date at the end of `TERMS.md`, so
 each pull request records the version its partner accepted. One acceptance covers

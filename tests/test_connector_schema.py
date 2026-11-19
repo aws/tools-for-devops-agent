@@ -103,7 +103,7 @@ class StringRuleTests(unittest.TestCase):
 
     def test_categories_include_devops(self):
         categories = CONNECTOR["properties"]["categories"]["items"]["enum"]
-        self.assertEqual(categories, ["cloud", "telemetry", "pipeline", "communication", "devops"])
+        self.assertEqual(categories, ["cloud", "telemetry", "pipeline", "communication", "devops", "security"])
 
     def test_a_header_prefix_takes_no_placeholder(self):
         self.check(PREFIX, good=["Bearer ", "Token ", "", "{x}", "a{"], bad=["{{config.x}}", "Bearer {{config.x}}", "{{"])

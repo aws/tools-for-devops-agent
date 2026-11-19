@@ -1,0 +1,39 @@
+name: Check action pins
+
+# Fails on any `uses:` in .github/workflows/ not pinned to a full commit SHA.
+# NOTE: advisory until an admin makes "check-action-pins" a required check.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    # Deliberately NOT filtered with `paths:`: a required check that never runs
+    # stays pending forever.
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check-action-pins:
+    name: check-action-pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Check that every action is pinned to a commit SHA
+        run: |
+          uses_line='^[[:space:]]*(-[[:space:]]+)?uses:'
+          local_or_pinned='uses:[[:space:]]*(\./|[^@[:space:]]+@[0-9a-f]{40}([[:space:]]|$))'
+          unpinned=$(grep -rnE --include='*.yml' --include='*.yaml' "$uses_line" .github/workflows \
+            | grep -vE "$local_or_pinned" || true)
+          if [ -z "$unpinned" ]; then
+            echo "Every action is pinned to a full commit SHA."
+            exit 0
+          fi
+          while IFS=: read -r file line content; do
+            echo "::error file=${file},line=${line}::Pin to a full 40-character commit SHA, not a tag or branch:${content#*uses:}"
+          done <<< "$unpinned"
+          exit 1

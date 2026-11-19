@@ -31,6 +31,8 @@ LICENSE_TICKED = "## License confirmation\n- [x] I confirm the terms of the Apac
 SECURITY_TICKED = "## Security and safety\n- [x] Read-only by default."
 SKILLS_TICKED = "## Skills — complete if this PR adds or changes a skill\n- [x] frontmatter is valid"
 CONNECTORS_TICKED = "## Connectors — complete if this PR adds or changes a connector\n- [x] I accept the terms."
+PARTNER_YAML = "name: acme\ntier: partner-managed\ncontact_email: devops@acme.example\n"
+AWS_YAML = "name: acme\ntier: aws-managed\ncontact_email: devops@acme.example\n"
 
 
 class TemplateTest(unittest.TestCase):
@@ -205,6 +207,81 @@ class ConnectorTest(unittest.TestCase):
         self.assertNotIn("partner terms", cpc.summary([], [], False, "complete", False))
 
 
+class TierTest(unittest.TestCase):
+    def test_only_a_single_plain_or_quoted_partner_managed_tier_counts_as_partner(self):
+        cases = {
+            "tier: partner-managed": True,
+            'tier: "partner-managed"': True,
+            "tier: 'partner-managed'  # shown as a badge": True,
+            "tier:   partner-managed": True,
+            "tier: aws-managed": False,
+            "tier: Partner-Managed": False,
+            'tier: "partner-managed\'': False,
+            "tier: !!str partner-managed": False,
+            "tier: *anchor": False,
+            "tier: >\n  partner-managed": False,
+            "tier:": False,
+            "": False,
+            "mcp:\n  tier: partner-managed": False,
+            # A second spelling of the key, which a YAML parser would keep instead.
+            "tier: partner-managed\ntier: aws-managed": False,
+            'tier: partner-managed\n"tier": aws-managed': False,
+            "tier: partner-managed\n'tier' : aws-managed": False,
+            "tier: partner-managed\ntier : aws-managed": False,
+            "tier: partner-managed\n? tier\n: aws-managed": False,
+            "\ufefftier: partner-managed": False,
+        }
+        for text, expected in cases.items():
+            with self.subTest(text):
+                self.assertIs(cpc.declares_partner_tier(f"name: acme\n{text}\nversion: 1.0.0\n"), expected)
+
+    def test_nested_and_block_text_lines_are_not_the_tier(self):
+        text = "name: acme\ntier: partner-managed\ndescription: |\n  tier: aws-managed\nmcp:\n  tier: x\n"
+        self.assertTrue(cpc.declares_partner_tier(text))
+
+    def test_a_partner_managed_connector_never_reads_the_record(self):
+        def read_base(path):
+            raise AssertionError(path)
+        files = {"connectors/acme/connector.yaml": PARTNER_YAML}
+        self.assertEqual(cpc.unowned_tier(CONNECTOR_PR, files.get, read_base), [])
+
+    def test_any_other_tier_needs_an_entry_in_the_record(self):
+        files = {
+            "connectors/acme/connector.yaml": AWS_YAML,
+            "connectors/beta/connector.yaml": "name: beta\ntier: aws-managed\n",
+            "connectors/gamma/connector.yaml": "name: gamma\n",
+        }
+        paths = ["connectors/acme/connector.yaml", "connectors/beta/logo.svg", "connectors/gamma/README.md"]
+        record = json.dumps({"connectors": {"beta": "aws/devops-agent-team"}})
+        unmet = cpc.unowned_tier(paths, files.get, {cpc.OWNERSHIP_RECORD: record}.get)
+        self.assertEqual([u.split(" must ")[0] for u in unmet], [
+            "Connectors → connectors/acme/connector.yaml",
+            "Connectors → connectors/gamma/connector.yaml",
+        ])
+        self.assertIn(cpc.OWNERSHIP_RECORD, unmet[0])
+
+    def test_a_record_the_base_branch_lacks_lists_no_connector(self):
+        files = {"connectors/acme/connector.yaml": AWS_YAML}
+        self.assertEqual(len(cpc.unowned_tier(CONNECTOR_PR, files.get, lambda path: None)), 1)
+
+    def test_the_committed_record_is_well_formed_and_lists_no_connector_yet(self):
+        text = (ROOT / cpc.OWNERSHIP_RECORD).read_text(encoding="utf-8")
+        self.assertEqual(cpc.ownership_record(text), set())
+
+    def test_a_malformed_record_is_an_error_not_a_grant(self):
+        for text in ("not json", "[]", '{"connectors": []}', '{"connectors": {"acme": ""}}',
+                     '{"connectors": {"acme": 1}}', "{}"):
+            with self.subTest(text):
+                with self.assertRaises(ValueError):
+                    cpc.ownership_record(text)
+
+    def test_a_removed_connector_has_no_tier_to_check(self):
+        self.assertEqual(cpc.unowned_tier(CONNECTOR_PR, lambda path: None, lambda path: None), [])
+
+    def test_the_summary_names_the_record_for_a_connector_pr(self):
+        self.assertIn(cpc.OWNERSHIP_RECORD, cpc.summary([], [], False, "complete", True))
+
+
 class DecideTest(unittest.TestCase):
     AFTER = "2026-10-20T00:00:00Z"
     BEFORE = "2026-10-01T00:00:00Z"
@@ -228,6 +305,16 @@ class DecideTest(unittest.TestCase):
         for name, pr, unmet, expected in cases:
             with self.subTest(name):
                 self.assertEqual(cpc.decide(pr, unmet), expected)
+
+    def test_a_tier_finding_fails_every_pr_but_a_draft(self):
+        cases = [
+            ("bot", self.pr(user={"type": "Bot"}), ("fail", "incomplete")),
+            ("predating", self.pr(created_at=self.BEFORE), ("fail", "incomplete")),
+            ("draft", self.pr(draft=True), ("pass", "draft")),
+        ]
+        for name, pr, expected in cases:
+            with self.subTest(name):
+                self.assertEqual(cpc.decide(pr, ["tier"], ["tier"]), expected)
 
 
 class MainTest(unittest.TestCase):
@@ -253,14 +340,21 @@ class MainTest(unittest.TestCase):
         self.assertEqual((self.out / "outcome").read_text().strip(), "error")
         self.assertFalse((self.out / "reason").exists())
 
-    def connector_pr(self, connector_yaml):
+    def connector_pr(self, connector_yaml, base_record=None, pr_record=None):
         repo = self.tmp / "repo"
         repo.mkdir()
         self.git("init", "-q", "-b", "main")
+        if base_record is not None:
+            (repo / ".github").mkdir()
+            (repo / cpc.OWNERSHIP_RECORD).write_text(base_record, encoding="utf-8")
+            self.git("add", ".")
         self.git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "base")
         self.git("checkout", "-q", "-b", "pr")
         (repo / "connectors" / "acme").mkdir(parents=True)
         (repo / "connectors" / "acme" / "connector.yaml").write_text(connector_yaml, encoding="utf-8")
+        if pr_record is not None:
+            (repo / ".github").mkdir(exist_ok=True)
+            (repo / cpc.OWNERSHIP_RECORD).write_text(pr_record, encoding="utf-8")
         self.git("add", ".")
         self.git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "connector")
         cwd = os.getcwd()
@@ -270,15 +364,27 @@ class MainTest(unittest.TestCase):
         return cpc.main(["--event", self.event(text), "--base-ref", "main", "--out", str(self.out)])
 
     def test_a_connector_pr_with_contact_email_passes(self):
-        self.assertEqual(self.connector_pr("name: acme\ncontact_email: devops@acme.example\n"), 0)
+        self.assertEqual(self.connector_pr(PARTNER_YAML), 0)
         self.assertEqual((self.out / "outcome").read_text().strip(), "pass")
 
     def test_a_connector_pr_without_contact_email_fails(self):
-        self.assertEqual(self.connector_pr("name: acme\n"), 1)
+        self.assertEqual(self.connector_pr("name: acme\ntier: partner-managed\n"), 1)
         self.assertEqual((self.out / "reason").read_text().strip(), "incomplete")
 
+    def test_an_aws_managed_connector_without_an_entry_fails(self):
+        self.assertEqual(self.connector_pr(AWS_YAML), 1)
+        self.assertEqual((self.out / "reason").read_text().strip(), "incomplete")
+
+    def test_an_aws_managed_connector_with_an_entry_on_the_base_branch_passes(self):
+        record = json.dumps({"connectors": {"acme": "aws/devops-agent-team"}})
+        self.assertEqual(self.connector_pr(AWS_YAML, base_record=record), 0)
+
+    def test_an_entry_the_pr_adds_itself_grants_nothing(self):
+        record = json.dumps({"connectors": {"acme": "aws/devops-agent-team"}})
+        self.assertEqual(self.connector_pr(AWS_YAML, pr_record=record), 1)
+
     def test_a_head_ref_git_cannot_read_is_an_error_not_a_finding(self):
-        self.connector_pr("name: acme\ncontact_email: devops@acme.example\n")
+        self.connector_pr(PARTNER_YAML)
         code = cpc.main(["--event", self.event(body(REQUIRED_ALL_TICKED, CONNECTORS_TICKED, LICENSE_TICKED)),
                          "--base-ref", "main", "--head-ref", "pr", "--out", str(self.out)])
         self.assertEqual(code, 0)

@@ -25,6 +25,12 @@ the Connectors section, whose partner terms acceptance can never be marked
 A connector is a definition, not a tool, so it adds no other tool items; the
 shared files directly in ``connectors/`` and ``connectors/schema/`` call for nothing.
 
+Each changed connector must also declare ``tier: partner-managed``, unless it has an
+entry in the AWS ownership record, ``.github/aws-managed-connectors.json``, read from
+the base branch so a PR cannot add its own entry. ``tier`` is the badge customers
+see, so this finding fails even a PR that is otherwise only reported on, except a
+draft, which is checked again when it is marked ready for review.
+
 Exit status: 0 pass, 1 fail, 2 the check could not run. An error says nothing
 about the PR, and the labeler leaves the PR's label and comment alone on it.
 """
@@ -60,6 +66,16 @@ CONNECTOR_DIR = re.compile(r"^connectors/(?!schema/)([^/]+)/")
 # job, so this looks only for the top-level key with a plain or quoted value, not a
 # block scalar (> or |), whose trailing newline the schema's pattern would refuse.
 CONTACT_EMAIL = re.compile(r"""^contact_email:[ \t]*(?![>|]|""|'')[^\s#]""", re.M)
+# `tier` is the badge customers see. A PR can set partner-managed on its own; any
+# other value needs the connector's entry in the AWS ownership record. This reads
+# connector.yaml as text, so it fails closed: the file must have exactly one
+# top-level line that could set `tier`, and it must be a plain or quoted
+# partner-managed. TIER_KEY counts every spelling of the key a YAML parser accepts
+# at the top level (quoted, explicit `? `, a space before the colon), so a second
+# spelling cannot hide the value the parser keeps.
+TIER_KEY = re.compile(r"""^(?:\?[ \t]*)?(["']?)tier\1[ \t]*(?::|$)""")
+PARTNER_TIER = re.compile(r"""^tier:[ \t]*(["']?)partner-managed\1[ \t]*(?:#.*)?$""")
+OWNERSHIP_RECORD = ".github/aws-managed-connectors.json"
 
 # Items every PR is held to, tool or not, and that can never be marked n/a: the
 # repository is public, and the licence is a statement only the author can make.
@@ -117,6 +133,50 @@ def missing_contact(paths: list[str], read) -> list[str]:
     return unmet
 
 
+def declares_partner_tier(text: str) -> bool:
+    """Whether connector.yaml's only top-level ``tier`` is partner-managed."""
+    lines = [line for line in text.splitlines() if TIER_KEY.match(line)]
+    return len(lines) == 1 and bool(PARTNER_TIER.match(lines[0]))
+
+
+def ownership_record(text: str | None) -> set[str]:
+    """The connector names the AWS ownership record lists. A record the base branch
+    does not have lists none. A malformed one raises, so main() reports an error
+    rather than granting or refusing anything on a record it cannot read."""
+    if text is None:
+        return set()
+    record = json.loads(text)
+    connectors = record.get("connectors") if isinstance(record, dict) else None
+    if not isinstance(connectors, dict) or not all(
+        isinstance(owner, str) and owner.strip() for owner in connectors.values()
+    ):
+        raise ValueError(f"{OWNERSHIP_RECORD} must be {{\"connectors\": {{\"<name>\": \"<owning AWS team>\"}}}}")
+    return set(connectors)
+
+
+def unowned_tier(paths: list[str], read, read_base) -> list[str]:
+    """Unmet entries for each changed connector that declares a tier other than
+    partner-managed without an entry in the ownership record. ``read`` returns a
+    file's text at the PR head and ``read_base`` at the base branch, or None when the
+    file is not there. The record is read only when a connector needs it."""
+    names = sorted({m.group(1) for m in map(CONNECTOR_DIR.match, paths) if m})
+    unmet = []
+    owned = None
+    for name in names:
+        path = f"connectors/{name}/connector.yaml"
+        text = read(path)
+        if text is None or declares_partner_tier(text):
+            continue
+        if owned is None:
+            owned = ownership_record(read_base(OWNERSHIP_RECORD))
+        if name in owned:
+            continue
+        unmet.append(f"{CONNECTOR_SECTION} → {path} must declare tier: partner-managed. Any other tier, "
+                     f"or one this check cannot read as a single top-level line, needs an entry for {name} "
+                     f"in {OWNERSHIP_RECORD} on the base branch, added by a maintainer in its own pull request")
+    return unmet
+
+
 def required_sections(paths: list[str]) -> tuple[list[str], bool]:
     """The sections the changed files call for, and whether this is a tool PR."""
     tool_dirs = [d for d in TOOL_DIRS if any(p.startswith(d) for p in paths)]
@@ -159,11 +219,15 @@ def evaluate(body: str, paths: list[str]) -> tuple[list[str], list[str], bool]:
     return unmet, waived, is_tool
 
 
-def decide(pr: dict, unmet: list[str]) -> tuple[str, str]:
+def decide(pr: dict, unmet: list[str], binding: list[str] | None = None) -> tuple[str, str]:
     """(outcome, reason). The reason lets the labeler say why a PR passed, so it
-    never tells the author of a draft or a grandfathered PR they are done."""
+    never tells the author of a draft or a grandfathered PR they are done.
+    ``binding`` holds the unmet entries that fail any PR that is not a draft,
+    whoever opened it and whenever."""
     if not unmet:
         return "pass", "complete"
+    if binding and not pr.get("draft"):
+        return "fail", "incomplete"
     # A bot cannot fill in a template, and a draft is not submitted for review. The
     # label does not override either: labeling a draft would nag an author who has
     # said they are not finished.
@@ -187,7 +251,8 @@ def summary(unmet: list[str], waived: list[str], is_tool: bool, reason: str, is_
     )
     if is_connector:
         lines.append("It changes a connector, so the partner terms in the Connectors section must be accepted, "
-                     "and each changed connector's connector.yaml must set contact_email.")
+                     "and each changed connector's connector.yaml must set contact_email and declare "
+                     f"tier: partner-managed, unless the connector is listed in {OWNERSHIP_RECORD}.")
     if waived:
         lines += ["", "Marked n/a, with a reason:", ""] + [f"- {w}" for w in waived]
     heading = {
@@ -242,7 +307,9 @@ def main(argv: list[str] | None = None) -> int:
         paths = changed_paths(args.base_ref, args.head_ref)
         unmet, waived, is_tool = evaluate(pr.get("body") or "", paths)
         unmet += missing_contact(paths, read_at(args.head_ref))
-        outcome, reason = decide(pr, unmet)
+        binding = unowned_tier(paths, read_at(args.head_ref), read_at(args.base_ref))
+        unmet += binding
+        outcome, reason = decide(pr, unmet, binding)
         report = summary(unmet, waived, is_tool, reason, changes_connector(paths))
         step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if step_summary:

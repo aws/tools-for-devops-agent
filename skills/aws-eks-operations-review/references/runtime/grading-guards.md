@@ -22,6 +22,7 @@ A feature, control, or object observed to be **absent** is graded against its ow
 | FP10 | CP1,CP2,CP3,CP-M1,Sc3,R17 | object count growth | etcd near full | Correlate actual storage size, quota, 7-day growth rate, and dominant resource; fail pressure at >75% quota or >10% weekly growth. |
 | FP11 | O4,O14,OM1,AX10,CP1–CP11,CP-M1–CP-M6 | empty log query | no errors; healthy | Verify logging enabled, log group/stream, delivery delay, window, and filters. Missing telemetry is a visibility gap, not PASS. |
 | FP12 | U5,U5b,U5c,U5d,Sc14,Sc15,AX1 | deprecated API in source/chart | deployed upgrade blocker | Confirm live usage through Cluster Insights, audit logs, live API objects, or Helm stored manifests; source-only references are code hygiene. |
+| FP13 | AX5,Op7,N2,S38,Op29 | add-on, CNI image, or node AMI version lag; a question about CVEs | the version is vulnerable; a CVE, CVSS score, or "known vulnerable" version | Version lag is a version gap. Cite a CVE, CVSS score, or vulnerable version only when that identifier appears in a retrieved Inspector finding or AWS security bulletin, and name the source. AWS-hosted add-on images are not in the customer's ECR, so customer Inspector findings do not cover them: point to the add-on release notes and AWS security bulletins. |
 
 ## Confidence contract
 

@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  dx-resilience-mcp — read-only MCP server for AWS DevOps Agent that analyses
+  BGP prefix coverage across redundant Direct Connect VIFs.
+  Sample code: validate in a non-production environment before use.
+
+Parameters:
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    Description: CloudWatch Logs retention for the MCP server function.
+  DxRegions:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional comma-separated list of regions holding Direct Connect
+      resources (e.g. "eu-west-1,eu-west-2"). DX APIs are regional and
+      resilient estates often span regions. Empty = this stack's region only.
+  ReservedConcurrency:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    Description: >-
+      Hard cap on concurrent executions (Lambda reserved concurrency). Bounds
+      the worst-case spend of a runaway or abusive invocation loop: maximum
+      cost rate = this cap x function duration x memory, regardless of request
+      volume. The Direct Connect APIs this server calls are free, so Lambda
+      compute is the only billable component. 2 is ample for a single Agent
+      Space; raise only if analyses queue behind each other.
+  TargetAccountRoleArn:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional. ARN of a read-only role in the account that owns the Direct
+      Connect resources (deploy network-account-role.yaml there). Leave empty
+      when the VIFs are in this account. When set, all Direct Connect calls
+      are made via this role.
+
+Conditions:
+  CrossAccount: !Not [!Equals [!Ref TargetAccountRoleArn, '']]
+
+Globals:
+  Function:
+    Timeout: 120
+    MemorySize: 512
+
+Resources:
+  DxResilienceMcpFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: dx-resilience-mcp
+      Description: Read-only Direct Connect VIF resilience analysis (MCP, DevOps Agent only)
+      CodeUri: src/
+      Handler: run.sh
+      Runtime: python3.12
+      # Structural cost/DoS bound: even an authorized caller looping tool
+      # calls cannot exceed cap x timeout x memory in spend.
+      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      Layers:
+        - !Ref DependenciesLayer
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          PORT: '8000'
+          TARGET_ROLE_ARN: !If [CrossAccount, !Ref TargetAccountRoleArn, '']
+          DX_REGIONS: !Ref DxRegions
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            # Strictly read-only Direct Connect access. This is the layer that
+            # makes the "completely harmless" guarantee structural: no mutating
+            # action is grantable to this function.
+            - Sid: DirectConnectReadOnly
+              Effect: Allow
+              Action:
+                - directconnect:DescribeVirtualInterfaces
+                - directconnect:DescribeConnections
+                - directconnect:DescribeLags
+                - directconnect:DescribeDirectConnectGateways
+                - directconnect:DescribeDirectConnectGatewayAssociations
+                - directconnect:ListVirtualInterfaceRoutes
+                - directconnect:ListResiliencyGroups
+                - directconnect:ListResiliencyGroupAssociations
+                - directconnect:GetResiliencyGroup
+              Resource: '*'
+            # Only present in cross-account mode, and only for the one role
+            # fixed at deploy time — the agent cannot supply a role at runtime.
+            - !If
+              - CrossAccount
+              - Sid: AssumeNetworkAccountReadOnlyRole
+                Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Ref TargetAccountRoleArn
+              - !Ref AWS::NoValue
+
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: dx-resilience-mcp-deps
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes:
+        - python3.12
+    Metadata:
+      BuildMethod: python3.12
+
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${DxResilienceMcpFunction}
+      RetentionInDays: !Ref LogRetentionDays
+
+  # Role AWS DevOps Agent assumes to invoke the Function URL (SigV4).
+  # Register this role ARN together with the Function URL in the Agent Space.
+  DevOpsAgentAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dx-resilience-mcp-devops-agent-access
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: aidevops.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                # Confused-deputy protection required by DevOps Agent SigV4
+                # registration; without it the service will not assume this role.
+                aws:SourceArn: !Sub arn:aws:aidevops:*:${AWS::AccountId}:service/*
+      Policies:
+        - PolicyName: InvokeMcpFunctionUrl
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # A Function URL invoke requires BOTH permissions: InvokeFunctionUrl
+              # authorizes the URL, InvokeFunction authorizes the underlying
+              # invocation. With only the former the URL returns 403.
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunctionUrl
+                  - lambda:InvokeFunction
+                Resource: !GetAtt DxResilienceMcpFunction.Arn
+
+Outputs:
+  McpEndpoint:
+    Description: Function URL to register as the MCP server endpoint in your Agent Space.
+    Value: !GetAtt DxResilienceMcpFunctionUrl.FunctionUrl
+  AccessRoleArn:
+    Description: IAM role for DevOps Agent to assume when calling this MCP server.
+    Value: !GetAtt DevOpsAgentAccessRole.Arn
+  LambdaExecutionRoleArn:
+    Description: >-
+      Execution role of the MCP function. For cross-account setups, pass this
+      to network-account-role.yaml in the account owning the DX resources.
+    Value: !GetAtt DxResilienceMcpFunctionRole.Arn

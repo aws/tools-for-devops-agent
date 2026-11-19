@@ -52,6 +52,36 @@ upload payload.
 | best-practices | 92% / 91% / 82%, consistency 94% | one accepted deviation (BP-04) and one harness defect, both below |
 | functional | serial: 22/22 skill loaded, 83/83 assertions | run it serially; one parallel invocation loaded the skill in only 13/22 |
 
+### 1.10.0 results (2026-11-17, devops-agent 0.1.0, judge `us.anthropic.claude-sonnet-5`, us-east-1)
+
+These runs follow the second review round: the vulnerability posture overlay became grading guard FP13, comparison/fleet compares supplied reports with at most one live review, and the overlay cases were reworked. The results committed under `evals/structure/` (v3), `evals/best-practices/v3/`, and `evals/functional/v3/` come from them.
+
+| Tier | Result | Notes |
+|---|---|---|
+| structure | 12/12 (100%) | `structure-tests-results-v3.json` |
+| best-practices | 92% / 91% / 91%, consistency 94% | BP-04 fails 3/3, the accepted deviation below. BP-02 gave warnings in two iterations. |
+| functional (5 cases × 3 iterations, one invocation) | 30/30 iterations ran; the skill loaded in 15/15 with-skill iterations | See the per-case table |
+
+Functional results for these cases only (the 22 original cases were not re-run):
+
+| Case | Skill loaded | Expected output (with / without) | Assertions (with / without) |
+|---|---|---|---|
+| `eks-overlay-delta-classification` | 3/3 | 3/3 / 0/3 | 12/12 / 2/12 |
+| `eks-overlay-live-delta` (live cluster) | 3/3 | 3/3 / 0/3 | 15/15 / 0/15 |
+| `eks-overlay-fleet-drift` | 3/3 | 3/3 / 0/3 | 15/15 / 8/15 |
+| `eks-overlay-not-requested` | 3/3 | 3/3 / 0/3 | 9/9 / 0/9 |
+| `eks-scenario-fp13-no-invented-cve` | 3/3 | 3/3 / 0/3 | 12/12 / 7/12 |
+
+With the skill uploaded, 15/15 expected outputs and 63/63 assertions passed, against 0/15 and 17/63 without it.
+
+How to read this:
+
+- **`eks-overlay-live-delta` runs against a real cluster.** A temporary EKS 1.37 cluster (two AL2023 nodes, deleted after testing) was seeded with a privileged pod, unhardened workloads, a Secret passed as an env var, a public endpoint, and no audit logging or KMS encryption. A live Security review produced the previous report, which the prompt supplies compacted to its appendix with AWS identifiers replaced by placeholders and no fingerprints. Between the two runs the privileged pod was deleted and a `hostNetwork` pod was added. In all three iterations the skill graded the cluster live, classified S1 as Resolved, S2 as Regressed, and S19 as Persisting, matched by `check_id` plus `canonical_resource_id`, and rendered `### Change since previous review` in §1.
+- **Correction to the previous record.** The earlier version of this section said every iteration where the skill loaded met its expected output. That run had 4 of 15 with-skill iterations where the agent reported the skill as unavailable, and in two of them it loaded a different skill named `eks-operations-review`, so the sentence overstated the result. In this run the skill loaded in all 15 with-skill iterations, so there were no activation misses to re-run serially.
+- **Case changes.** `delta-identity-mismatch` was dropped because it passed 3/3 without the skill. The vulnerability case now tests guard FP13 and asserts the guard by name. `fleet-drift` now asks for three clusters with one supplied report, one live review, and one cluster with no report, and checks that no second live review starts.
+- **Before trusting a full-suite number, re-run serially.** These cases were added to `evals.json` by hand, so port them into `convert-evals.py` before its next regeneration, or they will be dropped.
+- Real account identifiers, node public IPs, and resource identifiers in the recorded agent output were replaced with placeholders.
+
 ### Serial run — the trustworthy path
 
 Use the driver rather than one big invocation:
@@ -184,8 +214,9 @@ The service rejects a skill zip containing more than **100 files**, counting wha
 `CHANGELOG.md`, `.skilleval.yaml`, `evals/`, `scripts/`, and `.claude/`. Note it does **not**
 exclude other root-level documents.
 
-This package sits at 74 files (`SKILL.md` plus 73 references) after consolidating the remediation
-shards by size instead of ID count, leaving 26 files of headroom. It previously sat at exactly 100,
+This package sits at 75 files (`SKILL.md` plus 74 references) after consolidating the remediation
+shards by size instead of ID count and adding the overlay reference in 1.10.0, leaving 25
+files of headroom. It previously sat at exactly 100,
 where a stray root-level report pushed it to 101 and every upload failed with
 `Zip validation failed: Zip contains 101 files`, while `check-consistency.sh` reported a compliant
 payload because its exclusion list did not match the uploader's. That check now mirrors the uploader

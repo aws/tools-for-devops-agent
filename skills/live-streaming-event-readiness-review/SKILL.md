@@ -16,10 +16,10 @@ description: >
   Not for active incidents or media-pipeline encode/package tuning.
 metadata:
   author: awsmanishon
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Read-only readiness review that grades a streaming/OTT platform for a large-scale live event across 9 pillars and returns PASS/FAIL/N/A scorecards with prioritized remediations."
   aws-devops-agent-skills.agent-types: "CHAT"
-  aws-devops-agent-skills.aws-services: "Amazon EC2, Amazon EKS, Amazon ECS, Amazon RDS, Amazon VPC, AWS Service Quotas, AWS Health, Amazon CloudWatch, Amazon CloudFront, Amazon Keyspaces, Amazon EBS, Amazon S3, AWS Elemental MediaTailor, Amazon Kinesis"
+  aws-devops-agent-skills.aws-services: "Amazon EC2, Amazon EKS, Amazon ECS, Amazon RDS, Amazon VPC, AWS Service Quotas, AWS Health, Amazon CloudWatch, Amazon CloudFront, Amazon Keyspaces, Amazon EBS, Amazon S3, AWS Elemental MediaTailor, Amazon Kinesis Data Streams"
   aws-devops-agent-skills.technical-domains: "Capacity Planning, Containers, Networking, Observability, Operations"
 ---
 
