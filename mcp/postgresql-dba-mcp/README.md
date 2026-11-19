@@ -4,6 +4,8 @@ A Model Context Protocol (MCP) server for read-only diagnostics of Amazon RDS fo
 
 This MCP server is sample code for technical review. Validate it in a non-production account and database before broader use.
 
+**When to use this MCP vs. the other RDS/Aurora options:** use this PostgreSQL DBA MCP (with the `postgresql-dba` skill) for deep, PostgreSQL-specific database-internal diagnostics over a direct, TLS-pinned connection — health reports, `shared_buffers`/memory sizing, vacuum/XID, indexes, statement performance, replication, connections, and locks. Use the `rds-aidba` MCP (with the `database-rds-devops` skill) for cross-engine Aurora MySQL **and** Aurora PostgreSQL data-plane checks over the RDS Data API. For a control-plane, Well-Architected operational review driven by native RDS/Aurora/CloudWatch APIs rather than in-database SQL, use the `rds-operation-review` skill instead.
+
 > **AWS DevOps Agent only:** This server uses Streamable HTTP with AWS IAM/SigV4 and is designed exclusively for AWS DevOps Agent. It is not compatible with stdio-based local MCP clients such as Kiro, Cursor, or VS Code.
 
 ## Deployment status and boundaries
@@ -244,6 +246,21 @@ Public reference: [Connect MCP servers to AWS DevOps Agent](https://docs.aws.ama
   - `com.amazonaws.<region>.monitoring`
 
 The template also creates a dedicated endpoint security group allowing TCP 443 only from the configured Lambda security group. Each interface endpoint incurs hourly and data-processing charges while it exists.
+
+> **Deploy into a dedicated VPC — interface-endpoint prerequisite.** The stack
+> creates its own interface endpoints for Secrets Manager, RDS, EC2, and
+> CloudWatch (`com.amazonaws.<region>.secretsmanager`, `.rds`, `.ec2`, and
+> `.monitoring`) with `PrivateDnsEnabled: true`, and each one carries a narrow
+> endpoint policy scoped to only the actions this server needs. Because private
+> DNS reroutes **all** traffic to those service endpoints in the VPC through the
+> endpoint, any other workload in the same VPC that calls Secrets Manager, RDS,
+> EC2, or CloudWatch would be forced through these restrictive policies and could
+> break. Deploy the stack into a **dedicated VPC** that runs no other workloads
+> calling those four services and that has **no pre-existing interface endpoints**
+> for them: if an interface endpoint for any of these services already exists in
+> the VPC, CloudFormation cannot create a second one and the stack fails to
+> create. This is a deployment-placement requirement only; it does not change the
+> template or its endpoint policies.
 
 The layer build downloads the official Amazon RDS global CA bundle and verifies its expected SHA-256 before packaging it. A bundle rotation requires an intentional URL/hash review. See [Using SSL/TLS to encrypt an RDS connection](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html). Content was rephrased for compliance with licensing restrictions.
 
