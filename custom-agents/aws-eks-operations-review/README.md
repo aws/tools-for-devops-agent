@@ -6,7 +6,7 @@
 
 This custom agent is an orchestrator for the [`aws-eks-operations-review`](https://github.com/aws/tools-for-devops-agent/tree/main/skills/aws-eks-operations-review) skill. It runs a full read-only operations review of one Amazon EKS cluster and publishes the result as **multiple artifacts — one Summary plus one per pillar** rather than a single large report.
 
-The multi-artifact split is the agent's central design decision. A full review spans 49 discovery areas and roughly 288 graded rows, and assembling that into one cumulative artifact means many sequential `create_or_update_artifact` calls whose payload grows with each call — the failure mode that produces render stalls and half-written reports. Splitting by pillar keeps each artifact small enough that most complete in one or two calls, makes every completed pillar a standalone deliverable, and removes cross-pillar accumulation risk entirely.
+The multi-artifact split is the agent's central design decision. A full review spans 49 discovery areas and roughly 289 graded rows, and assembling that into one cumulative artifact means many sequential `create_or_update_artifact` calls whose payload grows with each call — the failure mode that produces render stalls and half-written reports. Splitting by pillar keeps each artifact small enough that most complete in one or two calls, makes every completed pillar a standalone deliverable, and removes cross-pillar accumulation risk entirely.
 
 ## Key Capabilities
 

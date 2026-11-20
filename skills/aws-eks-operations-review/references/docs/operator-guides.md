@@ -77,7 +77,7 @@ This table mirrors [`../runtime/check-manifest.md`](../runtime/check-manifest.md
 | Pillar / component | Check IDs (all required) | Count | Source |
 |--------------------|--------------------------|-------|--------|
 | Operations | Op1–Op32, OpM1–OpM9 | 41 | `pillars/operations.md` |
-| Resilience & HA | R1–R22, RM1–RM4 | 26 | `pillars/resilience.md` |
+| Resilience & HA | R1–R23, RM1–RM4 | 27 | `pillars/resilience.md` |
 | Security | S1–S39, SM1–SM7 | 46 | `pillars/security.md` |
 | Scalability | Sc1–Sc23, ScM1–ScM7 | 30 | `pillars/scalability.md` |
 | Performance Efficiency | P1–P16, PM1–PM3 | 19 | `pillars/performance.md` |
@@ -86,7 +86,7 @@ This table mirrors [`../runtime/check-manifest.md`](../runtime/check-manifest.md
 | Cost / Sustainability / Architectural | A1–A26, AM1–AM7 | 33 | `pillars/cost-architecture.md` |
 | Control Plane Health | CP1–CP11, CP-M1–CP-M6, CPM1–CPM3 | 20 | `pillars/control-plane.md` (CloudWatch) |
 | AWS-API & Cluster Insights | AX1–AX14 | 14 | `aws-api-checks.md` |
-| **Core total (all 9 pillars + AX)** | | **288** | |
+| **Core total (all 9 pillars + AX)** | | **289** | |
 
 **Conditional checklists — grade in full only when their gate fires; otherwise one explicit `N/A — no <x>` line:**
 

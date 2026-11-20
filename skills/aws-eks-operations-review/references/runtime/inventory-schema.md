@@ -23,6 +23,7 @@ Load only in S4. Retain this bounded structure in the transient ledger; never cr
 | Keys | Canonical checks |
 |---|---|
 | `storageclasses_immediate_binding,lbfronted_no_prestop` | R19,R18 |
+| `grace_le_prestop,pdb_unhealthy_ifhealthy,workloads_colocated_ready,tolerations_unbounded_nodefailure,ipmode_pods_without_readiness_gate` | R11,R7,R4,R23,N16 |
 | `storageclasses_unencrypted,webhooks_high_timeout,webhooks_cabundle_expiring,secrets_store_csi_rotation_off,awsnode_uses_node_role` | S32–S36 |
 | `nodepools_overlap_unweighted,spot_to_spot_consolidation_off,karpenter_ami_latest,karpenter_self_hosted,spot_nodepool_low_diversity,donotdisrupt_pods,cas_version_mismatch,cas_autodiscovery,automode_selfmanaged_dupes,dual_autoscaler` | Op27,Op28,Op11,Op20,Op22,OpM8,Op9,Op24/OpM2,Op17,Op18 |
 | `initcontainer_request_inflation` | P14 |

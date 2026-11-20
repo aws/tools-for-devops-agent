@@ -48,7 +48,7 @@ Reads discovery areas: 8 SERVICES, 10 INGRESS, 25 CNI, 26 NETWORKING_ADVANCED, 4
 | N13 | AWS Load Balancer Controller present | area 26/33 (`features.third_party_controllers.aws_lb_controller`) | installed (not relying on legacy in-tree controller) | Medium |
 | N14 | LB target-type = IP | area 26 (Service/Ingress annotations) | LoadBalancer/Ingress use `target-type: ip` | Medium |
 | N15 | Correct LB type per workload | area 8/26 | HTTP(S) → ALB/Ingress; TCP/UDP or source-IP/static-IP → NLB | Low |
-| N16 | Pod readiness gates for LB | area 35 (readiness gates) + LBC webhook | LB-fronted workloads use readiness gates | Medium |
+| N16 | Pod readiness gates for LB | area 26 (Ingress/Service target type, `TargetGroupBinding` `targetType`) + area 35 (pod `readinessGates`) + namespace labels | workloads behind IP-mode targets (ALB `target-type: ip`, NLB IP targets, `TargetGroupBinding` with `targetType: ip`) run in namespaces labelled `elbv2.k8s.aws/pod-readiness-gate-inject: enabled` AND their running pods carry a `target-health.elbv2.k8s.aws/...` readiness gate (the LBC webhook injects it only at pod creation, so pods created before the label have none until recreated); instance-mode targets are N/A; N/A without the AWS Load Balancer Controller (N13) | Medium |
 | N17 | No NodePort services for ingress | area 8 (`svcType`) | no NodePort used as the ingress path | Medium |
 
 ## Network performance & DNS scaling (N18–N26)

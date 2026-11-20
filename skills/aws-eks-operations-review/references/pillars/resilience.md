@@ -22,14 +22,14 @@ Reads discovery areas: 4 DEPLOYMENTS, 5 STATEFULSETS, 7 PODS, 14 PDB, 35 RELIABI
 | R1 | Multi-AZ node distribution | nodes `topology.kubernetes.io/zone` (`single_az_nodes`) | nodes span 2+ AZs | Critical |
 | R2 | Multiple replicas for prod Deployments | Deployment `spec.replicas` | non-batch Deployments have replicas ≥ 2 | High |
 | R3 | No singleton pods | pods `ownerReferences` | no app pods running outside a controller | High |
-| R4 | Topology spread or anti-affinity | Deployment pod spec | replicas > 1 have topologySpreadConstraints or podAntiAffinity | High |
+| R4 | Topology spread or anti-affinity, and live placement | Deployment pod spec + Ready pods `spec.nodeName` (area 7) | replicas > 1 have topologySpreadConstraints or podAntiAffinity, AND no node runs more than ceil(replicas/2) Ready pods of the workload (preferred rules and `ScheduleAnyway` can still pack replicas, and the scheduler never rebalances) | High; Critical when all Ready pods of a multi-replica workload share one node |
 | R5 | topologySpread minDomains + whenUnsatisfiable | Deployment topologySpreadConstraints | zone spreads set `minDomains`; avoid `DoNotSchedule` unless intended | Medium |
 | R6 | PDB coverage | PDBs vs workloads (`workloads_without_pdb`) | multi-replica Deployments/StatefulSets have a matching PDB | High |
-| R7 | No blocking PDBs | PDB spec (`pdb_blocking`) | no PDB with `maxUnavailable:0` or `minAvailable:100%` | High |
+| R7 | No blocking PDBs | PDB spec (`pdb_blocking`, `unhealthyPodEvictionPolicy`) + PDB status | no PDB with `maxUnavailable:0` or `minAvailable:100%`; PDBs set `unhealthyPodEvictionPolicy: AlwaysAllow` (GA in Kubernetes 1.31) unless the app needs quorum, because with the default `IfHealthyBudget` a workload whose pods are not Ready keeps `disruptionsAllowed` at 0 and blocks the drain of every node it runs on | High for `maxUnavailable:0` / `minAvailable:100%`; the eviction policy alone is Low, Medium when the selected pods are currently not Ready or crash-looping |
 | R8 | Liveness + readiness probes | container probes (`containers_*_liveness/readiness`) | all serving containers have both | High |
 | R9 | Startup probe for slow starters | container `startupProbe` | slow-init containers have a startupProbe | Medium |
 | R10 | Rollout sizing | Deployment `spec.strategy` (`rollout_maxunavail_risky`) | RollingUpdate `maxUnavailable` keeps app above its minimum; not `Recreate` for HA apps | Medium |
-| R11 | terminationGracePeriod > 0 | pod `terminationGracePeriodSeconds` | > 0 (default 30 OK); flag very short (<10s) | Medium |
+| R11 | terminationGracePeriod covers preStop | pod `terminationGracePeriodSeconds` + container `lifecycle.preStop` | > 0 (default 30 OK); flag very short (<10s); when a container has a `preStop` hook that sleeps or waits, the grace period exceeds the hook duration plus a shutdown margin (10s), because the hook runs inside the grace period and SIGTERM is sent only after it returns | Medium; High when the grace period is ≤ the preStop duration (the app is SIGKILLed without handling SIGTERM) |
 | R12 | Node version consistency | nodes kubeletVersion | all nodes same kubelet minor | High |
 | R13 | EBS PVC AZ alignment | PVs (ebs csi) + node AZs | nodes launchable in each AZ that has EBS PVCs | High |
 | R14 | Metrics Server present | `features.observability.metrics_server` | metrics-server Ready | High |
@@ -41,6 +41,8 @@ Reads discovery areas: 4 DEPLOYMENTS, 5 STATEFULSETS, 7 PODS, 14 PDB, 35 RELIABI
 | R20 | Snapshot coverage for stateful workloads | VolumeSnapshots / VolumeSnapshotSchedule / AWS Backup protected resources | stateful workloads (StatefulSets with PVCs) have a backup mechanism: VolumeSnapshots exist with recent timestamps (< 24h for critical data), or AWS Backup protects the underlying EBS volumes; EFS-backed data requires EFS automatic backups; N/A without stateful workloads. | Medium |
 | R21 | Restore testing / RTO-RPO alignment | operational evidence (manual) | the team has tested restore from snapshots within the last 90 days; documented RTO and RPO targets exist and are met by the backup frequency/retention; RPO must be no greater than snapshot frequency and RTO must be achievable for the data size/procedure; N/A when R20 is N/A. | Low |
 | R22 | External dependency mapping | pod egress (NetworkPolicies, ServiceEntries, ExternalName services) + application docs | critical external dependencies (databases, S3, SQS, third-party APIs) are identified; their failure modes are understood and mitigated (retries, circuit breakers, fallbacks); Evidence includes dependency documentation plus health checks/synthetic canaries; N/A without external dependencies. | Low |
+
+| R23 | No tolerations that keep pods on failed nodes | Deployment/StatefulSet pod spec `tolerations` (areas 4, 5) | no Deployment or StatefulSet tolerates every taint with a key-less `operator: Exists` toleration (it matches the `NoExecute` `node.kubernetes.io/not-ready` and `unreachable` taints with no time limit, so its pods are never evicted from a dead node); explicit `not-ready` / `unreachable` tolerations set `tolerationSeconds` (the admission default is 300). DaemonSets are N/A: they tolerate these taints by design. | High for a key-less `Exists`; Medium for an unbounded `not-ready` / `unreachable` toleration |
 
 ## Manual / process checks (RM)
 

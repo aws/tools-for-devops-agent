@@ -37,9 +37,15 @@ spec:
 **References:**
 - [Kubernetes — Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 
-### R4 — Topology spread or anti-affinity
-**Why it matters:** Without spread, all replicas can pack onto one node/AZ — defeating the point of multiple replicas when that domain fails.
-**Steps:** Add `topologySpreadConstraints` across `topology.kubernetes.io/zone` and `kubernetes.io/hostname` for multi-replica workloads (preferred over pod anti-affinity on modern EKS).
+### R4 — Topology spread or anti-affinity, and live placement
+**Why it matters:** Without spread, all replicas can pack onto one node/AZ — defeating the point of multiple replicas when that domain fails. A rule alone is not proof: preferred anti-affinity and `whenUnsatisfiable: ScheduleAnyway` let the scheduler co-locate replicas under capacity pressure, and nothing moves them apart later. When every Ready replica sits on one node, losing that node is a full outage even with replicas ≥ 2 and a PDB.
+**Steps:**
+1. Add `topologySpreadConstraints` across `topology.kubernetes.io/zone` and `kubernetes.io/hostname` for multi-replica workloads (preferred over pod anti-affinity on modern EKS).
+2. Check where the Ready pods run now:
+   ```bash
+   kubectl get pods -n ${NAMESPACE} -l app=${APP} -o json | jq -r '.items[] | select(any(.status.conditions[]?; .type=="Ready" and .status=="True")) | .spec.nodeName' | sort | uniq -c
+   ```
+3. If one node holds more than half of the Ready pods, make the hostname spread hard for small replica counts (`whenUnsatisfiable: DoNotSchedule` on `kubernetes.io/hostname`, keeping the zone spread soft per R5), then restart the rollout to reschedule. For ongoing rebalancing, the descheduler's `RemovePodsViolatingTopologySpreadConstraint` plugin evicts pods that violate the spread.
 **Snippet:**
 ```yaml
 spec:
@@ -103,10 +109,15 @@ spec:
    kubectl get pdb -A -o json | jq -r '.items[] | select((.spec.maxUnavailable==0) or (.spec.minAvailable=="100%")) | "\(.metadata.namespace)/\(.metadata.name)"'
    ```
 2. Change to a value that protects availability but still allows one pod to move (e.g. `minAvailable: 1` for replicas ≥ 2, or `maxUnavailable: 1`).
+3. Let unhealthy pods be evicted. With the default `unhealthyPodEvictionPolicy: IfHealthyBudget`, pods that are Running but not Ready can be evicted only while the budget is met, so a crash-looping workload keeps `disruptionsAllowed` at 0 and stalls the drain of every node it runs on. Set `AlwaysAllow` (GA in Kubernetes 1.31); keep `IfHealthyBudget` only for quorum-based apps that must not lose a not-ready member during a disruption.
+   ```bash
+   kubectl get pdb -A -o json | jq -r '.items[] | select((.spec.unhealthyPodEvictionPolicy // "IfHealthyBudget") == "IfHealthyBudget") | "\(.metadata.namespace)/\(.metadata.name) allowed=\(.status.disruptionsAllowed) healthy=\(.status.currentHealthy)/\(.status.expectedPods)"'
+   ```
 **Snippet:**
 ```yaml
 spec:
   maxUnavailable: 1          # was 0 — allows controlled disruption
+  unhealthyPodEvictionPolicy: AlwaysAllow
 ```
 **References:**
 - [EKS Best Practices — Application HA (PDBs)](https://docs.aws.amazon.com/eks/latest/best-practices/application.html)

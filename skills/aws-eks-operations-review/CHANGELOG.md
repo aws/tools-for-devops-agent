@@ -1,4 +1,31 @@
 # Changelog
+## [1.11.0] - 2026-11-19
+Eviction and node-loss readiness in Resilience and Networking, agreed in issue #258. Workloads
+that passed the old predicates could still fail when their pods were evicted or their node was
+replaced. Core check count 288 → 289 (Resilience 26 → 27).
+- R11 is now "terminationGracePeriod covers preStop": the grace period must exceed the preStop
+  duration plus a 10s shutdown margin. High when the grace period is at or below the preStop
+  duration, because the hook runs inside the grace period and the app is SIGKILLed without
+  handling SIGTERM. The remediation adds a jq query that reads `sleep` and `exec ... sleep N` hooks.
+- R7 also checks `unhealthyPodEvictionPolicy` (GA in Kubernetes 1.31): with the default
+  `IfHealthyBudget`, a workload whose pods are not Ready keeps `disruptionsAllowed` at 0 and blocks
+  drains. That part alone is Low, Medium when the selected pods are not Ready or crash-looping;
+  the existing `maxUnavailable: 0` / `minAvailable: 100%` predicate keeps High.
+- R4 also checks live placement: no node runs more than ceil(replicas/2) Ready pods of a workload.
+  Critical when all Ready pods of a multi-replica workload share one node.
+- New R23 "No tolerations that keep pods on failed nodes": a key-less `operator: Exists` on a
+  Deployment or StatefulSet (High) or an unbounded `not-ready` / `unreachable` toleration (Medium).
+  DaemonSets are N/A.
+- N16 is refined instead of adding a separate Resilience check: it applies only to IP-mode targets
+  (instance-mode targets are N/A) and passes only when the namespace label is set AND the running
+  pods carry the `target-health.elbv2.k8s.aws/...` gate, since the webhook injects it at pod creation.
+- Inventory: tolerations (areas 4, 5), PDB `unhealthyPodEvictionPolicy` and status (area 14),
+  Ready replicas per node and readiness-gate evidence (area 35); new derived signals in
+  `inventory-schema.md`. No new permissions: the same objects are read.
+- Counts updated in the manifest, QA checklist, report contract, operator guide, README, SKILL.md,
+  `llms.txt`, and the custom agent prompt. Evals: three scenario cases (grace period equal to
+  preStop, N16 on IP targets only, R23 with a DaemonSet).
+
 ## [1.10.0] - 2026-11-18
 Optional overlays, contributed from the `eks-guardian` proposal (PR #85) instead of adding a
 fourth EKS review skill. Overlays are opt-in derived views: they add no check, discovery area,

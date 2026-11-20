@@ -368,6 +368,47 @@
         "The response includes a 'Change since previous review' subsection in the executive summary (\u00a71) of the eight-section report"
       ],
       "task_type": "chat"
+    },
+    {
+      "id": "eks-scenario-grace-equals-prestop",
+      "prompt": "During an EKS operations review you observe this evidence for a production Deployment behind an ALB with IP targets:\n\nterminationGracePeriodSeconds is not set (default 30). The only container has lifecycle.preStop.exec.command [\"/bin/sh\",\"-c\",\"sleep 30\"]. The target group deregistration delay is 20 seconds.\n\nGrade R11 and R18 for this workload. Give the verdict, severity, and the reason for each.",
+      "expected_output": "R18 passes because the preStop sleep covers the deregistration delay. R11 fails with High severity: the 30s preStop uses the whole 30s grace period, SIGTERM is sent only after the hook returns, so the app is SIGKILLed without handling SIGTERM. The fix raises terminationGracePeriodSeconds above the preStop duration plus shutdown time.",
+      "assertions": [
+        "The response grades R11 as FAIL",
+        "The response assigns High severity to the R11 finding",
+        "The response explains that the preStop hook runs inside the grace period and SIGTERM is sent only after the hook returns",
+        "The response grades R18 as PASS because the 30s preStop covers the 20s deregistration delay",
+        "The response recommends a terminationGracePeriodSeconds greater than 30 rather than shortening the preStop below the deregistration delay"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-n16-ip-targets-only",
+      "prompt": "During an EKS operations review you observe this evidence:\n\nNamespace shop runs Deployment web behind an Ingress with alb.ingress.kubernetes.io/target-type: ip. The namespace has the label elbv2.k8s.aws/pod-readiness-gate-inject: enabled, added yesterday. The 4 running web pods were created 6 days ago and have no readinessGates.\nNamespace legacy runs Deployment api behind a Service type LoadBalancer with NLB instance targets. Its namespace has no readiness gate label.\n\nGrade N16. Is there one FAIL, two, or none, and why?",
+      "expected_output": "One FAIL for shop/web: the namespace label is present, but the LBC webhook injects the gate only at pod creation, so the existing pods have no gate until they are recreated. legacy/api is N/A because instance-mode targets register nodes, not pods. Severity Medium; the fix is a rollout restart in shop and verifying the target-health gate on the new pods.",
+      "assertions": [
+        "The response reports exactly one N16 FAIL, for the web workload in namespace shop",
+        "The response explains that the readiness gate is injected only when a pod is created, so the namespace label alone does not pass",
+        "The response treats the instance-mode NLB workload in namespace legacy as N/A rather than FAIL",
+        "The response recommends recreating the shop pods, for example with a rollout restart"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
+    },
+    {
+      "id": "eks-scenario-r23-daemonset-na",
+      "prompt": "During an EKS operations review you observe these tolerations:\n\n1. Deployment payments/api: tolerations [{operator: Exists}].\n2. StatefulSet data/queue: tolerations [{key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute}] with no tolerationSeconds.\n3. DaemonSet kube-system/node-agent: tolerations [{operator: Exists}].\n\nGrade R23 for each and give severities.",
+      "expected_output": "payments/api FAIL High: a key-less Exists tolerates the NoExecute not-ready/unreachable taints forever, so its pods are never evicted from a dead node. data/queue FAIL Medium: an unbounded unreachable toleration; set tolerationSeconds. The DaemonSet is N/A because DaemonSets tolerate these taints by design and R23 covers only Deployments and StatefulSets.",
+      "assertions": [
+        "The response grades the payments/api Deployment as FAIL with High severity",
+        "The response grades the data/queue StatefulSet as FAIL with Medium severity",
+        "The response treats the node-agent DaemonSet as N/A and does not report it as a FAIL",
+        "The response explains that the tolerated not-ready or unreachable NoExecute taint keeps pods bound to a failed node",
+        "The response recommends explicit taint keys or a bounded tolerationSeconds rather than removing every toleration"
+      ],
+      "task_type": "chat",
+      "should_trigger": true
     }
   ]
 }

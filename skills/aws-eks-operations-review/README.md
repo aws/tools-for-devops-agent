@@ -22,7 +22,7 @@ Read-only EKS best-practices review for AWS DevOps Agent. It uses the MCP tool `
 
 `SKILL.md` is an S0–S8 state machine. `references/runtime/` contains the ordered discovery manifest, bounded inventory schema, router, cluster gates, grading guards, exact check manifest, telemetry thresholds, common-check crosswalk, QA gate, and final-response contract. `references/pillars/` owns canonical predicates for nine pillars; root reference files own AX and gated Upgrade/Windows/Hybrid/AI-ML definitions. `references/remediations/index.md` dispatches known FAIL IDs to small shards. `references/control-plane-health/` contains staged CP query/source/threshold/procedure/remediation files. `references/docs/` contains operator/background material and is not normal runtime authority.
 
-Canonical coverage: 49 discovery areas; 288 core checks (41 Operations, 26 Resilience, 46 Security, 30 Scalability, 19 Performance, 26 Observability, 33 Networking, 33 Cost, 20 Control Plane, 14 AWS API); 81 gated checks (35 Upgrade, 18 Windows, 12 Hybrid, 16 AI/ML). Control Plane scorecard IDs are CP1–CP11, CP-M1–CP-M6, and CPM1–CPM3; CP1–CP25 in query shards are query IDs only; Cluster Insights is AX1.
+Canonical coverage: 49 discovery areas; 289 core checks (41 Operations, 27 Resilience, 46 Security, 30 Scalability, 19 Performance, 26 Observability, 33 Networking, 33 Cost, 20 Control Plane, 14 AWS API); 81 gated checks (35 Upgrade, 18 Windows, 12 Hybrid, 16 AI/ML). Control Plane scorecard IDs are CP1–CP11, CP-M1–CP-M6, and CPM1–CPM3; CP1–CP25 in query shards are query IDs only; Cluster Insights is AX1.
 
 ## Optional overlays
 
