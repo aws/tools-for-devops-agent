@@ -1,0 +1,108 @@
+{
+  "version": "v2",
+  "iteration": 1,
+  "eval_id": "cloudtrail-audit-inline-delivery-error-service-events",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tools_ready": {
+    "outcome": "ready",
+    "ready": true,
+    "waited_seconds": 86.8,
+    "probes": 2,
+    "summary": "Agent space tools ready after 2 probe(s) in 1m 26s"
+  },
+  "skill_load": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly identifies: (1) delivery failure since 2026-10-20 with ~13 days of undelivered logs, pointing to bucket/KMS policy as the likely fix location; (2) clarifies IsLogging=true does not mean logs are arriving; (3) correctly identifies the selector excludes AwsServiceEvent type and service-linked role sessions (aws-service-role ARN prefix), explaining these won't appear in the trail. It does not invent any bucket names, functions, or tables - it refers generically to 'the destination bucket' without fabricating specifics. No changes are made or offered; the agent only reports findings, which aligns with 'nothing is changed.' \n\nThe one gap: the expected output asks the response to explain how such excluded events are normally attributed (userIdentity.invokedBy, sessionIssuer under aws-service-role, eventType AwsServiceEvent) - the agent mentions eventType AwsServiceEvent and the ARN prefix matching aws-service-role, but does not explicitly mention userIdentity.invokedBy or sessionIssuer. This is a partial miss on one sub-detail, but the core substantive findings (delivery failure, 13-day gap, bucket policy fix location, IsLogging misconception, selector exclusions and their audit implications) are all present and correct. This is a minor omission relative to the overall strong match on all major criteria.",
+      "evidence": "\"Both: LatestDeliveryError: AccessDenied, LatestDigestDeliveryError: AccessDenied ... almost always an S3 bucket policy, bucket ownership change, or KMS key policy issue\"; \"roughly 13 days with no confirmed successful delivery to the bucket\"; \"IsLogging: true only means CloudTrail is capturing events internally. It does not mean events are reaching your storage\"; \"Excludes AwsServiceEvent type events, and Excludes userIdentity.arn starting with [redacted ARN] (service-linked role activity)... this trail captures no Data events and no Insight events\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response states that log delivery for main-trail is failing with an S3 access error, that the last successful delivery was 2026-10-20, that roughly 13 days of logs have not been delivered as of 2026-11-02, and that the destination bucket policy (or bucket access) is where the fix lies.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states 'LatestDeliveryTime is 2026-10-20T03:10:00Z. Against the stated \"today\" of 2026-11-02, that's roughly 13 days with no confirmed successful delivery to the bucket' and 'AccessDenied on both delivery types together points at the bucket/key, not CloudTrail itself' and 'typically traces to a bucket policy or KMS key policy change on the destination bucket, not the trail configuration itself.'",
+          "reasoning": "The response covers the AccessDenied error, the 2026-10-20 last delivery time, the ~13 day gap, and points to bucket policy/KMS key as the fix location.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that IsLogging being true does not mean logs are arriving in the bucket.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'IsLogging: true only means CloudTrail is capturing events internally. It does not mean events are reaching your storage.'",
+          "reasoning": "Directly states this exact point.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that the selector excludes AWS service originated events and service linked role sessions, so actions taken by automated systems will not appear in this trail, and presents this as something auditors must know.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Excludes AwsServiceEvent type events, and Excludes userIdentity.arn starting with [redacted ARN] (service-linked role activity)... worth flagging if anyone assumes this trail also covers S3 object-level or Lambda invoke activity \u2014 it doesn't.' Also 'This is the kind of finding that fails an audit or compliance review outright'",
+          "reasoning": "The response explicitly notes the exclusions and frames them as something to flag for anyone assuming broader coverage, tying to audit concerns elsewhere in the response.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains how AWS service and service linked role activity is normally attributed in CloudTrail events and names at least two of userIdentity.invokedBy, a sessionIssuer under aws-service-role, and the AwsServiceEvent event type.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of userIdentity.invokedBy, sessionIssuer, or explanation of how service-linked role sessions are normally attributed beyond simply naming the AwsServiceEvent eventType and the ARN prefix filter.",
+          "reasoning": "The response names AwsServiceEvent (one of the three) but never discusses invokedBy or sessionIssuer attribution mechanisms, so it does not name at least two of the three required concepts.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response makes clear that its conclusions are based on the status and selector data supplied in the prompt rather than on a live read of the account.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'no account access needed, this is all derivable from the two API responses' stated at the very start.",
+          "reasoning": "The response explicitly frames its analysis as derived from the supplied API data, not live account access.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not invent coverage or gaps for any S3 bucket, Lambda function or DynamoDB table, since none were supplied.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response never mentions any specific S3 bucket name, Lambda function, or DynamoDB table; it only generically refers to 'the destination bucket' and 'S3 object-level or Lambda invoke activity' as examples of what the trail does not cover, without inventing specifics.",
+          "reasoning": "No fabricated specific resources were introduced beyond the generic conceptual references needed to explain selector scope.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not offer to create, modify, start, stop or delete any trail, selector, bucket, function or table, does not end with an offer to open a support case, draft API calls, re-run from another account or extend the report, and performs no write action. An operator command such as `aws cloudtrail get-event-selectors --trail-name <ARN>` to be run from the CLI or the management account is a required next step, not an offer.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not offer to create/modify/delete any resource or extend the report, and ends with 'Net assessment' summary with no offer. However, it also does not include any operator command such as 'aws cloudtrail get-event-selectors' as a required next step.",
+          "reasoning": "The first part of the assertion (no write actions/offers) is satisfied, but the second part requiring an operator CLI command as a required next step is missing from the output, so the assertion as a whole is not fully satisfied.",
+          "confidence": "medium"
+        },
+        {
+          "text": "No CloudTrail write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 8,
+        "pass_rate": 0.75
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "11s",
+    "cost": "$0.09",
+    "context_window": {
+      "utilization": "4.1%",
+      "compaction_count": 0
+    }
+  }
+}
