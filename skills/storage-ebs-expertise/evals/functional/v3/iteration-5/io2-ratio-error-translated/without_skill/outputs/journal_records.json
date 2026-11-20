@@ -1,0 +1,58 @@
+[
+  {
+    "agentSpaceId": "7fed591c-7c71-4f85-a4bf-1339a110d0ff",
+    "executionId": "edb97664-a55a-4ad7-87ce-a63ec7242e8d",
+    "recordId": "edefe261-02ec-4ba7-921e-45fff20ede94",
+    "content": "{\"id\": \"529f4fe0-e87e-4f25-b233-8d67ff0d83dd\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"AWS EBS io2 volume IOPS ratio limit error\"}]}",
+    "createdAt": "2026-11-11T11:18:21.152000-08:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "7fed591c-7c71-4f85-a4bf-1339a110d0ff",
+    "executionId": "edb97664-a55a-4ad7-87ce-a63ec7242e8d",
+    "recordId": "0ce6ee4e-a713-4c17-aa24-d731608820d3",
+    "content": "{\"id\": \"0ce6ee4e-a713-4c17-aa24-d731608820d3\", \"role\": \"user\", \"content\": [{\"text\": \"ModifyVolume failed with 'Iops to volume size ratio of 1333.3 is too high; maximum is 1000' when I raised IOPS on my 15 GiB io2 volume to 20,000. What does that mean?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-11T11:18:21.529000-08:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "7fed591c-7c71-4f85-a4bf-1339a110d0ff",
+    "executionId": "edb97664-a55a-4ad7-87ce-a63ec7242e8d",
+    "recordId": "28b886f2-a9a4-47e4-a11a-b2932294a09c",
+    "content": "{\"id\": \"cf84a61c-cbed-4b7b-a7e0-97e18dfd329a\", \"role\": \"assistant\", \"block_type\": \"thinking\", \"content\": [{\"type\": \"text\", \"text\": \"I'm checking the IOPS-to-size ratio for io2 volumes: 20000 IOPS divided by 15 GiB gives 1333.3, which exceeds the documented maximum of 1000 IOPS per GiB for io2 (standard io2 allows 500 IOPS/GiB, Block Express allows 1000 IOPS/GiB), so that explains the error.\\n\\nSo 15 GiB caps at 15,000 IOPS max \\u2014 the fix is either increasing the volume size to at least 20 GiB or lowering the requested IOPS to 15,000 or below, and I should mention ModifyVolume can change both together, plus the 6-hour cooldown between modifications.\\n\\n\"}]}",
+    "createdAt": "2026-11-11T11:18:27.541000-08:00",
+    "recordType": "thinking"
+  },
+  {
+    "agentSpaceId": "7fed591c-7c71-4f85-a4bf-1339a110d0ff",
+    "executionId": "edb97664-a55a-4ad7-87ce-a63ec7242e8d",
+    "recordId": "400f3d59-afa9-4651-ba6e-4b16e85d7590",
+    "content": "{\"id\": \"3df93f79-e9c9-43b8-a3a3-3110c43db06f\", \"role\": \"assistant\", \"block_type\": \"thinking_duration\", \"content\": [{\"type\": \"text\", \"text\": \"2773\"}]}",
+    "createdAt": "2026-11-11T11:18:27.586000-08:00",
+    "recordType": "thinking_duration"
+  },
+  {
+    "agentSpaceId": "7fed591c-7c71-4f85-a4bf-1339a110d0ff",
+    "executionId": "edb97664-a55a-4ad7-87ce-a63ec7242e8d",
+    "recordId": "060a7ea0-7907-4a77-bec0-7761cd441cd3",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 4.2, \"compaction_count\": 0}}}",
+    "createdAt": "2026-11-11T11:18:29.005000-08:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "7fed591c-7c71-4f85-a4bf-1339a110d0ff",
+    "executionId": "edb97664-a55a-4ad7-87ce-a63ec7242e8d",
+    "recordId": "883de1b7-d1ed-46ba-8dfe-05910c3bb151",
+    "content": "{\"id\": \"883de1b7-d1ed-46ba-8dfe-05910c3bb151\", \"role\": \"assistant\", \"content\": [{\"text\": \"The ratio of provisioned IOPS to volume size has a hard cap, and your request goes over it.\\n\\n- Your request is 20,000 IOPS on 15 GiB, which is 20,000 \\u00f7 15 \\u2248 1,333.3 IOPS per GiB.\\n- The maximum for io2 is 1,000 IOPS per GiB, which is what the error is telling you.\\n- At 15 GiB, the most you can provision is 15 \\u00d7 1,000 = **15,000 IOPS**.\\n\\n**Ways to fix it**\\n1. **Lower the IOPS target** to 15,000 or less.\\n2. **Increase the volume size** to at least 20 GiB (20,000 \\u00f7 1,000). You can change size and IOPS in the same ModifyVolume call, for example `--size 20 --iops 20000`.\\n\\n**Things to keep in mind**\\n- EBS volumes can only grow, never shrink. If you only need the IOPS, option 1 avoids a permanent size increase.\\n- If you grow the volume, you'll also need to extend the partition and filesystem inside the OS to use the new space. The IOPS change doesn't need that.\\n- After a successful modification, you generally have to wait about 6 hours (and for the volume to reach `optimizing` or `completed`) before you can modify the same volume again. Getting the values right in one call helps.\\n- The volume's total IOPS can also be limited by the EC2 instance type's EBS performance, so check that the instance can sustain 20,000 IOPS.\\n\\nI can check the current state of the volume and the attached instance's EBS limits if you want to confirm that 20,000 IOPS is usable. I'd need the volume ID.\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-11T11:18:29.080000-08:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "7fed591c-7c71-4f85-a4bf-1339a110d0ff",
+    "executionId": "edb97664-a55a-4ad7-87ce-a63ec7242e8d",
+    "recordId": "9a87f2f3-d232-4996-aba5-85d18b4d9993",
+    "content": "{\"id\": \"936fe0fb-705b-4b01-aff1-1bccbeeecde9\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"The ratio of provisioned IOPS to volume size has a hard cap, and your request goes over it.\\n\\n- Your request is 20,000 IOPS on 15 GiB, which is 20,000 \\u00f7 15 \\u2248 1,333.3 IOPS per GiB.\\n- The maximum for io2 is 1,000 IOPS per GiB, which is what the error is telling you.\\n- At 15 GiB, the most you can provision is 15 \\u00d7 1,000 = **15,000 IOPS**.\\n\\n**Ways to fix it**\\n1. **Lower the IOPS target** to 15,000 or less.\\n2. **Increase the volume size** to at least 20 GiB (20,000 \\u00f7 1,000). You can change size and IOPS in the same ModifyVolume call, for example `--size 20 --iops 20000`.\\n\\n**Things to keep in mind**\\n- EBS volumes can only grow, never shrink. If you only need the IOPS, option 1 avoids a permanent size increase.\\n- If you grow the volume, you'll also need to extend the partition and filesystem inside the OS to use the new space. The IOPS change doesn't need that.\\n- After a successful modification, you generally have to wait about 6 hours (and for the volume to reach `optimizing` or `completed`) before you can modify the same volume again. Getting the values right in one call helps.\\n- The volume's total IOPS can also be limited by the EC2 instance type's EBS performance, so check that the instance can sustain 20,000 IOPS.\\n\\nI can check the current state of the volume and the attached instance's EBS limits if you want to confirm that 20,000 IOPS is usable. I'd need the volume ID.\"}]}",
+    "createdAt": "2026-11-11T11:18:29.126000-08:00",
+    "recordType": "final_response"
+  }
+]

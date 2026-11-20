@@ -1,0 +1,78 @@
+{
+  "version": "v3",
+  "iteration": 4,
+  "eval_id": "latency-impairment-fis",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'storage-ebs-expertise' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'storage-ebs-expertise' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identified that this was not an IOPS/throughput saturation issue but an impairment signature: both volume and instance were well below their provisioned/instance limits (1.4% IOPS, 0.5% throughput; EBSIOBalance%/EBSByteBalance% at 99%) while latency and queue length spiked. The agent checked DescribeVolumeStatus (volume healthy, no modifications), AWS Health (no events), and crucially identified via FIS that experiment EXP7SDntcG3Ff1fsx used aws:ebs:volume-io-latency to inject 500ms latency on reads/writes to vol-0123456789abcdef0_2, matching the alarm window exactly (both the 01:11 and 15:33 occurrences). The root cause finding explicitly states the FIS-injected latency caused the queue buildup and low effective IOPS, and explicitly answers \"do not add IOPS\" / \"the answer to the user: do not add IOPS\" - correctly declining to recommend more provisioning. This matches the expected root cause description point-for-point: injected latency via FIS aws:ebs:volume-io-latency, impairment signature rather than saturation, and no recommendation to add IOPS.</reasoning>\n<parameter name=\"confidence\">high",
+      "evidence": "\"Root Cause: FIS experiment EXP7SDntcG3Ff1fsx injected 500 ms EBS I/O latency ... ran aws:ebs:volume-io-latency against vol-0123456789abcdef0_2 from 15:30:14 to 15:45:15 UTC ... Answer to the user: do not add IOPS.\" and \"The impairment sits at the volume, not the instance.\" and \"This rules out a volume change or AWS-side impairment as the cause.\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the volume is below its provisioned limits and is not saturated.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"With about 16 I/Os in flight at about 0.4 s each, the volume could deliver only about 42 IOPS (1.4% of the 3,000 provisioned) and about 0.66 MiB/s (0.5% of 125 MiB/s)... Latency set the IOPS ceiling, so the provisioned limit was never reached.\"",
+          "reasoning": "The output explicitly states the volume operated at a small fraction of its provisioned IOPS/throughput and was not saturated, with the ceiling being latency-bound rather than the provisioned limit.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response checks volume status, AWS Health events and AWS FIS experiments before concluding.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Volume is healthy and has no modifications: describe_volume_status reports ok, with io-enabled passed and no events.\" ; \"No AWS Health events; instance i-0123456789abcdef0_3 is stopped: AWS Health shows no EBS or EC2 events in us-east-1 since 2026-11-10.\" ; \"FIS injected 500 ms I/O latency on vol-0123456789abcdef0_2: Experiment EXP7SDntcG3Ff1fsx (role ebs-skill-eval-fis) ran aws:ebs:volume-io-latency...\"",
+          "reasoning": "The output explicitly references checking volume status (describe_volume_status), AWS Health events, and FIS experiments (EXP7SDntcG3Ff1fsx, EXP4Xs8yABzn38YDgv) before reaching its root cause conclusion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not recommend increasing IOPS, throughput or volume size.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Answer to the user: do not add IOPS.\" and throughout the response the conclusion is that latency (from FIS injection) was the cause, not a capacity issue, with no recommendation to increase IOPS, throughput, or size anywhere in the text.",
+          "reasoning": "The response explicitly states not to add IOPS and never recommends increasing throughput or volume size; instead it attributes the issue to an FIS-injected latency experiment.",
+          "confidence": "high"
+        },
+        {
+          "text": "AWS FIS is checked",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'FIS'"
+        },
+        {
+          "text": "Impairment is named",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'impair'"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m55s",
+    "cost": "$2.45",
+    "context_window": {
+      "utilization": "7.3%",
+      "compaction_count": 0
+    }
+  }
+}
