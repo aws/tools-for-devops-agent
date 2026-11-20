@@ -71,7 +71,7 @@ maps each track to the skill that covers it and the fallback to run when that sk
 | 3 agent loop | `agentcore` | `agent-runtime` | `LLM-AGT` rows |
 | 3 agent loop | self-hosted | `host-investigation`: investigate the compute with general tools | — |
 | 4 model endpoint | `bedrock` | `bedrock-configuration` | `LLM-INV` rows |
-| 4 model endpoint | `sagemaker` | `sagemaker-serving` | `LLM-SM` rows |
+| 4 model endpoint | `sagemaker` | `sagemaker-serving` | `LLM-SM`, `LLM-SM-SERVE` and `LLM-SM-BATCH` rows |
 | 4 model endpoint | any, capacity or quota | `capacity-and-quota` | quota and spend rows |
 | 5 retrieval | `bedrock` knowledge base | `retrieval` | `LLM-KB` rows |
 | 7 output filter | Bedrock Guardrails | `guardrails` | `LLM-GRD` rows |
