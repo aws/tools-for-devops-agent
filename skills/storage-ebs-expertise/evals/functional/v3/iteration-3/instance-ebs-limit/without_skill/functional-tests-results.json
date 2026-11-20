@@ -1,0 +1,74 @@
+{
+  "version": "v3",
+  "iteration": 3,
+  "eval_id": "instance-ebs-limit",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to actually investigate: read the instance's EBS baseline via DescribeInstanceTypes, sum IOPS across attached volumes, examine EBSIOBalance%, conclude the instance (not the volume) is the binding constraint, state the volume has headroom, say raising volume IOPS won't help, and recommend an instance type change while explicitly not calling the volume saturated.\n\nThe agent's actual response did none of this analysis. It claimed the provided instance ID and volume ID were invalid/malformed placeholder values and refused to proceed, asking the user to supply real IDs. It did not call any AWS APIs, did not read instance type EBS baselines, did not analyze EBSIOBalance% data, and did not reach any conclusion about whether the instance or volume is the bottleneck. It only speculated generically that 'a burstable instance with a gp3 volume provisioned above the instance's EBS limits can exhaust its EBS burst credits' as a plausible theory, without confirming it with data or making the specific determination required (volume has headroom, raising IOPS won't help, recommend instance type change).\n\nThis is a fundamental failure to perform the expected investigation and reach the expected conclusions. The response does not meet the expected output criteria at all.",
+      "evidence": "\"I couldn't look anything up. EC2 rejected both IDs as malformed... I don't want to guess which instance you mean. Could you send: 1. The actual instance ID and volume ID...\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The instance, not the volume, is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent states: 'I couldn't look anything up. EC2 rejected both IDs as malformed' and does not identify any binding layer; it only lists hypothetical checks like 'Instance limits: the instance type's baseline and burst EBS throughput and IOPS, compared with what the gp3 volume is provisioned for.'",
+          "reasoning": "The agent never actually identified a binding layer because it rejected the IDs as invalid and didn't perform any analysis. It only lists metrics it would check, without naming the instance as the binding constraint.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says raising volume IOPS will not help and recommends an instance type change.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent says: 'I'd like to confirm it with real metrics before suggesting a fix, such as a larger instance type or lower provisioned IOPS and throughput.' This presents both options as possible fixes without ruling out IOPS changes or firmly recommending instance type change.",
+          "reasoning": "The agent does not make a definitive statement that raising volume IOPS will not help, nor does it explicitly recommend an instance type change as a confirmed action. It only mentions a larger instance type as one of two possible fixes, contingent on confirming with real metrics, and does not address whether raising IOPS would or wouldn't help.",
+          "confidence": "high"
+        },
+        {
+          "text": "The volume is not described as saturated.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent lists 'Volume load: volume IOPS and throughput, queue length, and idle time, to see whether I/O is hitting the instance's cap' as something to check, but does not state that the volume is saturated.",
+          "reasoning": "The agent never describes the volume as saturated; it only discusses hypothetical metrics it would check, such as 'volume IOPS and throughput, queue length, and idle time, to see whether I/O is hitting the instance's cap.' No claim of saturation is made.",
+          "confidence": "high"
+        },
+        {
+          "text": "The volume headroom is stated",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.2
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "8s",
+    "cost": "$0.07",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

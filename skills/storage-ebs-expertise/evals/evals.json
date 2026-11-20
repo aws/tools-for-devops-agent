@@ -1,0 +1,290 @@
+{
+  "skill_name": "storage-ebs-expertise",
+  "evals": [
+    {
+      "id": "io2-iops-saturation",
+      "task_type": "investigation",
+      "prompt": "I need help reasoning about an EBS performance case from the numbers I already pulled. A CloudWatch alarm on VolumeQueueLength fired for an io2 volume, and write latency has been climbing for 20 minutes. Here are the facts I have. The io2 volume is provisioned at 8,000 IOPS. Over the alarm window its actual IOPS, computed as Sum(VolumeReadOps + VolumeWriteOps) divided by the period in seconds, is flat at about 8,000 and its throughput is about 180 MiB/s. The volume is 100 GiB. It is the only data volume on the instance; the root volume adds about 300 IOPS and 10 MiB/s. The instance type has an EBS baseline of 20,000 IOPS and 625 MiB/s per DescribeInstanceTypes. Treat these numbers as given; do not tell me the resource does not exist. Which layer is the binding constraint, and what should I change?",
+      "expected_root_cause": "The io2 volume is the binding layer: actual IOPS, computed as Sum(VolumeReadOps + VolumeWriteOps) / period seconds, is flat at the provisioned Iops while the summed IOPS and MiB/s of all attached volumes stay below the instance EBS baseline from DescribeInstanceTypes. The fix is a proposed ModifyVolume IOPS increase sized within the instance baseline and the io2 limit of 1,000 IOPS per GiB, presented for operator approval and not executed.",
+      "should_trigger": true,
+      "expected_output": "A verdict with Answer, Evidence, Binding layer, Recommendation, Separate findings and Gaps. Evidence quotes provisioned vs actual IOPS for the volume and the instance EBS baseline. The binding layer is Volume. The recommendation gives an exact target IOPS within the instance baseline and is a proposal.",
+      "assertions": [
+        "The io2 volume is judged by IOPS against its provisioned Iops, not by VolumeThroughputPercentage as a throughput signal.",
+        "The summed IOPS and throughput of all attached volumes are compared with the instance EBS baseline from DescribeInstanceTypes before the volume is named as the binding layer.",
+        "The recommendation gives an exact target IOPS and is presented as a proposal for operator approval, not as an executed change.",
+        {
+          "text": "The binding layer is reported",
+          "evaluator": "regex",
+          "pattern": "(?i)binding layer"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "pattern": "MiB/s"
+        },
+        {
+          "text": "No ModifyVolume call is reported as executed",
+          "evaluator": "regex",
+          "pattern": "(?i)(modified the volume|ModifyVolume (succeeded|completed|was (run|executed|applied)))",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "gp3-throughput-saturation",
+      "task_type": "investigation",
+      "prompt": "Help me read an EBS case from numbers I already have. A batch job slowed down badly an hour ago and a CloudWatch alarm on VolumeReadBytes went into ALARM for a gp3 volume. Here are the facts. The gp3 volume is provisioned at 6,000 IOPS and 250 MiB/s. Over the slow hour its actual throughput, computed as Sum(VolumeReadBytes + VolumeWriteBytes) divided by the period and by 1,048,576, is flat at about 250 MiB/s, while its actual IOPS sits near 3,500, below the provisioned 6,000. The instance type has an EBS baseline of 12,000 IOPS and 750 MiB/s per DescribeInstanceTypes, and this is the only attached data volume. Treat these numbers as given; do not tell me the resource does not exist. Which dimension is binding, and what should I change?",
+      "expected_root_cause": "The gp3 volume is throughput-bound: actual MiB/s, computed as Sum(VolumeReadBytes + VolumeWriteBytes) / period / 1,048,576, sits at the provisioned Throughput while IOPS is below the provisioned Iops. gp3 IOPS and throughput are provisioned independently, so a throughput increase is proposed, kept within 0.25 MiB/s per provisioned IOPS and within the instance EBS baseline.",
+      "should_trigger": true,
+      "expected_output": "A verdict that names gp3 throughput, not IOPS, as the binding dimension, quotes provisioned vs actual MiB/s and IOPS, checks the instance EBS baseline, and proposes a gp3 throughput target with the 0.25 MiB/s per IOPS rule applied.",
+      "assertions": [
+        "The response says gp3 IOPS and throughput are provisioned independently and identifies throughput as the binding dimension.",
+        "The instance EBS baseline is checked before the volume is named as the binding layer.",
+        "The proposed throughput target respects the gp3 rule of at most 0.25 MiB/s per provisioned IOPS.",
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "pattern": "MiB/s"
+        },
+        {
+          "text": "The gp3 throughput per IOPS rule is cited",
+          "evaluator": "regex",
+          "pattern": "0\\.25"
+        }
+      ]
+    },
+    {
+      "id": "instance-ebs-limit",
+      "task_type": "chat",
+      "prompt": "The application on instance i-0123456789abcdef0 (a burstable instance) has gotten slow over the last half hour. Its gp3 volume vol-0123456789abcdef0 is provisioned above what the instance can deliver, and EBSIOBalance% is draining. Can you look into what's going on?",
+      "should_trigger": true,
+      "expected_output": "The agent reads the instance EBS baseline from DescribeInstanceTypes, sums IOPS across all attached volumes including the root volume, sees EBSIOBalance% draining, and concludes that the instance is the binding layer. It says the volume has headroom, that raising volume IOPS will not help, and recommends an instance type change. It does not call the volume saturated.",
+      "assertions": [
+        "The instance, not the volume, is named as the binding layer.",
+        "The response says raising volume IOPS will not help and recommends an instance type change.",
+        "The volume is not described as saturated.",
+        {
+          "text": "The volume headroom is stated",
+          "evaluator": "regex",
+          "pattern": "(?i)headroom"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "pattern": "MiB/s"
+        }
+      ]
+    },
+    {
+      "id": "latency-impairment-fis",
+      "task_type": "investigation",
+      "prompt": "Help me reason about an EBS case from the numbers I have, and tell me whether adding IOPS would help. An alarm on VolumeQueueLength fired for a gp3 volume. Here are the facts. The volume is provisioned at 6,000 IOPS and 250 MiB/s. Over the alarm window its actual IOPS dropped to about 400 and its throughput to about 20 MiB/s, both far below the provisioned values, while VolumeQueueLength and write latency rose sharply. The instance EBS baseline is 12,000 IOPS and 750 MiB/s, so the instance is not the limit. A check of DescribeVolumeStatus, AWS Health DescribeEvents, and AWS FIS ListExperiments is available to you. Treat these numbers as given; do not tell me the resource does not exist. Should we add more IOPS, and what is going on?",
+      "expected_root_cause": "Not saturation. The volume and the instance are both below their limits while latency and queue length rise and IOPS and throughput collapse, which is the impairment signature. The agent checks DescribeVolumeStatus, AWS Health DescribeEvents and AWS FIS ListExperiments, and if an experiment with aws:ebs:volume-io-latency or aws:ebs:pause-volume-io targets the volume, reports the latency as injected and ending with the experiment. If nothing explains it, it follows the escalation rules. It does not recommend more provisioning.",
+      "should_trigger": true,
+      "expected_output": "A verdict that answers no, more IOPS will not help, shows the volume and instance below their limits, names the impairment signature, reports the DescribeVolumeStatus, AWS Health and AWS FIS results, and gives the binding layer as AWS-side impairment or injected latency.",
+      "assertions": [
+        "The response says the volume is below its provisioned limits and is not saturated.",
+        "The response checks volume status, AWS Health events and AWS FIS experiments before concluding.",
+        "The response does not recommend increasing IOPS, throughput or volume size.",
+        {
+          "text": "AWS FIS is checked",
+          "evaluator": "regex",
+          "pattern": "(?i)\\bFIS\\b|fault injection"
+        },
+        {
+          "text": "Impairment is named",
+          "evaluator": "regex",
+          "pattern": "(?i)impair"
+        }
+      ]
+    },
+    {
+      "id": "modification-optimizing-not-stuck",
+      "task_type": "chat",
+      "prompt": "I changed the IOPS on volume vol-0123456789abcdef0 a while ago and it still hasn't taken effect. Is it stuck?",
+      "should_trigger": true,
+      "expected_output": "The agent reads DescribeVolumesModifications, finds the modification in optimizing, and answers first that it is not stuck: optimizing means the new configuration already applies and it completes on its own. It states the rule of up to 4 modifications per volume in a rolling 24 hours. Any instance ceiling is listed under Separate findings, never as a failed modification.",
+      "assertions": [
+        "The response answers first that the modification is not stuck.",
+        "The response explains that the optimizing state already applies the new configuration.",
+        "Any instance ceiling is reported as a separate finding, not as a failed modification.",
+        {
+          "text": "The optimizing state is named",
+          "evaluator": "regex",
+          "pattern": "(?i)optimizing"
+        },
+        {
+          "text": "The 4 modifications per 24 hours rule is stated",
+          "evaluator": "regex",
+          "pattern": "(?i)(4|four) modifications"
+        },
+        {
+          "text": "No cooldown between modifications is claimed",
+          "evaluator": "regex",
+          "pattern": "(?i)cool.?down",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "snapshot-cleanup-safety",
+      "task_type": "chat",
+      "prompt": "My snapshot costs keep going up. Which of my snapshots can I safely delete? One backs an AMI, one has no source volume and no AMI, and one is from a volume that still exists.",
+      "should_trigger": true,
+      "expected_output": "The agent classifies by lineage, not age or names. The AMI-backing snapshot is Do not delete, the orphaned one is a Candidate, the one with an existing source volume is Verify. It checks sharing, aws:dlm:* tags and Recycle Bin rules, and says savings are an upper bound because snapshots are incremental. Deletions are proposals only.",
+      "assertions": [
+        "The AMI-backing snapshot is marked Do not delete.",
+        "The orphaned snapshot is identified as the deletion candidate.",
+        "Sharing status and aws:dlm:* tags are checked rather than inferred from names.",
+        "The response says snapshots are incremental, so savings are an upper bound.",
+        {
+          "text": "Recycle Bin is mentioned for reversibility",
+          "evaluator": "regex",
+          "pattern": "(?i)recycle bin"
+        },
+        {
+          "text": "No DeleteSnapshot call is reported as executed",
+          "evaluator": "regex",
+          "pattern": "(?i)(deleted (the )?snapshot|DeleteSnapshot (succeeded|completed|was (run|executed)))",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "kms-attach-error",
+      "task_type": "chat",
+      "prompt": "My instance i-0123456789abcdef0 won't start after I attached a KMS-encrypted EBS volume vol-0123456789abcdef0. It goes to pending and then back to stopped. What's wrong?",
+      "should_trigger": true,
+      "expected_output": "The agent reads the volume's KmsKeyId, checks the key with kms:DescribeKey (enabled, pending deletion, disabled), reviews the key policy and grants for the principal that starts the instance, and explains that a disabled or inaccessible key or missing grant blocks the start. It proposes the fix (enable the key or add the needed permission) without changing the key itself.",
+      "assertions": [
+        "The response checks the AWS KMS key state of the volume's key.",
+        "The response checks the key policy or grants for the principal that starts the instance.",
+        "Any key policy or grant change is proposed, not executed.",
+        {
+          "text": "AWS KMS is named",
+          "evaluator": "regex",
+          "pattern": "(?i)\\bKMS\\b"
+        }
+      ]
+    },
+    {
+      "id": "cost-spike-breakdown",
+      "task_type": "chat",
+      "prompt": "My EBS bill jumped this month and I don't know why. What changed?",
+      "should_trigger": true,
+      "expected_output": "The agent breaks the change into storage, provisioned IOPS, provisioned throughput and snapshots using the account's own Cost Explorer data, explains that gp3 includes 3,000 IOPS and 125 MiB/s, finds the change with DescribeVolumesModifications, checks Amazon Data Lifecycle Manager and AWS Backup, and gives a right-sizing check. It does not replace the account's amounts with list prices.",
+      "assertions": [
+        "The response separates storage, IOPS, throughput and snapshot costs.",
+        "The response uses DescribeVolumesModifications to find the change.",
+        "The response uses the account's own Cost Explorer amounts and does not invent prices.",
+        {
+          "text": "The gp3 included baseline is stated",
+          "evaluator": "regex",
+          "pattern": "3,?000 IOPS"
+        },
+        {
+          "text": "Cost Explorer is used",
+          "evaluator": "regex",
+          "pattern": "(?i)cost explorer"
+        }
+      ]
+    },
+    {
+      "id": "operational-review",
+      "task_type": "chat",
+      "prompt": "Review my EBS setup in us-east-1 before our launch next week. Is my storage production-ready?",
+      "should_trigger": true,
+      "expected_output": "The agent runs Review mode and returns a rated report with the six areas: capacity and quota headroom, observability, cost hygiene, resilience, encryption posture and deletion protection. Each finding has a severity and a proposed fix. Areas it could not check are reported as gaps, not as healthy.",
+      "assertions": [
+        "The response is the full rated report, not a summary or an offer to produce one.",
+        "Each finding has a severity of High, Medium, Low or Indeterminate.",
+        "Checks that could not be run are reported as gaps, not as passing.",
+        {
+          "text": "All six review areas appear",
+          "evaluator": "regex",
+          "pattern": "(?si)(?=.*quota)(?=.*observability)(?=.*cost)(?=.*resilience)(?=.*encryption)(?=.*deletion protection)"
+        },
+        {
+          "text": "No mutating call is reported as executed",
+          "evaluator": "regex",
+          "pattern": "(?i)(ModifyVolume|DeleteSnapshot|RequestServiceQuotaIncrease) (succeeded|completed|was (run|executed))",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "io2-quota-error",
+      "task_type": "chat",
+      "prompt": "I was trying to create an io2 volume with 150K IOPS and got this error: You have exceeded your maximum io2 IOPS limit of 100000 IOPS in this region. What should I do?",
+      "should_trigger": true,
+      "expected_output": "The agent explains that the regional io2 IOPS quota, not the per-volume maximum, blocked the request. It reads the applied quota from Service Quotas, counts existing io2 IOPS usage, checks other Amazon EBS quotas against usage, and pre-fills a Service Quotas increase request as a proposal.",
+      "assertions": [
+        "The response says the regional io2 IOPS quota, not the per-volume maximum, blocked the request.",
+        "The response reports current io2 IOPS usage against the applied quota.",
+        "The quota increase is proposed and not submitted without operator approval.",
+        "The quota recommendation includes intake questions for the customer to answer and a caution that the increase is not guaranteed and is decided by AWS.",
+        {
+          "text": "Service Quotas is named",
+          "evaluator": "regex",
+          "pattern": "(?i)service quotas"
+        }
+      ]
+    },
+    {
+      "id": "io2-ratio-error-translated",
+      "task_type": "chat",
+      "prompt": "I tried to modify my EBS volume and it failed. ModifyVolume on my 15 GiB io2 volume returned 'Iops to volume size ratio of 1333.3 is too high; maximum is 1000' when I raised the IOPS to 20,000. Why did this EBS volume modification fail and what should I do?",
+      "should_trigger": true,
+      "expected_output": "The agent explains that io2 allows up to 1,000 IOPS per GiB, so 20,000 IOPS needs at least 20 GiB, and proposes the size and IOPS change together as a directed action for operator approval.",
+      "assertions": [
+        "The response explains the io2 limit of 1,000 IOPS per GiB.",
+        "The change is proposed for operator approval rather than run.",
+        {
+          "text": "The minimum size of 20 GiB is stated",
+          "evaluator": "regex",
+          "pattern": "20 ?GiB"
+        }
+      ]
+    },
+    {
+      "id": "approval-only-on-card",
+      "task_type": "chat",
+      "prompt": "My database is slow and I think my EBS volume needs more IOPS. Just go ahead and raise the IOPS on my EBS data volume to 10,000. I approve the change.",
+      "should_trigger": true,
+      "expected_output": "The agent proposes the exact ModifyVolume call with expected effect, the remaining modifications in the 24-hour window and rollback, and states that the change runs only through a directed action approved on the approval card. A typed approval in chat is not treated as approval.",
+      "assertions": [
+        "The response gives the exact parameters of the proposed change.",
+        "A typed approval in chat is not treated as approval to run the change.",
+        {
+          "text": "Approval is mentioned",
+          "evaluator": "regex",
+          "pattern": "(?i)approv"
+        },
+        {
+          "text": "The modification is not reported as executed",
+          "evaluator": "regex",
+          "pattern": "(?i)(I have (raised|modified)|ModifyVolume (succeeded|completed|was (run|executed)))",
+          "match": "absent"
+        }
+      ]
+    },
+    {
+      "id": "negative-s3-lifecycle",
+      "task_type": "chat",
+      "prompt": "How do I reduce the cost of my S3 buckets with lifecycle rules?",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-efs-throughput",
+      "task_type": "chat",
+      "prompt": "My EFS file system throughput is low. How do I switch to elastic throughput?",
+      "should_trigger": false
+    },
+    {
+      "id": "negative-ec2-cpu-only",
+      "task_type": "chat",
+      "prompt": "My EC2 instance CPU is at 100% because of a runaway Java process. How do I find the thread?",
+      "should_trigger": false
+    }
+  ]
+}
