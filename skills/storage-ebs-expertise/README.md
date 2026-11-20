@@ -179,7 +179,7 @@ storage-ebs-expertise/
 
 ## Version and Change Log
 
-Version 1.0.0. See [CHANGELOG.md](CHANGELOG.md).
+Version 1.0.0. See the CHANGELOG.md file in this skill directory.
 
 ## Disclaimer
 
