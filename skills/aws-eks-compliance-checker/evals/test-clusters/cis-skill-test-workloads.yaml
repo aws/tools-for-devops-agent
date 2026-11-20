@@ -1,0 +1,148 @@
+# TEMPORARY test workloads for the aws-eks-compliance-checker skill evals.
+# Deliberate findings in team-a and default; secure-ns is the compliant control.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: priv-pod
+  namespace: team-a
+spec:
+  containers:
+    - name: pause
+      image: public.ecr.aws/eks-distro/kubernetes/pause:3.9
+      securityContext:
+        privileged: true
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hostnet-pod
+  namespace: team-a
+spec:
+  hostNetwork: true
+  containers:
+    - name: pause
+      image: public.ecr.aws/eks-distro/kubernetes/pause:3.9
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+  namespace: team-a
+type: Opaque
+stringData:
+  password: not-a-real-password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: env-secret-app
+  namespace: team-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: env-secret-app }
+  template:
+    metadata:
+      labels: { app: env-secret-app }
+    spec:
+      containers:
+        - name: pause
+          image: public.ecr.aws/eks-distro/kubernetes/pause:3.9
+          env:
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: app-secret, key: password }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-web
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: legacy-web }
+  template:
+    metadata:
+      labels: { app: legacy-web }
+    spec:
+      containers:
+        - name: pause
+          image: public.ecr.aws/eks-distro/kubernetes/pause:3.9
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: wildcard-operator
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: wildcard-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: wildcard-operator
+subjects:
+  - kind: Group
+    name: contractors
+    apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: Group
+    name: ops-team
+    apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secure-ns
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: secure-ns
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hardened-pod
+  namespace: secure-ns
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: pause
+      image: public.ecr.aws/eks-distro/kubernetes/pause:3.9
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: { drop: [ALL] }
