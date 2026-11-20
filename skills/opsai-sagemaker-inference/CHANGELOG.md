@@ -1,7 +1,7 @@
 # Changelog
 
 ## [1.0.0] - 2026-11-19
-- Initial release. Merges llmops-sagemaker-inference-endpoints 1.0.0, llmops-sagemaker-serverless-async 1.0.0, llmops-sagemaker-batch 1.0.0 into one skill.
+- Initial release. Merges the earlier SageMaker inference endpoints, serverless and async, and batch transform skills into one skill.
 - Real-time endpoints: failures, health check, VPC path, scaling, `ModelError`, right-sizing, lineage (LLM-SM-001..011).
 - Serverless and asynchronous endpoints: cold start, concurrency, notifications, backlog scaling, fit decision (LLM-SM-SERVE-001..005).
 - Batch transform: job failures, parallelism, partial output, output encryption (LLM-SM-BATCH-001..004).

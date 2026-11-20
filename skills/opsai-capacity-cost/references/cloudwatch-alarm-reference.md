@@ -71,13 +71,13 @@ For auto-scaling (LLM-SM-001), use a **target-tracking** policy on `InvocationsP
 
 ---
 
-## LLMOps evaluation-quality alarms (custom metrics)
+## Evaluation-quality alarms (custom metrics)
 
 Evaluation scores are not native CloudWatch metrics — publish them (LLM-EVAL-005) then alarm:
 
 | alarm | namespace / metric | statistic | threshold approach | period | datapoints/eval | source |
 |---|---|---|---|---|---|---|
-| Quality regression | `LLMOps/Evaluation` / `<metric>` (e.g. `Accuracy`) | Average | `<` baseline − margin | per eval run | 1 of 1 | Workload-specific |
-| Safety regression | `LLMOps/Evaluation` / `Toxicity` | Average | `>` baseline + margin | per eval run | 1 of 1 | Workload-specific |
+| Quality regression | `OpsAI/Evaluation` / `<metric>` (e.g. `Accuracy`) | Average | `<` baseline − margin | per eval run | 1 of 1 | Workload-specific |
+| Safety regression | `OpsAI/Evaluation` / `Toxicity` | Average | `>` baseline + margin | per eval run | 1 of 1 | Workload-specific |
 
 Baseline + margin are set by the regression gate (LLM-EVAL-007).

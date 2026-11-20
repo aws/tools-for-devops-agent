@@ -16,7 +16,7 @@
   chunking, embedding models, vector store encryption and exposure, search type, access and quotas on
   the retrieval path.
 
-It merges the earlier `llmops-bedrock-configuration` and `llmops-rag-knowledge` skills into one
+It merges the earlier Bedrock configuration and RAG knowledge base skills into one
 install.
 
 ## Key Capabilities

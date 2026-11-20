@@ -89,7 +89,7 @@ cd skills/opsai-incident-triage && zip -r ../opsai-incident-triage.zip . -x 'REA
 This produces `skills/opsai-incident-triage.zip` containing `SKILL.md` and `references/` at the top level, with
 the repo-management files excluded.
 
-> **CRITICAL:** When uploading, select **All agents** as the Agent Type. The custom `llmops-agent` can
+> **CRITICAL:** When uploading, select **All agents** as the Agent Type. The custom `opsai-agent` can
 > only load the skill if it is published to all agents — selecting a single built-in agent type will
 > prevent the custom agent from seeing it.
 

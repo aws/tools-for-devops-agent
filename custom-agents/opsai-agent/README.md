@@ -1,4 +1,4 @@
-# LLMOps Agent — Custom Agent
+# OpsAI Agent — Custom Agent
 
 > ⚠️ **Non-Production Notice**: Sample code, not intended for production use without additional
 > review and testing. Validate in a non-production Agent Space first, and review the tool
@@ -6,7 +6,7 @@
 
 ## Purpose
 
-The LLMOps Agent triages and reviews GenAI workloads on Amazon Bedrock, Amazon SageMaker AI and Amazon
+The OpsAI Agent triages and reviews GenAI workloads on Amazon Bedrock, Amazon SageMaker AI and Amazon
 Bedrock AgentCore. You ask it a question and it picks the right skill, so you don't have to know which
 skill covers which service.
 
@@ -46,7 +46,7 @@ skill covers which service.
 
    | Field | Value |
    |---|---|
-   | Name | `llmops-agent` |
+   | Name | `opsai-agent` |
    | System prompt | all of `SYSTEM_PROMPT.md` (plain Markdown, no frontmatter) |
    | Skills | the eight OpsAI skills |
    | Memory stores | optional, for run-to-run trends |

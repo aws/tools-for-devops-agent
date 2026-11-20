@@ -17,7 +17,7 @@
   enforces, and was ever validated. It also troubleshoots guardrail behaviour, limits and latency,
   including how-to questions with no account to read.
 
-It merges the earlier `llmops-bedrock-permissions-audit` and `llmops-guardrails` skills into one
+It merges the earlier Bedrock permissions audit and guardrails skills into one
 install.
 
 ## Key Capabilities

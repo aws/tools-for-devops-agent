@@ -22,7 +22,7 @@ the concrete observed evidence, an AWS-doc citation, and a recommended (never ex
   `Rejected`, a registered package with no lineage to its training job/dataset, and a model package group
   with a broad/absent resource policy or an un-CMK'd artifact.
 
-Merged from llmops-sagemaker-training 1.0.0 and llmops-sagemaker-model-registry 1.0.0.
+Merged from the earlier SageMaker training and Model Registry skills.
 
 ## Prerequisites
 

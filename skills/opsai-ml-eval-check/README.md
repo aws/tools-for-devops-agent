@@ -21,7 +21,7 @@ recommended (never executed) remediation:
 Inside a live incident it still returns its own findings; where the fault sits is decided by live-failure
 triage when that skill is installed, and otherwise the answer says the locus was not determined.
 
-Merged from llmops-quality-evaluation 1.0.0 and llmops-sagemaker-evaluation 1.0.0.
+Merged from the earlier quality evaluation and SageMaker evaluation skills.
 ## Prerequisites
 Read-only (or least-privilege) credentials for the account and region under review. Required IAM read
 actions:

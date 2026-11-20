@@ -191,7 +191,7 @@ cd skills/opsai-capacity-cost && zip -r ../opsai-capacity-cost.zip . -x 'README.
 The archive contains `SKILL.md`, `references/` and `assets/`. In the Agent Space console, open
 **Skills**, choose **Import skill** and upload the archive.
 
-> **Set the Agent Type to "All agents".** A custom agent such as `llmops-agent` can only load a skill
+> **Set the Agent Type to "All agents".** A custom agent such as `opsai-agent` can only load a skill
 > that is registered for all agents. A skill registered under any narrower type is not visible to it.
 
 Do not upload with `devops-agent skills upload-skill`. That command creates a new asset on every run

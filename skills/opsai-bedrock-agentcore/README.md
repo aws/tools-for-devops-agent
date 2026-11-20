@@ -78,7 +78,7 @@ cd skills/opsai-bedrock-agentcore && zip -r ../opsai-bedrock-agentcore.zip . -x 
 This produces `skills/opsai-bedrock-agentcore.zip` containing `SKILL.md`, `references/`, and `assets/` at the
 top level, with the repo-management files excluded.
 
-> **CRITICAL:** When uploading, select **All agents** as the Agent Type. The custom `llmops-agent` can
+> **CRITICAL:** When uploading, select **All agents** as the Agent Type. The custom `opsai-agent` can
 > only load the skill if it is published to all agents — selecting a single built-in agent type will
 > prevent the custom agent from seeing it.
 

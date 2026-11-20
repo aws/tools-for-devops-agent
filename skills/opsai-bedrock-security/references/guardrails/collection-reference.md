@@ -96,7 +96,7 @@ A group with `withTrace` = 0 and `withRequestGuardrail` = 0 is "could not confir
 | `bedrock:ListEvaluationJobs` | job names, `status`, `jobType` (automated/human), creation times (empty = none ever) | LLM-EVAL-001, 002, 004 |
 | `bedrock:GetEvaluationJob` | task type, metrics, dataset S3 locations, model targets, output location, failure reason | LLM-EVAL-003, 006, 009, 010, 011 |
 | `s3:ListObjectsV2`/`HeadObject` on eval dataset+output prefixes | dataset last-modified (staleness), output versioning/retention | LLM-EVAL-003, 008 |
-| `cloudwatch:ListMetrics` (namespace `LLMOps/Evaluation`) | whether eval scores are published as metrics | LLM-EVAL-005 |
+| `cloudwatch:ListMetrics` (namespace `OpsAI/Evaluation`) | whether eval scores are published as metrics | LLM-EVAL-005 |
 
 ## SageMaker inference (SM)
 

@@ -1,6 +1,6 @@
 # Changelog
 ## [1.0.0] - 2026-11-19
-- Initial release. Merges llmops-quality-evaluation 1.0.0, llmops-sagemaker-evaluation 1.0.0 into one skill.
+- Initial release. Merges the earlier quality evaluation and SageMaker evaluation skills into one skill.
 - Bedrock evaluation: model evaluation (`CreateEvaluationJob`, automated or human), Bedrock RAG evaluation jobs on a knowledge base, quality gates, regression detection and A/B comparison (LLM-EVAL-001..011).
 - Finish-reason drift from Bedrock invocation logs (LLM-EVAL-012..014).
 - SageMaker-side evaluation: Nova evaluation recipes and LLM-as-judge jobs run as SageMaker training jobs (LLM-SM-EVAL-001..004). LLM-SM-EVAL-004 now marks the switch to this skill's Bedrock path instead of a hand-off.

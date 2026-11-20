@@ -30,7 +30,7 @@ It also answers stated break-fix errors directly (failed endpoints, health check
 the endpoint or job itself; deciding whether a live fault sits with the provider, infrastructure or
 application is left to a live-failure triage skill when one is installed.
 
-Merged from llmops-sagemaker-inference-endpoints 1.0.0, llmops-sagemaker-serverless-async 1.0.0, llmops-sagemaker-batch 1.0.0.
+Merged from the earlier SageMaker inference endpoints, serverless and async, and batch transform skills.
 
 ## Prerequisites
 

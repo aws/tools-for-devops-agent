@@ -145,7 +145,7 @@ Recommended metric filter (CloudWatch Logs):
 ```
 { $.output.outputBodyJson.stopReason = "max_tokens" }
 ```
-Publish as a custom metric (e.g., `LLMOps/FinishReason/MaxTokens` with dimension `ModelId`) and alarm when the 1-hour rate exceeds the baseline by >10 percentage points. See LLM-TEL-002 and LLM-EVAL-012.
+Publish as a custom metric (e.g., `OpsAI/FinishReason/MaxTokens` with dimension `ModelId`) and alarm when the 1-hour rate exceeds the baseline by >10 percentage points. See LLM-TEL-002 and LLM-EVAL-012.
 
 ## Telemetry coverage signals
 
