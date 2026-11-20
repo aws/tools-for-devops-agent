@@ -51,12 +51,38 @@ Resources:
       AvailabilityZone: us-east-1b
       MapPublicIpOnLaunch: true
       Tags: [{ Key: kubernetes.io/role/elb, Value: "1" }]
+  # Egress goes through a NAT gateway so the nodes can join when the account has
+  # VPC Block Public Access in block-ingress mode. The node subnets still map
+  # public IPs on launch, so CIS 5.4.3 still fails.
+  NatSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.32.0/24
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: false
+  NatSubnetRt:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref NatSubnet, RouteTableId: !Ref PublicRt }
+  NatEip:
+    Type: AWS::EC2::EIP
+    Properties: { Domain: vpc }
+  Nat:
+    Type: AWS::EC2::NatGateway
+    DependsOn: IgwAttach
+    Properties: { AllocationId: !GetAtt NatEip.AllocationId, SubnetId: !Ref NatSubnet }
+  NodeRt:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  NodeDefault:
+    Type: AWS::EC2::Route
+    Properties: { RouteTableId: !Ref NodeRt, DestinationCidrBlock: 0.0.0.0/0, NatGatewayId: !Ref Nat }
   SubnetARt:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: { SubnetId: !Ref SubnetA, RouteTableId: !Ref PublicRt }
+    Properties: { SubnetId: !Ref SubnetA, RouteTableId: !Ref NodeRt }
   SubnetBRt:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: { SubnetId: !Ref SubnetB, RouteTableId: !Ref PublicRt }
+    Properties: { SubnetId: !Ref SubnetB, RouteTableId: !Ref NodeRt }
 
   ClusterRole:
     Type: AWS::IAM::Role
@@ -106,10 +132,11 @@ Resources:
 
   # Deliberate finding: unencrypted node volumes (account EBS default encryption is off).
   # After CREATE_COMPLETE, tag the node group's Auto Scaling group with auto-stop=no
-  # (aws autoscaling create-or-update-tags) if account automation scales node groups to 0 out of hours, which would remove
+  # (aws autoscaling create-or-update-tags) if account automation scales node groups to 0 out of hours, which removes
   # the bare test pods (priv-pod, hostnet-pod, hardened-pod).
   Nodegroup:
     Type: AWS::EKS::Nodegroup
+    DependsOn: NodeDefault
     Properties:
       ClusterName: !Ref Cluster
       NodeRole: !GetAtt NodeRole.Arn

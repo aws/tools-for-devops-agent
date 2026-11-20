@@ -17,7 +17,7 @@ metadata:
   name: devops-agent-cis-reader
 rules:
   - apiGroups: [""]
-    resources: [namespaces, pods, serviceaccounts, nodes]
+    resources: [namespaces, pods, serviceaccounts]
     verbs: [get, list]
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [clusterroles, clusterrolebindings, roles, rolebindings]
@@ -26,10 +26,7 @@ rules:
     resources: [networkpolicies]
     verbs: [get, list]
   - apiGroups: [apps]
-    resources: [daemonsets, deployments, statefulsets, replicasets]
-    verbs: [get, list]
-  - apiGroups: [batch]
-    resources: [jobs, cronjobs]
+    resources: [daemonsets, deployments, statefulsets]
     verbs: [get, list]
   - apiGroups: [apiextensions.k8s.io]
     resources: [customresourcedefinitions]
