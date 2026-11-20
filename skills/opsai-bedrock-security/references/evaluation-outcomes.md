@@ -42,12 +42,12 @@ credential with GRANT `unknown` is rated by rule 3 instead: its active copy rate
 and in Warnings, prefixed with the account.
 
 In the `<why>` lists below, `the AWS tool refused the call` covers the refusals of
-`collection-reference.md` section 6; `the AWS tool did not apply the result filter` covers both an
+`credential-collection-reference.md` section 6; `the AWS tool did not apply the result filter` covers both an
 unfiltered response (`policy-snapshot.md` section 3 step 2) and a filter rejected even for one name
 (step 3: for users and groups, in the short form S1s or S2s too);
 `the AWS tool returned a response in an unexpected form` is steps 1 and 2; the snapshot preview
 texts are step 3, after narrowing to one name or for a short-form response; and the other preview
-texts are the Previews paragraph of `collection-reference.md`.
+texts are the Previews paragraph of `credential-collection-reference.md`.
 
 | Id | Path | Warning text |
 |---|---|---|
@@ -210,7 +210,7 @@ Each wrong conclusion is in quotes, followed by the right one.
   warning says so; `bedrock:CreateMarketplaceModelEndpoint` still counts.
 - "The Deny on `arn:aws:bedrock:*:*:*` makes GRANT `none`." Such a Deny does block real requests on
   those resources, but the audit tests the resource `*`, which the Deny does not
-  match (`api-quirks.md` section 3). GRANT stays `broad` and the tier is unchanged; add
+  match (`credential-api-quirks.md` section 3). GRANT stays `broad` and the tier is unchanged; add
   W6, because the row can overstate access.
 - "`ReadOnlyAccess` cannot invoke." `ReadOnlyAccess` (v191 at the time of writing) allows
   `bedrock:CallWithBearerToken` and `bedrock-mantle:CallWithBearerToken`, which the audit counts as

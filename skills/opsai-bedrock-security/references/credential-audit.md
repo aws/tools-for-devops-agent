@@ -21,7 +21,7 @@ sub-agent's reply starts with the answer (Delegating).
 1. **Credentials:** every credential the question needs, none invented and none left out, each
    named by its IAM user name or its masked key ID (`...` plus the last four characters).
 2. **Reach:** what each can do in Amazon Bedrock: its GRANT and its tier.
-3. **Action:** its recommended action (`references/credential-audit/checks-credentials.md` section 4), as steps for
+3. **Action:** its recommended action (`references/checks-credentials.md` section 4), as steps for
    the customer, never carried out; for an SCP's impact, the rollout steps in its Router row.
 4. **Limits:** each scope limit that changes the conclusion, and what the question's Router row
    says the answer states. SCPs and RCPs are not evaluated, and `sts:AssumeRole` is not followed
@@ -54,23 +54,23 @@ after a line `---`. The reply ends there, without an offer, a follow-up suggesti
 The agent that delegated answers with that opening, as written or with every line of it kept.
 
 ## Router
-Every row also needs `references/credential-audit/collection-reference.md`, which says how to make each call and read
-its response. Every row that evaluates a user's policies also needs `references/credential-audit/policy-snapshot.md`,
-`references/credential-audit/policy-evaluation.md` and `references/credential-audit/evaluation-outcomes.md`.
+Every row also needs `references/credential-collection-reference.md`, which says how to make each call and read
+its response. Every row that evaluates a user's policies also needs `references/policy-snapshot.md`,
+`references/policy-evaluation.md` and `references/evaluation-outcomes.md`.
 
 | Requester says | First read | Load |
 |---|---|---|
-| Which IAM users or access keys can invoke Amazon Bedrock; give me a full report | `iam:GetAccountSummary`, the account-wide `iam:ListServiceSpecificCredentials`, `iam:ListUsers`, then the policy snapshot | `references/credential-audit/checks-credentials.md`, `references/credential-audit/policy-snapshot.md`, `references/credential-audit/policy-evaluation.md`, `references/credential-audit/evaluation-outcomes.md`, `assets/bedrock-permissions-report-template.md` |
-| List our long-term Amazon Bedrock API keys | `iam:ListServiceSpecificCredentials` with `ServiceName` `bedrock.amazonaws.com` and `AllUsers` true | `references/credential-audit/checks-credentials.md` (LLM-BPA-009, 010, 011, 013, 014; section 8). The answer says that IAM does not report when an Amazon Bedrock API key was last used, so whether each key is in use is unknown, and that the audit changed nothing |
-| Does the root account have an access key | `iam:GetAccountSummary` `AccountAccessKeysPresent`, then an existing credential report | `references/credential-audit/checks-credentials.md` (LLM-BPA-001, 014), `references/credential-audit/api-quirks.md` |
-| Dormant, old or unused keys with Amazon Bedrock access | `iam:ListAccessKeys`, `iam:GetAccessKeyLastUsed` | `references/credential-audit/checks-credentials.md` (LLM-BPA-006, 007) |
-| A GuardDuty AI Protection finding; Amazon Bedrock usage traced to a user or key, or that nobody recognizes | For a key named, `iam:GetAccessKeyLastUsed` (it returns the owner), then that user's credentials; otherwise as the first row | A named user's checks first, the whole account only when asked; `references/credential-audit/checks-credentials.md` section 8. The answer says that the audit covers IAM users and their long-lived keys only, that IAM roles, federated users and IAM Identity Center users can also make calls, and that only AWS CloudTrail shows who did |
-| We deactivated the key; is that enough | `iam:ListAccessKeys` status, then the policy evaluation as if the key were active | `references/credential-audit/checks-credentials.md` (LLM-BPA-013), `references/credential-audit/policy-evaluation.md` |
-| What would an SCP that denies Amazon Bedrock to IAM users break | The audit rows with an active credential that can invoke | `references/credential-audit/remediation-guidance.md` (section 3.2), `assets/remediation/scp-deny-bedrock-to-iam-users.json`. The answer gives the rollout steps (review the list with the workload owners, test on a sandbox OU first, then attach), says that IAM roles and IAM Identity Center users are not affected and the audit does not cover them, and that SCPs and RCPs are not evaluated |
-| Keep Amazon Bedrock to our Regions or approved models | The Regions or model IDs the requester names | `references/credential-audit/remediation-guidance.md`, `assets/remediation/scp-restrict-bedrock-regions-models.json` |
-| Phase out or forbid long-term Amazon Bedrock API keys, keeping short-term ones | The API key inventory, then the users whose allowed actions include `iam:CreateServiceSpecificCredential` | `references/credential-audit/remediation-guidance.md` (section 3.3), `assets/remediation/policy-deny-long-term-bedrock-api-keys.json` |
-| Stop users from using or creating any Amazon Bedrock API key, short-term ones included | The rows with API keys | `assets/remediation/policy-deny-bedrock-api-keys.json`, which blocks every API key |
-| Why is this user `unknown`, or is a conditioned grant really blocked | The row's warning | `references/credential-audit/evaluation-outcomes.md` (section 3), `references/credential-audit/policy-evaluation.md`, `references/credential-audit/api-quirks.md` (sections 4 and 5) |
+| Which IAM users or access keys can invoke Amazon Bedrock; give me a full report | `iam:GetAccountSummary`, the account-wide `iam:ListServiceSpecificCredentials`, `iam:ListUsers`, then the policy snapshot | `references/checks-credentials.md`, `references/policy-snapshot.md`, `references/policy-evaluation.md`, `references/evaluation-outcomes.md`, `assets/bedrock-permissions-report-template.md` |
+| List our long-term Amazon Bedrock API keys | `iam:ListServiceSpecificCredentials` with `ServiceName` `bedrock.amazonaws.com` and `AllUsers` true | `references/checks-credentials.md` (LLM-BPA-009, 010, 011, 013, 014; section 8). The answer says that IAM does not report when an Amazon Bedrock API key was last used, so whether each key is in use is unknown, and that the audit changed nothing |
+| Does the root account have an access key | `iam:GetAccountSummary` `AccountAccessKeysPresent`, then an existing credential report | `references/checks-credentials.md` (LLM-BPA-001, 014), `references/credential-api-quirks.md` |
+| Dormant, old or unused keys with Amazon Bedrock access | `iam:ListAccessKeys`, `iam:GetAccessKeyLastUsed` | `references/checks-credentials.md` (LLM-BPA-006, 007) |
+| A GuardDuty AI Protection finding; Amazon Bedrock usage traced to a user or key, or that nobody recognizes | For a key named, `iam:GetAccessKeyLastUsed` (it returns the owner), then that user's credentials; otherwise as the first row | A named user's checks first, the whole account only when asked; `references/checks-credentials.md` section 8. The answer says that the audit covers IAM users and their long-lived keys only, that IAM roles, federated users and IAM Identity Center users can also make calls, and that only AWS CloudTrail shows who did |
+| We deactivated the key; is that enough | `iam:ListAccessKeys` status, then the policy evaluation as if the key were active | `references/checks-credentials.md` (LLM-BPA-013), `references/policy-evaluation.md` |
+| What would an SCP that denies Amazon Bedrock to IAM users break | The audit rows with an active credential that can invoke | `references/remediation-guidance.md` (section 3.2), `assets/scp-deny-bedrock-to-iam-users.json`. The answer gives the rollout steps (review the list with the workload owners, test on a sandbox OU first, then attach), says that IAM roles and IAM Identity Center users are not affected and the audit does not cover them, and that SCPs and RCPs are not evaluated |
+| Keep Amazon Bedrock to our Regions or approved models | The Regions or model IDs the requester names | `references/remediation-guidance.md`, `assets/scp-restrict-bedrock-regions-models.json` |
+| Phase out or forbid long-term Amazon Bedrock API keys, keeping short-term ones | The API key inventory, then the users whose allowed actions include `iam:CreateServiceSpecificCredential` | `references/remediation-guidance.md` (section 3.3), `assets/policy-deny-long-term-bedrock-api-keys.json` |
+| Stop users from using or creating any Amazon Bedrock API key, short-term ones included | The rows with API keys | `assets/policy-deny-bedrock-api-keys.json`, which blocks every API key |
+| Why is this user `unknown`, or is a conditioned grant really blocked | The row's warning | `references/evaluation-outcomes.md` (section 3), `references/policy-evaluation.md`, `references/credential-api-quirks.md` (sections 4 and 5) |
 
 ## The Review Procedure
 Work through one account at a time, taking the steps below in their numbered order and ticking each
@@ -80,14 +80,14 @@ one off as it is done. Step 1 sets the scope, so do it before anything else.
 - [ ] Step 2: Name each account with `iam:ListAccountAliases`; with no alias, write `account ending NNNN`
 - [ ] Step 3: Root keys: `iam:GetAccountSummary`; when `AccountAccessKeysPresent` is 1, read an existing credential report with `iam:GetCredentialReport`, only when its content comes back as CSV text, and never generate one (LLM-BPA-001, LLM-BPA-014)
 - [ ] Step 4: API keys: the account-wide `iam:ListServiceSpecificCredentials` for `bedrock.amazonaws.com`, with `MaxItems` 50. `AccessDenied` makes the account partial: skip every API key listing and continue
-- [ ] Step 5: Inventory: `iam:ListUsers` with `MaxItems` 100 and the result filter L1, `iam:ListAccessKeys` per user within the work budget, and `iam:ListServiceSpecificCredentials` per API key user (`BedrockAPIKey-*`, `AeaApiKey-*`). Keep users with an access key, an API key, or an API key user name. A list page that comes back as a preview is asked for again with half the `MaxItems` (`references/credential-audit/collection-reference.md`, Previews), never summarised
-- [ ] Step 6: Apply the work budget: choose the users to evaluate in the priority order of `references/credential-audit/collection-reference.md` section 4.1, and list the rest as not evaluated
+- [ ] Step 5: Inventory: `iam:ListUsers` with `MaxItems` 100 and the result filter L1, `iam:ListAccessKeys` per user within the work budget, and `iam:ListServiceSpecificCredentials` per API key user (`BedrockAPIKey-*`, `AeaApiKey-*`). Keep users with an access key, an API key, or an API key user name. A list page that comes back as a preview is asked for again with half the `MaxItems` (`references/credential-collection-reference.md`, Previews), never summarised
+- [ ] Step 6: Apply the work budget: choose the users to evaluate in the priority order of `references/credential-collection-reference.md` section 4.1, and list the rest as not evaluated
 - [ ] Step 7: For each user evaluated: `iam:GetAccessKeyLastUsed` per access key and `iam:ListMFADevices`
-- [ ] Step 8: Policy snapshot for the users evaluated (`references/credential-audit/policy-snapshot.md`): the user and group snapshots, the customer managed documents and the AWS managed snapshot, each `iam:GetAccountAuthorizationDetails` call with its result filter. A preview is narrowed, never summarised; a rejected filter is retried with one name and then, for users and groups, replaced by its short form. Then `iam:GetContextKeysForPrincipalPolicy` per user evaluated
-- [ ] Step 9: Evaluate each user with `references/credential-audit/policy-evaluation.md`, writing the evidence and the warnings from `references/credential-audit/evaluation-outcomes.md`: GRANT, the allowed escalation and canary actions, and the warnings. The root account is modelled as allowed, without a call
-- [ ] Step 10: Score every credential row with the tier rules of `references/credential-audit/checks-credentials.md` section 2, in order: tier, reasons word for word, LLM-BPA check-ids, and the one action from section 4
+- [ ] Step 8: Policy snapshot for the users evaluated (`references/policy-snapshot.md`): the user and group snapshots, the customer managed documents and the AWS managed snapshot, each `iam:GetAccountAuthorizationDetails` call with its result filter. A preview is narrowed, never summarised; a rejected filter is retried with one name and then, for users and groups, replaced by its short form. Then `iam:GetContextKeysForPrincipalPolicy` per user evaluated
+- [ ] Step 9: Evaluate each user with `references/policy-evaluation.md`, writing the evidence and the warnings from `references/evaluation-outcomes.md`: GRANT, the allowed escalation and canary actions, and the warnings. The root account is modelled as allowed, without a call
+- [ ] Step 10: Score every credential row with the tier rules of `references/checks-credentials.md` section 2, in order: tier, reasons word for word, LLM-BPA check-ids, and the one action from section 4
 - [ ] Step 11: Order the rows, hide Info rows except GRANT `unknown` and the credentials the question asks about (an inventory asks about all), and count the hidden ones by cause. For a full audit, an inventory or a request for everything, write the report with `assets/bedrock-permissions-report-template.md`; otherwise answer the question directly (answer rule)
-- [ ] Step 12: When the requester asks how to fix or prevent a finding, what an SCP would break, or how to phase out long-term API keys, give the matching template from `assets/remediation/` as `references/credential-audit/remediation-guidance.md` describes (in a full report, under Suggested policies)
+- [ ] Step 12: When the requester asks how to fix or prevent a finding, what an SCP would break, or how to phase out long-term API keys, give the matching template from `assets/` as `references/remediation-guidance.md` describes (in a full report, under Suggested policies)
 - [ ] Step 13: Go through Before You Present, then answer, keeping every must-keep item; a sub-agent's reply starts with the answer of Delegating
 
 **Scope.** Audit only the accounts connected to this Agent Space, each with the Agent Space role in
@@ -101,7 +101,7 @@ every connected account and say so.
 ### Work budget
 
 By default at most 100 users are inventoried and 20 principals evaluated per account, a work budget
-(not an AWS threshold) that the requester can change. `references/credential-audit/collection-reference.md` section
+(not an AWS threshold) that the requester can change. `references/credential-collection-reference.md` section
 4.1 gives the priority order and how to list what was left out.
 
 ## Before You Present
@@ -149,14 +149,14 @@ When the draft fails an item and you cannot fix it, tell the requester which ite
 ## Guardrails
 Non-negotiable, at every step:
 
-1. **Read-only.** Call only the IAM APIs in `references/credential-audit/collection-reference.md`. Never create,
+1. **Read-only.** Call only the IAM APIs in `references/credential-collection-reference.md`. Never create,
    rotate, deactivate or delete a credential, never attach or detach a policy, never create an SCP,
    and never call an Amazon Bedrock API, model invocation included. Never offer to apply, attach,
    create or delete anything, or to draft a policy and apply it: hand the policy or the command to
    the customer to apply. Never call `iam:SimulatePrincipalPolicy`, `iam:SimulateCustomPolicy` or
    any IAM `Generate*` call, `iam:GenerateCredentialReport` included, never use IAM Access
    Analyzer, and never pass an AWS managed policy's ARN to an IAM call: AWS DevOps Agent's AWS tool
-   does not run those calls and rejects such ARNs (`references/credential-audit/api-quirks.md` sections 18 and 19).
+   does not run those calls and rejects such ARNs (`references/credential-api-quirks.md` sections 18 and 19).
 2. **No role assumption.** Never call `sts:AssumeRole` or AWS Organizations. Read each account with
    the Agent Space role that AWS DevOps Agent already uses for it.
 3. **Mask, always.** Apply the output rule from the start of this file, including in plans, in
@@ -165,7 +165,7 @@ Non-negotiable, at every step:
    `ServiceUserName`.
 5. **Show what decided each row.** Give the dates, statuses, granting policies and the conditions
    that decided behind every tier. Keep "IAM returned nothing" apart from "the call failed"
-   (`references/credential-audit/api-quirks.md`).
+   (`references/credential-api-quirks.md`).
 6. **Only catalog findings.** Every finding gets the tier that the catalog assigns, and in the report
    its LLM-BPA check-ids. Report nothing the catalog does not define, and use no threshold other than
    90 days unless the requester names another value.
@@ -177,14 +177,14 @@ Non-negotiable, at every step:
 9. **Complete results only, and policy reads only with this skill loaded.** Never distill or
    summarise any IAM result, and never evaluate a preview or take any value from it; the one thing
    to read in a snapshot preview is its first key, which says how to narrow the request
-   (`references/credential-audit/policy-snapshot.md` section 3). Ask for less instead
-   (`references/credential-audit/collection-reference.md`, Previews). The files of this skill are read whole too: if
+   (`references/policy-snapshot.md` section 3). Ask for less instead
+   (`references/credential-collection-reference.md`, Previews). The files of this skill are read whole too: if
    one comes back as a preview, never work from the part shown; name the file to the requester and
    stop (a sub-agent names it in its reply and returns no results). Before any
    `iam:GetAccountAuthorizationDetails`, `iam:GetPolicy`, `iam:GetPolicyVersion` or
    `iam:GetContextKeysForPrincipalPolicy` call, load this skill and read
-   `references/credential-audit/policy-snapshot.md`, `references/credential-audit/policy-evaluation.md` and
-   `references/credential-audit/evaluation-outcomes.md`. A sub-agent gets the prompt in `assets/delegation-prompt.md`
+   `references/policy-snapshot.md`, `references/policy-evaluation.md` and
+   `references/evaluation-outcomes.md`. A sub-agent gets the prompt in `assets/delegation-prompt.md`
    and never returns policy text; if it cannot load this skill, run the audit yourself.
 10. **Keep the must-keep items.** Whatever the format, and whoever ran the audit, the answer keeps
     every item of the answer rule's list. A sub-agent's reply opens with them (Delegating), and
@@ -200,7 +200,7 @@ Non-negotiable, at every step:
 - Policy-evaluation and rating mistakes (the canary actions, `aws:TokenIssueTime`, the Marketplace
   statement of `AmazonBedrockFullAccess`, a Deny on `arn:aws:bedrock:*:*:*`, `ReadOnlyAccess`,
   `AccountAccessKeysPresent`, MFA and API keys, expired API keys) are in
-  `references/credential-audit/evaluation-outcomes.md` section 5. Read it before you rate a row.
+  `references/evaluation-outcomes.md` section 5. Read it before you rate a row.
 - "The result was too large, so distill it." Never, the user list included: ask for less
   (guardrail 9).
 - "The sub-agent's opening answer reads better in my own words." Give it as written, or keep every
@@ -214,10 +214,10 @@ Non-negotiable, at every step:
   `policy-deny-long-term-bedrock-api-keys.json`.
 - "IAM can list or revoke a short-term API key." It cannot: a short-term key is a pre-signed URL
   that inherits the credentials and expiry of the session that made it. Deny its use, or end the
-  session (`references/credential-audit/remediation-guidance.md` section 3.3).
+  session (`references/remediation-guidance.md` section 3.3).
 - "That account ID is another account's, so it can be shown." Mask it: `account ending NNNN`.
 - "The AWS tool rejected the result filter, so make the snapshot call without it." Never: retry
-  as step 8 says; a filter still rejected gives `unknown` (`references/credential-audit/policy-snapshot.md`
+  as step 8 says; a filter still rejected gives `unknown` (`references/policy-snapshot.md`
   sections 3 and 4).
 - "The key is inactive, so we are done." Its secret works again after `iam:UpdateAccessKey`. If it
   would rate Critical or High when re-enabled, it is LLM-BPA-013: delete it.
@@ -240,7 +240,7 @@ The severity of a check is its risk tier.
 The tiers rank what to fix first. They define no response times, so give none.
 
 ## Error Handling
-Read `references/credential-audit/api-quirks.md` before you draw a conclusion from any response. The traps that matter
+Read `references/credential-api-quirks.md` before you draw a conclusion from any response. The traps that matter
 most:
 
 - **The AWS tool's refusals** (sections 18 and 19): never retry a refused call, and never count a
@@ -250,35 +250,35 @@ most:
   calls (not a no), URL-encoded documents, last use, partial accounts, expired API keys, paging,
   and snapshot filters and previews (guardrail 9).
 
-Operational failures (throttling, failed accounts) follow `references/credential-audit/collection-reference.md`
+Operational failures (throttling, failed accounts) follow `references/credential-collection-reference.md`
 section 6.
 
 ## Appendix
 References under `references/`:
 
-- `references/credential-audit/checks-credentials.md`: the LLM-BPA-001 to LLM-BPA-015 catalog, tier rules,
+- `references/checks-credentials.md`: the LLM-BPA-001 to LLM-BPA-015 catalog, tier rules,
   actions, order and visibility, what each answer states (primary)
-- `references/credential-audit/collection-reference.md`: every read-only call, the previews rule and failure handling
-- `references/credential-audit/policy-snapshot.md`: the snapshot calls, filters, fallbacks and sub-agent rules
-- `references/credential-audit/policy-evaluation.md`: how to evaluate a user's policies
-- `references/credential-audit/evaluation-outcomes.md`: evidence, AWS managed policies, `unknown` reasons,
+- `references/credential-collection-reference.md`: every read-only call, the previews rule and failure handling
+- `references/policy-snapshot.md`: the snapshot calls, filters, fallbacks and sub-agent rules
+- `references/policy-evaluation.md`: how to evaluate a user's policies
+- `references/evaluation-outcomes.md`: evidence, AWS managed policies, `unknown` reasons,
   warnings, examples and evaluation mistakes
-- `references/credential-audit/api-quirks.md`: responses that are easy to misread
-- `references/credential-audit/remediation-guidance.md`: suggested policies, an SCP's rollout, phasing out
+- `references/credential-api-quirks.md`: responses that are easy to misread
+- `references/remediation-guidance.md`: suggested policies, an SCP's rollout, phasing out
   long-term API keys, usage nobody recognizes
 - `references/related-skills.md`: what this skill does not cover, and which skill does
-- `references/credential-audit/metrics-and-logs.md`: this audit reads no metric or log; where usage is recorded
+- `references/credential-metrics-and-logs.md`: this audit reads no metric or log; where usage is recorded
 
 Assets under `assets/`:
 
 - `assets/bedrock-permissions-report-template.md`: the full report (answer rule)
 - `assets/delegation-prompt.md`: the sub-agent prompt, its reply's shape and the reply checks
-- `assets/remediation/scp-deny-bedrock-to-iam-users.json`: SCP template
-- `assets/remediation/scp-restrict-bedrock-regions-models.json`: SCP template, only for the
+- `assets/scp-deny-bedrock-to-iam-users.json`: SCP template
+- `assets/scp-restrict-bedrock-regions-models.json`: SCP template, only for the
   Regions or models the requester names
-- `assets/remediation/policy-deny-bedrock-api-keys.json`: blocks every Amazon Bedrock API key,
+- `assets/policy-deny-bedrock-api-keys.json`: blocks every Amazon Bedrock API key,
   short-term ones included
-- `assets/remediation/policy-deny-long-term-bedrock-api-keys.json`: blocks only long-term Amazon
+- `assets/policy-deny-long-term-bedrock-api-keys.json`: blocks only long-term Amazon
   Bedrock API keys
 
 AWS documentation (the references cite the rest):

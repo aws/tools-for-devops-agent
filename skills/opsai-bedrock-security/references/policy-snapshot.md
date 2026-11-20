@@ -2,7 +2,7 @@
 
 How the audit reads the identity-based policies of the users it evaluates: the calls, their result
 filters, the checks on each response, the fallbacks, the names inside a filter and the rules for
-sub-agents. `collection-reference.md` has the other calls, the Previews rule for every IAM result
+sub-agents. `credential-collection-reference.md` has the other calls, the Previews rule for every IAM result
 and the failure table (its section 6); `policy-evaluation.md` evaluates what this file reads.
 
 The audit evaluates each user's identity-based policies itself (`policy-evaluation.md`). It reads
@@ -26,14 +26,14 @@ it.
 | `iam:GetAccountAuthorizationDetails`, AWS managed policies | `{"Filter": ["AWSManagedPolicy"], "MaxItems": 50}`, plus `"Marker"` on later pages | S4, with the `Name` values of the attached AWS managed policies | When an AWS managed policy is attached to an evaluated user or group, and no earlier snapshot call in the account was refused or unfiltered | `IsTruncated`, `Marker`, `AwsManaged[]` with `Version` and `Statement` |
 
 Then, for each evaluated user that is not already `unknown`, call
-`iam:GetContextKeysForPrincipalPolicy` (`collection-reference.md` section 2) for the cross-check of
+`iam:GetContextKeysForPrincipalPolicy` (`credential-collection-reference.md` section 2) for the cross-check of
 `policy-evaluation.md` section 3. The `Filter` value `Role` is never used.
 
 A managed policy ARN is customer managed when its account segment (the fifth colon-separated part)
 is an account ID, and AWS managed when it is `aws`. Read the ARN from the `Arn` of the
 attached-policy entry in S1 or S2 (its `PolicyArn` in S1s or S2s). `iam:GetPolicy` and
 `iam:GetPolicyVersion` take only customer managed ARNs. No call ever takes an AWS managed policy's
-ARN: AWS managed documents come only from the S4 snapshot (`api-quirks.md` section 19).
+ARN: AWS managed documents come only from the S4 snapshot (`credential-api-quirks.md` section 19).
 
 ## 2. Filter templates
 
@@ -118,18 +118,18 @@ not documented. The size check runs on the filtered result.
 
 Check every `iam:GetAccountAuthorizationDetails` response in this order. A refusal (a plain message
 such as `Denied operation: ...`) and an IAM error (a string under the account key that starts
-`AWS API error (`) are not checked here: `collection-reference.md` section 6 handles them.
+`AWS API error (`) are not checked here: `credential-collection-reference.md` section 6 handles them.
 
 1. **Preview.** A response that begins `## Large Tool Result`, says that the result
    `exceeds the threshold`, and then shows a `Preview` and the options `Distill` and
    `Narrow search`, is a preview. Never take the `Distill` option, and never evaluate any part of
-   a preview, its policy text and its paging fields included (`collection-reference.md`,
+   a preview, its policy text and its paging fields included (`credential-collection-reference.md`,
    Previews). Read only the first key under the account key, which decides the next step:
    * `IsTruncated`, `Marker` or the template's own key (`Users`, `Groups` or `AwsManaged`): the
      filter was applied and the result is too large. Narrow it (step 3).
    * `UserDetailList`, `GroupDetailList`, `RoleDetailList` or `Policies`: the filter was not
      applied (step 2).
-   * Any other key: an unexpected response. `collection-reference.md` section 6, "Any other",
+   * Any other key: an unexpected response. `credential-collection-reference.md` section 6, "Any other",
      with the reason `the AWS tool returned a response in an unexpected form`.
 
    This test does not depend on the order in which the AWS tool writes the keys.
@@ -143,7 +143,7 @@ such as `Denied operation: ...`) and an IAM error (a string under the account ke
    load this skill, says nothing about the AWS tool: discard its result (section 6) and make the
    filtered call. A response that starts with one of the template's keys but is cut off without
    the preview note is handled like a preview (step 3). Any other complete response:
-   `collection-reference.md` section 6, "Any other", with the reason
+   `credential-collection-reference.md` section 6, "Any other", with the reason
    `the AWS tool returned a response in an unexpected form`.
 3. **Names per request, and narrowing.** A request names at most 20 names. With more names pending,
    send one request per group of at most 20 names, in order, for each page, all with the same
@@ -160,14 +160,14 @@ such as `Denied operation: ...`) and an IAM error (a string under the account ke
 
    **A rejected filter, and the short forms.** An error from the AWS tool that is not an IAM error
    (it does not start `AWS API error (`), is not a refusal of the operation
-   (`collection-reference.md` section 6), and whose text names the result filter,
+   (`credential-collection-reference.md` section 6), and whose text names the result filter,
    `jmespath_filter` or JMESPath, or says that the input is too long or over a maximum length,
    means that the AWS tool rejected the filter. How the AWS tool words such an error has not been
    observed, so the test is kept this wide. An error from the AWS tool on a request that carried
    S1 or S2 is treated once as a rejected filter, even when the test above does not recognise it,
    provided it is not an IAM error, not a refusal and not throttling: send the first name alone,
    then the short form for that name. If the short form fails with the same error, follow
-   `collection-reference.md` section 6, "Any other", for the names still pending. Record the
+   `credential-collection-reference.md` section 6, "Any other", for the names still pending. Record the
    error text.
    * A rejected request with several names: send the same request again with its first name only.
      If that is not rejected (a complete response, or a preview, which the rules above handle),
@@ -209,7 +209,7 @@ such as `Denied operation: ...`) and an IAM error (a string under the account ke
 
 ## 4. Fallbacks
 
-"Refused" means that the AWS tool refused the call (`collection-reference.md` section 6);
+"Refused" means that the AWS tool refused the call (`credential-collection-reference.md` section 6);
 "unfiltered" means that step 2 of section 3 found the filter not applied; "rejected filter" means
 that a one-name request with S4 was still rejected, or, for users and groups, that the short form
 S1s or S2s was rejected too for that name (section 3 step 3); "unexpected" means a response in an
@@ -251,7 +251,7 @@ no ARN.
 
 The agent that the requester talks to may run the audit itself or hand it to a sub-agent
 (`credential-audit.md`, answer rule). When a sub-agent runs it, the rules of sections 2 to 5, and the Previews
-paragraph of `collection-reference.md`, must reach it:
+paragraph of `credential-collection-reference.md`, must reach it:
 
 * Any agent or sub-agent that calls `iam:GetAccountAuthorizationDetails`, `iam:GetPolicy`,
   `iam:GetPolicyVersion` or `iam:GetContextKeysForPrincipalPolicy`, or evaluates the documents,

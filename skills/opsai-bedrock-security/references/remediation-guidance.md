@@ -17,7 +17,7 @@ one:
 Where a key cannot be replaced yet, these controls reduce what it can do and make its use visible:
 
 * Scope its permissions to the Amazon Bedrock actions and models it needs. The policies in
-  `assets/remediation/` are a starting point.
+  `assets/` are a starting point.
 * Add IAM condition keys that limit where it can be used from, such as source IP or VPC endpoint.
 * Set AWS Budgets and Cost Anomaly Detection alerts on Amazon Bedrock spend.
 * Keep AWS CloudTrail on, and turn on Amazon Bedrock model invocation logging where you need request
@@ -36,10 +36,10 @@ link from section 4.
 
 | Template | Type | What it does | When to present it |
 |---|---|---|---|
-| `assets/remediation/scp-deny-bedrock-to-iam-users.json` | Service control policy | Denies the six invoke actions to IAM users and to the account root user (`aws:PrincipalType` `User` or `Account`). IAM roles and IAM Identity Center users are unaffected | Name it in every full report. Show its content when the requester asks how to keep long-lived keys away from Amazon Bedrock, or asks what such an SCP would break |
-| `assets/remediation/policy-deny-bedrock-api-keys.json` | Identity policy for users, groups or roles that should never use Amazon Bedrock API keys | Blocks **every** Amazon Bedrock API key, short-term ones included: denies using any API key through both endpoints (`bedrock:CallWithBearerToken`, `bedrock-mantle:CallWithBearerToken`) and creating a new long-term key (`iam:CreateServiceSpecificCredential` where `iam:ServiceSpecificCredentialServiceName` is `bedrock.amazonaws.com`). Never present it as keeping short-term keys working | Name it in every full report. Show its content when a finding involves API keys (LLM-BPA-005, LLM-BPA-009, LLM-BPA-010 or LLM-BPA-013 on an API key), the requester asks how to fix it, and no API key should work at all |
-| `assets/remediation/policy-deny-long-term-bedrock-api-keys.json` | Identity policy for the IAM users that hold long-term keys and the identities that could create them | Blocks **long-term** Amazon Bedrock API keys only: denies `bedrock:CallWithBearerToken` when `bedrock:BearerTokenType` is `LONG_TERM`, and `bedrock-mantle:CallWithBearerToken` when `bedrock-mantle:BearerTokenType` is `LONG_TERM`, and creating a new long-term key (the same `iam:CreateServiceSpecificCredential` deny). Short-term keys keep working | Name it in every full report. Show its content when the requester wants to phase out or forbid long-term keys, or to block them without breaking short-term ones (section 3.3) |
-| `assets/remediation/scp-restrict-bedrock-regions-models.json` | Service control policy | One statement denies the invoke actions outside the approved Regions (`aws:RequestedRegion`). The other denies the model-invocation actions for models not on the approved list | Only when the requester names the Regions they use or the model IDs they approve. Otherwise do not mention it beyond one line saying it needs those lists |
+| `assets/scp-deny-bedrock-to-iam-users.json` | Service control policy | Denies the six invoke actions to IAM users and to the account root user (`aws:PrincipalType` `User` or `Account`). IAM roles and IAM Identity Center users are unaffected | Name it in every full report. Show its content when the requester asks how to keep long-lived keys away from Amazon Bedrock, or asks what such an SCP would break |
+| `assets/policy-deny-bedrock-api-keys.json` | Identity policy for users, groups or roles that should never use Amazon Bedrock API keys | Blocks **every** Amazon Bedrock API key, short-term ones included: denies using any API key through both endpoints (`bedrock:CallWithBearerToken`, `bedrock-mantle:CallWithBearerToken`) and creating a new long-term key (`iam:CreateServiceSpecificCredential` where `iam:ServiceSpecificCredentialServiceName` is `bedrock.amazonaws.com`). Never present it as keeping short-term keys working | Name it in every full report. Show its content when a finding involves API keys (LLM-BPA-005, LLM-BPA-009, LLM-BPA-010 or LLM-BPA-013 on an API key), the requester asks how to fix it, and no API key should work at all |
+| `assets/policy-deny-long-term-bedrock-api-keys.json` | Identity policy for the IAM users that hold long-term keys and the identities that could create them | Blocks **long-term** Amazon Bedrock API keys only: denies `bedrock:CallWithBearerToken` when `bedrock:BearerTokenType` is `LONG_TERM`, and `bedrock-mantle:CallWithBearerToken` when `bedrock-mantle:BearerTokenType` is `LONG_TERM`, and creating a new long-term key (the same `iam:CreateServiceSpecificCredential` deny). Short-term keys keep working | Name it in every full report. Show its content when the requester wants to phase out or forbid long-term keys, or to block them without breaking short-term ones (section 3.3) |
+| `assets/scp-restrict-bedrock-regions-models.json` | Service control policy | One statement denies the invoke actions outside the approved Regions (`aws:RequestedRegion`). The other denies the model-invocation actions for models not on the approved list | Only when the requester names the Regions they use or the model IDs they approve. Otherwise do not mention it beyond one line saying it needs those lists |
 
 ### 3.1 Filling the placeholders
 
@@ -104,7 +104,7 @@ answer from the audit:
   or API key (console-only users, for example) are not inventoried, and IAM roles and IAM Identity
   Center users are out of scope. Say so.
 * **How to block long-term keys and keep short-term ones:**
-  `assets/remediation/policy-deny-long-term-bedrock-api-keys.json`. Its two bearer-token statements
+  `assets/policy-deny-long-term-bedrock-api-keys.json`. Its two bearer-token statements
   deny only requests made with a long-term key (`LONG_TERM`), on both endpoints, and its third
   statement denies creating new long-term keys. The customer attaches it to the IAM users that hold
   long-term keys and to the identities that could create them, or puts the same statements in a

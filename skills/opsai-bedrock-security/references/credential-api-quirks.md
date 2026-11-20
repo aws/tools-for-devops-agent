@@ -24,7 +24,7 @@ gives the reading to use.
   * Never generate a report. The skill reads only a report that already exists (section 18).
   * Read the report only for the `<root_account>` row, and only when the AWS tool returns
     `Content` as CSV text that starts with `user,arn,user_creation_time`. Never decode Base64 or
-    any other encoding by hand: the report is then unreadable (`collection-reference.md`
+    any other encoding by hand: the report is then unreadable (`credential-collection-reference.md`
     section 1.1). Never guess a value.
   * A preview of the report is unreadable too. Never distill it, never read the root row out of
     it, and do not ask for it again: a result filter cannot shorten one CSV string.
@@ -208,7 +208,7 @@ gives the reading to use.
   100, and `iam:GetAccountAuthorizationDetails` pages its snapshot the same way. A missed page
   drops users, keys or policies without any error: the inventory shrinks, or a policy goes unread.
 - **Correct reading:** Check `IsTruncated` after every call. While it is true, call again with
-  `Marker` set to the returned value. `collection-reference.md` gives the paging parameters of each
+  `Marker` set to the returned value. `credential-collection-reference.md` gives the paging parameters of each
   call. A page that comes back as a preview is asked for again in a smaller form (section 20).
 
 ## 18. AWS DevOps Agent's AWS tool does not run the policy simulator or credential report generation
@@ -265,7 +265,7 @@ gives the reading to use.
     `iam:ListUsers` and the account-wide `iam:ListServiceSpecificCredentials`, ask for the same page
     with half the `MaxItems`, down to 10. The credential report and the other calls cannot be
     narrowed, so the report is then unreadable and any other call counts as failed
-    (`collection-reference.md`, Previews). What is still too large after narrowing follows the
+    (`credential-collection-reference.md`, Previews). What is still too large after narrowing follows the
     fallback (`policy-snapshot.md` section 4).
 
 ## Sources

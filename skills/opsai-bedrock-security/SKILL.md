@@ -100,7 +100,7 @@ Activate this skill when the requester:
 - Wants an inventory of long-term Amazon Bedrock API keys, or asks whether an API key user is still
   needed (LLM-BPA-009, LLM-BPA-010, LLM-BPA-011, LLM-BPA-013, LLM-BPA-014).
 - Wants to phase out long-term Amazon Bedrock API keys and keep short-term ones
-  (`references/credential-audit/remediation-guidance.md` section 3.3).
+  (`references/remediation-guidance.md` section 3.3).
 - Asks about root access keys (LLM-BPA-001), dormant or never-used keys (LLM-BPA-006), old keys (LLM-BPA-007), or
   users without MFA (LLM-BPA-008) that still have Amazon Bedrock access.
 - Asks whether a user can enable more models or create new API keys (LLM-BPA-004, LLM-BPA-005), or holds
@@ -109,7 +109,7 @@ Activate this skill when the requester:
   `Impact:IAMUser/CostHarvesting`, or unexpected Amazon Bedrock usage traced to an IAM user or key.
 - Deactivated a key and asks whether that is enough (LLM-BPA-013).
 - Wants to know what an SCP that denies Amazon Bedrock to IAM users would break before applying it
-  (`references/credential-audit/remediation-guidance.md`).
+  (`references/remediation-guidance.md`).
 
 **Guardrails**
 
@@ -123,8 +123,8 @@ Activate this skill when the requester:
   **contextual grounding** on a RAG path (008), **blocked-message UX** (009) or **CMK / KMS
   encryption** (010).
 - Reports a **guardrail limit or quota**, or a guarded call that fails as input too long
-  (`references/guardrails/service-limits.md`); tool output a guardrail lets through, correct answers it blocks,
-  the same prompt blocked **only sometimes**, or **latency** (`references/guardrails/documented-behavior.md`).
+  (`references/service-limits.md`); tool output a guardrail lets through, correct answers it blocks,
+  the same prompt blocked **only sometimes**, or **latency** (`references/documented-behavior.md`).
 - Asks a **how-to or "why" question about guardrails with no account to read**, or pastes evidence from
   another account (see "Answering from evidence" in `references/guardrails-review.md`).
 
@@ -159,7 +159,7 @@ Non-negotiable, at every step, in both areas:
    they invoke the guardrail, are billable and can exercise a production path.
 2. **No role assumption and no simulator.** Never call `sts:AssumeRole`, AWS Organizations,
    `iam:SimulatePrincipalPolicy`, `iam:SimulateCustomPolicy`, any IAM `Generate*` call or IAM Access
-   Analyzer. Evaluate policies with `references/credential-audit/policy-evaluation.md`.
+   Analyzer. Evaluate policies with `references/policy-evaluation.md`.
 3. **Mask, always** (Output rule above), including in plans, prompts to sub-agents and replies you pass
    on. Report secrets by key name only.
 4. **Evidence or silence.** Every finding cites the value that decided it. Keep "returned nothing"
@@ -193,11 +193,11 @@ next step for the customer, written before the closing.
 ## References
 
 - [`references/credential-audit.md`](references/credential-audit.md): answer rule, must-keep items, delegating, and the credential audit
-  procedure (LLM-BPA). Its reference files, in [`references/credential-audit/`](references/credential-audit/):
-  [`references/credential-audit/checks-credentials.md`](references/credential-audit/checks-credentials.md), [`references/credential-audit/collection-reference.md`](references/credential-audit/collection-reference.md), [`references/credential-audit/policy-snapshot.md`](references/credential-audit/policy-snapshot.md), [`references/credential-audit/policy-evaluation.md`](references/credential-audit/policy-evaluation.md), [`references/credential-audit/evaluation-outcomes.md`](references/credential-audit/evaluation-outcomes.md), [`references/credential-audit/api-quirks.md`](references/credential-audit/api-quirks.md), [`references/credential-audit/remediation-guidance.md`](references/credential-audit/remediation-guidance.md), [`references/credential-audit/metrics-and-logs.md`](references/credential-audit/metrics-and-logs.md).
+  procedure (LLM-BPA). Its reference files, in `references/`:
+  [`references/checks-credentials.md`](references/checks-credentials.md), [`references/credential-collection-reference.md`](references/credential-collection-reference.md), [`references/policy-snapshot.md`](references/policy-snapshot.md), [`references/policy-evaluation.md`](references/policy-evaluation.md), [`references/evaluation-outcomes.md`](references/evaluation-outcomes.md), [`references/credential-api-quirks.md`](references/credential-api-quirks.md), [`references/remediation-guidance.md`](references/remediation-guidance.md), [`references/credential-metrics-and-logs.md`](references/credential-metrics-and-logs.md).
 - [`references/guardrails-review.md`](references/guardrails-review.md): the guardrails procedure and answering from evidence (LLM-GRD). Its
-  reference files, in [`references/guardrails/`](references/guardrails/): [`references/guardrails/checks-guardrails.md`](references/guardrails/checks-guardrails.md), [`references/guardrails/collection-reference.md`](references/guardrails/collection-reference.md), [`references/guardrails/metrics-and-logs.md`](references/guardrails/metrics-and-logs.md), [`references/guardrails/api-quirks.md`](references/guardrails/api-quirks.md), [`references/guardrails/service-limits.md`](references/guardrails/service-limits.md), [`references/guardrails/documented-behavior.md`](references/guardrails/documented-behavior.md).
+  reference files, in `references/`: [`references/checks-guardrails.md`](references/checks-guardrails.md), [`references/guardrails-collection-reference.md`](references/guardrails-collection-reference.md), [`references/guardrails-metrics-and-logs.md`](references/guardrails-metrics-and-logs.md), [`references/guardrails-api-quirks.md`](references/guardrails-api-quirks.md), [`references/service-limits.md`](references/service-limits.md), [`references/documented-behavior.md`](references/documented-behavior.md).
 - [`references/related-skills.md`](references/related-skills.md): areas this skill does not cover, the fallback for each, and the
   boundaries.
 - Assets: [`assets/bedrock-permissions-report-template.md`](assets/bedrock-permissions-report-template.md), [`assets/delegation-prompt.md`](assets/delegation-prompt.md), [`assets/guardrail-posture-report-template.md`](assets/guardrail-posture-report-template.md).
-- Remediation templates in [`assets/remediation/`](assets/remediation/), for the customer to apply: [`assets/remediation/scp-deny-bedrock-to-iam-users.json`](assets/remediation/scp-deny-bedrock-to-iam-users.json), [`assets/remediation/scp-restrict-bedrock-regions-models.json`](assets/remediation/scp-restrict-bedrock-regions-models.json), [`assets/remediation/policy-deny-bedrock-api-keys.json`](assets/remediation/policy-deny-bedrock-api-keys.json), [`assets/remediation/policy-deny-long-term-bedrock-api-keys.json`](assets/remediation/policy-deny-long-term-bedrock-api-keys.json).
+- Remediation templates in `assets/`, for the customer to apply: [`assets/scp-deny-bedrock-to-iam-users.json`](assets/scp-deny-bedrock-to-iam-users.json), [`assets/scp-restrict-bedrock-regions-models.json`](assets/scp-restrict-bedrock-regions-models.json), [`assets/policy-deny-bedrock-api-keys.json`](assets/policy-deny-bedrock-api-keys.json), [`assets/policy-deny-long-term-bedrock-api-keys.json`](assets/policy-deny-long-term-bedrock-api-keys.json).

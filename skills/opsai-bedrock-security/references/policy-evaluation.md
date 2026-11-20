@@ -66,7 +66,7 @@ Build the set from the snapshot entries (`policy-snapshot.md` section 2).
 - Every document carries its `Version`: S1, S2 and their short forms return each inline
   `PolicyDocument` whole, `iam:GetPolicyVersion` returns `PolicyVersion.Document`, and S4 projects
   `Version` for each entry. A document that arrives as a string is URL-decoded and parsed as JSON
-  (`api-quirks.md` section 9). `Statement` may be one object or a list.
+  (`credential-api-quirks.md` section 9). `Statement` may be one object or a list.
 - Admin-class policies (`checks-credentials.md` section 1): go through the user's
   `AttachedManagedPolicies`, then each group's `AttachedManagedPolicies` in `GroupList` order.
   Match each entry's `Arn` exactly against the three admin-class ARNs, and write each match by its
@@ -94,7 +94,7 @@ The first check that applies decides, and the user is not evaluated further.
    policy in the set uses means that a policy is missing: `unknown`, U6. A key found in the set
    that IAM does not report changes nothing. No key reported and none found confirms that the set
    has no condition and no variable. `NoSuchEntity`: the user was deleted during the scan; skip it
-   with W5. Any other failed call, other than a permission error (`collection-reference.md`
+   with W5. Any other failed call, other than a permission error (`credential-collection-reference.md`
    section 6): `unknown`, U7.
 
 ## 4. Matching

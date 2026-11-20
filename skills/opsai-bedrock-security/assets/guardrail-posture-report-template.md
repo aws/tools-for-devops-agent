@@ -9,7 +9,7 @@ a delivered report. Never reproduce blocked prompt/completion text; never print 
 table in full — every row, every cell — never a summary of it.
 
 When you delegate the evidence gathering, paste the Findings header row below and each check's
-remediation text from `references/guardrails/checks-guardrails.md` into the sub-agent's prompt, so that it
+remediation text from `references/checks-guardrails.md` into the sub-agent's prompt, so that it
 returns all eight columns.
 
 ## Scope
@@ -32,7 +32,7 @@ Deciding finding: `<name the single highest-severity check that decided it, with
 |---|---|---|---|---|---|---|---|
 | `<LLM-GRD-NNN>` | `<CRITICAL/HIGH/MEDIUM/LOW/INFO>` | `<measured <value> / no-datapoints / not-queried>` | `<start → end UTC, or "config read at <timestamp>">` | `<the read-only API that produced it>` | `<guardrails / agent-runtime / retrieval / bedrock-configuration / caller>` | `<the catalog row's AWS-doc citation URL>` | `<read-only command or IaC change to confirm/fix>` |
 
-Every row cites a `check-id` from `references/guardrails/checks-guardrails.md`. No freelance findings.
+Every row cites a `check-id` from `references/checks-guardrails.md`. No freelance findings.
 `workload-specific` checks with no AWS-published number are reported `INFO`. A check that was
 evaluated and not raised has `Not raised` in the Severity cell; never print the catalog severity for it.
 

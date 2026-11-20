@@ -28,7 +28,7 @@ API key ID, or the text of a policy document.
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `<Critical>` | `<alias>` | `<user name or <root_account>>` | `<access key>` | `<...ABCD>` | `<700d>` | `<400d ago>` | `<no>` | `<broad>` | `<LLM-BPA-002, LLM-BPA-003>` |
 
-Rows are in the order of `references/credential-audit/checks-credentials.md` section 5. Info rows are left out unless
+Rows are in the order of `references/checks-credentials.md` section 5. Info rows are left out unless
 the requester asked for all findings, except rows with GRANT `unknown` and rows for the credentials
 the question asks about (an inventory of API keys shows every API key).
 
@@ -37,7 +37,7 @@ the question asks about (an inventory of API keys shows every API key).
 One block per row, in the same order and with the same number:
 
 **1.** -> `<the one recommended action, word for word from the catalog>`
-- docs: `<the AWS documentation link for this action: the AWS-doc-citation of the row's first check-id, references/credential-audit/checks-credentials.md section 3>`
+- docs: `<the AWS documentation link for this action: the AWS-doc-citation of the row's first check-id, references/checks-credentials.md section 3>`
 - why: `<first reason, word for word>`
 - why: `<next reason>`
 - why: `<If re-enabled it would rate Critical:>`
@@ -113,7 +113,7 @@ names are unique only within an account. List each warning once per account.
 - `policy-deny-long-term-bedrock-api-keys.json`: an identity policy that denies using and creating long-term Amazon Bedrock API keys and leaves short-term keys working.
 - `<Only when the requester named Regions or approved models:>` `scp-restrict-bedrock-regions-models.json`: a service control policy that denies Amazon Bedrock outside the named Regions and for models not on the approved list.
 
-`<Only when the requester asked how to fix a finding or what one of these policies would affect: the answer, below the list. For the user-deny SCP, the lists of references/credential-audit/remediation-guidance.md section 3.2 (affected now, affected if re-enabled, not affected, check first), then the filled template as its section 3.1 describes.>`
+`<Only when the requester asked how to fix a finding or what one of these policies would affect: the answer, below the list. For the user-deny SCP, the lists of references/remediation-guidance.md section 3.2 (affected now, affected if re-enabled, not affected, check first), then the filled template as its section 3.1 describes.>`
 
 Nothing was applied. Ask for a template to see it with the placeholders explained. AWS documentation: [Service control policies](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html), [Control permissions for Amazon Bedrock API keys](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-permissions.html).
 

@@ -11,11 +11,11 @@ output rule of `SKILL.md` says, the accounts that policies name included. Never 
 **Paging.** Every IAM list call below, and `iam:GetAccountAuthorizationDetails`, pages with
 `IsTruncated` and `Marker`. When a response has `IsTruncated` true, call again with `Marker` set to
 the returned value until `IsTruncated` is false. IAM can return fewer items than `MaxItems` even
-when more exist, so check `IsTruncated` on every page (`api-quirks.md` section 17).
+when more exist, so check `IsTruncated` on every page (`credential-api-quirks.md` section 17).
 
 **Previews.** The AWS tool can replace any large result with a preview: a note that the result
 exceeds its size threshold, the start of the result, and the options "Distill" and "Narrow search"
-(`api-quirks.md` section 20). For every IAM result the audit reads, from any call and made by any
+(`credential-api-quirks.md` section 20). For every IAM result the audit reads, from any call and made by any
 agent:
 
 - Never take the `Distill` option, and never ask any tool or sub-agent to summarise the result. A
@@ -106,7 +106,7 @@ Read the root principal like this:
    `The IAM credential report was generated at <YYYY-MM-DD HH:MM> UTC; a root access key created since then is not visible.`
 
 Never take IAM user data (keys, last use, MFA) from the credential report. It can be up to four hours
-old, and it omits users created since and every long-term API key. See `api-quirks.md` section 1.
+old, and it omits users created since and every long-term API key. See `credential-api-quirks.md` section 1.
 
 ## 2. User-level calls
 
@@ -206,8 +206,8 @@ Calls the skill never makes:
 - any Amazon Bedrock API, including model invocation;
 - `iam:SimulatePrincipalPolicy`, `iam:SimulateCustomPolicy` and every IAM `Generate*` call,
   `iam:GenerateCredentialReport` included: AWS DevOps Agent's AWS tool does not run them
-  (`api-quirks.md` section 18), and the skill never needs them;
-- any IAM call that takes an AWS managed policy's ARN (`api-quirks.md` section 19);
+  (`credential-api-quirks.md` section 18), and the skill never needs them;
+- any IAM call that takes an AWS managed policy's ARN (`credential-api-quirks.md` section 19);
 - IAM Access Analyzer;
 - any IAM call that creates, updates, attaches, detaches, tags or deletes anything.
 

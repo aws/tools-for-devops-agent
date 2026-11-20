@@ -29,7 +29,7 @@ Token metrics (`InputTokenCount` / `OutputTokenCount`) are the primary signal fo
 
 ## AWS/Bedrock/Guardrails — guardrail metrics
 
-Namespace: `AWS/Bedrock/Guardrails`. Dimensions: `GuardrailArn` + `GuardrailVersion` (version number or `DRAFT`), `Operation` (`ApplyGuardrail`), `GuardrailContentSource` (`Input` / `Output`), `GuardrailPolicyType` (`ContentPolicy`, `TopicPolicy`, `WordPolicy`, `SensitiveInformationPolicy`, `ContextualGroundingPolicy`). `Invocations` by `GuardrailArn` + `GuardrailVersion` is the per-version traffic read in the Guardrails section of `collection-reference.md` (row (d)). Series that carry `GuardrailArn` carry only `GuardrailArn` + `GuardrailVersion`; series with `Operation`, `GuardrailContentSource` or `GuardrailPolicyType` carry no `GuardrailArn`, so they are account-wide, and the `Operation` series also counts inline evaluations (measured on `Converse`), not only standalone `ApplyGuardrail` calls. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-guardrails-cw-metrics.html
+Namespace: `AWS/Bedrock/Guardrails`. Dimensions: `GuardrailArn` + `GuardrailVersion` (version number or `DRAFT`), `Operation` (`ApplyGuardrail`), `GuardrailContentSource` (`Input` / `Output`), `GuardrailPolicyType` (`ContentPolicy`, `TopicPolicy`, `WordPolicy`, `SensitiveInformationPolicy`, `ContextualGroundingPolicy`). `Invocations` by `GuardrailArn` + `GuardrailVersion` is the per-version traffic read in the Guardrails section of `guardrails-collection-reference.md` (row (d)). Series that carry `GuardrailArn` carry only `GuardrailArn` + `GuardrailVersion`; series with `Operation`, `GuardrailContentSource` or `GuardrailPolicyType` carry no `GuardrailArn`, so they are account-wide, and the `Operation` series also counts inline evaluations (measured on `Converse`), not only standalone `ApplyGuardrail` calls. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-guardrails-cw-metrics.html
 
 | Metric | Meaning |
 |---|---|
@@ -108,7 +108,7 @@ When model invocation logging is enabled (LLM-INV-001), scan the delivered logs 
 | High `inputTokenCount` outliers | Prompt bloat / unbounded context — cost + latency | LLM-COST, LLM-INV-011 |
 | High `outputTokenCount` outliers | Runaway generations / missing `maxTokens` | LLM-INV-011 |
 | Guardrail `intervened`/blocked markers in output | Guardrail actively blocking — review for attack vs false-positive | LLM-GRD-002 |
-| A guardrail id under `inputAssessment` holding only `appliedGuardrailDetails` and `invocationMetrics` | Normal when nothing was detected. The guardrail was applied to that side; the entry does not show which policy ran. Read the `detected` booleans and `usage` integers, not the key (`api-quirks.md` §18) | none: not a finding by itself |
+| A guardrail id under `inputAssessment` holding only `appliedGuardrailDetails` and `invocationMetrics` | Normal when nothing was detected. The guardrail was applied to that side; the entry does not show which policy ran. Read the `detected` booleans and `usage` integers, not the key (`guardrails-api-quirks.md` §18) | none: not a finding by itself |
 | Missing/empty log stream despite traffic | Logging misconfigured or delivery failing | LLM-INV-001, LLM-INV-005 |
 | Deprecated `modelId` appearing in records | Still invoking an end-of-life model | LLM-INV-003 |
 

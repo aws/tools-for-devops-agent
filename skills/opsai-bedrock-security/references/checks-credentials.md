@@ -17,7 +17,7 @@ they are labelled as such.
 
 ## 1. Definitions
 
-The inputs come from the read-only calls in `collection-reference.md` and `policy-snapshot.md`, and
+The inputs come from the read-only calls in `credential-collection-reference.md` and `policy-snapshot.md`, and
 from the policy evaluation in `policy-evaluation.md`.
 
 | Term | Exact meaning |
@@ -61,7 +61,7 @@ reasons in the order given, word for word, with the values filled in.
      read or shows no root key: **Critical**, reason
      `The root account has an access key (AccountAccessKeysPresent is 1), but the credential report does not confirm whether it is active.`
      (LLM-BPA-001). The skill reads only an existing report and never
-     generates one; see `api-quirks.md` section 1 and `collection-reference.md` section 1.1.
+     generates one; see `credential-api-quirks.md` section 1 and `credential-collection-reference.md` section 1.1.
    * The root key is inactive: **Info**, reason `The root access key is inactive.` (LLM-BPA-014).
    * A root key is never re-rated as if it were active.
 2. **Orphaned API key user:** **Medium**, reason
@@ -141,7 +141,7 @@ one that rates High carries only rule 6 reasons or only the rule 7 reason.
 | LLM-BPA-002 | Security | Critical | Rule 5. Can invoke, and an admin-class policy (`AdministratorAccess`, `PowerUserAccess`, `AmazonBedrockFullAccess`) is attached to the user directly or through a group | Replace the broad permissions with a policy limited to the Amazon Bedrock actions, models and Regions the workload needs, rotate the key, and move the workload to an IAM role | https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html (apply least-privilege permissions); https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonBedrockFullAccess.html |
 | LLM-BPA-003 | Security | Critical | Rule 5. Can invoke, and every one of the six canary actions is allowed on `*` (effectively `bedrock:*`). Fewer than six never matches | As LLM-BPA-002 | https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html (apply least-privilege permissions); https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonBedrockLimitedAccess.html (allows some canary actions without being `bedrock:*`) |
 | LLM-BPA-004 | Security | Critical | Rule 5. Can invoke, and `aws-marketplace:Subscribe` or `bedrock:CreateMarketplaceModelEndpoint` is allowed on `*` (can enable more models) | Remove the action from the user's policies, rotate the key, and move the workload to an IAM role | https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html |
-| LLM-BPA-005 | Security | Critical | Rule 5. Can invoke, and `iam:CreateServiceSpecificCredential` is allowed on `*` or on the user's own ARN (can create new API keys that outlive a rotated access key) | Remove the action, rotate the key, and move the workload to an IAM role. To block API key creation and keep short-term keys working, see `assets/remediation/policy-deny-long-term-bedrock-api-keys.json` | https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html |
+| LLM-BPA-005 | Security | Critical | Rule 5. Can invoke, and `iam:CreateServiceSpecificCredential` is allowed on `*` or on the user's own ARN (can create new API keys that outlive a rotated access key) | Remove the action, rotate the key, and move the workload to an IAM role. To block API key creation and keep short-term keys working, see `assets/policy-deny-long-term-bedrock-api-keys.json` | https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html |
 | LLM-BPA-006 | Security | High | Rule 6. Can invoke, and the key is dormant: never used, or unused for at least `N` days (default 90) | Delete the key. Recreate it only if a workload breaks | https://docs.aws.amazon.com/securityhub/latest/userguide/iam-controls.html (control IAM.8, 90 days) |
 | LLM-BPA-007 | Security | High | Rule 6. Can invoke, and the key is at least `N` days old (default 90) | Move the workload to an IAM role. If the user must stay, rotate the key | https://docs.aws.amazon.com/securityhub/latest/userguide/iam-controls.html (control IAM.3, 90 days); https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html |
 | LLM-BPA-008 | Security | High | Rule 6. Can invoke, the credential is an access key, and the user has no MFA device | Move the workload to an IAM role. If the user must stay, rotate the key and enable MFA | https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html (require MFA); https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_mfa.html |
@@ -249,7 +249,7 @@ summary and the per-account table count visible rows only.
 | 80% of probe ARNs | Design constant, not an AWS threshold | Separates `broad` from `scoped` in the probe step (`policy-evaluation.md` section 7.2) |
 | 120 probe ARNs | Design constant | Most probes built from one user's own policies |
 | 1 hour | Design constant (IAM reuses a credential report up to four hours old) | Warn when the credential report is older than this |
-| 100 users and 20 principals per account | Skill work budget, not an AWS threshold | See `collection-reference.md` section 4.1 |
+| 100 users and 20 principals per account | Skill work budget, not an AWS threshold | See `credential-collection-reference.md` section 4.1 |
 
 ## 8. What the answer states, by question
 
