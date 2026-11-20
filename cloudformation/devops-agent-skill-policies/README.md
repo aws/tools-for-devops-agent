@@ -73,6 +73,7 @@ Support plan for the underlying APIs to return data.
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `EnableConfigAthenaCiAnalysis` | `'false'` | For `config-cost-optimization`'s Athena CI-driver path: adds `athena:StartQueryExecution`, `athena:GetQueryExecution`, `athena:GetQueryResults`, `athena:GetWorkGroup`, `glue:GetDatabase`, `glue:GetTable`, `glue:GetPartitions`, and `s3:GetObject` on the Config delivery data. |
+| `EnableSsmAutomationExecutionRead` | `'false'` | For the `aws-systems-manager` custom agent: adds read-only `ssm:GetAutomationExecution`, scoped to this account's automation executions, so the agent can inspect the per-location rate-control and alarm settings of multi-account executions. Without it those checks are reported as Not checked. |
 | `ConfigDataBucketArn` | `''` | Config delivery bucket ARN; scopes the `s3:GetObject` grant to `<arn>/*`. Empty grants `s3:GetObject` on all buckets (testing only). Used only when `EnableConfigAthenaCiAnalysis=true`. |
 
 The Athena path also needs a workgroup with Athena-managed query results, because the
