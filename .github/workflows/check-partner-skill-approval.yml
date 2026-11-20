@@ -1,0 +1,67 @@
+name: Check partner skill approval
+
+# Fails a pull request that changes a partner-managed skill unless a code owner
+# of /connectors/ approved its head commit. The rules are in
+# .github/scripts/check_partner_skill_approval.py, with tests in
+# tests/test_check_partner_skill_approval.py.
+#
+# NOTE: a red check does not block merging on its own. An admin must add the
+# job's name ("check-partner-skill-approval") to the required status checks for
+# `main` in branch protection. Until then this workflow is advisory.
+#
+# A review does not start a new run, so after the approval a maintainer re-runs
+# the job.
+#
+# A pull request runs its own copy of the script, so code-owner review of
+# /.github/ (.github/CODEOWNERS) is the control.
+
+on:
+  pull_request:
+    # `edited`: a change of the base branch fires only this type, and the skills
+    # a pull request changes depend on its base.
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+    # Deliberately NOT filtered with `paths:`: a required status check that never
+    # runs is reported as pending forever.
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: check-partner-skill-approval-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # The job id and its display name are kept identical, because the display name
+  # is the status check context that branch protection matches on. The job has no
+  # `if:`, because a skipped required check counts as passed.
+  check-partner-skill-approval:
+    name: check-partner-skill-approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Full history, so the script can find the merge base.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned dependencies
+        run: python3 -I -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
+
+      - name: Check the approval of partner-managed skill changes
+        # The script reads the pull request from the event payload file. No event
+        # field is interpolated into this command.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          python3 .github/scripts/check_partner_skill_approval.py \
+            --event "$GITHUB_EVENT_PATH" \
+            --base-ref "origin/${BASE_REF}"

