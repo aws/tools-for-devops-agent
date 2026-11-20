@@ -1,5 +1,26 @@
 # LLM Incident Signatures
 
+## Summary priors (managed binding)
+
+The one-line priors that `SKILL.md` used to carry; the full table with API calls and traps follows.
+
+| Symptom | First signal to check | Likely locus | Check / ref |
+|---|---|---|---|
+| `ThrottlingException` | `THROTTLES` vs quota; backoff present? | APPLICATION, or INFRASTRUCTURE if quota posture | LLM-INV-007 |
+| `ThrottlingException`, but `AWS/Bedrock` shows no throttles | `AWS/Bedrock/Guardrails` `InvocationThrottles`, `Operation=ApplyGuardrail` | INFRASTRUCTURE (guardrail rate quota) | LLM-INV-007 |
+| `THROTTLES` climbing | Climb rate vs your own traffic growth | INFRASTRUCTURE | LLM-INV-002 |
+| `InternalServerError` / 5xx | `SERVER_ERRORS` rate across models + provider health | PROVIDER | classifier Steps 1–2 |
+| 5xx / 503 from a **self-hosted** model server | ALB `HTTPCode_Target_5XX_Count`, target health, the server's own logs | **INFRASTRUCTURE**, never PROVIDER | `references/hosting-bindings.md` |
+| `ServiceUnavailableException` | Exception dominance + Health events | PROVIDER | classifier Step 5 |
+| `ModelNotReadyException` | Cold-start clustering; one model? | PROVIDER | classifier Step 5 |
+| `ValidationException` | Request shape / params / context length | APPLICATION | LLM-INV-011 |
+| Intermittent timeouts | Latency p90/p99 vs baseline; stage isolation | UNDETERMINED | LLM-TEL-001 |
+| Not responding at all | Ingress 5xx before the loop runs, then model latency | INFRASTRUCTURE | `references/request-path.md` |
+| Agent loop returning empty | **Bind first.** `agentcore`: alias→version, guardrail intervention, finish reason. Self-hosted: the loop's own logs | APPLICATION | `references/api-quirks.md` §6, §11 |
+| Retrieval returning nothing | Ingestion-job history (not resource status) | APPLICATION | `references/api-quirks.md` §8 |
+| Latency spike, no config change | Server latency vs Health; blast radius | PROVIDER | classifier Steps 3–4 |
+| `TimeToFirstToken` degradation | TTFT trend; one model vs many | UNDETERMINED | `references/metrics-and-logs.md` |
+
 A lookup table from an observed symptom to the first signal to check, the read-only APIs that produce
 that signal, the likely fault locus from the classifier, and the trap that most often
 causes a misread. **This is a starting-point index, not a shortcut around the classifier** — always

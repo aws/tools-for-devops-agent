@@ -4,12 +4,9 @@ description: Diagnose an Amazon SageMaker training or customization job, includi
   and review Model Registry governance of the models it produces. Use this skill when a training job is denied
   access to S3, a KMS key or iam:PassRole, fails with InsufficientInstanceCapacity, ResourceLimitExceeded or out
   of memory, goes to Failed with no logs, restarts after a spot interruption or skips its checkpoints, stalls as a
-  multi-node run, times out in VPC mode, finds no input files, hides loss metrics or bills GPU time for a run that
-  produced no model, and when a pipeline registers no model package version, deploys are not gated on approval
+  multi-node run, times out in VPC mode, finds no input files, hides loss metrics or bills GPU time for a run with no model, and when a pipeline registers no model package version, deploys are not gated on approval
   status, a served model has no approved package, a package group must be shared across accounts, a package is
-  rejected on an instance type, lineage is missing, or managed MLflow calls fail, even if they do not name
-  execution roles, checkpoints or approval status. Findings carry LLM-SM-TRAIN and LLM-SM-REG check-ids with an
-  AWS-doc citation, from read-only APIs.
+  rejected on an instance type, lineage is missing, or managed MLflow calls fail. Not for evaluation jobs of a fine-tuned model (Nova eval recipe, LLM-as-judge), even when one fails. Findings carry LLM-SM-TRAIN and LLM-SM-REG check-ids and AWS-doc citations, read-only.
 metadata:
   author: jmadhuki
   version: "1.0.0"
