@@ -1,6 +1,6 @@
 # Testing record
 
-Results from `devops-agent skill-eval` 0.1.0, with judge `us.anthropic.claude-sonnet-5` in us-east-1. They are committed under `evals/structure/` (v2), `evals/best-practices/v2/`, and `evals/functional/v7/`. Structure and best-practices ran on 2026-11-18. Functional ran on 2026-11-19 against the final rules in this PR.
+Results from `devops-agent skill-eval` 0.1.0, with judge `us.anthropic.claude-sonnet-5` in us-east-1. They are committed under `evals/structure/` (v3), `evals/best-practices/v3/`, and `evals/functional/v7/`. All three ran on 2026-11-19 against the final `SKILL.md` and references in this PR.
 
 ## Test clusters
 
