@@ -27,25 +27,21 @@ from what you ask:
 
 ## Skill composition
 
-Fourteen skills, all in this repository's [`skills/`](../../skills/) directory. The agent is
+Eight skills, all in this repository's [`skills/`](../../skills/) directory. The agent is
 self-contained by design and consumes no skill from outside this repository.
 
 | What the operator raises | Skill loaded |
 |---|---|
 | Live model-call failures: 5xx, throttling, timeouts, latency, empty responses (Bedrock, SageMaker, AgentCore, self-hosted) | [`opsai-incident-triage`](../../skills/opsai-incident-triage/) |
-| Quality regression, eval jobs, quality gates, truncated outputs | [`llmops-quality-evaluation`](../../skills/llmops-quality-evaluation/) |
+| Quality regression, quality gates, truncated outputs, Bedrock (model and RAG) and SageMaker (Nova recipe, LLM-as-judge) evaluation jobs | [`opsai-ml-eval-check`](../../skills/opsai-ml-eval-check/) |
 | Invocation logging, model access, inference profiles, a failing call denied by IAM, SCP or marketplace | [`opsai-bedrock-review`](../../skills/opsai-bedrock-review/) |
 | Who can invoke Bedrock: IAM users, long-term API keys, dormant or root keys, GuardDuty AI Protection findings | [`opsai-bedrock-security`](../../skills/opsai-bedrock-security/) |
 | Content filters, PII, denied topics, grounding, version pinning | [`opsai-bedrock-security`](../../skills/opsai-bedrock-security/) |
 | Spend, cost attribution, pricing tiers, quota headroom, provisioned throughput | [`opsai-capacity-cost`](../../skills/opsai-capacity-cost/) |
 | Knowledge bases, ingestion health, chunking, embedding model | [`opsai-bedrock-review`](../../skills/opsai-bedrock-review/) |
 | Bedrock Agents, action groups, AgentCore runtimes and gateways | [`opsai-bedrock-agentcore`](../../skills/opsai-bedrock-agentcore/) |
-| SageMaker real-time inference endpoints — posture, scaling, cost, right-sizing, monitoring, VPC/CMK, lineage | [`llmops-sagemaker-inference-endpoints`](../../skills/llmops-sagemaker-inference-endpoints/) |
-| SageMaker training/customization (Nova, JumpStart) job failures | [`llmops-sagemaker-training`](../../skills/llmops-sagemaker-training/) |
-| SageMaker serverless/async inference — cold start, concurrency, notifications, backlog scaling, fit | [`llmops-sagemaker-serverless-async`](../../skills/llmops-sagemaker-serverless-async/) |
-| SageMaker batch transform for offline LLM scoring | [`llmops-sagemaker-batch`](../../skills/llmops-sagemaker-batch/) |
-| SageMaker-side evaluation jobs (Nova eval recipe, LLM-as-judge) | [`llmops-sagemaker-evaluation`](../../skills/llmops-sagemaker-evaluation/) |
-| SageMaker Model Registry governance of customized artifacts | [`llmops-sagemaker-model-registry`](../../skills/llmops-sagemaker-model-registry/) |
+| SageMaker inference: real-time, serverless and async endpoints, batch transform — failures, scaling, cold start, notifications, backlog, right-sizing, endpoint cost, monitoring, VPC/CMK, deployed-endpoint lineage | [`opsai-sagemaker-inference`](../../skills/opsai-sagemaker-inference/) |
+| SageMaker training/customization (Nova, JumpStart) job failures and Model Registry governance of customized artifacts | [`opsai-sagemaker-training`](../../skills/opsai-sagemaker-training/) |
 
 
 ## Files
@@ -63,7 +59,7 @@ through Chat. Schedules are triggers on the agent detail page.
 
 ## Setup
 
-### 1. Upload the fourteen skills
+### 1. Upload the eight skills
 
 Zip each skill from this repository's `skills/` directory and upload it. Zip from **inside** each directory so `SKILL.md` lands
 at the archive root.
@@ -71,15 +67,13 @@ at the archive root.
 ```bash
 cd ../../skills
 for skill in opsai-incident-triage opsai-bedrock-review opsai-bedrock-security \
-             opsai-capacity-cost opsai-bedrock-agentcore llmops-quality-evaluation \
-             llmops-sagemaker-inference-endpoints llmops-sagemaker-training \
-             llmops-sagemaker-serverless-async llmops-sagemaker-batch llmops-sagemaker-evaluation \
-             llmops-sagemaker-model-registry; do
+             opsai-capacity-cost opsai-bedrock-agentcore opsai-ml-eval-check \
+             opsai-sagemaker-inference opsai-sagemaker-training; do
   (cd "$skill" && zip -r "../$skill.zip" . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*')
 done
 ```
 
-Upload all fourteen. For each, select **"All agents"** as the Agent Type. A custom agent cannot load a
+Upload all eight. For each, select **"All agents"** as the Agent Type. A custom agent cannot load a
 skill unless it is imported as "All agents."
 
 ### 2. Create the agent
@@ -90,7 +84,7 @@ skill unless it is imported as "All agents."
 |---|---|
 | Name | `llmops-agent` |
 | System prompt | paste all of `SYSTEM_PROMPT.md` |
-| Skills | all fourteen |
+| Skills | all eight |
 | Memory stores | optional; attach a custom store if you want run-to-run trend memory |
 
 ### 3. Add the tool
@@ -119,7 +113,7 @@ Run once manually first. The first run has no previous report to diff and will s
 | Scope | the Agent Space's configured Regions | Pin it to one workload by adding a line to the system prompt, e.g. "Restrict scope to Bedrock resources tagged `Application=support-copilot` in `us-east-1`." |
 | Schedule | none until you add a trigger | Weekly is enough; GenAI posture changes with deployments, not with traffic |
 | Tools | `use_aws` | assign via Chat |
-| Skills | 14 | all in this repository's `skills/` directory |
+| Skills | 8 | all in this repository's `skills/` directory |
 
 Bedrock and its evaluation APIs are Region-gated. Confirm the Regions in scope actually host the
 workload, or the agent will correctly report features as unavailable rather than missing.
