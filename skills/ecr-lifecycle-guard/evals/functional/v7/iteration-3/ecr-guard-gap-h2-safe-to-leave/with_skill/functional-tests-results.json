@@ -1,0 +1,119 @@
+{
+  "version": "v7",
+  "iteration": 3,
+  "eval_id": "ecr-guard-gap-h2-safe-to-leave",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tools_ready": {
+    "outcome": "ready",
+    "ready": true,
+    "waited_seconds": 309.5,
+    "probes": 5,
+    "summary": "Agent space tools ready after 5 probe(s) in 5m 9s"
+  },
+  "skill_load": {
+    "outcome": "loaded",
+    "loaded": true,
+    "waited_seconds": 45.5,
+    "probes": 2,
+    "summary": "Chat agent loaded the uploaded skill after 2 probe(s) in 45s (evidence: skill_load)",
+    "evidence": "skill_load"
+  },
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'ecr-lifecycle-guard' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'ecr-lifecycle-guard' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The response gives a clear \"No, not fully safe to leave as-is\" judgement tied to concrete deciding facts: the expiring set is SIMULATED (preview cancelled, not approved), and 11 of 26 images have unknown in-use status because batch:DescribeJobDefinitions was AccessDenied \u2014 explicitly the source the user's EC2 Batch jobs would reference. It states recorded pull time (lastRecordedPullTime) was read for all 26 images and explains that a recorded pull inside the 30-day window counts as in-use (v2.3.0 example). It explicitly explains that direct EC2/Batch pulls leave no ECS task/service or Batch definition to find and are visible only through recorded pull time or CloudTrail events (U8 finding details push-correlated exclusion logic), and in the Next Steps section notes that a pull only refreshes lastRecordedPullTime for roughly 24 hours, matching the 24-hour refresh caveat. It explicitly states the Batch read was denied and treats the 11 affected images as \"Expiring-Unknown\" rather than confirmed unused, with findings and recommendations to grant permissions before relying on the policy. Finally, since production-like/in-use-candidate images (latest, hotfix-2.3.1, v2.5.0) are in the expiring set, it presents a concrete protective rule (JSON lifecycle rule additions) for the operator to apply, explicitly stating \"This skill does not apply lifecycle policy changes,\" satisfying the \"does not apply it\" requirement. All elements of the expected output are substantively covered.</reasoning>\n<parameter name=\"evidence\">\"Bottom line: No, not fully safe to leave as-is... 11 images the policy would expire next evaluation... have unknown in-use status because batch:DescribeJobDefinitions was denied \u2014 if any ACTIVE Batch job definition pins one of those tags, this policy will delete an image a running job depends on.\" / \"U1 | lastRecordedPullTime read for every image | PASS | 26 of 26 images\" / \"a pull only refreshes lastRecordedPullTime for roughly 24 hours and does not stop the next evaluation\" / \"Suggested Protective Rule... Apply it with aws ecr put-lifecycle-policy or the console after running a preview on the complete policy. This skill does not apply lifecycle policy changes.\"</parameter>\n</invoke>\n",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response gives an overall judgement on whether the policy is safe to leave as is, and ties that judgement to the deciding fact (an in use image expiring, an in use source that could not be checked, a simulated expiring list, or nothing expiring).",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Bottom line: No, not fully safe to leave as-is. No image currently shows confirmed in-use evidence, but 11 images the policy would expire next evaluation ... have unknown in-use status because batch:DescribeJobDefinitions was denied \u2014 if any ACTIVE Batch job definition pins one of those tags, this policy will delete an image a running job depends on.\" This ties the judgement directly to the deciding facts: unknown in-use status due to an unchecked source (Batch) and a simulated expiring list.",
+          "reasoning": "The response gives a clear overall verdict (not fully safe) and explicitly ties it to the deciding facts: the Batch job definitions source could not be checked (AccessDenied), and the expiring set itself is simulated/unconfirmed.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that the recorded pull time (lastRecordedPullTime) was checked for the images and treats a recorded pull inside the window as evidence that the image is in use.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"U1 | lastRecordedPullTime read for every image | PASS | 26 of 26 images\" and \"v2.3.0 carries a recorded pull, 2026-11-05 15:15:34 UTC, inside the 30 day window, and is unaffected since it is outside the expiring set.\"",
+          "reasoning": "The response explicitly states lastRecordedPullTime was checked for all 26 images and uses a recorded pull inside the 30-day window as evidence that v2.3.0 is in use/unaffected.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains that direct pulls from EC2 leave no ECS task or Batch job definition reference and are visible only through the recorded pull time or CloudTrail pull events, and notes that ECR may take up to 24 hours to refresh the recorded pull time.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response mentions CloudTrail pull events and lastRecordedPullTime generally (e.g., 'push correlated events only ... no tier (a) or (b) evidence' and U8 details on BatchGetImage events), but nowhere does it explicitly explain that direct EC2 pulls leave no ECS/Batch reference and are visible only via recorded pull time or CloudTrail, nor does it state the up-to-24-hour refresh delay for lastRecordedPullTime in that framing. The closest statement is in Next Steps item 4: 'a pull only refreshes lastRecordedPullTime for roughly 24 hours and does not stop the next evaluation' - this is about duration of refresh validity, not about the up-to-24-hour delay in refreshing after a pull, and it does not explain that EC2 direct pulls are invisible to ECS/Batch task definition checks.",
+          "reasoning": "The assertion requires two specific explanatory points: (a) that direct EC2 pulls leave no ECS/Batch reference and are only visible via recorded pull time/CloudTrail, and (b) that ECR may take up to 24 hours to refresh the recorded pull time. The response does not clearly articulate point (a) - it doesn't explicitly say EC2 direct pulls are invisible to task-definition-based checks. Point (b) is referenced in Next Steps #4 but describes it differently (duration pull data is valid for, not refresh delay).",
+          "confidence": "medium"
+        },
+        {
+          "text": "If batch:DescribeJobDefinitions was denied, the response says so, says the expiring images could not be checked against Batch job definitions, and does not describe them as unused or safe.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"AccessDenied | batch:DescribeJobDefinitions denied for the Agent Space role\" and \"11 images the policy would expire next evaluation ... have unknown in-use status because batch:DescribeJobDefinitions was denied\" and 'Expiring-Unknown' verdict (not 'unused' or 'safe') for all 11 images, plus Next Steps explicitly says to confirm before relying on policy.",
+          "reasoning": "The response clearly states the AccessDenied error, explicitly says the 11 expiring images could not be checked against Batch job definitions, and consistently labels them 'Expiring-Unknown' rather than describing them as unused or safe. It explicitly warns the policy 'will delete an image a running job depends on' if any job references these tags.",
+          "confidence": "high"
+        },
+        {
+          "text": "If any expiring image is in use or carries a production like tag, the response presents a concrete protective lifecycle rule (matching that tag family, with a priority lower than the existing rules) and states that the operator applies it after a preview; the agent does not apply it.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The 'Suggested Protective Rule' section provides concrete JSON lifecycle rules for 'latest', 'hotfix-*', and 'v*.*.*' tag patterns at priorities 50, 60, 70 (lower than rule 100), and states 'Apply it with aws ecr put-lifecycle-policy or the console after running a preview on the complete policy. This skill does not apply lifecycle policy changes.'",
+          "reasoning": "The response identifies that latest, hotfix-2.3.1, and v2.5.0 are production-like tags only covered by the catch-all rule, and provides a concrete protective rule with priorities (50, 60, 70) lower than the catch-all (100) but still following the existing nightly-/build-*/rc- rules' priority scheme as described. It explicitly states the operator must apply it after a preview, and the agent does not apply it itself ('This skill does not apply lifecycle policy changes.').",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not state or imply that any image in the expiring set is safe or not a concern without evidence.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Every expiring image is labeled 'Expiring-Unknown' with evidence 'no tier (a) or (b) evidence; Batch not readable' - never labeled safe. The overall bottom line says 'No, not fully safe to leave as-is.' The Attention rating and Findings table (R2, MEDIUM severity) reinforce lack of safety assurance.",
+          "reasoning": "The response consistently avoids declaring any expiring image safe; all are marked Expiring-Unknown with explicit caveats about missing evidence, and the overall verdict explicitly says not safe.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not offer to modify the lifecycle policy, delete images, or perform any write action.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"This skill does not apply lifecycle policy changes.\" and 'Apply it with aws ecr put-lifecycle-policy or the console after running a preview on the complete policy.' The Not Assessed table notes 'agent guardrail cancelled StartLifecyclePolicyPreview as a mutating action; approval was not available in this run.'",
+          "reasoning": "The response explicitly declines to apply any changes, recommending the operator run the preview and apply changes themselves, and notes that even a preview action (StartLifecyclePolicyPreview) was blocked by a guardrail requiring operator approval. No write/delete action is offered or performed by the agent.",
+          "confidence": "high"
+        },
+        {
+          "text": "No write API is reported as having been called",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 7,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 8,
+        "pass_rate": 0.875
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m10s",
+    "cost": "$3.57",
+    "context_window": {
+      "utilization": "5.9%",
+      "compaction_count": 0
+    }
+  }
+}
