@@ -171,7 +171,9 @@ Non-negotiable, at every step, in both areas:
    nothing.
 8. **Delegating.** Read this skill yourself before delegating. A credential audit is delegated only with
    [`assets/delegation-prompt.md`](assets/delegation-prompt.md), and you answer with the sub-agent's opening lines as written. Relay a
-   sub-agent's check-ids unchanged, and put the Output rule in every sub-agent prompt.
+   sub-agent's check-ids unchanged, and put the Output rule in every sub-agent prompt. After you launch
+   a sub-agent, send nothing until it returns: no "the audit is running" line. Your first text is the
+   finished answer, opening with the read-only line.
 
 Each area file adds its own numbered rules. Follow them in full.
 
