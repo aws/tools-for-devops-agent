@@ -1,0 +1,124 @@
+#!/bin/bash
+
+# Script to update MCP config file with actual Cognito client secret and real URLs
+# Usage: ./scripts/update-mcp-config.sh [profile]
+
+set -e
+
+PROFILE=${1:-default}
+CONFIG_FILE="mcp-server-config.json"
+COGNITO_STACK_NAME="PrometheusLambdaMCPCognitoStack"
+API_STACK_NAME="PrometheusLambdaMCPAPIGatewayStack"
+
+echo "🔍 Updating MCP configuration with actual client secret and URLs..."
+
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "❌ Config file $CONFIG_FILE not found. Run CDK deploy first."
+    exit 1
+fi
+
+# Auto-detect region by finding the stack across all regions
+echo "🔍 Auto-detecting deployment region..."
+REGION=""
+for region in us-east-1 us-west-2 eu-west-1 eu-west-3 ap-southeast-1 ap-northeast-1; do
+    if aws cloudformation describe-stacks --stack-name "$COGNITO_STACK_NAME" --region "$region" --profile "$PROFILE" >/dev/null 2>&1; then
+        REGION="$region"
+        echo "📋 Found stack in region: $REGION"
+        break
+    fi
+done
+
+if [ -z "$REGION" ]; then
+    echo "❌ Could not find $COGNITO_STACK_NAME in any common region"
+    echo "💡 Try specifying region: REGION=your-region ./scripts/update-mcp-config.sh $PROFILE"
+    exit 1
+fi
+
+# Get values from Cognito stack
+CLIENT_ID=$(aws cloudformation describe-stacks \
+    --stack-name "$COGNITO_STACK_NAME" \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='M2MClientId'].OutputValue" \
+    --output text)
+
+USER_POOL_ID=$(aws cloudformation describe-stacks \
+    --stack-name "$COGNITO_STACK_NAME" \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" \
+    --output text)
+
+COGNITO_DOMAIN=$(aws cloudformation describe-stacks \
+    --stack-name "$COGNITO_STACK_NAME" \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='CognitoDomain'].OutputValue" \
+    --output text)
+
+# Get values from API Gateway stack
+API_ENDPOINT=$(aws cloudformation describe-stacks \
+    --stack-name "$API_STACK_NAME" \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='MCPEndpoint'].OutputValue" \
+    --output text)
+
+if [ "$CLIENT_ID" = "None" ] || [ -z "$CLIENT_ID" ]; then
+    echo "❌ Could not retrieve Client ID from CloudFormation outputs"
+    exit 1
+fi
+
+if [ "$USER_POOL_ID" = "None" ] || [ -z "$USER_POOL_ID" ]; then
+    echo "❌ Could not retrieve User Pool ID from CloudFormation outputs"
+    exit 1
+fi
+
+if [ "$API_ENDPOINT" = "None" ] || [ -z "$API_ENDPOINT" ]; then
+    echo "❌ Could not retrieve API Endpoint from CloudFormation outputs"
+    exit 1
+fi
+
+echo "📋 Found User Pool: $USER_POOL_ID"
+echo "📋 Found Client ID: $CLIENT_ID"
+echo "📋 Found API Endpoint: $API_ENDPOINT"
+echo "📋 Found Cognito Domain: $COGNITO_DOMAIN"
+
+# Get client secret from Cognito
+echo "🔐 Retrieving client secret..."
+CLIENT_SECRET=$(aws cognito-idp describe-user-pool-client \
+    --user-pool-id "$USER_POOL_ID" \
+    --client-id "$CLIENT_ID" \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --query 'UserPoolClient.ClientSecret' \
+    --output text)
+
+if [ "$CLIENT_SECRET" = "None" ] || [ -z "$CLIENT_SECRET" ]; then
+    echo "❌ Could not retrieve client secret"
+    exit 1
+fi
+
+# Build token endpoint URL
+TOKEN_ENDPOINT="https://${COGNITO_DOMAIN}.auth.${REGION}.amazoncognito.com/oauth2/token"
+
+# Update the config file with all real values
+echo "📝 Updating configuration file..."
+jq --arg client_id "$CLIENT_ID" \
+   --arg client_secret "$CLIENT_SECRET" \
+   --arg endpoint "$API_ENDPOINT" \
+   --arg token_url "$TOKEN_ENDPOINT" \
+   '.authorization_configuration.client_id = $client_id | 
+    .authorization_configuration.client_secret = $client_secret |
+    .endpoint = $endpoint |
+    .authorization_configuration.exchange_url = $token_url |
+    .authorization_configuration.exchange_parameters[1].value = "prometheus-mcp-server/read"' \
+    "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+
+echo "✅ Successfully updated $CONFIG_FILE with actual values"
+echo "🔍 Verification:"
+echo "Client ID: $CLIENT_ID"
+echo "Client Secret: ${CLIENT_SECRET:0:8}..."
+echo "MCP Endpoint: $API_ENDPOINT"
+echo "Token Endpoint: $TOKEN_ENDPOINT"
