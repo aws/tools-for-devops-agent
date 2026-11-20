@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.5
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (4 files). Agent types: On-demand (`CHAT`). The optional observability-sources table moved to its own section, "Connecting additional observability sources (optional)". The Agent Types section says **On-demand** and **Generic** instead of **Chat tasks** and **All agents**.
+
 ## 1.0.4
 - `technical-domains` uses the approved value `Databases` instead of `Database`, so the skill is listed with the other database skills.
 - `metadata.author` is the contributor's GitHub username, `abhit-cloud`, so catalogs link to their profile.

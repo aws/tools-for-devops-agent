@@ -115,18 +115,75 @@ All three Pricing API actions are required, not just `GetProducts`. The skill sh
 
 **2. Enable CloudTrail data events for CloudWatch and X-Ray.** The Athena identity join reads `StartQueryExecution`, a management event that CloudTrail records by default within its 90-day Event History. `GetMetricData` (CloudWatch) and `BatchGetTraces` (X-Ray) are different: they reach CloudTrail only as data events, which are off by default. Enable data events for these services so CloudTrail captures that activity and the report can attribute and corroborate it for the configured role. Data events add a recording charge, so scope the selectors to the resources you measure and keep the reporting window inside the retention you configure.
 
-**3. Add the skill.** It is a single `SKILL.md` with no reference files, so any install path works: paste it into the skill form, import the directory through the GitHub integration (which re-syncs with one click), or upload a zip containing `SKILL.md` alone. Exclude `evals/` from any zip — it is far over the 100-file and 6 MB limits.
-
-```bash
-cd devops-agent-cost-insights
-zip ../devops-agent-cost-insights.zip SKILL.md
-```
+**3. Add the skill.** Follow [Uploading to AWS DevOps Agent](#uploading-to-aws-devops-agent) below.
 
 **4. Supply your Support plan.** Support credits have no Pricing API entry, so the skill applies the published tier percentages rather than resolving a rate on the run: Unified Operations 100%, Enterprise Support 75%, Business Support+ 30% of the prior month's `AWS Support` charge. Provide `SUPPORT_PLAN` and last month's `AWS Support` charge (`PRIOR_MONTH_SUPPORT_CHARGE`) if you want the credit computed; the skill derives the rate from the plan. Put them in the consuming agent's configuration for scheduled runs, or in the request itself for a one-off. Omitting them is valid, and the report then shows direct cost with no credit offset.
 
 **5. Confirm it works.** Ask a cost question in chat ("What did this Agent Space cost over the last 7 days?") to confirm the skill triggers, or run the [custom agent](../../custom-agents/devops-agent-cost-dashboard/) for a scheduled dashboard.
 
 If any of the three Pricing API actions is denied, the skill still runs. It reports measured quantities for each downstream category and marks the dollar figure *not priced: rate unavailable*, whichever of the three actions is missing: a denied `DescribeServices` or `GetAttributeValues` stops price-dimension derivation before a rate is ever requested, and a denied `GetProducts` stops the rate lookup itself. Grant all three if you want priced downstream lines.
+
+---
+
+## Uploading to AWS DevOps Agent
+
+Complete setup steps 1 and 2 in [Getting started](#getting-started) first, or add the skill as **Inactive** until they're done. You can add this skill in two ways:
+
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
+
+This skill answers cost questions an operator asks in chat, and the [cost dashboard custom agent](https://github.com/aws/tools-for-devops-agent/blob/main/custom-agents/devops-agent-cost-dashboard/) calls it by name, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add context those agents don't need.
+
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `devops-agent-cost-insights`, or filter by AWS service **AWS DevOps Agent**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to change the checks in "Step 7: Validate Before Reporting" in `SKILL.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/devops-agent-cost-insights/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f devops-agent-cost-insights.zip
+   zip -r devops-agent-cost-insights.zip devops-agent-cost-insights/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l devops-agent-cost-insights.zip | tail -1   # expect 1 file
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   devops-agent-cost-insights.zip
+   └── devops-agent-cost-insights/
+       └── SKILL.md                # required: frontmatter with name and description
+   ```
+
+   The zip leaves out `evals/`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `devops-agent-cost-insights.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ---
 

@@ -44,6 +44,68 @@ target account should have some of the following in place:
   `DataClassification`, `Compliance`. None are required for the skill to
   activate — it degrades gracefully to "no evidence found" per category.
 
+## Uploading to AWS DevOps Agent
+
+Set up the IAM permission and resource tags in [Prerequisites](#prerequisites) first, or add the skill as **Inactive** until it's done. You can add this skill in two ways:
+
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **Incident RCA** (`INCIDENT_RCA`) and **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **Incident RCA** and **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
+
+This skill adds business impact to Aurora and RDS incident investigations, during root cause analysis or when you ask in chat, so target **Incident RCA** and **On-demand**. **Generic** would load it for every agent type, incident triage and evaluation included, and add business-impact context those agents don't need.
+
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent types.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `aurora-incident-business-context`, or filter by AWS service **Amazon RDS**.
+4. Choose **Details** and check that the agent types listed are **Incident RCA** and **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to change the tag keys the skill looks for in `references/evidence-sources.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/aurora-incident-business-context/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f aurora-incident-business-context.zip
+   zip -r aurora-incident-business-context.zip aurora-incident-business-context/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l aurora-incident-business-context.zip | tail -1   # expect 2 files
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   aurora-incident-business-context.zip
+   └── aurora-incident-business-context/
+       ├── SKILL.md                          # required: frontmatter with name and description
+       └── references/
+           └── evidence-sources.md
+   ```
+
+   The zip leaves out `evals/`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `aurora-incident-business-context.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **Incident RCA** and **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
+
 ## How to use it with DevOps Agent
 
 Install the skill in your Agent Space (Investigations and/or Chat

@@ -2,6 +2,10 @@
 
 All notable changes to the `aws-fsxn-operations-review` skill are documented here.
 
+## [1.0.1] - 2026-11-19
+
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (8 files, `SKILL.md` inside the `aws-fsxn-operations-review/` folder). Agent types: **On-demand** (`CHAT`), replacing the stale `Chat tasks` label.
+
 ## [1.0.0] - 2026-10-14
 
 Initial release of the Amazon FSx for NetApp ONTAP Operational Review skill.

@@ -30,10 +30,10 @@ Output: a shareable report artifact `agentcore-observability-review-<target>-<YY
 
 ## Agent Types
 
-- **Chat tasks** — "is AgentCore observability configured correctly?", "why can't I see traces
+- **On-demand** (`CHAT`) — "is AgentCore observability configured correctly?", "why can't I see traces
   for my agent?", "set up OTEL for my agent".
 
-Select **All agents** to make it available to all agent types.
+Select **Generic** when you upload the zip to make it available to all agent types.
 
 ## Prerequisites
 
@@ -60,6 +60,72 @@ Full policy JSON: [`references/iam-tiers.md`](https://github.com/aws/tools-for-d
 CloudWatch Logs + Metrics (Tier 1, required baseline); AWS X-Ray and AgentCore control plane
 (Tier 2); Lambda / ECS / EKS (Tier 3). Source-repository file read is **not** required — code-level
 checks are prescriptive.
+
+## Uploading to AWS DevOps Agent
+
+Complete the [prerequisites](#prerequisites) first (the IAM tiers and the capability providers connected to the Agent Space), or add the skill as **Inactive** until it's done. You can add this skill in two ways:
+
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
+
+This skill runs an on-demand observability readiness check that you ask for in chat, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add setup and remediation guidance those agents don't need.
+
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `agentcore-observability-setup`, or filter by AWS service **Amazon Bedrock AgentCore**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to adjust check severities in `references/checks-catalog.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/agentcore-observability-setup/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f agentcore-observability-setup.zip
+   zip -r agentcore-observability-setup.zip agentcore-observability-setup/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l agentcore-observability-setup.zip | tail -1   # expect 6 files
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   agentcore-observability-setup.zip
+   └── agentcore-observability-setup/
+       ├── SKILL.md                          # required: frontmatter with name and description
+       └── references/
+           ├── checks-catalog.md
+           ├── iam-tiers.md
+           ├── remediation-runtime.md
+           ├── remediation-memory-gateway.md
+           └── remediation-non-runtime.md
+   ```
+
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `agentcore-observability-setup.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## Usage
 

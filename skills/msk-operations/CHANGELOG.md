@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.7 - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (7 files). Agent types: On-demand (`CHAT`), the names the web app shows, instead of `Chat tasks` and `All agents`. Removed the outdated upload constraints.
+
 ## 1.0.6
 - Added the `Streaming Data` technical domain next to `Analytics`, as `firehose-operation-review` has, so catalogs list the skill with the other streaming skills.
 - `metadata.author` is the contributor's GitHub username, `kalyanjanaki`, so catalogs link to their profile.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — 2026-11-19
+
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (7 files). Agent types: **On-demand** (`CHAT`). Removed the GitHub import option and the Asset API option, and replaced the narrower zip command with the standard one.
+
 ## 1.0.0 — 2026-10-19
 
 Initial release.

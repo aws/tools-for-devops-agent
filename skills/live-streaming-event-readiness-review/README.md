@@ -78,8 +78,8 @@ missing (see the Coverage note), so a reduced-depth run is never silent.
 | `support-cases` | SUP context | open-case risk not surfaced |
 | `investigation-cost-guardrail` | whole review | review not cost-bounded |
 
-**Install them the same way as this skill** — Import from repository (point at each
-`skills/<name>` directory in `aws/tools-for-devops-agent`) or upload each zip. See
+**Install them the same way as this skill**: add each one from the Skills Catalog,
+or upload each one as a zip (see [Uploading to AWS DevOps Agent](#uploading-to-aws-devops-agent)). See
 `references/reuse-skills.md` for the full map and invocation order.
 
 ## Prerequisites
@@ -137,35 +137,73 @@ missing (see the Coverage note), so a reduced-depth run is never silent.
 
 ## Agent types
 
-- **Chat tasks** — conversational and proactive event-readiness review.
+- **On-demand** — conversational and proactive event-readiness review.
 
 ## Uploading to AWS DevOps Agent
 
-**Option A: Import from GitHub (recommended)** — if a GitHub connection is
-configured in your Agent Space, import directly from the repository, pointing to
-the `skills/live-streaming-event-readiness-review` directory. See
-[Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills).
+Set up the read-only access and the `DevOpsAgentSkill-LiveStreamingEventReadinessReview` policy in [Prerequisites](#prerequisites) first, or add the skill as **Inactive** until it's done. You can add this skill in two ways:
 
-**Option B: Upload as a zip file**
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
 
-1. Zip the directory (allowed extensions only, excluding dev tooling):
+This review runs weeks before an event and isn't an event-day incident tool, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add context those agents don't need.
+
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `live-streaming-event-readiness-review`, or filter by AWS service **Amazon CloudFront**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to adjust checks or severities in `references/best-practices.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/live-streaming-event-readiness-review/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
 
    ```bash
-   cd skills
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f live-streaming-event-readiness-review.zip
    zip -r live-streaming-event-readiness-review.zip live-streaming-event-readiness-review/ \
-     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' \
-     -x '*/.git/*' '*/evals/*' '*/.skilleval.yaml' '*/CHANGELOG.md' '*/README.md' '*.DS_Store'
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l live-streaming-event-readiness-review.zip | tail -1   # expect 6 files
    ```
 
-2. In the AWS DevOps Agent web app, go to the **Skills** page.
-3. Click **Add skill** → **Upload skill**.
-4. Drag and drop the zip (max 6 MB).
-5. Select the agent type: **Chat tasks**.
-6. Click **Upload**.
+2. Check that the zip has this structure:
 
-**Option C: Upload via the Asset API** — assign the skill to the `CHAT` agent
-type. See
-[Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end).
+   ```text
+   live-streaming-event-readiness-review.zip
+   └── live-streaming-event-readiness-review/
+       ├── SKILL.md                          # required: frontmatter with name and description
+       └── references/
+           ├── best-practices.md             # 9 pillars, 61 canonical checks
+           ├── discovery.md
+           ├── remediations.md
+           ├── report-format.md
+           └── reuse-skills.md
+   ```
+
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `live-streaming-event-readiness-review.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## How to use this skill
 

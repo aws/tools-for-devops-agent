@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.4] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (3 files). Agent types: **On-demand** (`CHAT`). The zip now keeps the `bedrock-operation-review/` folder, as the standard command builds it, instead of putting `SKILL.md` at the archive root. The Agent Types section now says **On-demand** and **Generic** instead of "Chat tasks" and "All agents".
+
 ## [1.0.3] - 2026-11-10
 - `technical-domains` uses `AI/ML` instead of `Machine Learning` and `GenAI`, so catalogs list every AI skill under one domain.
 - `metadata.author` is the contributor's GitHub username, `sean-nixon`, so catalogs link to their profile.

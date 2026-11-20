@@ -27,7 +27,7 @@ enable_tools:
   - dx-resilience-mcp_analyze_vif_resilience
   - dx-resilience-mcp_compare_prefix_sets
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   author: abed-kayyali
   summary: Audit Layer-3 failover coverage across redundant Direct Connect VIFs — deterministic BGP prefix-symmetry analysis in both directions.
   aws-devops-agent-skills.agent-types: "CHAT"

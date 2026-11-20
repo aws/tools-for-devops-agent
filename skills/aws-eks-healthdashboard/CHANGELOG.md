@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- README: replaced "Packaging" with "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (14 files, `SKILL.md` inside the `aws-eks-healthdashboard/` folder). Agent types: **On-demand** (`CHAT`).
+
 ## 1.0.1
 
 - Added `aws-services` (`Amazon EKS`) and `technical-domains` (`Containers, Observability`), so catalogs list the skill under EKS and those domains.

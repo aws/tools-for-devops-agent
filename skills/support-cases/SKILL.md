@@ -12,7 +12,7 @@ description: ALWAYS use this skill in the beginning of any incident investigatio
   patterns that inform the current investigation.
 metadata:
   author: udid-aws
-  version: "1.0.1"
+  version: "1.0.2"
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
   aws-devops-agent-skills.aws-services: "AWS Support"
   aws-devops-agent-skills.technical-domains: "Operations"

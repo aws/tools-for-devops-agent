@@ -9,7 +9,7 @@ description: >
   incident summary, even if the user doesn't name the database.
 metadata:
   author: maayushii
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Adds business impact (dependent services, downtime cost, compliance exposure, recent changes) to Aurora/RDS incident investigations."
   aws-devops-agent-skills.agent-types: "INCIDENT_RCA, CHAT"
   aws-devops-agent-skills.aws-services: "Amazon RDS, AWS Config, AWS CloudTrail"

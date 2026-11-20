@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.1.6] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (3 files). Agent types: On-demand (`CHAT`). Replaced the old in-folder zip steps and the "All agents" advice with these; the note that a custom agent's **Skills** picker may need the skill uploaded as **Generic** is kept in the agent-type paragraph. The Agent Types section and the usage heading say **On-demand** instead of **Chat tasks**.
+
 ## [1.1.5] - 2026-10-22
 - Updated the link to the skill IAM policies template, which moved to `cloudformation/devops-agent-skill-policies/`.
 

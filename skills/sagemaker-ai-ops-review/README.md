@@ -94,59 +94,74 @@ Latency and Stale Endpoint checks read `AWS/SageMaker` CloudWatch metrics, which
 
 ## Agent Types
 
-**Chat tasks**. The skill is intended for on-demand and scheduled review runs, not live incident response — for SageMaker access failures during an incident, use the `aiml-access-diagnostics` skill instead.
+**On-demand**. The skill is intended for on-demand and scheduled review runs, not live incident response — for SageMaker access failures during an incident, use the `aiml-access-diagnostics` skill instead.
 
 ## Uploading to AWS DevOps Agent
 
-> Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
+Complete the [prerequisites](#prerequisites) first, including the optional `savingsplans:DescribeSavingsPlans` permission, or add the skill as **Inactive** until it's done. You can add this skill in two ways:
 
-### 1. Package the skill
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
 
-Build the archive from **inside** the skill directory so `SKILL.md` sits at the archive root — nesting it under a subdirectory causes `Failed to get skill resource` errors at load time:
+This skill runs on-demand and scheduled reviews and isn't meant for live incident response, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add context those agents don't need. For SageMaker AI access failures during an incident, use [`aiml-access-diagnostics`](../aiml-access-diagnostics/) instead. If you run the review from the [`aws-operation-review`](../../custom-agents/aws-operation-review/) custom agent and the skill doesn't appear in its **Skills** picker, upload it with Option B and leave **Generic** selected.
 
-```bash
-cd skills/sagemaker-ai-ops-review
-zip -qrD ../sagemaker-ai-ops-review.zip . \
-  -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*' '.DS_Store' '*/.DS_Store'
-```
+### Option A: Add from the Skills Catalog (recommended)
 
-The `.DS_Store` exclusions matter on macOS: Finder metadata is not covered by `.gitignore` as far as
-`zip` is concerned, and without them an 8 KB `.DS_Store` lands at the archive root alongside
-`SKILL.md`. Verify the archive contents before uploading:
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
 
-```bash
-unzip -l ../sagemaker-ai-ops-review.zip
-```
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `sagemaker-ai-ops-review`, or filter by AWS service **Amazon SageMaker AI**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
 
-The resulting `sagemaker-ai-ops-review.zip` contains:
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
 
-```
-SKILL.md                    # frontmatter + skill instructions (required, at root)
-references/
-├── pillar-checks.md        # the authoritative 20 check definitions
-└── iam-policy.json         # sample add-on policy (savingsplans:DescribeSavingsPlans)
-```
+### Option B: Upload as a zip file (customizable)
 
-`README.md`, `CHANGELOG.md`, `.skilleval.yaml`, and `evals/` are excluded — they are repo and offline-evaluation artifacts, not part of the runtime skill.
+Use this option to change the skill, for example to change a check's thresholds or severity mapping in `references/pillar-checks.md`, or to choose different agent types.
 
-Constraints enforced at upload time:
+1. Clone the repository, make your changes under `skills/sagemaker-ai-ops-review/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
 
-- Total zip size ≤ **6 MB**.
-- `SKILL.md` is required and must include `name` and `description` frontmatter.
-- A `scripts/` directory is **not** allowed — uploads containing scripts are rejected.
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f sagemaker-ai-ops-review.zip
+   zip -r sagemaker-ai-ops-review.zip sagemaker-ai-ops-review/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l sagemaker-ai-ops-review.zip | tail -1   # expect 3 files
+   ```
 
-### 2. Upload via the Operator Web App
+2. Check that the zip has this structure:
 
-1. Navigate to the **Skills** page in your Agent Space Operator Web App.
-2. Choose **Add skill** → **Upload skill**.
-3. Drag and drop `sagemaker-ai-ops-review.zip` (or browse to it).
-4. Select agent type: **All agents**. This matters: narrowing the skill to **Chat tasks** can keep it out of a custom agent's skill picker entirely, leaving the agent with no checks to run. Narrow the agent types only if you are driving the skill from Chat alone.
-5. Review the validation results.
-6. Choose **Upload**.
+   ```text
+   sagemaker-ai-ops-review.zip
+   └── sagemaker-ai-ops-review/
+       ├── SKILL.md                    # required: frontmatter with name and description
+       └── references/
+           ├── pillar-checks.md        # the 20 check definitions
+           └── iam-policy.json         # sample add-on policy (savingsplans:DescribeSavingsPlans)
+   ```
+
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `sagemaker-ai-ops-review.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## How to Use This Skill
 
-### Chat tasks
+### On-demand
 
 Operational Readiness Review before a production launch — the primary use case:
 

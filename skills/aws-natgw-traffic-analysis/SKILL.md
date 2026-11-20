@@ -2,7 +2,7 @@
 name: aws-natgw-traffic-analysis
 description: 'Use this skill when a user wants to understand what traffic is going through an AWS NAT Gateway, why it takes that path, or how to reduce NAT Gateway cost - for example "why is my NAT Gateway bill so high", "what is going through my NAT Gateway", traffic leaving through NAT instead of over peering or a VPC endpoint, EKS, ECS, or other private-subnet workloads sending heavy AWS API, container image, or S3 traffic through NAT, S3 traffic still hitting NAT even though a Gateway Endpoint exists, whether Gateway or Interface Endpoints are actually being used, customer-owned or BYOIP public IPs appearing as NAT destinations, estimating how much fixing NAT traffic would save, which flow logs to use for NAT analysis, or before recommending a Cross-Region S3 Interface Endpoint. Also use it when the user shares or points to NAT Gateway VPC Flow Logs, or asks which resource or service is behind a NAT Gateway destination IP. Read-only and advisory: reports traffic in GB and percent and never changes resources.'
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   author: abitnar1
   summary: "Traces AWS NAT Gateway traffic from flow logs to find endpoint, peering, and cross-region paths that bypass NAT. Read-only, GB and percent only."
   aws-devops-agent-skills.agent-types: "CHAT"

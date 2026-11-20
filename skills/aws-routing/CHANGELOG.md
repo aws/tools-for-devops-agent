@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.8] - 2026-11-19
+### Changed
+- README: added "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (6 files). Agent types: **On-demand** (`CHAT`) and **Incident RCA** (`INCIDENT_RCA`). The README had no upload section before.
+
 ## [1.2.7] - 2026-11-17
 ### Changed
 - `SKILL.md`: added `aws-services` (`AWS Cloud WAN, AWS Direct Connect, AWS Transit Gateway, Amazon VPC`) and `technical-domains` (`Networking`), so catalogs list the skill under the services whose routing it explains and under Networking.

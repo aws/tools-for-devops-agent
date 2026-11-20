@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.4
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (1 file). Agent types: Incident Triage (`INCIDENT_TRIAGE`). Removed the GitHub import option, the GitHub-connection note, and the Asset API option.
+
 ## 1.0.3
 - Added `aws-services` (`AWS Lambda, Amazon SQS, Amazon Aurora DSQL`) and `technical-domains` (`Operations, Observability`), so catalogs list the skill under the services its description names and under those domains.
 

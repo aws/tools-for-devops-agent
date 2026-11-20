@@ -2,6 +2,9 @@
 
 All notable changes to this skill are documented here. New entries go at the top.
 
+## [1.0.5] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (6 files). Agent types: On-demand (`CHAT`), Incident RCA (`INCIDENT_RCA`). Removed the GitHub import and Asset API options. The Agent Types and usage sections say **On-demand** instead of **Chat tasks** and **Generic** instead of **All agents**.
+
 ## [1.0.4] - 2026-11-10
 - `metadata.author` is the contributor's GitHub username, `howard-m-k`, so catalogs link to their profile.
 

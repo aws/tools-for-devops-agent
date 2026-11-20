@@ -6,7 +6,7 @@ description: Skip low-priority incidents during a scheduled maintenance window.
   expected disruptions.
 metadata:
   author: dgorin6
-  version: "1.0.3"
+  version: "1.0.4"
   aws-devops-agent-skills.agent-types: "INCIDENT_TRIAGE"
   aws-devops-agent-skills.technical-domains: "Operations"
 ---
