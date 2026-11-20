@@ -557,6 +557,29 @@ class LimitsAndTierTests(CheckSkillTestCase):
             with self.subTest(bad=bad):
                 self.assertOneError(tree(skill_md(frontmatter_with(tier=bad))), '"metadata.tier" must be')
 
+    def test_read_skill_tier_returns_the_tier_or_none(self):
+        self.assertEqual(sc.read_skill_tier(skill_md(frontmatter_with(tier='"partner-managed"'))), "partner-managed")
+        self.assertEqual(sc.read_skill_tier(skill_md(frontmatter_with(tier="aws-managed"))), "aws-managed")
+        self.assertIsNone(sc.read_skill_tier(skill_md()))
+        self.assertIsNone(sc.read_skill_tier(skill_md("name: demo-skill\n")))
+
+    def test_read_skill_tier_refuses_what_it_cannot_read(self):
+        unreadable = {
+            "not UTF-8": b"---\nname: \xff\n---\n",
+            "no frontmatter": b"# Demo\n",
+            "no closing line": b"---\nname: demo-skill\n",
+            "empty frontmatter": b"---\n---\n",
+            "not a mapping": skill_md("- demo-skill\n"),
+            "an alias": skill_md(frontmatter_with(tier="*anchor")),
+            "a repeated key": skill_md(frontmatter_with(tier='"aws-managed"') + '  tier: "partner-managed"\n'),
+            "a tier that is not text": skill_md(frontmatter_with(tier="1")),
+            "a tier with no value": skill_md(frontmatter_with(tier="")),
+        }
+        for name, content in unreadable.items():
+            with self.subTest(name):
+                with self.assertRaises(ValueError):
+                    sc.read_skill_tier(content)
+
     def test_spec_text_fields_must_not_be_empty(self):
         for key in ("license", "compatibility", "allowed-tools"):
             with self.subTest(key=key):

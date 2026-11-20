@@ -1,0 +1,58 @@
+[
+  {
+    "agentSpaceId": "e2a71307-6961-4ec1-bd76-a458a2b12783",
+    "executionId": "0d2beaf1-83c0-4a3a-b1fb-8eaca7601d88",
+    "recordId": "c7cc70b8-ef1f-4747-b15b-e28475bd7493",
+    "content": "{\"id\": \"de95f173-848f-4a1e-8a5e-0e96414bf6e3\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"Review EC2 stop runbook before release\"}]}",
+    "createdAt": "2026-11-19T11:20:43.376000-08:00",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "e2a71307-6961-4ec1-bd76-a458a2b12783",
+    "executionId": "0d2beaf1-83c0-4a3a-b1fb-8eaca7601d88",
+    "recordId": "55efe466-69f0-4e8a-8e44-2c3be6391538",
+    "content": "{\"id\": \"55efe466-69f0-4e8a-8e44-2c3be6391538\", \"role\": \"user\", \"content\": [{\"text\": \"Check this runbook before release:\\n\\n```yaml\\nschemaVersion: '0.3'\\ndescription: Stops an EC2 instance.\\nassumeRole: '{{AutomationAssumeRole}}'\\nparameters:\\n  AutomationAssumeRole:\\n    type: AWS::IAM::Role::Arn\\n  InstanceId:\\n    type: String\\n    allowedPattern: '^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$'\\n  KeyName:\\n    type: String\\n    allowedPattern: '^[A-Za-z0-9._-]{1,255}$'\\nmainSteps:\\n  - name: StopInstance\\n    action: aws:changeInstanceState\\n    inputs:\\n      InstanceIds: ['{{InstanceId}}']\\n      DesiredState: stopped\\n```\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-19T11:20:43.720000-08:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "e2a71307-6961-4ec1-bd76-a458a2b12783",
+    "executionId": "0d2beaf1-83c0-4a3a-b1fb-8eaca7601d88",
+    "recordId": "3859248d-edb0-4a1d-82b5-ff8e62893649",
+    "content": "{\"id\": \"e9664835-2281-432e-92f2-b35c3dbdf531\", \"role\": \"assistant\", \"block_type\": \"thinking\", \"content\": [{\"type\": \"text\", \"text\": \"I'm reviewing this SSM Automation document, checking that the aws:changeInstanceState inputs like InstanceIds and DesiredState are correctly specified, and I'm spotting that a KeyName parameter is declared but appears unused.\\n\\nOther issues I'm noting: missing parameter descriptions, no timeout or onFailure settings, no Force flag for graceful stop handling, minimal top-level description, and the possibility that instances in an ASG could get replaced on stop. I also want to flag that the AutomationAssumeRole likely needs ec2:StopInstances and ec2:DescribeInstanceStatus permissions, though I'll hedge that since I'm not fully certain. I'll respond with the corrected YAML and these notes without needing any tools.\\n\\n\"}]}",
+    "createdAt": "2026-11-19T11:20:52.236000-08:00",
+    "recordType": "thinking"
+  },
+  {
+    "agentSpaceId": "e2a71307-6961-4ec1-bd76-a458a2b12783",
+    "executionId": "0d2beaf1-83c0-4a3a-b1fb-8eaca7601d88",
+    "recordId": "9802f39f-2587-452e-b1ae-6c99cbf3274f",
+    "content": "{\"id\": \"e6c2a0b4-6d3f-4b5e-a7e9-ec720179baf3\", \"role\": \"assistant\", \"block_type\": \"thinking_duration\", \"content\": [{\"type\": \"text\", \"text\": \"5380\"}]}",
+    "createdAt": "2026-11-19T11:20:52.282000-08:00",
+    "recordType": "thinking_duration"
+  },
+  {
+    "agentSpaceId": "e2a71307-6961-4ec1-bd76-a458a2b12783",
+    "executionId": "0d2beaf1-83c0-4a3a-b1fb-8eaca7601d88",
+    "recordId": "4e54304a-d767-47d2-81f5-95c214186a7d",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 4.3, \"compaction_count\": 0}}}",
+    "createdAt": "2026-11-19T11:20:55.292000-08:00",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "e2a71307-6961-4ec1-bd76-a458a2b12783",
+    "executionId": "0d2beaf1-83c0-4a3a-b1fb-8eaca7601d88",
+    "recordId": "70b9ab55-ec50-40e9-8484-857104d3b71b",
+    "content": "{\"id\": \"70b9ab55-ec50-40e9-8484-857104d3b71b\", \"role\": \"assistant\", \"content\": [{\"text\": \"The runbook is valid and should work, but I'd fix one thing before release.\\n\\n**Fix before release**\\n- **`KeyName` is never used.** No step references `{{KeyName}}`, and it has no default, so Automation will require every caller to supply it. That's a pointless required input, and it could confuse operators or break callers who don't pass it. Remove it, or add a default if an existing caller already passes it.\\n\\n**Worth considering**\\n- **Parameter descriptions.** None of the parameters have one. Adding them makes the document easier to run from the console.\\n- **`InstanceId` type.** `AWS::EC2::Instance::Id` gives you built-in validation and a console picker. Your regex is correct, so this is optional.\\n- **Timeout and failure handling.** The step has no `timeoutSeconds` or `onFailure`. A stop that hangs would block until the default timeout.\\n- **`Force`.** `aws:changeInstanceState` supports `Force: true`. Leave it unset if you want graceful stops only.\\n- **Description.** It's the bare minimum. Mention that instance-store data is lost on stop, and that instances in an Auto Scaling group may be replaced.\\n- **IAM permissions.** The `AutomationAssumeRole` needs `ec2:StopInstances` and `ec2:DescribeInstanceStatus`. I haven't checked this against the current docs, so confirm it. Scope the role to the instances you intend to stop, for example with tag conditions.\\n\\n**Suggested version**\\n```yaml\\nschemaVersion: '0.3'\\ndescription: >-\\n  Stops an EC2 instance. Data on instance store volumes is lost on stop, and\\n  instances in an Auto Scaling group may be replaced.\\nassumeRole: '{{AutomationAssumeRole}}'\\nparameters:\\n  AutomationAssumeRole:\\n    type: AWS::IAM::Role::Arn\\n    description: (Required) Role Automation assumes to stop the instance.\\n  InstanceId:\\n    type: String\\n    description: (Required) ID of the instance to stop.\\n    allowedPattern: '^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$'\\nmainSteps:\\n  - name: StopInstance\\n    action: aws:changeInstanceState\\n    timeoutSeconds: 600\\n    onFailure: Abort\\n    inputs:\\n      InstanceIds: ['{{InstanceId}}']\\n      DesiredState: stopped\\n```\\n\\nI only reviewed the YAML. I haven't checked the IAM role or run the document. A dry run on a non-production instance is a good last check. If you want, I can look at the role or other runbooks in your account.\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-19T11:20:55.334000-08:00",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "e2a71307-6961-4ec1-bd76-a458a2b12783",
+    "executionId": "0d2beaf1-83c0-4a3a-b1fb-8eaca7601d88",
+    "recordId": "809e6a11-f682-4e34-9a01-cad01022d705",
+    "content": "{\"id\": \"e6916af1-a1a5-45dd-b9f3-a323ab700b76\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"The runbook is valid and should work, but I'd fix one thing before release.\\n\\n**Fix before release**\\n- **`KeyName` is never used.** No step references `{{KeyName}}`, and it has no default, so Automation will require every caller to supply it. That's a pointless required input, and it could confuse operators or break callers who don't pass it. Remove it, or add a default if an existing caller already passes it.\\n\\n**Worth considering**\\n- **Parameter descriptions.** None of the parameters have one. Adding them makes the document easier to run from the console.\\n- **`InstanceId` type.** `AWS::EC2::Instance::Id` gives you built-in validation and a console picker. Your regex is correct, so this is optional.\\n- **Timeout and failure handling.** The step has no `timeoutSeconds` or `onFailure`. A stop that hangs would block until the default timeout.\\n- **`Force`.** `aws:changeInstanceState` supports `Force: true`. Leave it unset if you want graceful stops only.\\n- **Description.** It's the bare minimum. Mention that instance-store data is lost on stop, and that instances in an Auto Scaling group may be replaced.\\n- **IAM permissions.** The `AutomationAssumeRole` needs `ec2:StopInstances` and `ec2:DescribeInstanceStatus`. I haven't checked this against the current docs, so confirm it. Scope the role to the instances you intend to stop, for example with tag conditions.\\n\\n**Suggested version**\\n```yaml\\nschemaVersion: '0.3'\\ndescription: >-\\n  Stops an EC2 instance. Data on instance store volumes is lost on stop, and\\n  instances in an Auto Scaling group may be replaced.\\nassumeRole: '{{AutomationAssumeRole}}'\\nparameters:\\n  AutomationAssumeRole:\\n    type: AWS::IAM::Role::Arn\\n    description: (Required) Role Automation assumes to stop the instance.\\n  InstanceId:\\n    type: String\\n    description: (Required) ID of the instance to stop.\\n    allowedPattern: '^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$'\\nmainSteps:\\n  - name: StopInstance\\n    action: aws:changeInstanceState\\n    timeoutSeconds: 600\\n    onFailure: Abort\\n    inputs:\\n      InstanceIds: ['{{InstanceId}}']\\n      DesiredState: stopped\\n```\\n\\nI only reviewed the YAML. I haven't checked the IAM role or run the document. A dry run on a non-production instance is a good last check. If you want, I can look at the role or other runbooks in your account.\"}]}",
+    "createdAt": "2026-11-19T11:20:55.378000-08:00",
+    "recordType": "final_response"
+  }
+]

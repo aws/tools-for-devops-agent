@@ -604,6 +604,15 @@ pull request that removes a connector needs no `contact_email`. A connector is a
 definition, not a tool, so no other checklist item applies unless the pull request
 also changes a skill.
 
+A pull request that changes a partner-managed skill, one whose `SKILL.md` sets
+`metadata.tier: "partner-managed"` on `main` or in the pull request, needs an
+approving review of its latest commit from a code owner of `/connectors/`
+([`.github/CODEOWNERS`](.github/CODEOWNERS)). Until then the
+`check-partner-skill-approval` check fails. An approval of an earlier commit doesn't
+count, so a push after the approval needs a new one. A review doesn't start the
+check again, so after the approval a maintainer re-runs the job. The check is
+advisory until an admin adds it to the required status checks for `main`.
+
 **Revising the terms (maintainers).** AWS Legal approves the new text and updates
 its record of the terms. One pull request then updates `TERMS.md`, its
 `Date last updated`, and the version named in the pull request template's terms
