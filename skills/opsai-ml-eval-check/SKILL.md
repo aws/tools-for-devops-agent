@@ -36,6 +36,11 @@ Every assessment is grounded in the check catalog [checks-evaluation.md](referen
 
 The read-only calls are the `bedrock` evaluation describe/list/get calls and the SageMaker training-job describe calls in [collection-reference.md](references/collection-reference.md) (load with any Router row), and the invocation-log and metric reads in [metrics-and-logs.md](references/metrics-and-logs.md) (load before any log query or metric read). It never mutates a resource. `bedrock:ApplyGuardrail` is not a collection call, is billable, and is never called.
 
+**Answer in this chat.** Run this skill's read-only checks and answer here. Do not stop to offer
+an investigation or to ask whether to keep going, and do not send an interim status line: the first
+text you send is the finished answer. Ask the user only when an input the checks need is missing (for
+example which Region or resource), and give what you can answer without it in the same reply.
+
 ## When to Use
 
 Activate this skill when the user:

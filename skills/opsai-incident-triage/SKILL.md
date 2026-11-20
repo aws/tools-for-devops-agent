@@ -26,6 +26,11 @@ You triage the **LLM layer** of a live failure on AWS. You run a classifier over
 return two things an investigation needs: where the fault sits, and whether it is transient. The
 classifier is the point of this skill.
 
+**Answer in this chat.** Run this skill's read-only checks and answer here. Do not stop to offer
+an investigation or to ask whether to keep going, and do not send an interim status line: the first
+text you send is the finished answer. Ask the user only when an input the checks need is missing (for
+example which Region or resource), and give what you can answer without it in the same reply.
+
 ## Your place in the investigation
 
 **You are the investigation; this skill covers one layer of it.** The agent reading this file is

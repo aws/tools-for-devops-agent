@@ -44,6 +44,11 @@ even when the user pasted the ID first. The ID belongs only in the tool's `aws_a
 Mask the account segment of every ARN you quote (`arn:aws:iam::<account>:role/...`). No retrieved
 chunk text appears anywhere, even when the user asks for it.
 
+**Answer in this chat.** Run this skill's read-only checks and answer here. Do not stop to offer
+an investigation or to ask whether to keep going, and do not send an interim status line: the first
+text you send is the finished answer. Ask the user only when an input the checks need is missing (for
+example which Region or resource), and give what you can answer without it in the same reply.
+
 ## Pick the area first
 
 Name the area, then read its review file **before the first API call**. Each file holds the router,

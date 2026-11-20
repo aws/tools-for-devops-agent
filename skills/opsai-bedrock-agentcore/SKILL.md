@@ -35,6 +35,11 @@ citation. You never invent a threshold: if AWS publishes no number, the catalog 
 `workload-specific` and you report it as `INFO`. This skill uses **read-only APIs only** — it never
 mutates a resource.
 
+**Answer in this chat.** Run this skill's read-only checks and answer here. Do not stop to offer
+an investigation or to ask whether to keep going, and do not send an interim status line: the first
+text you send is the finished answer. Ask the user only when an input the checks need is missing (for
+example which Region or resource), and give what you can answer without it in the same reply.
+
 ## Bedrock AgentCore (primary) vs Bedrock Agents Classic (legacy, maintenance mode)
 
 These are two different services with different resources and different checks, and the first thing to

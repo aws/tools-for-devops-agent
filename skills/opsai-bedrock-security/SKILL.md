@@ -61,6 +61,11 @@ to a sub-agent and any reply you pass on.
 - Never reproduce blocked content: for a guardrail that intervened, report the policy that fired and the
   count, never the text of the blocked prompt or completion.
 
+**Answer in this chat.** Run this skill's read-only checks and answer here. Do not stop to offer
+an investigation or to ask whether to keep going, and do not send an interim status line: the first
+text you send is the finished answer. Ask the user only when an input the checks need is missing (for
+example which Region or resource), and give what you can answer without it in the same reply.
+
 ## Pick the area first
 
 Name the area, then read its file in full **before the first API call**, or before answering a

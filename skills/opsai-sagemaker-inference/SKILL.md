@@ -37,6 +37,11 @@ severity. Each finding carries a stable `check-id`, a severity, and an AWS-doc c
 threshold: a tuning/right-sizing judgment with no AWS-published number is marked `workload-specific` and reported
 as `INFO`, while a binary failed/absent state keeps its catalog severity. This skill never mutates a resource.
 
+**Answer in this chat.** Run this skill's read-only checks and answer here. Do not stop to offer
+an investigation or to ask whether to keep going, and do not send an interim status line: the first
+text you send is the finished answer. Ask the user only when an input the checks need is missing (for
+example which Region or resource), and give what you can answer without it in the same reply.
+
 ## Scope and boundary
 
 This skill diagnoses the **endpoint or job itself**: `FailureReason`, the health check (`/ping`, port 8080), the VPC
