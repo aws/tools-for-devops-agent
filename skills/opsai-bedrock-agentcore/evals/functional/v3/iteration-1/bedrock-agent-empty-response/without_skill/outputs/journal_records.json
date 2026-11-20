@@ -1,0 +1,58 @@
+[
+  {
+    "agentSpaceId": "544f7a8c-2de0-4d76-9771-f9b35e178c2f",
+    "executionId": "e98b908d-dc43-4559-b69b-46c2bf6031b7",
+    "recordId": "a6a4e6e3-bc87-42ba-88c1-e2702552f030",
+    "content": "{\"id\": \"a6a4e6e3-bc87-42ba-88c1-e2702552f030\", \"role\": \"user\", \"content\": [{\"text\": \"Our Bedrock agent in us-east-1 is returning empty responses in production, but when we test it in the console it works. We prepared a new version yesterday. What should we check?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-20T09:29:31.387000+05:30",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "544f7a8c-2de0-4d76-9771-f9b35e178c2f",
+    "executionId": "e98b908d-dc43-4559-b69b-46c2bf6031b7",
+    "recordId": "7782b091-bf69-42a3-bc53-29c02c980d05",
+    "content": "{\"id\": \"1cebdddd-0fb4-4970-922c-bc5d4faf5d63\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"Bedrock agent empty responses in production\"}]}",
+    "createdAt": "2026-11-20T09:29:31.499000+05:30",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "544f7a8c-2de0-4d76-9771-f9b35e178c2f",
+    "executionId": "e98b908d-dc43-4559-b69b-46c2bf6031b7",
+    "recordId": "0dbcf641-fea4-4028-8664-d846dc94b7dc",
+    "content": "{\"id\": \"0d09f806-d2d5-4ba2-abe3-f090ec2cd34d\", \"role\": \"assistant\", \"block_type\": \"thinking\", \"content\": [{\"type\": \"text\", \"text\": \"This is a guidance request, so I can answer directly but live data would help. The classic cause here is a mismatch between console testing (which uses DRAFT/TSTALIASID) and production, which relies on an alias pointed to a specific version \\u2014 if a new version was prepared but the alias wasn't updated to point to it, that would explain discrepancies like empty responses in production.\\n\\nOther common culprits I should mention: IAM permissions for model invocation and Lambda action groups, guardrails silently blocking content, improper handling of the streaming EventStream response on the client side, session/endSession logic, and deprecated foundation models.\\n\\nI could try listing agents to pinpoint their specific setup, but without an agent ID that's not very targeted. I'll just answer directly with the troubleshooting checklist and offer to investigate further if they share the agent ID.\\n\\n\"}]}",
+    "createdAt": "2026-11-20T09:29:38.854000+05:30",
+    "recordType": "thinking"
+  },
+  {
+    "agentSpaceId": "544f7a8c-2de0-4d76-9771-f9b35e178c2f",
+    "executionId": "e98b908d-dc43-4559-b69b-46c2bf6031b7",
+    "recordId": "85cc97cf-db6f-426d-8668-006324c9b608",
+    "content": "{\"id\": \"483f1048-b0b5-4fea-a8c0-b226b1ea5270\", \"role\": \"assistant\", \"block_type\": \"thinking_duration\", \"content\": [{\"type\": \"text\", \"text\": \"4414\"}]}",
+    "createdAt": "2026-11-20T09:29:38.893000+05:30",
+    "recordType": "thinking_duration"
+  },
+  {
+    "agentSpaceId": "544f7a8c-2de0-4d76-9771-f9b35e178c2f",
+    "executionId": "e98b908d-dc43-4559-b69b-46c2bf6031b7",
+    "recordId": "7beeb95f-1ca3-46d4-88f4-c7d45d2aa4b0",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 4.3, \"compaction_count\": 0}}}",
+    "createdAt": "2026-11-20T09:29:44.166000+05:30",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "544f7a8c-2de0-4d76-9771-f9b35e178c2f",
+    "executionId": "e98b908d-dc43-4559-b69b-46c2bf6031b7",
+    "recordId": "ed0bc066-724f-4ffe-8b34-244ecae37b31",
+    "content": "{\"id\": \"ed0bc066-724f-4ffe-8b34-244ecae37b31\", \"role\": \"assistant\", \"content\": [{\"text\": \"The most likely cause is the console test and production running different agent configurations. Here's what I'd check, most likely first.\\n\\n**1. Which version the alias points to**\\n- The console test window uses the **DRAFT** version (the `TSTALIASID` test alias). Production calls `InvokeAgent` with a specific alias ID, and that alias points to a fixed numbered version.\\n- Creating a version doesn't change any alias. If you prepared a new version yesterday but didn't update the production alias, production is still on the old version. If you did repoint it, the new version may be missing something that DRAFT has.\\n- Run `get_agent_alias` and look at `routingConfiguration`. Then compare the version it points to with DRAFT. Check the instructions, model, action groups, knowledge bases, and guardrail.\\n\\n**2. Version snapshot vs. DRAFT drift**\\n- A version is a snapshot taken when you created it. If you edited DRAFT after that and didn't run **Prepare**, the console reflects the edits and the version doesn't.\\n- Check that the version's action groups, Lambda ARNs, knowledge base associations, and prompt overrides match what you tested in DRAFT.\\n\\n**3. Client-side handling (a common cause of \\\"empty\\\" responses)**\\n- `InvokeAgent` returns an event stream. If the client doesn't iterate over `completion` and concatenate the `chunk.bytes` events, the result looks empty.\\n- Confirm the call uses the right `agentId`, `agentAliasId`, and a valid `sessionId`. Confirm it also decodes the bytes and handles the stream.\\n- Turn on `enableTrace=true` in production. If the trace shows orchestration steps but no final answer, the problem is on the agent side. If there are no events at all, look at the client.\\n\\n**4. Guardrails**\\n- If the alias's version has a guardrail attached, it can replace output with a blocked message or an empty string. DRAFT may have a different guardrail or none.\\n\\n**5. Permissions and dependencies that differ in production**\\n- **Agent service role:** it needs `bedrock:InvokeModel` on the model or inference profile used by that version. If you changed the model in the new version, check that model access is enabled in us-east-1. Also check that the model hasn't been deprecated.\\n- **Lambda action groups:** the Lambda resource policy must allow `bedrock.amazonaws.com` with a `SourceArn` that matches the agent. Check that the Lambda isn't erroring or returning a malformed response format. Look at its CloudWatch logs.\\n- **Knowledge base:** check that it is associated with the version and that its data source sync and vector store access still work.\\n\\n**6. Throttling and quotas**\\n- Check CloudWatch for `ThrottlingException`, or for model invocation errors around the time of the failures. Check Bedrock model invocation logging too, if you have it enabled.\\n\\n**Quick triage order**\\n1. Compare the production alias's version to the version you prepared yesterday.\\n2. Invoke production with tracing on and read the trace.\\n3. Check the Lambda and guardrail logs for that version.\\n\\nIf you give me the agent ID or alias ID, I can check the alias routing, the version's configuration against DRAFT, and recent errors in us-east-1. I can also look at the Lambda and CloudWatch logs for you.\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-20T09:29:44.208000+05:30",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "544f7a8c-2de0-4d76-9771-f9b35e178c2f",
+    "executionId": "e98b908d-dc43-4559-b69b-46c2bf6031b7",
+    "recordId": "e54315a9-0e8f-4b31-8aa5-3047117ad595",
+    "content": "{\"id\": \"64a3241b-c22c-4fea-ae02-16a3b5426ca5\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"The most likely cause is the console test and production running different agent configurations. Here's what I'd check, most likely first.\\n\\n**1. Which version the alias points to**\\n- The console test window uses the **DRAFT** version (the `TSTALIASID` test alias). Production calls `InvokeAgent` with a specific alias ID, and that alias points to a fixed numbered version.\\n- Creating a version doesn't change any alias. If you prepared a new version yesterday but didn't update the production alias, production is still on the old version. If you did repoint it, the new version may be missing something that DRAFT has.\\n- Run `get_agent_alias` and look at `routingConfiguration`. Then compare the version it points to with DRAFT. Check the instructions, model, action groups, knowledge bases, and guardrail.\\n\\n**2. Version snapshot vs. DRAFT drift**\\n- A version is a snapshot taken when you created it. If you edited DRAFT after that and didn't run **Prepare**, the console reflects the edits and the version doesn't.\\n- Check that the version's action groups, Lambda ARNs, knowledge base associations, and prompt overrides match what you tested in DRAFT.\\n\\n**3. Client-side handling (a common cause of \\\"empty\\\" responses)**\\n- `InvokeAgent` returns an event stream. If the client doesn't iterate over `completion` and concatenate the `chunk.bytes` events, the result looks empty.\\n- Confirm the call uses the right `agentId`, `agentAliasId`, and a valid `sessionId`. Confirm it also decodes the bytes and handles the stream.\\n- Turn on `enableTrace=true` in production. If the trace shows orchestration steps but no final answer, the problem is on the agent side. If there are no events at all, look at the client.\\n\\n**4. Guardrails**\\n- If the alias's version has a guardrail attached, it can replace output with a blocked message or an empty string. DRAFT may have a different guardrail or none.\\n\\n**5. Permissions and dependencies that differ in production**\\n- **Agent service role:** it needs `bedrock:InvokeModel` on the model or inference profile used by that version. If you changed the model in the new version, check that model access is enabled in us-east-1. Also check that the model hasn't been deprecated.\\n- **Lambda action groups:** the Lambda resource policy must allow `bedrock.amazonaws.com` with a `SourceArn` that matches the agent. Check that the Lambda isn't erroring or returning a malformed response format. Look at its CloudWatch logs.\\n- **Knowledge base:** check that it is associated with the version and that its data source sync and vector store access still work.\\n\\n**6. Throttling and quotas**\\n- Check CloudWatch for `ThrottlingException`, or for model invocation errors around the time of the failures. Check Bedrock model invocation logging too, if you have it enabled.\\n\\n**Quick triage order**\\n1. Compare the production alias's version to the version you prepared yesterday.\\n2. Invoke production with tracing on and read the trace.\\n3. Check the Lambda and guardrail logs for that version.\\n\\nIf you give me the agent ID or alias ID, I can check the alias routing, the version's configuration against DRAFT, and recent errors in us-east-1. I can also look at the Lambda and CloudWatch logs for you.\"}]}",
+    "createdAt": "2026-11-20T09:29:44.253000+05:30",
+    "recordType": "final_response"
+  }
+]

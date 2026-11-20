@@ -1,0 +1,82 @@
+{
+    "skill_name": "opsai-sagemaker-training",
+    "evals": [
+        {
+            "id": "training-job-failed-malformed-data",
+            "task_type": "chat",
+            "prompt": "My Nova Micro SFT+LoRA fine-tuning job on SageMaker failed and I don't know why. Can you look at the training job and tell me what went wrong and how to fix it?",
+            "expected_output": "A read-only review that reads DescribeTrainingJob for TrainingJobStatus, SecondaryStatus, and FailureReason before concluding anything. It first checks whether the job is actually Failed or is only InProgress/Pending waiting on GPU capacity (LLM-SM-TRAIN-007) and does not prescribe a config change for a job that has not failed. If the FailureReason indicates malformed or corrupt training data (a Bedrock Converse JSONL parse error, a record missing required messages/role/content keys, or the invalid-sample tolerance exceeded), it classifies the failure as a data problem (LLM-SM-TRAIN-001) rather than a capacity problem, and recommends validating and fixing the JSONL offline before resubmitting, as a command for the operator to run. It cites an LLM-SM-TRAIN check-id and redacts the account id.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads DescribeTrainingJob status, SecondaryStatus, and FailureReason rather than guessing from the word failed",
+                "The response distinguishes a data-validation failure (malformed or corrupt training data) from a capacity failure, and does not conflate the two",
+                "The response does not prescribe a config or data change if the job is actually InProgress/Pending waiting on capacity, recognizing Pending-on-capacity is not Failed",
+                "The response cites a training sub-family check-id and recommends the fix as a command for the operator to run rather than mutating any resource",
+                {
+                    "text": "At least one finding carries an LLM-SM training check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-SM-(?:TRAIN|REG)-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "capacity-vs-quota",
+            "task_type": "chat",
+            "prompt": "My SageMaker training job on a GPU instance type will not start. Is this a capacity problem or a quota problem, and what should I do?",
+            "expected_output": "A read-only review that reads both the DescribeTrainingJob FailureReason and the service-quotas value for the requested training instance type before deciding. It distinguishes InsufficientInstanceCapacity, an AWS-side capacity shortfall where the fix is to retry with backoff or try an alternate instance type / region and NOT to request a quota increase (LLM-SM-TRAIN-002), from an instance-type service quota of zero, a customer quota where the fix is to request a service-quota increase (LLM-SM-TRAIN-003). It cites the observed service-quotas value as evidence and prescribes the correct one of the two remediations as a command, without claiming both.",
+            "should_trigger": true,
+            "assertions": [
+                "The response distinguishes InsufficientInstanceCapacity (AWS-side capacity) from an instance-type service quota of zero (customer quota) as two different root causes with opposite remediations",
+                "The response reads a service-quotas value as evidence rather than assuming the cause",
+                "The response prescribes retry/alternate-instance for a capacity shortfall and a quota-increase request only for a zero quota, not both",
+                "The response cites the relevant training sub-family check-id and gives the remediation as a command for the operator to run",
+                {
+                    "text": "At least one finding carries an LLM-SM training check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-SM-(?:TRAIN|REG)-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "model-registry-approval",
+            "task_type": "chat",
+            "prompt": "We fine-tuned a model and I want to make sure the version we are serving actually went through approval in the SageMaker Model Registry. Can you check the model package approval status?",
+            "expected_output": "A read-only review that reads ListModelPackages / DescribeModelPackage for the customized artifact and reports the ModelApprovalStatus. It flags a package deployed or staged for deploy with ModelApprovalStatus PendingManualApproval or Rejected as an unapproved model being served or promoted (LLM-SM-REG-002), and recommends routing the package through the approval step and deploying only Approved versions, as a command for the operator to run. It does not call UpdateModelPackage or any mutating API itself, cites an LLM-SM-REG check-id, and redacts the account id.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the model package ModelApprovalStatus rather than assuming approval",
+                "The response flags a PendingManualApproval or Rejected package being served or promoted as a finding and recommends deploying only Approved versions",
+                "The response recommends the remediation as a command for the operator to run and does not call UpdateModelPackage or any mutating API itself",
+                {
+                    "text": "At least one finding carries an LLM-SM registry check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-SM-(?:TRAIN|REG)-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "negative-sagemaker-eval-failed",
+            "task_type": "chat",
+            "prompt": "Our SageMaker evaluation job for the fine-tuned Nova model failed with a bad eval dataset path. What should we fix?",
+            "should_trigger": false
+        }
+    ]
+}
