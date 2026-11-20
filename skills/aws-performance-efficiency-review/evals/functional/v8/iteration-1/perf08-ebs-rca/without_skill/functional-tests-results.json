@@ -1,0 +1,109 @@
+{
+  "version": "v8",
+  "iteration": 1,
+  "eval_id": "perf08-ebs-rca",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies that worker-a's data disk (<volume-id>) is provisioned at only 125 MiB/s throughput (gp3), causing it to cap out under the increased afternoon load (producer rate rising from 90/15min to 1,080/15min at 12:00 UTC), making worker-a's jobs ~3x slower than worker-b's (which has a 500 MiB/s disk). This matches the expected root cause precisely: same disk (<volume-id>), same throughput value (125 MiB/s), same comparison to worker-b's 500 MiB/s disk, same timing (12:00 UTC producer rate increase), same job slowdown ratio (~3x, ~32s vs ~10.8s), and the same conclusion that combined capacity falls short of demand causing the backlog. The investigation also appropriately ruled out CPU (low on both) and noted IOPS well under 3000, consistent with the expected reasoning that CPU/IOPS/instance are not the limiting factors. The fix proposed (raising WorkerADataDiskMiBps to 500) matches the expected fix (raise to at least ~400 MiB/s).",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause is worker-a's data disk (perf-demo-08-data-a) held at its provisioned throughput (125 MiB/s) in the afternoon, separated from the symptoms (job duration on worker-a, queue backlog, age of the oldest message) and not attributed to CPU, the arrival rate or the instance",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Root Cause section: 'worker-a data disk provisioned at only 125 MiB/s (WorkerADataDiskMiBps=125)' is separated from symptom 'perf-demo-08-jobs queue backlog' via 'Cascades to: symptom-queue-backlog' and 'finding-worker-a-ebs-throughput-cap', and explicitly states 'CPU is low on both instances (A ~0.9%, B ~2.7%)' ruling out CPU, and attributes the trigger to arrival rate separately ('Producer rate rose 12x at 12:00... That plateau marks the workers' combined processing capacity') while the root cause itself is the disk cap, not the instance type (both are same c7g.4xlarge).",
+          "reasoning": "The output clearly states the disk throughput cap as root cause, distinct from symptoms, and explicitly notes CPU is low (ruling out CPU) and treats arrival rate as a separate trigger.",
+          "confidence": "high"
+        },
+        {
+          "text": "Evidence reads both data disks' configuration and compares worker-a's measured disk bytes per second (VolumeWriteBytes plus VolumeReadBytes) with its provisioned throughput, with at least one saturation signal (VolumeThroughputExceededCheck, VolumeQueueLength or VolumeIdleTime)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Supporting Observations: 'Data-disk throughput differs between workers: Both data disks are gp3, 16 GiB, 3000 IOPS... worker-a's DataDiskA... is set to 125 MiB/s, while worker-b's DataDiskB... is set to 500 MiB/s.' and 'Read+write throughput on DataDiskA... has held flat at 125.07 MiB/s since 12:30. That equals its provisioned 125 MiB/s, at ~500 IOPS (well under 3000). DataDiskB... runs at ~378 MiB/s against a 500 MiB/s cap... VolumeThroughputExceededCheck returned no datapoints.'",
+          "reasoning": "The output reads both disks' config, compares worker-a's measured throughput to its provisioned cap, and references VolumeThroughputExceededCheck as a saturation signal (though it returned no datapoints, it was checked).",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation uses perf-demo-08-worker-b as the control (same launch template, code, settings, queue and job shape, higher disk throughput), compares the same metrics on both, and rules out the code, payload, queue and producer",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'worker-a jobs take ~3x longer than worker-b jobs: Worker logs (/perf-demo-08/workers) at 15:00 UTC: worker-a jobs take ~32\u201334 s... worker-b jobs take ~10.8 s... for the same 256 MiB write+read.' Also 'Both instances are c7g.4xlarge in us-east-1a and run release r2026.10 from launch template lt-05be106212f404aad v1.' and 'Both workers run 8 slots (config: slots=8, file_mib=256, chunk_ms=20, release r2026.10).'",
+          "reasoning": "The investigation uses worker-b as control with same launch template, release, slots, job shape, and higher disk throughput, comparing job duration and disk metrics on both. It also implicitly rules out code/payload/queue/producer by showing producer rate and worker config identical, with disk throughput as the differentiator.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation applies a magnitude check with arithmetic: bytes per job (about 512 MiB) from disk bytes against completed jobs, worker-a's jobs per minute times bytes per job matching the provisioned throughput, and the predicted job duration against the measured one, or the served rate (about 60 a minute) against the arrival rate (about 72 a minute)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'worker-a's jobs slow to ~32 s versus ~10.8 s on worker-b' and 'Together the workers delete only ~885 jobs per 15 min against 1,080 sent' and '~59/min' vs '~88.8/min' capacity, but does not show explicit arithmetic deriving bytes per job (~512 MiB) from disk bytes/completed jobs, nor compute worker-a's jobs/min times bytes/job matching provisioned throughput, nor predicted vs measured duration via that calculation.",
+          "reasoning": "While there are numbers like job duration, disk throughput, and rates, the specific magnitude-check arithmetic connecting bytes/job to provisioned throughput and predicted duration is not explicitly shown in the text provided.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The instance-level EBS limit and IOPS are checked and ruled out on both workers",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output mentions IOPS: 'at ~500 IOPS (well under 3000)' for worker-a, and 'Both data disks are gp3, 16 GiB, 3000 IOPS' but does not explicitly check or rule out instance-level EBS throughput/IOPS limits (e.g., EBS-optimized instance bandwidth) for c7g.4xlarge on both workers.",
+          "reasoning": "IOPS at the volume level is checked, but there's no explicit mention of instance-level EBS bandwidth limits being checked and ruled out separately from volume-level throughput.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Low CPU is reported as consistent with waiting on the disk, not as spare capacity, and no downsizing is recommended",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'CPU is low on both instances (A ~0.9%, B ~2.7%)' is listed as a supporting observation under the disk-cap cause, implying CPU is low because workers wait on disk, not spare capacity; no downsizing recommendation appears anywhere in the output; the fix proposed is 'raising WorkerADataDiskMiBps' not downsizing.",
+          "reasoning": "CPU is mentioned as low but contextualized within the disk-bound finding, and the fix recommended is disk throughput increase, not downsizing, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any configuration change at about 12:00 (release label or log level on both workers), if found, is ruled out by scope or history and not by timing alone",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'Both workers run 8 slots (config: slots=8, file_mib=256, chunk_ms=20, release r2026.10)... config_error and receive_error timeouts appeared only at startup (08:08).' and 'The stack has not been updated since it was created at 08:04 UTC and the volumes have no modification history, so the values were set at creation.' No explicit mention of checking a release label or log level change at ~12:00 UTC.",
+          "reasoning": "The investigation does mention release/version info and config errors but only at startup (08:08), not specifically ruling out a 12:00 configuration change by scope or history; there's no explicit check of a possible config change exactly at noon.",
+          "confidence": "low"
+        },
+        {
+          "text": "The onset is stated at about 12:00 UTC and the arrival-rate step is named as the trigger, distinguished from the cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Since ~12:00 UTC, ApproximateNumberOfMessagesVisible has risen steadily' and 'Producer rate rose 12x at 12:00; consumption levels off at ~885 per 15 min: NumberOfMessagesSent went from 90 to 1,080 per 15 min at 12:00 UTC.' The Root Cause section states 'Under the scheduled day rate (72/min, 12:00\u201322:00 UTC)... worker-a's disk caps out' \u2014 distinguishing the arrival-rate step as trigger from the disk cap as cause.",
+          "reasoning": "Onset at ~12:00 UTC is stated, and the arrival-rate step is named as trigger, clearly distinguished from the root cause (disk throughput cap).",
+          "confidence": "high"
+        },
+        {
+          "text": "The findings compare the incident (afternoon) window with a baseline (morning) window and state a job duration percentile and disk MiB/s per worker for each, without using the overnight drain as the baseline; each finding cites a metric name, a time window and an observed value with its unit",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output gives 'At 08:08, before the load step, both workers took ~10.8 s per job' as baseline and 'worker-a jobs take ~32\u201334 s... worker-b jobs take ~10.8 s' at 15:00 UTC as incident window, with 'Before 12:00 both disks ran at ~25 MiB/s' as baseline disk throughput and '125.07 MiB/s' vs '~378 MiB/s' for incident. However, no explicit percentile (e.g., p50, p90) of job duration is stated \u2014 durations are given as point estimates/ranges, not percentiles (except chunk_p50 is mentioned, not job duration percentile).",
+          "reasoning": "While baseline and incident windows are compared with metric names, times and values with units (e.g., MiB/s, seconds), the assertion specifically requires a 'job duration percentile' per worker per window, which is not clearly provided \u2014 only chunk_p50 (an internal metric) is given, not overall job duration percentile.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 9,
+        "pass_rate": 0.5556
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "3m44s",
+    "cost": "$1.86",
+    "context_window": {
+      "utilization": "8.8%",
+      "compaction_count": 0
+    }
+  }
+}

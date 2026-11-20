@@ -1,0 +1,117 @@
+{
+  "version": "v8",
+  "iteration": 3,
+  "eval_id": "perf02-credits-rca",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's Root Cause finding precisely matches the expected root cause: perf-demo-worker-a is a t3.micro in standard CPU credit mode that drains its CPUCreditBalance to ~0 by ~14:00 UTC under the day-rate load, gets throttled to the 10% baseline (CPUSurplusCreditBalance stays 0, confirming it cannot borrow), causing per-job duration to rise ~5.4x (1,093ms to 5,880ms) and throughput to drop (~1,230 to ~305 jobs/30min). The investigation explicitly contrasts this with worker-b (unlimited mode), which handles the same load without slowing, ruling out job code/SQS/producer issues - exactly matching the expected reasoning. The investigation also notes workers logged no errors (ruling out boot-time errors) and overnight recovery as credits rebuild. All key identifying details (service names, instance IDs, credit mode, timestamps, throughput numbers) align closely with the expected root cause description.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause names CPU credit exhaustion on perf-demo-worker-a (CPUCreditBalance reaching zero and the CPU throttled to baseline in standard mode) and separates this cause from its symptoms (rising per-job duration and the growing backlog and age of oldest message), rather than blaming the job code or an inherently too-heavy workload",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Cause: worker-a CPU credits run out, throttling consumer throughput' ... 'From then on its CPU is held at ~10.0%, the t3.micro baseline.' and separately 'Root Cause: worker-a runs as a standard-credit t3.micro, which cannot sustain the day-window load'. The per-job duration increase and backlog growth are described as effects cascading to 'symptom-perf-demo-jobs-backlog', not blamed on job code.",
+          "reasoning": "The report clearly separates the credit exhaustion cause from the downstream symptoms (slower per-job time, growing backlog/age) and does not blame job code or workload size inherently.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation breaks the two consumers down per instance, naming perf-demo-worker-a as the degraded consumer and perf-demo-worker-b as unaffected under the same code and load, and uses the twin to rule out the job code, SQS and the producer",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'worker-a (standard mode) CPUCreditBalance drops from ~84 to ~0.02... worker-b (unlimited mode) has a credit balance of 0 throughout but runs at ~49.6% CPU during peak hours.' and 'worker-a jobs slow down ~5.4\u00d7 once its CPU credits run out; worker-b stays steady'",
+          "reasoning": "The investigation explicitly contrasts the two named instances under identical code/load, using worker-b's steady performance to rule out job code issues.",
+          "confidence": "high"
+        },
+        {
+          "text": "Evidence includes CPUCreditBalance together with CPUUtilization and CPUSurplusCreditBalance from CloudWatch for worker-a across the incident window",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'worker-a (standard mode) CPUCreditBalance drops from ~84 to ~0.02 between 11:00 and 14:00 UTC. Its CPUUtilization then stays at 10.0% until about 23:00, and CPUSurplusCreditBalance stays 0.'",
+          "reasoning": "All three metrics (CPUCreditBalance, CPUUtilization, CPUSurplusCreditBalance) are explicitly reported for worker-a across the incident window.",
+          "confidence": "high"
+        },
+        {
+          "text": "The findings compare the incident (afternoon) window with a baseline (morning or overnight) window when credits are healthy and state the rate per period rather than a single snapshot",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Before the credits run out (08:00\u201314:00), both hosts take ~1,093 ms per job... From 15:00 it does only ~305 jobs per 30 min at ~5,880 ms average' and 'Peak send rate exceeds the delete-rate plateau: Every day, NumberOfMessagesSent goes from 420/h to 4,920/h'",
+          "reasoning": "The report compares baseline (08:00-14:00, morning) rates per 30-min bin against incident afternoon rates, and gives rates per hour/period rather than single snapshots.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation does not read worker-a's baseline-pinned or low CPUUtilization as the instance being idle or simply too small without checking the credit balance (no false idle or false saturation finding)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The report ties low CPU explicitly to credit exhaustion: 'CPUCreditBalance drops from ~84 to ~0.02... CPUUtilization then stays at 10.0% until about 23:00' - framed as throttling due to credits, not idleness or being 'too small' without checking credits.",
+          "reasoning": "The pinned CPU is explicitly attributed to credit exhaustion via explicit balance/surplus checks, not treated as idle or an inherent sizing issue without that check.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation states the onset time of the backlog and matches it to worker-a's CPUCreditBalance reaching zero, hours after the 12:00 arrival increase rather than at that increase",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'NumberOfMessagesSent goes from 420/h to 4,920/h for about 10 hours (~12:00\u201321:00 UTC). For the first ~2 hours, NumberOfMessagesDeleted keeps up at 4,920/h. It then levels off at ~3,820\u20133,850/h' and 'CPUCreditBalance drops from ~84 to ~0.02 between 11:00 and 14:00 UTC... backlog is growing again: 1,836 visible and 20 in flight' at 14:00.",
+          "reasoning": "The report explicitly times the backlog onset to around 14:00, roughly 2 hours after the 12:00 send-rate increase, matching when credits hit ~0, not at the 12:00 increase itself.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation applies a magnitude check: the backlog growth (NumberOfMessagesSent minus NumberOfMessagesDeleted) or worker-a's throughput drop matches the capacity worker-a lost net of what worker-b absorbs",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Together the two workers drain ~3,840 jobs/h against 4,920/h arriving, so the backlog grows by ~1,080 per hour.' matches 'the backlog grows by ~1,080 messages per hour' from the send/delete rate observation.",
+          "reasoning": "The report explicitly cross-checks the magnitude: worker throughput loss implies ~1,080/h backlog growth, matching the NumberOfMessagesSent minus Deleted calculation of the same ~1,080/h figure.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any configuration change in or near the 12:00 window, if mentioned, is ruled out by timing, scope or history and not treated as the cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No configuration change near 12:00 is mentioned in the output at all; the Gaps section only notes 'CloudTrail lookup not available... Changes made to the worker instances could not be checked.'",
+          "reasoning": "Since CloudTrail was blocked, the investigation never actually ruled out a config change near 12:00 by timing/scope/history \u2014 it is left as an open gap rather than addressed or ruled out, so this assertion is not satisfied.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Does not probe or report on AWS accounts that are not in the request path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The entire report only references account 012345678901_1 and resources within us-east-1 (perf-demo-jobs, perf-demo-worker-a/b, stack perf-demo-02).",
+          "reasoning": "No other AWS accounts are probed or mentioned.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Treats the backlog on perf-demo-jobs as its own problem: if another backed-up queue in the account (for example perf-demo-08-jobs) is mentioned, it is kept out of scope and not blamed for perf-demo-jobs",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of perf-demo-08-jobs or any other queue anywhere in the investigation summary; only perf-demo-jobs is discussed.",
+          "reasoning": "The investigation stays scoped to perf-demo-jobs and does not implicate or discuss any other backed-up queue.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 9,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 10,
+        "pass_rate": 0.9
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m50s",
+    "cost": "$2.41",
+    "context_window": {
+      "utilization": "8.2%",
+      "compaction_count": 0
+    }
+  }
+}

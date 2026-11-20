@@ -1,0 +1,118 @@
+{
+  "version": "v8",
+  "iteration": 1,
+  "eval_id": "perf02-credits-rca",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's root cause matches the expected root cause closely: worker-a (t3.micro, standard credit mode) exhausts its CPU credits during the afternoon high-load window, gets throttled to the 10% baseline, causing throughput to drop below producer ingest rate and the SQS backlog/message age to grow. The investigation correctly identifies the comparison with worker-b (unlimited mode, unaffected) as confirming the burstable credit model is the cause, ruling out producer/job code/SQS config issues. The timing (credits exhausted ~2h into the day window, recovery overnight) and mechanism (standard mode cannot borrow surplus credits, throttled to baseline) align with the expected explanation.",
+      "evidence": "\"In stack perf-demo-02, perf-demo-worker-a (i-1234567890abcdef0_1, t3.micro) is set to CreditSpecification standard... After that, standard mode holds the instance at 10% CPU, and the two workers together can no longer keep up with the producer.\" / \"i-1234567890abcdef0_2 (perf-demo-worker-b) runs in unlimited mode and holds ~50% CPU through the same window.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause names CPU credit exhaustion on perf-demo-worker-a (CPUCreditBalance reaching zero and the CPU throttled to baseline in standard mode) and separates this cause from its symptoms (rising per-job duration and the growing backlog and age of oldest message), rather than blaming the job code or an inherently too-heavy workload",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Root cause states: 'perf-demo-worker-a ... is set to CreditSpecification standard ... After that, standard mode holds the instance at 10% CPU, and the two workers together can no longer keep up with the producer.' Symptoms (backlog, oldest message age) are listed separately under 'Symptoms' and linked via 'Cascades to' rather than conflated with the cause. No mention of job code or inherently heavy workload as cause.",
+          "reasoning": "The cause is clearly CPU credit exhaustion/throttling, separated from the symptom of backlog growth via explicit cascade structure.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation breaks the two consumers down per instance, naming perf-demo-worker-a as the degraded consumer and perf-demo-worker-b as unaffected under the same code and load, and uses the twin to rule out the job code, SQS and the producer",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'i-1234567890abcdef0_1 (perf-demo-worker-a) runs in standard credit mode... i-1234567890abcdef0_2 (perf-demo-worker-b) runs in unlimited mode and holds ~50% CPU through the same window.' Both are on 'the same launch template' implying same code/load, used to rule out code issues.",
+          "reasoning": "The investigation explicitly breaks down per-instance behavior and uses worker-b as an unaffected twin to isolate the cause to worker-a's credit mode.",
+          "confidence": "high"
+        },
+        {
+          "text": "Evidence includes CPUCreditBalance together with CPUUtilization and CPUSurplusCreditBalance from CloudWatch for worker-a across the incident window",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output mentions 'CPUCreditBalance falls from ~84 at 11:00 to ~0 by 14:00 UTC, and CPU is then pinned at exactly 10%' but does not mention CPUSurplusCreditBalance anywhere in the text.",
+          "reasoning": "CPUCreditBalance and CPUUtilization are referenced, but CPUSurplusCreditBalance is not mentioned at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "The findings compare the incident (afternoon) window with a baseline (morning or overnight) window when credits are healthy and state the rate per period rather than a single snapshot",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Both consumers are t3.micro instances... Its CPUCreditBalance falls from ~84 at 11:00 to ~0 by 14:00 UTC, and CPU is then pinned at exactly 10% (the baseline) through 22:00... worker-b ... holds ~50% CPU through the same window.' Also 'Deletes keep pace until ~14:00, then fall to a flat ~3,830\u20133,850/hr' vs morning baseline of 4,920/hr producer rate, comparing day vs night rates.",
+          "reasoning": "The investigation compares rates across different periods (11:00 vs 14:00-22:00, day vs night) rather than relying on a single snapshot, though it could be more explicit about a clean 'baseline window' comparison.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The investigation does not read worker-a's baseline-pinned or low CPUUtilization as the instance being idle or simply too small without checking the credit balance (no false idle or false saturation finding)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The investigation explicitly ties the low CPU to the credit balance: 'Its CPUCreditBalance falls from ~84 at 11:00 to ~0 by 14:00 UTC, and CPU is then pinned at exactly 10% (the baseline)' - explaining the low CPU as a result of credit exhaustion, not idleness or oversizing.",
+          "reasoning": "The low CPUUtilization (10%) is correctly attributed to baseline throttling due to credit exhaustion, not misread as idle or an inherently oversized instance.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation states the onset time of the backlog and matches it to worker-a's CPUCreditBalance reaching zero, hours after the 12:00 arrival increase rather than at that increase",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Every day from ~14:00 UTC, visible messages... build to ~8,000' and 'CPUCreditBalance falls from ~84 at 11:00 to ~0 by 14:00 UTC' - matching the backlog onset at 14:00 to the credit exhaustion at 14:00, both hours after the 12:00 arrival increase.",
+          "reasoning": "The backlog onset (14:00) is explicitly matched to the moment worker-a's credits reach zero (14:00), both occurring 2 hours after the 12:00 load increase, not conflated with the increase itself.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation applies a magnitude check: the backlog growth (NumberOfMessagesSent minus NumberOfMessagesDeleted) or worker-a's throughput drop matches the capacity worker-a lost net of what worker-b absorbs",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The producer sends 4,920 msgs/hr from 12:00 to 22:00 UTC... Deletes keep pace until ~14:00, then fall to a flat ~3,830\u20133,850/hr. That leaves a deficit of ~1,080/hr, which accounts for the ~8k backlog.' Also: 'the day load... needs ~37.5% CPU per worker, against a 10% baseline.'",
+          "reasoning": "The investigation performs an explicit magnitude check matching the throughput deficit (~1,080/hr) to the observed backlog growth (~8k over ~7 hours \u2248 1,140/hr), demonstrating quantitative consistency.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any configuration change in or near the 12:00 window, if mentioned, is ruled out by timing, scope or history and not treated as the cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The gaps section mentions 'The cloudtrail lookup_events call (looking for ModifyInstanceCreditSpecification) was blocked' but this is about ruling out a manual config change to credit mode, not about a config change 'in or near the 12:00 window' as a competing hypothesis for the backlog.",
+          "reasoning": "No specific configuration change near 12:00 is identified or explicitly ruled out by timing/scope/history; the CloudTrail gap is about verifying historical credit mode changes, not a 12:00-window deploy/config event being ruled out as root cause.",
+          "confidence": "low"
+        },
+        {
+          "text": "Does not probe or report on AWS accounts that are not in the request path",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "All resource ARNs reference account 012345678901_1 (e.g., '[redacted ARN]') and no other AWS accounts are mentioned.",
+          "reasoning": "No evidence of probing or reporting on out-of-scope AWS accounts.",
+          "confidence": "high"
+        },
+        {
+          "text": "Treats the backlog on perf-demo-jobs as its own problem: if another backed-up queue in the account (for example perf-demo-08-jobs) is mentioned, it is kept out of scope and not blamed for perf-demo-jobs",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of perf-demo-08-jobs or any other queue in the provided summary; the investigation is scoped entirely to perf-demo-jobs.",
+          "reasoning": "The investigation stays focused on perf-demo-jobs without referencing or blaming any other backed-up queue in the account.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 8,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 10,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m0s",
+    "cost": "$1.99",
+    "context_window": {
+      "utilization": "8.7%",
+      "compaction_count": 0
+    }
+  }
+}

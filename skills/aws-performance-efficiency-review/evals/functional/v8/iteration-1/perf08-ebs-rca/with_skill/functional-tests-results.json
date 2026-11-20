@@ -1,0 +1,114 @@
+{
+  "version": "v8",
+  "iteration": 1,
+  "eval_id": "perf08-ebs-rca",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-performance-efficiency-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies that worker-a's data disk (<volume-id>, perf-demo-08-data-a) is provisioned at 125 MiB/s gp3 throughput, which saturates at ~125 MiB/s from 12:00 UTC when the producer rate steps up 12x (NightRatePerMinute=6 to DayRatePerMinute=72). This matches the expected root cause closely: same disk, same 125 MiB/s cap, same 12:00 UTC day-rate trigger, same comparison to worker-b's 500 MiB/s disk running at ~378 MiB/s, same conclusion that CPU/IOPS are not the bottleneck (explicitly noted ThroughputExceeded/IOPSExceeded checks returned no datapoints but queue length elevated), and the resulting backlog growth and queue wait increase. The causal chain, identifying details (volume IDs, throughput values, timestamps, producer rate change) all align with the expected root cause. The investigation's framing (disk throughput cap halves fleet capacity, root cause being the 125 MiB/s provisioning being too low for day-rate load) matches the expected explanation almost exactly.",
+      "evidence": "\"worker-a data disk provisioned at 125 MiB/s, too low for the daily 12:00 UTC day-rate load... The producer schedule switches from NightRatePerMinute=6 to DayRatePerMinute=72 at DayStartUtc=12, a 12\u00d7 load step every afternoon. At that load worker-a saturates its disk throughput and processes only ~1/3 of worker-b's jobs\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause is worker-a's data disk (perf-demo-08-data-a) held at its provisioned throughput (125 MiB/s) in the afternoon, separated from the symptoms (job duration on worker-a, queue backlog, age of the oldest message) and not attributed to CPU, the arrival rate or the instance",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Root Cause: 'worker-a data disk provisioned at 125 MiB/s, too low for the daily 12:00 UTC day-rate load' ... 'Combined throughput (~885 per 15 min) is below the new 1,080 per 15 min arrival rate' is framed as symptom cause, not instance/CPU. CPU is not mentioned as cause; instance type c7g.4xlarge is noted as identical across workers, not implicated.",
+          "reasoning": "The output clearly separates the disk throughput cap as root cause from the queue backlog and job duration symptoms, and explicitly rules out CPU, arrival rate, and instance as causes by noting arrival rate is the trigger and instance/CPU settings are identical across workers.",
+          "confidence": "high"
+        },
+        {
+          "text": "Evidence reads both data disks' configuration and compares worker-a's measured disk bytes per second (VolumeWriteBytes plus VolumeReadBytes) with its provisioned throughput, with at least one saturation signal (VolumeThroughputExceededCheck, VolumeQueueLength or VolumeIdleTime)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'<volume-id> (worker-a, 125 MiB/s provisioned) runs flat at ~125.07 MiB/s read+write' and 'The ThroughputExceeded and IOPSExceeded checks returned no datapoints' and 'queue length ~1.6\u20132.5' for worker-a vs '~3.34' for worker-b.",
+          "reasoning": "Both disks' provisioned throughput is compared (125 vs 500 MiB/s), measured read+write bytes are compared to provisioned throughput, and VolumeQueueLength is cited as a saturation signal. ThroughputExceededCheck is explicitly checked (returned no datapoints), satisfying the requirement of checking at least one saturation signal.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation uses perf-demo-08-worker-b as the control (same launch template, code, settings, queue and job shape, higher disk throughput), compares the same metrics on both, and rules out the code, payload, queue and producer",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'All other worker settings are identical (c7g.4xlarge, slots=8, file_mib=256, chunk_ms=20)' and worker-b metrics are compared throughout: 'worker-b's <volume-id> is provisioned at 500 MiB/s and runs at ~378 MiB/s' and 'completes... ~1,329 for worker-b'. Producer logs 'show only INIT_START lines, with no errors' ruling out producer; DLQ empty ruling out payload/code issues.",
+          "reasoning": "Worker-b is used as a control with matching settings, and the same metrics (disk MiB/s, job completion counts, p50 latency) are compared across both workers. Producer and queue are also addressed as not the cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation applies a magnitude check with arithmetic: bytes per job (about 512 MiB) from disk bytes against completed jobs, worker-a's jobs per minute times bytes per job matching the provisioned throughput, and the predicted job duration against the measured one, or the served rate (about 60 a minute) against the arrival rate (about 72 a minute)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'completes ~440 jobs per 30 min against ~1,329 for worker-b' and 'Combined throughput (~885 per 15 min) is below the new 1,080 per 15 min arrival rate' but does not show an explicit bytes-per-job calculation (e.g., ~512 MiB per job) or derive worker-a's jobs/min \u00d7 bytes/job = provisioned throughput.",
+          "reasoning": "While there is a magnitude/rate comparison (served vs arrival rate, job counts per worker), there's no explicit arithmetic connecting bytes per job (~512 MiB) to disk bytes/provisioned throughput, nor an explicit jobs-per-minute times bytes-per-job calculation shown. The specific bytes-per-job magnitude check is missing.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The instance-level EBS limit and IOPS are checked and ruled out on both workers",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output mentions gp3 IOPS (3000 IOPS for both volumes) but does not explicitly state checking the EC2 instance-level EBS throughput/IOPS limits (e.g., for c7g.4xlarge) and ruling them out separately from the volume-level throughput.",
+          "reasoning": "IOPS at the volume level (3000 IOPS for both) is mentioned, but there's no explicit mention of instance-level EBS bandwidth/IOPS limits (a separate constraint from volume-provisioned throughput) being checked and ruled out on both workers.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Low CPU is reported as consistent with waiting on the disk, not as spare capacity, and no downsizing is recommended",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output does not explicitly mention CPU utilization metrics or state that low CPU is consistent with waiting on disk, nor does it recommend or decline downsizing.",
+          "reasoning": "CPU is not discussed at all in the investigation summary provided. Since CPU utilization and any downsizing recommendation are absent, this assertion cannot be confirmed as satisfied; there's no evidence of CPU being framed correctly or incorrectly.",
+          "confidence": "low"
+        },
+        {
+          "text": "Any configuration change at about 12:00 (release label or log level on both workers), if found, is ruled out by scope or history and not by timing alone",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'No volume modifications or stack updates have happened since creation (CREATE_COMPLETE at 08:04 UTC)' but does not mention checking a release label or log level change around 12:00 UTC specifically.",
+          "reasoning": "The investigation does rule out recent changes generally (no volume modifications or stack updates since creation), but does not specifically address or rule out a configuration change like release label or log level at 12:00 UTC by scope or history as described in the assertion.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The onset is stated at about 12:00 UTC and the arrival-rate step is named as the trigger, distinguished from the cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Producer rate stepped up 12\u00d7 at 12:00 UTC: NumberOfMessagesSent: 90 per 15 min from 08:15 to 11:45, then 1,080 per 15 min from 12:00' and 'The producer schedule switches from NightRatePerMinute=6 to DayRatePerMinute=72 at DayStartUtc=12, a 12\u00d7 load step every afternoon' \u2014 distinguished from root cause: 'At that load worker-a saturates its disk throughput'.",
+          "reasoning": "The onset time (12:00 UTC) and the arrival-rate step (producer rate increase) are clearly identified as the trigger, while the root cause (disk throughput cap) is distinguished as the underlying cause that the trigger exposes.",
+          "confidence": "high"
+        },
+        {
+          "text": "The findings compare the incident (afternoon) window with a baseline (morning) window and state a job duration percentile and disk MiB/s per worker for each, without using the overnight drain as the baseline; each finding cites a metric name, a time window and an observed value with its unit",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'Before 12:00 both were at ~25 MiB/s' as a baseline, and incident window values '~125.07 MiB/s' for worker-a and '~378 MiB/s' for worker-b, with p50 latency 'Per-job queue_wait_ms p50 was ~13 ms before 12:00 UTC... By 16:30 it reached ~2.9M ms'. However it does not explicitly state a 'morning' baseline window label distinct from 'overnight', and does not clearly provide per-worker job duration percentile for both windows (only queue wait, not job processing duration, is given with percentiles) \u2014 worker-a job p50 'tripled to ~32s' is given only for incident window, not baseline equivalent for job duration specifically per worker.",
+          "reasoning": "The output does provide a before/after comparison with metric names, time windows, and values with units (e.g., 125 MiB/s vs 25 MiB/s, queue_wait_ms p50 13ms vs 2.9M ms), but it doesn't fully break down job duration percentile per worker for both baseline and incident windows side by side, and doesn't explicitly confirm the baseline window excludes 'overnight drain' as the baseline - the 08:15-11:45 window used as 'morning' baseline is reasonable but not explicitly labeled to exclude overnight data were it to exist. This is a partial match, and given ambiguity, it's graded as failing the full specificity requested but with medium confidence given partial support in the text.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 5,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 9,
+        "pass_rate": 0.4444
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m3s",
+    "cost": "$2.52",
+    "context_window": {
+      "utilization": "11.2%",
+      "compaction_count": 0
+    }
+  }
+}
