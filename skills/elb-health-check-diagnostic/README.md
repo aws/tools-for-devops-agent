@@ -7,6 +7,9 @@ NACLs, subnet/AZ routability, target resource exhaustion, and
 deregistration/cross-zone settings. It then classifies the root cause and
 reports the corrected settings for the operator to apply.
 
+Scope: Application and Network Load Balancer target groups only. It is not for
+Classic Load Balancers or Gateway Load Balancers.
+
 > **Non-production disclaimer.** Provided for demonstration and evaluation.
 > Read-only: it never modifies a security group, NACL, target group, or
 > instance. Apply any reported corrections through your own change-management
@@ -15,8 +18,8 @@ reports the corrected settings for the operator to apply.
 ## Prerequisites
 
 - An AWS DevOps Agent Agent Space with the target account associated.
-- The read-only permissions listed in `SKILL.md` (all covered by
-  `AIDevOpsAgentAccessPolicy`).
+- The read-only permissions listed in `SKILL.md`. All are covered by
+  `AIDevOpsAgentAccessPolicy`.
 
 ## Setup
 
@@ -34,7 +37,8 @@ It targets the `CHAT` and `INCIDENT_RCA` agent types.
 ## Cause classes
 
 `HEALTH_CHECK_CONFIG`, `SG_BLOCK`, `NACL_BLOCK`, `ROUTABILITY`,
-`RESOURCE_EXHAUSTION`, `GRACE_PERIOD`, `DEREGISTRATION_OR_CROSSZONE`. See
+`RESOURCE_EXHAUSTION`, `GRACE_PERIOD`, `DEPLOYMENT_DRAIN` (timing-inferred),
+`DEREGISTRATION_OR_CROSSZONE`, `TARGET_STATE`, `LB_INTERNAL`. See
 `references/decision-tree.md` for the corrected setting reported for each.
 
 ## Evaluation
