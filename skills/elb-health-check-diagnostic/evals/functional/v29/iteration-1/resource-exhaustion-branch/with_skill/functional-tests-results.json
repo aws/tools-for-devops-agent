@@ -1,0 +1,74 @@
+{
+  "version": "v29",
+  "iteration": 1,
+  "eval_id": "resource-exhaustion-branch",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'elb-health-check-diagnostic' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response directly fulfills the expected output. It confirms the network path (SGs, NACLs) is clean, then investigates resource utilization metrics (CPUUtilization, CPUCreditBalance, CPUCreditUsage, EBS queue length/EBSIOBalance%, network traffic) for the failing target. It explicitly compares the unhealthy instance against the healthy one in the same target group to show the exhaustion is isolated to one instance (CPU credit depletion causing throttling to baseline 10%). It explicitly classifies the root cause as 'RESOURCE_EXHAUSTION' and ties it to the health check timeout. This matches all elements of the expected output: clean network path, resource utilization check (CPU/credits/network/EBS), cross-target comparison for isolation, and explicit RESOURCE_EXHAUSTION classification.",
+      "evidence": "\"Root cause: RESOURCE_EXHAUSTION. Instance i-1234567890abcdef0_3 ... has run out of CPU credits and is throttled to its baseline.\" and the comparison table showing CPUUtilization, CPUCreditBalance, CPUCreditUsage for both the unhealthy and healthy instance, plus \"Disk: Both volumes are gp3 with a near-zero queue length, and EBSIOBalance% is 99 on both\" and \"Network: Inbound traffic and packet counts are similar on both instances.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The output checks network or EBS burst metrics (NetworkIn/Out, BurstBalance, or EBSIOBalance%) before concluding",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Disk: Both volumes are gp3 with a near-zero queue length, and EBSIOBalance% is 99 on both.\" and \"Network: Inbound traffic and packet counts are similar on both instances.\"",
+          "reasoning": "The output explicitly checks disk burst metrics and network metrics before concluding.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output compares the targets in the group and identifies which are saturated and which are not",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Table comparing i-1234567890abcdef0_3 (unhealthy, CPUUtilization pinned at about 10.0%, CPUCreditBalance about 0) vs i-1234567890abcdef0_4 (healthy, CPUUtilization about 3.6-3.8%, CPUCreditBalance grows from 0.27 to 6.0).",
+          "reasoning": "The output directly compares the two targets in the target group and identifies one as saturated (CPU pinned, zero credit balance) and the other as not (low CPU, banking credits).",
+          "confidence": "high"
+        },
+        {
+          "text": "The output classifies the cause as RESOURCE_EXHAUSTION and leads the fix with the saturated dimension (for example CPU credits or instance size) rather than a longer health-check timeout",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Root cause: RESOURCE_EXHAUSTION. Instance ... has run out of CPU credits and is throttled to its baseline.\" Fix #1: \"Fix the saturation first. Change TargetInstanceA to CpuCredits: unlimited, or move it to a larger or non-burstable instance type...\" Fix #2 explicitly labeled 'Optional, secondary' for timeout, with the caveat 'This only hides the saturation, so don't treat it as the fix.'",
+          "reasoning": "The output explicitly states the root cause label as RESOURCE_EXHAUSTION and leads with CPU credit/instance size fixes before mentioning timeout as a secondary, explicitly deprioritized option.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output does not apply BurstBalance to a gp3 volume",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Disk: Both volumes are gp3 with a near-zero queue length, and EBSIOBalance% is 99 on both.\" No mention of BurstBalance for the EBS volumes anywhere in the output.",
+          "reasoning": "The output uses EBSIOBalance% for the gp3 volumes, not BurstBalance, correctly avoiding applying BurstBalance (a gp2 metric) to gp3 volumes.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "50s",
+    "cost": "$0.42",
+    "context_window": {
+      "utilization": "7.1%",
+      "compaction_count": 0
+    }
+  }
+}
