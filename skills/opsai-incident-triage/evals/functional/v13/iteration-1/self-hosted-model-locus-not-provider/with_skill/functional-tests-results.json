@@ -1,0 +1,80 @@
+{
+  "version": "v13",
+  "iteration": 1,
+  "eval_id": "self-hosted-model-locus-not-provider",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the response to definitively report locus=INFRASTRUCTURE (not PROVIDER), explicitly treat provider health as not-applicable (since this is self-hosted, there is no AWS \"provider\" model service), and bind error slots specifically to ApplicationELB's HTTPCode_Target_4XX_Count and HTTPCode_Target_5XX_Count metrics. It should also avoid searching for an AWS Health event tied to a \"model service\" and avoid suggesting a cross-region inference profile, handing the serving-layer investigation to the customer/host.\n\nThe agent's response instead reports locus=UNDETERMINED and frames the situation as \"not-queried\" pending more information from the user (ALB/EKS cluster name or account ID), rather than concluding locus=INFRASTRUCTURE outright. It does check AWS Health events for ELB/EKS/EC2 (reasonable, not a \"model service\" health event, so that part is fine), and it does mention HTTPCode_Target_5XX_Count (partially satisfying the metric-binding requirement), but it omits HTTPCode_Target_4XX_Count and instead introduces HTTPCode_ELB_503_Count and HealthyHostCount, which aren't the specifically expected metrics. It never explicitly states \"provider health status = not-applicable\" \u2014 it says the AWS Health check is \"only a weak signal\" rather than explicitly marking it not-applicable since this is self-hosted.\n\nMost critically, the expected output wants a firm, confident conclusion (locus=INFRASTRUCTURE) explaining that since this is self-hosted, the user IS the provider and AWS Health/PROVIDER concepts don't apply \u2014 essentially answering \"this is on you, not AWS\" directly. The agent's response does lean this direction conceptually (\"you are the provider... no AWS Health event can exist for it\") but hedges with \"locus=UNDETERMINED\" and holds off on a definitive verdict, asking for more info instead of committing to the INFRASTRUCTURE classification immediately. This is a meaningful mismatch with the expected definitive framing.\n\nWhile the agent's reasoning is substantively aligned (self-hosted = customer is provider, check target health metrics, no health event will exist), the formal classification required (locus=INFRASTRUCTURE, provider health=not-applicable) is not explicitly stated, and the specific metric binding (4XX need included) is incomplete. This causes the response to fall short of the expected output's specific requirements.",
+      "evidence": "\"TRIAGE: binding=self-hosted-alb locus=UNDETERMINED transience=UNKNOWN \u2014 not-queried\" and \"In that case `HTTPCode_Target_5XX_Count` is high\" (missing HTTPCode_Target_4XX_Count) and \"AWS Health events since 2026-11-20 00:00 UTC for ELB, EKS and EC2 in us-east-1: none. This is only a weak signal\" (not explicitly marked not-applicable)",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The locus is INFRASTRUCTURE and not PROVIDER",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "'TRIAGE: binding=self-hosted-alb locus=UNDETERMINED transience=UNKNOWN \u2014 not-queried'",
+          "reasoning": "The agent explicitly marks locus as UNDETERMINED, not as INFRASTRUCTURE. It states it could not find the ALB/EKS cluster and therefore cannot determine locus, pending more info from the user.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provider health is recorded as not-applicable rather than as a missing or zero signal",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'AWS Health events ... none. This is only a weak signal, because I haven't found your actual stack yet.' and 'An empty Health feed doesn't mean everything is fine. It also doesn't point to AWS.'",
+          "reasoning": "The agent treats the empty AWS Health feed as a weak/inapplicable signal rather than treating it as proof of health, explicitly stating it doesn't mean everything is fine nor point to AWS, effectively treating provider health as not meaningfully applicable in this self-hosted context.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not propose a cross-region inference profile or any Bedrock-specific failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response discusses only ALB target health, pod status, GPU nodes, and makes no reference to Bedrock, inference profiles, or failover mechanisms.",
+          "reasoning": "No mention of cross-region inference profiles or Bedrock-specific failover anywhere in the response; it focuses entirely on ALB/EKS/vLLM troubleshooting.",
+          "confidence": "high"
+        },
+        {
+          "text": "The error signals are bound to load balancer or application metrics rather than AWS/Bedrock",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'HealthyHostCount, UnHealthyHostCount, HTTPCode_ELB_503_Count and HTTPCode_Target_5XX_Count on the ALB' and 'Pod state, restarts and OOMKilled events in the vLLM namespace.'",
+          "reasoning": "The error signals discussed are ALB and target group metrics (HealthyHostCount, HTTPCode_ELB_503_Count, HTTPCode_Target_5XX_Count) and Kubernetes pod state, not AWS service health or Bedrock metrics.",
+          "confidence": "high"
+        },
+        {
+          "text": "No Bedrock namespace is asserted for a self-hosted model",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "33s",
+    "cost": "$0.28",
+    "context_window": {
+      "utilization": "5.5%",
+      "compaction_count": 0
+    }
+  }
+}

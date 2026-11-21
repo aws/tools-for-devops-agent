@@ -1,0 +1,145 @@
+{
+    "skill_name": "opsai-sagemaker-inference",
+    "evals": [
+        {
+            "id": "endpoint-slow-and-erroring",
+            "task_type": "chat",
+            "prompt": "Our SageMaker real-time endpoint my-llm-ep is throwing Invocation5XXErrors and ModelLatency has been climbing over the last few hours. Can you review the endpoint and tell me what's wrong and whether it's sized right?",
+            "expected_output": "A read-only posture review of the endpoint that reads both the AWS/SageMaker invocation metrics (Invocation5XXErrors, ModelLatency, OverheadLatency, Invocations, InvocationsPerInstance) and the /aws/sagemaker/Endpoints instance resource metrics (CPUUtilization, MemoryUtilization, GPUUtilization) before drawing any right-sizing conclusion, checks whether a CloudWatch alarm exists on ModelLatency and Invocation5XXErrors, and whether an Application Auto Scaling target is registered on the production variant. Findings are reported with LLM-SM check-ids and catalog severities (for example LLM-SM-009 for latency/5xx with no alarm, LLM-SM-001 for no auto-scaling), each remediation is given as a command for the operator to run rather than executed, and the response never claims the endpoint is serving merely because EndpointStatus is InService.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reports findings grounded in the LLM-SM check family with explicit check-ids rather than generic advice",
+                "The response reads both metric namespaces (AWS/SageMaker invocation metrics and /aws/sagemaker/Endpoints instance resource metrics) before stating any right-sizing conclusion",
+                "The response treats EndpointStatus InService as control-plane state only and confirms serving from CurrentInstanceCount and recent Invocations rather than assuming InService means serving traffic",
+                "Every remediation is presented as a recommendation with the command for the operator to run, and the response does not call or claim to have called any mutating API such as UpdateEndpoint or UpdateEndpointWeightsAndCapacities",
+                "The response states what it actually observed for each signal, including explicitly saying when a metric returned no datapoints rather than treating absence as a measured zero",
+                {
+                    "text": "At least one finding carries an LLM-SM catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-SM-(?:BATCH-|SERVE-)?\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "idle-endpoint-wasting-money",
+            "task_type": "chat",
+            "prompt": "We have a SageMaker endpoint that shows InService but I think it's idle and just costing us money. Can you check whether it's actually serving anything and whether it's set up to scale?",
+            "expected_output": "The response does not accept InService as proof the endpoint is serving: it checks the production variant's CurrentInstanceCount and recent Invocations, recognizes that a variant can be InService with CurrentInstanceCount zero (LLM-SM-003), and distinguishes no CloudWatch datapoints (no traffic / not emitted) from a measured zero. It checks whether an Application Auto Scaling target is registered and treats an empty DescribeScalableTargets result on a production variant as fixed capacity (LLM-SM-001, HIGH) rather than scaling intentionally off. It recommends investigating or deleting the abandoned endpoint as a command for the operator to run, without deleting anything itself.",
+            "should_trigger": true,
+            "assertions": [
+                "The response checks CurrentInstanceCount and recent Invocations rather than concluding the endpoint is serving from InService status alone",
+                "The response distinguishes CloudWatch no-datapoints (no traffic or no emission) from a measured zero when judging whether the endpoint is idle",
+                "The response treats an empty scalable-targets result on a production variant as fixed capacity (LLM-SM-001) rather than as auto-scaling being intentionally off",
+                "The response recommends the remediation (investigate or delete the abandoned endpoint, confirm serverless/async intent) as a command for the operator and does not call DeleteEndpoint or any mutating API itself",
+                {
+                    "text": "At least one finding carries an LLM-SM catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-SM-(?:BATCH-|SERVE-)?\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "serverless-cold-start-provisioned-concurrency",
+            "task_type": "chat",
+            "prompt": "My SageMaker serverless endpoint has bad cold starts on the first request after it sits idle. Should we add provisioned concurrency?",
+            "expected_output": "A read-only review of the serverless endpoint that reads ServerlessConfig (MaxConcurrency, ProvisionedConcurrency) from DescribeEndpointConfig and the cold-start signals (ModelSetupTime, OverheadLatency) over a window, distinguishes no datapoints from a measured zero, explains that on-demand serverless scales to zero so cold starts after idle are expected, and reports LLM-SM-SERVE-001 when sustained cold-start latency meets no Provisioned Concurrency. Adding Provisioned Concurrency is given as a command for the operator to run, with the tuning value marked workload-specific, and nothing is mutated.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the endpoint's ServerlessConfig, including whether ProvisionedConcurrency is set, before recommending a change",
+                "The response explains that on-demand serverless scales to zero, so a slow first request after idle is an expected cold start",
+                "The response distinguishes no datapoints from a measured zero when reading the cold-start signal",
+                "The response gives the Provisioned Concurrency change as a command for the operator to run and does not call any mutating API",
+                {
+                    "text": "At least one finding carries an LLM-SM catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-SM-(?:BATCH-|SERVE-)?\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "serverless-async-silent-failures",
+            "task_type": "chat",
+            "prompt": "Our SageMaker asynchronous inference endpoint for the LLM seems to drop requests silently and sometimes the queue backs up. Can you review the async endpoint posture and tell me what is misconfigured?",
+            "expected_output": "A read-only review that reads DescribeEndpointConfig AsyncInferenceConfig and confirms whether OutputConfig.NotificationConfig SNS success and error topics exist, flagging their absence as silent failures (LLM-SM-SERVE-003), and checks whether Application Auto Scaling tracks ApproximateBacklogSizePerInstance so the queue does not back up or pay for idle instances (LLM-SM-SERVE-004). It reads the backlog and oldest-request-age CloudWatch signals, treating no datapoints as no traffic or not emitted rather than a measured zero, cites LLM-SM-SERVE check-ids, gives each remediation as a command for the operator to run without mutating anything, and redacts the account id.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the AsyncInferenceConfig and checks for NotificationConfig SNS success and error topics rather than assuming notifications exist",
+                "The response checks whether scaling tracks ApproximateBacklogSizePerInstance and treats a missing scaling policy as a backlog risk",
+                "The response distinguishes CloudWatch no-datapoints from a measured zero when reading the backlog and oldest-request-age signals",
+                "Every remediation is a recommendation with the command for the operator to run and the response does not call or claim to have called any mutating API",
+                {
+                    "text": "At least one finding carries an LLM-SM serverless/async check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-SM-(?:BATCH-|SERVE-)?\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "batch-transform-partial-output",
+            "task_type": "chat",
+            "prompt": "We ran a SageMaker batch transform job to score a large dataset with our LLM and it shows Completed, but the results look short. Can you review the transform job and tell me whether every record was actually scored?",
+            "expected_output": "A read-only review that reads DescribeTransformJob for TransformJobStatus and FailureReason, and does not accept Completed as proof of full scoring. It reconciles the output .out object count against the input record count with ListObjectsV2 and flags a short output as masked partial scoring (LLM-SM-BATCH-003), checks whether the job was under-parallelized at MaxConcurrentTransforms one on a large dataset (LLM-SM-BATCH-002), and whether the output was written without a CMK where the data is sensitive (LLM-SM-BATCH-004). It cites LLM-SM-BATCH check-ids, gives each remediation as a command for the operator to run without mutating anything, and redacts the account id.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reconciles the transform output object count against the input record count rather than trusting the Completed status",
+                "The response does not treat TransformJobStatus Completed as proof that every record was scored",
+                "The response cites a batch sub-family check-id and gives the remediation as a command for the operator to run rather than mutating any resource",
+                {
+                    "text": "At least one finding carries an LLM-SM batch check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-SM-(?:BATCH-|SERVE-)?\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "negative-training-pending",
+            "task_type": "chat",
+            "prompt": "Our SageMaker fine-tuning job has been InProgress with SecondaryStatus Pending for three hours waiting on GPU capacity. Is it broken?",
+            "should_trigger": false
+        },
+        {
+            "id": "negative-live-fault-is-it-aws",
+            "task_type": "chat",
+            "prompt": "Our model calls are failing right now, is it AWS or us?",
+            "should_trigger": false,
+            "assertions": [
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        }
+    ]
+}
