@@ -1,0 +1,73 @@
+{
+  "version": "v29",
+  "iteration": 2,
+  "eval_id": "resource-exhaustion-branch",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'elb-health-check-diagnostic' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response thoroughly matches the expected output. It confirms the network path (security groups, NACLs, routing) is clean, then investigates target resource utilization including CPU, CPU credit balance/usage, EBS I/O balance, and network throughput. It explicitly compares the failing instance (A) against the healthy instance (B) to show the exhaustion is isolated to instance A (near-zero credit balance vs. ~6 credits, 10% baseline CPU vs 6.5%). It explicitly classifies the root cause as 'RESOURCE_EXHAUSTION' with supporting evidence, which directly fulfills all elements of the expected output.</reasoning>\n<parameter name=\"evidence\">\"**Root cause: `RESOURCE_EXHAUSTION`.**\" ... \"CPU credits, 06:00 to 06:50 UTC on instance A: CPUCreditBalance stayed at about 0...\" ... \"Instance B for comparison: It has a credit balance of about 6 and averages 6.5% CPU, so it isn't throttled.\" ... \"Other resources ruled out: EBS I/O balance on A stayed at 99%. NetworkIn on A peaked at about 48 MB...\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The output checks network or EBS burst metrics (NetworkIn/Out, BurstBalance, or EBSIOBalance%) before concluding",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'EBS I/O balance on A stayed at 99%. NetworkIn on A peaked at about 48 MB in one 5-minute window... and is now about 0.1 MB per 5 minutes.' This shows the agent checked NetworkIn and EBSIOBalance% metrics before concluding.",
+          "reasoning": "The agent explicitly checked both EBS I/O balance and NetworkIn metrics as part of its 'Other resources ruled out' section, which directly satisfies the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output compares the targets in the group and identifies which are saturated and which are not",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output compares: 'i-1234567890abcdef0_3 is unhealthy with Target.Timeout... i-1234567890abcdef0_4 (nebula-demo-web-b, us-east-1b) is healthy' and later 'Instance B for comparison: It has a credit balance of about 6 and averages 6.5% CPU, so it isn't throttled.'",
+          "reasoning": "The output explicitly compares both targets in the group, identifying instance A as saturated (CPU credit exhausted, throttled at baseline) and instance B as not saturated (healthy credit balance, low CPU usage).",
+          "confidence": "high"
+        },
+        {
+          "text": "The output classifies the cause as RESOURCE_EXHAUSTION and leads the fix with the saturated dimension (for example CPU credits or instance size) rather than a longer health-check timeout",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output begins with 'Root cause: RESOURCE_EXHAUSTION.' and the 'Corrected settings' section leads with '1. Credits: Set i-1234567890abcdef0_3 to CpuCredits: unlimited, or move both web instances to a larger type...' before mentioning the timeout as item 3, explicitly labeled 'Temporary mitigation only... doesn't fix the throttling.'",
+          "reasoning": "The agent classifies the root cause as RESOURCE_EXHAUSTION explicitly and the fix recommendations lead with CPU credits/instance sizing (the saturated dimension), with the health-check timeout change clearly marked as only a temporary mitigation rather than the primary fix.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output does not apply BurstBalance to a gp3 volume",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output never mentions BurstBalance; instead for EBS it says 'EBS I/O balance on A stayed at 99%' referring to EBSIOBalance%, which is the correct metric for gp2/st1/sc1 volumes or the IO-credit based metric, not BurstBalance applied incorrectly to gp3.",
+          "reasoning": "The agent used 'EBS I/O balance' (EBSIOBalance%) rather than BurstBalance, and did not claim BurstBalance applies to a gp3 volume. No incorrect application of BurstBalance to gp3 is present in the output.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "49s",
+    "cost": "$0.41",
+    "context_window": {
+      "utilization": "7.0%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "skill_name": "elb-health-check-diagnostic",
+  "evals": [
+    {
+      "id": "sg-block-on-health-check-port",
+      "task_type": "chat",
+      "prompt": "Target group nebula-demo-tg has an unhealthy target. Diagnose the specific root cause and give me the corrected settings. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent reads the target health (Target.Timeout), compares the health-check port (8080) against the target security group, finds the target SG allows 80 but not 8080 from the ALB SG, and classifies SG_BLOCK. Because the health-check port differs from the traffic port, it reports both fixes: point the health check back to traffic-port, or add the inbound rule (source = ALB SG, port 8080) if 8080 is an intentional dedicated health-check port.",
+      "assertions": [
+        "The output names the checks it ruled out or did not need after finding the security-group block (for example NACLs, routability, or resource exhaustion)",
+        "The output gives both corrected options, with the health-check-port option conditional on 8080 being intentional, and recommends one of them with a reason",
+        "The output labels the cause class as SG_BLOCK and presents the inbound rule as a change for the operator to apply, without modifying the security group itself"
+      ]
+    },
+    {
+      "id": "target-type-branching",
+      "task_type": "chat",
+      "prompt": "Target group nebula-demo-lambda-tg behind the ALB nebula-demo-lambda-alb in us-east-1 has an unhealthy target. Diagnose the specific root cause now using read-only calls and report the corrected settings. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent branches on target type first, recognizes Lambda targets have no target-side security group, and does not apply EC2 SG/NACL logic to them.",
+      "assertions": [
+        "The output recognizes that Lambda targets do not have a target-side security group",
+        "The output shows where the 500 comes from by reading the function code or the owning CloudFormation stack template, or states which permission blocked that check",
+        "The output checks the function's resource policy for permission for elasticloadbalancing.amazonaws.com to invoke it, or checks the function's Errors/Throttles, or states why it could not"
+      ]
+    },
+    {
+      "id": "resource-exhaustion-branch",
+      "task_type": "chat",
+      "prompt": "Target group nebula-demo-web-tg behind the ALB nebula-demo-web-alb in us-east-1 has a target failing health checks, but the security groups and NACLs look correct. Diagnose the specific root cause now using read-only calls and report it. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "With the network path clean, the agent checks target resource utilization (CPU/credits/network/EBS burst, or ECS/EKS OOMKilled), compares across targets to see if exhaustion is isolated, and classifies RESOURCE_EXHAUSTION.",
+      "assertions": [
+        "The output checks network or EBS burst metrics (NetworkIn/Out, BurstBalance, or EBSIOBalance%) before concluding",
+        "The output compares the targets in the group and identifies which are saturated and which are not",
+        "The output classifies the cause as RESOURCE_EXHAUSTION and leads the fix with the saturated dimension (for example CPU credits or instance size) rather than a longer health-check timeout",
+        "The output does not apply BurstBalance to a gp3 volume"
+      ]
+    },
+    {
+      "id": "nacl-return-path",
+      "task_type": "chat",
+      "prompt": "Target group nebula-demo-nacl-tg behind the ALB nebula-demo-nacl-alb in us-east-1 has targets failing health checks with Target.Timeout, and the security groups allow the health-check port. Diagnose the specific root cause now using read-only calls and report it. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent finds the security groups are clean, then checks NACLs in both directions on both subnets, finds the target subnet NACL does not allow outbound ephemeral ports back to the load balancer subnets, and classifies NACL_BLOCK with the outbound entry to add.",
+      "assertions": [
+        "The output classifies the cause as NACL_BLOCK",
+        "The output identifies the missing outbound ephemeral-port rule on the target subnet NACL as the cause, stating that NACLs are stateless",
+        "The output reports the NACL entry for the operator to apply without modifying the NACL itself"
+      ]
+    },
+    {
+      "id": "target-not-in-use-az",
+      "task_type": "chat",
+      "prompt": "Target nebula-demo-az-tg has a target showing unused with Target.NotInUse. Diagnose the specific root cause now using read-only calls and report it. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent reads the reason code, compares the target's Availability Zone with the AZs enabled on the load balancer, finds the AZ is not enabled, and classifies ROUTABILITY without walking the security-group and NACL steps.",
+      "assertions": [
+        "The output classifies the cause as ROUTABILITY",
+        "The output names both possible meanings of Target.NotInUse (the target's AZ is not enabled on the load balancer, or the target group is not referenced by a listener rule) and states which one applies, with the evidence",
+        "The output states that it skipped the security-group and NACL checks because Target.NotInUse is a routability code"
+      ]
+    },
+    {
+      "id": "nlb-without-security-group",
+      "task_type": "chat",
+      "prompt": "Target group nebula-demo-nlb-tg behind the NLB nebula-demo-nlb in us-east-1 has an unhealthy target. Diagnose the specific root cause now using read-only calls and report the corrected settings. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent finds the NLB has no security group, so the target SG must allow the health-check port from the NLB's private IPs or the VPC CIDR instead of from a load-balancer SG, finds that rule missing, and classifies SG_BLOCK.",
+      "assertions": [
+        "The output recognizes the NLB has no security group",
+        "The output classifies the cause as SG_BLOCK",
+        "The output reports the inbound rule with the NLB private IPs or the VPC CIDR as the source, not a load-balancer security group"
+      ]
+    },
+    {
+      "id": "ecs-awsvpc-target",
+      "task_type": "chat",
+      "prompt": "Target group nebula-demo-ecs-tg has IP targets from an ECS service using awsvpc networking and they are unhealthy with Target.Timeout. Diagnose the specific root cause now using read-only calls and report it. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent recognizes the targets are ECS awsvpc task ENIs, finds the task ENI's security group via the network interface, checks the health-check port against that SG, and reports the cause with the ECS service as the place to fix it.",
+      "assertions": [
+        "The output identifies the target as an ECS awsvpc task with its own network interface",
+        "The output reads the security group from the task network interface, not from an EC2 instance",
+        "The output reports a specific cause class with the evidence observed"
+      ]
+    },
+    {
+      "id": "unrelated-classic-lb",
+      "task_type": "chat",
+      "prompt": "My Classic Load Balancer my-classic-elb shows OutOfService instances and the HealthyHostCount metric in the AWS/ELB namespace is 0. Why?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-gateway-lb",
+      "task_type": "chat",
+      "prompt": "The target group behind my Gateway Load Balancer my-gwlb has unhealthy appliance targets and the AWS/GatewayELB UnHealthyHostCount alarm is firing. What is wrong?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-s3-lifecycle",
+      "task_type": "chat",
+      "prompt": "How do I set an S3 lifecycle rule to move objects to Glacier after 90 days?",
+      "should_trigger": false
+    }
+  ]
+}

@@ -4,19 +4,15 @@ description: >-
   Diagnose unhealthy targets in an Application Load Balancer (ALB) or Network
   Load Balancer (NLB) target group. Use this skill whenever a prompt names an
   ALB/NLB target group and says targets are unhealthy, health checks are
-  failing, Target.Timeout or another target-health reason code appears, or the
+  failing, a target-health reason code such as Target.Timeout appears, or the
   load balancer returns 5xx/503 with no healthy targets. Also use it when an
   investigation starts from an UnHealthyHostCount alarm in the
-  AWS/ApplicationELB or AWS/NetworkELB namespace. This includes EC2, IP,
-  Lambda, ECS, and EKS targets, and intermittent health-check failures where
-  security groups and NACLs already look correct. The skill runs a
-  deterministic, read-only decision tree over the target group's health check
-  config, per-target reason codes, security groups, NACLs, subnet/AZ
-  routability, target resource utilization, and deregistration/cross-zone
-  settings, then classifies the specific root cause and emits the corrected
-  values. Not for Classic Load Balancers (AWS/ELB namespace) or Gateway Load
-  Balancers (AWS/GatewayELB namespace). Read-only: it never modifies a
-  security group, target group, or instance.
+  AWS/ApplicationELB or AWS/NetworkELB namespace. Covers EC2, IP, Lambda, ECS,
+  and EKS targets. Runs a deterministic, read-only decision tree over health
+  check config, reason codes, security groups, NACLs, subnet/AZ routability,
+  and target resource utilization, then classifies the root cause and emits
+  the corrected values. Not for Classic Load Balancers (AWS/ELB) or Gateway
+  Load Balancers (AWS/GatewayELB). Read-only: it never modifies resources.
 metadata:
   author: saadnu-aws
   version: "1.0.0"
@@ -64,9 +60,13 @@ Read-only permissions, all covered by `AIDevOpsAgentAccessPolicy` through its
 - CloudWatch: `cloudwatch:GetMetricData`
 - ECS/EKS/Auto Scaling, only for those target types: `ecs:DescribeTasks`,
   `ecs:DescribeServices`, `autoscaling:DescribeAutoScalingGroups`, `eks:Describe*`
-- Lambda targets: `lambda:GetPolicy`
+- Lambda targets: `lambda:GetPolicy`, `lambda:GetFunctionConfiguration`, and
+  `cloudformation:GetTemplate` (to read an inline handler). `lambda:GetFunction`
+  is not in the policy, so function code is read from the stack template.
 
 If a call is denied, say which check it blocked and scope the conclusion.
+
+Run these calls yourself in this conversation (for example with `use_aws`). Do not hand the checks to a subagent: a subagent does not receive this decision tree, and its result may not come back in the same turn.
 
 ## Workflow
 
@@ -86,7 +86,11 @@ Copy this checklist and work through it in order:
   - **Lambda:** no target SG or NACL. Check the function's resource policy
     (`lambda:GetPolicy`) allows `elasticloadbalancing.amazonaws.com` to invoke
     it, and check the `Errors` and `Throttles` metrics. The default
-    health-check timeout is 30 seconds.
+    health-check timeout is 30 seconds. To find why a Lambda target returns a
+    bad status, read the function code. If `lambda:GetFunction` is denied, read
+    the template of the CloudFormation stack that owns the function
+    (`cloudformation:GetTemplate`), where an inline handler is visible. If that
+    is also denied, say so and scope the conclusion.
   - **IP / ECS awsvpc:** find the target ENI with `ec2:DescribeNetworkInterfaces`
     to get its security groups. `DescribeInstances` only covers instance targets.
 - [ ] Step 3: Route by state and reason code:
@@ -94,12 +98,13 @@ Copy this checklist and work through it in order:
   - `Elb.InitialHealthChecking` + recent deploy -> `GRACE_PERIOD` or `DEPLOYMENT_DRAIN` (timing-inferred; see Notes). Go to Step 6.
   - `Target.DeregistrationInProgress` / flapping during deploys -> `DEREGISTRATION_OR_CROSSZONE` (`DescribeTargetGroupAttributes` / `DescribeLoadBalancerAttributes`). Go to Step 6.
   - `Target.Timeout` / `Target.FailedHealthChecks` -> continue to Step 4.
-  - `unused` / `Target.NotInUse` -> either the target's AZ is not enabled on the LB, or the target group is not referenced by a listener rule. Compare the target's AZ with `DescribeLoadBalancers` and check `DescribeRules`. Class `ROUTABILITY`. Skip Step 4 and go to Step 6.
+  - `unused` / `Target.NotInUse` -> either the target's AZ is not enabled on the LB, or the target group is not referenced by a listener rule. Compare the target's AZ with `DescribeLoadBalancers` and check `DescribeRules`. Class `ROUTABILITY`. Skip Step 4 and go to Step 6: do not read security groups or NACLs for this code. In the report, name both possible meanings, say which one applies, and say the network-path checks were skipped because `Target.NotInUse` is a routability code.
   - `unused` / `Target.InvalidState`, `Target.NotRegistered`, `Target.IpUnusable` -> the target is stopped or terminated, not registered, or its IP belongs to a load balancer. Not a network cause. Class `TARGET_STATE`. Report the observed state. Go to Step 6.
   - `unavailable` / `Target.HealthCheckDisabled` -> health checks are off for the target group (the default for Lambda target groups). This is not a failure. Class `HEALTH_CHECK_CONFIG`; report whether that is intended. Go to Step 6.
   - `Elb.InternalError` -> the failure is on the load balancer side. Do not attribute it to the target. Class `LB_INTERNAL`. Go to Step 6.
 - [ ] Step 4: Check the network path, stopping at the first failure:
   - Health-check port/protocol/path vs. the app's actual listener. Mismatch -> `HEALTH_CHECK_CONFIG`.
+    When the instance or image is readable, confirm the process listens on the health-check port.
   - Security groups on the HC port. Use `DescribeLoadBalancers` to see the LB's security groups.
     - ALB, or NLB with security groups: the target SG must allow the HC port from the LB SG. Missing -> `SG_BLOCK`.
     - NLB without security groups: the target SG must allow the HC port from the NLB's private IPs or the VPC CIDR. Missing -> `SG_BLOCK`.
@@ -112,6 +117,7 @@ Copy this checklist and work through it in order:
 - [ ] Step 6: Map the cause class to its corrected setting using the table in [references/decision-tree.md](references/decision-tree.md#cause-classes-and-corrected-settings-step-6).
 - [ ] Step 7: Validate before presenting: confirm the evidence for the chosen class was actually observed (a specific rule, reason code, or metric), not assumed; if a permission gap blocked a check, say which and scope the conclusion.
 - [ ] Step 8: Report the cause class, affected targets, evidence, and the corrected setting for the operator to apply via IaC. Never apply it.
+  - **Finish in this turn.** Present the full result in the same response. Do not end with "the diagnosis is running" or hand the work to a background investigation unless the user asked for one.
 
 ## Gotchas
 

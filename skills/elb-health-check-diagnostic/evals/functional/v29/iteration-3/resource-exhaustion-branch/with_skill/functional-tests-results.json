@@ -1,0 +1,74 @@
+{
+  "version": "v29",
+  "iteration": 3,
+  "eval_id": "resource-exhaustion-branch",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'elb-health-check-diagnostic' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response fully satisfies the expected criteria. It confirms the network path (SGs, NACLs, routing) is clean, consistent with the user's statement. It then checks resource utilization metrics\u2014CPU utilization, CPU credit balance, CPU surplus credits, EBS I/O balance, and network throughput\u2014for both targets. It explicitly compares the unhealthy target (A) against the healthy target (B), showing A is pinned at the t3.micro baseline (10% CPU) with near-zero CPU credit balance while B has rising credits and lower utilization, demonstrating the exhaustion is isolated to one target. It rules out disk and network via EBSIOBalance% and NetworkIn comparisons. Finally, it explicitly classifies the issue as 'RESOURCE_EXHAUSTION' and ties this to CPU credit exhaustion causing health check timeouts. This matches all elements of the expected output: clean network path confirmation, resource utilization checks (CPU/credits/EBS/network), cross-target comparison to confirm isolation, and explicit RESOURCE_EXHAUSTION classification.",
+      "evidence": "\"Class: `RESOURCE_EXHAUSTION`.\" ... \"CPUUtilization | Flat at about 10.0%... | About 3.6\u20133.8%\" \"CPUCreditBalance | About 0... | Rising from 0 to about 6\" ... \"`EBSIOBalance%` was 99 on both... Disk is ruled out.\" \"NetworkIn and packet counts on A were tiny and in line with B after startup... network is ruled out.\" \"A's CPU sits at exactly the t3.micro baseline (10%). That is the signature of a credit-starved burstable instance being throttled.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The output checks network or EBS burst metrics (NetworkIn/Out, BurstBalance, or EBSIOBalance%) before concluding",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'EBSIOBalance% was 99 on both, and the volumes are gp3... Disk is ruled out.' and 'NetworkIn and packet counts on A were tiny and in line with B after startup... network is ruled out.'",
+          "reasoning": "The agent explicitly checked NetworkIn and EBSIOBalance% before concluding, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output compares the targets in the group and identifies which are saturated and which are not",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Table comparing CPUUtilization and CPUCreditBalance for A (unhealthy, flat at 10%, credit balance ~0) vs B (healthy, ~3.6-3.8%, credit balance rising to ~6), with explicit statement 'A's CPU sits at exactly the t3.micro baseline... That is the signature of a credit-starved burstable instance being throttled.'",
+          "reasoning": "The output clearly compares both targets and identifies A as saturated and B as not.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output classifies the cause as RESOURCE_EXHAUSTION and leads the fix with the saturated dimension (for example CPU credits or instance size) rather than a longer health-check timeout",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'Class: RESOURCE_EXHAUSTION' and the fix section leads with '1. Fix the saturation first. Set CpuCredits: unlimited... or move to a larger or non-burstable instance type' before mentioning timeout as 'Optional, secondary... This only hides the saturation, so don't use it as the fix.'",
+          "reasoning": "The output explicitly classifies as RESOURCE_EXHAUSTION and leads the fix with CPU credits/instance size, explicitly deprioritizing the timeout fix.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output does not apply BurstBalance to a gp3 volume",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output uses 'EBSIOBalance%' for the gp3 volumes, not 'BurstBalance': 'EBSIOBalance% was 99 on both, and the volumes are gp3 (3000 IOPS, 125 MB/s).'",
+          "reasoning": "BurstBalance is the correct metric for gp2 volumes, while EBSIOBalance% is correct for gp3/io volumes. The agent correctly used EBSIOBalance% for gp3, not BurstBalance, satisfying the assertion that it does not misapply BurstBalance to gp3.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "48s",
+    "cost": "$0.40",
+    "context_window": {
+      "utilization": "6.5%",
+      "compaction_count": 0
+    }
+  }
+}

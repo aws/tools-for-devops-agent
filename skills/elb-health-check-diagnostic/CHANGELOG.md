@@ -21,3 +21,11 @@
 - Scope is ALB/NLB only. Classic and Gateway Load Balancers are excluded.
 - Deployment correlation is timing-inferred. VPC Reachability Analyzer is a
   planned follow-up.
+- For Lambda targets that return a bad status, reads the inline handler from
+  the owning CloudFormation stack template, because `lambda:GetFunction` is not
+  in `AIDevOpsAgentAccessPolicy`.
+- For `Target.NotInUse`, skips the security-group and NACL checks and names
+  both possible meanings (AZ not enabled, or target group not in a listener
+  rule).
+- Runs its checks directly in the conversation instead of handing them to a
+  subagent, and presents the full result in the same turn.

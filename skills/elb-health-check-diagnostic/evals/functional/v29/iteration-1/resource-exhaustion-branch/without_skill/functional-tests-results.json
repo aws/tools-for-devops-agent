@@ -1,0 +1,70 @@
+{
+  "version": "v29",
+  "iteration": 1,
+  "eval_id": "resource-exhaustion-branch",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent checked target resource utilization (CPU, CPU credit balance/usage, network bytes) for the unhealthy target and compared it against the healthy target in the same target group, finding that the unhealthy instance was CPU-credit exhausted (standard burstable mode, 0 credit balance, flat 10% baseline CPU) while the healthy instance had normal utilization and growing credits. This is effectively a RESOURCE_EXHAUSTION classification (CPU credit exhaustion on a t3.micro), isolated to one target, which matches the expected output's criteria of checking CPU/credits, comparing across targets, and classifying as resource exhaustion. The agent also appropriately noted confidence caveats and confirmed network path was clean before reaching this conclusion.",
+      "evidence": "\"`CPUCreditBalance` on A has been about 0 for the whole window... The CPU credit mode is `standard`, so it can't borrow credits... Instance B is at about 3.5% CPU and its credit balance is building (0 \u2192 6).\" and \"Most likely root cause: ... is out of CPU credits and throttled to the t3.micro baseline.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The output checks network or EBS burst metrics (NetworkIn/Out, BurstBalance, or EBSIOBalance%) before concluding",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent cites NetworkIn: 'A received about 48 MB of inbound traffic in its first 5 minutes, against about 6 MB for B.' It also examines CPUCreditBalance and CPUCreditUsage extensively ('CPUCreditBalance on A has been about 0 for the whole window from 06:00 to 06:50 UTC... CPUCreditUsage on A is about 1.0 per 5 minutes').",
+          "reasoning": "The assertion requires checking network or burst metrics before concluding. The output explicitly checks NetworkIn (48MB vs 6MB) and CPU credit burst metrics (CPUCreditBalance, CPUCreditUsage) before reaching its conclusion. This satisfies the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output compares the targets in the group and identifies which are saturated and which are not",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Instance B is at about 3.5% CPU and its credit balance is building (0 \u2192 6).' versus 'CPU is flat at 10.0% for the entire hour' for A, and 'i-1234567890abcdef0_3 is unhealthy... i-1234567890abcdef0_4 is healthy.'",
+          "reasoning": "The agent directly compares the two targets in the group, explicitly identifying A as CPU-saturated/throttled and B as healthy with building credit balance and lower CPU usage. This is clear evidence of comparison between saturated and non-saturated targets.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output classifies the cause as RESOURCE_EXHAUSTION and leads the fix with the saturated dimension (for example CPU credits or instance size) rather than a longer health-check timeout",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Most likely root cause: i-1234567890abcdef0_3 ... is out of CPU credits and throttled to the t3.micro baseline.' The fix section leads with: 'If the workload needs sustained CPU, switch A to unlimited credit mode or move to a larger or non-burstable instance type.' No mention of increasing health check timeout as the primary fix.",
+          "reasoning": "The output clearly identifies the root cause as CPU credit exhaustion (a resource exhaustion issue) and the fix recommendations lead with addressing the CPU credit/instance sizing dimension (switching to unlimited credit mode or larger instance type), not with increasing the health check timeout. The health check timeout is mentioned only to explain the failure mechanism, not as a recommended fix.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output does not apply BurstBalance to a gp3 volume",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent uses 'CPUCreditBalance' and 'CPUCreditUsage' metrics (burst credits for CPU, applicable to T-family instances) throughout, not BurstBalance (which applies to EBS gp2/io1 volumes). No mention of BurstBalance or gp3 anywhere in the output.",
+          "reasoning": "The output never references BurstBalance at all, and does not discuss EBS volumes or gp3 storage. It correctly uses CPU credit metrics for the t3.micro instance type. Since BurstBalance was never applied anywhere, let alone to a gp3 volume, this assertion passes by omission/absence of the problematic behavior.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "35s",
+    "cost": "$0.29",
+    "context_window": {
+      "utilization": "5.7%",
+      "compaction_count": 0
+    }
+  }
+}
