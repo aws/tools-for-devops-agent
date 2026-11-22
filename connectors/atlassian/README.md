@@ -1,4 +1,4 @@
-# Atlassian MCP
+# Atlassian
 
 Use Atlassian MCP to find Jira work, Confluence runbooks, previous incidents and
 connected source code, and to create follow-up work when requested. The server is
