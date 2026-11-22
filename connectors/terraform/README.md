@@ -40,25 +40,6 @@ For details on token permissions and remote-server safeguards, see [Remote Terra
 - "Show the Terraform state version metadata for the payments workspace; do not change anything."
 - "Create a plan-only run for the staging workspace and summarize the proposed changes. Do not approve or apply it."
 
-## Optional: install HashiCorp Terraform Agent Skills
-
-HashiCorp's Terraform Agent Skills are separate from this connector and are not installed into AWS DevOps Agent by connecting it. Browse the official [HashiCorp Agent Skills repository](https://github.com/hashicorp/agent-skills) and its [Terraform skill catalog](https://github.com/hashicorp/agent-skills/blob/main/SKILLS.md), then install skills into a compatible client as needed. For example:
-
-```sh
-npx skills add hashicorp/agent-skills/plugins/terraform/skills/terraform-style-guide
-npx skills add hashicorp/agent-skills/plugins/terraform/skills/terraform-test
-npx skills add hashicorp/agent-skills/plugins/terraform/skills/terraform-stacks
-```
-
-For Claude Code, install the Terraform plugin bundle with:
-
-```sh
-claude plugin marketplace add hashicorp/agent-skills
-claude plugin install terraform@hashicorp
-```
-
-See the Agent Skills repository for current instructions for other compatible clients. The skills are maintained and licensed by HashiCorp under that repository's license; this connector does not copy or redistribute their content.
-
 ## Troubleshooting
 
 - **"Authorization bearer token is required"** — Reconnect with the API token in the connector's credential field. Do not include the `Bearer ` prefix yourself.
