@@ -1,0 +1,76 @@
+name: Check partner maintainers
+
+# Fails a pull request that changes a partner-managed connector or one of its skills
+# unless its author is a user in that connector's `maintainers` on the base branch
+# and it leaves `maintainers` unchanged. Any other such pull request needs the
+# `partner-managed-verified` label, added by a code owner of /connectors/ after its
+# last push. The rules are in .github/scripts/check_partner_maintainers.py, with
+# tests in tests/test_check_partner_maintainers.py.
+#
+# NOTE: a red check does not block merging on its own. An admin must add the
+# job's name ("check-partner-maintainers") to the required status checks for
+# `main` in branch protection. Until then this workflow is advisory.
+#
+# A pull request runs its own copy of the script, so code-owner review of
+# /.github/ (.github/CODEOWNERS) is the control.
+
+# The script reads the action back from the names of earlier runs to find the last
+# push, so this name is part of the check. `action` is set by GitHub, never by the
+# pull request.
+run-name: "check-partner-maintainers: ${{ github.event.action }}"
+
+on:
+  pull_request:
+    # `edited`: a change of the base branch fires only this type, and what a pull
+    # request changes depends on its base.
+    # `labeled` / `unlabeled`: adding or removing the label takes effect at once.
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    # Deliberately NOT filtered with `paths:`: a required status check that never
+    # runs is reported as pending forever.
+
+permissions:
+  contents: read
+  # The issue events say who added the label and when, and this workflow's runs
+  # say when the head commit was pushed.
+  issues: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: check-partner-maintainers-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # The job id and its display name are kept identical, because the display name
+  # is the status check context that branch protection matches on. The job has no
+  # `if:`, because a skipped required check counts as passed.
+  check-partner-maintainers:
+    name: check-partner-maintainers
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Full history, so the script can find the merge base.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned dependencies
+        run: python3 -I -m pip install --require-hashes -r .github/scripts/skill-rules/requirements.txt
+
+      - name: Check the author against the connector's maintainers
+        # The script reads the pull request from the event payload file. No event
+        # field is interpolated into this command.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          python3 .github/scripts/check_partner_maintainers.py \
+            --event "$GITHUB_EVENT_PATH" \
+            --base-ref "origin/${BASE_REF}"
