@@ -78,8 +78,8 @@ Use the AWS DevOps Agent Asset API to manage the skill programmatically. Assign 
 
 ### Demo videos
 
-- [Demo 1: diagnosing an SSH connection timeout with an Automation runbook (3 min)](VIDEO_1_USER_ATTACHMENTS_URL)
-- [Demo 2: reviewing and hardening an Automation runbook (3 min)](VIDEO_2_USER_ATTACHMENTS_URL)
+- [Demo 1: diagnosing an SSH connection timeout with an Automation runbook (3 min)](https://github.com/user-attachments/assets/deaf5397-64f4-4143-bdc8-1546c0ed6af1)
+- [Demo 2: reviewing and hardening an Automation runbook (3 min)](https://github.com/user-attachments/assets/cfb1634d-fbe1-4ac6-a96e-85d09921d8bd)
 
 ### Find a runbook
 
