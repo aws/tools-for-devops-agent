@@ -14,8 +14,9 @@ replaced. Core check count 288 → 289 (Resilience 26 → 27).
 - R4 also checks live placement: no node runs more than ceil(replicas/2) Ready pods of a workload.
   Critical when all Ready pods of a multi-replica workload share one node.
 - New R23 "No tolerations that keep pods on failed nodes": a key-less `operator: Exists` on a
-  Deployment or StatefulSet (High) or an unbounded `not-ready` / `unreachable` toleration (Medium).
-  DaemonSets are N/A.
+  Deployment or StatefulSet (High) or an explicit `not-ready` / `unreachable` toleration (Medium),
+  counted only when `effect` is `NoExecute` or empty and `tolerationSeconds` is unset.
+  `NoSchedule` tolerations and bounded `NoExecute` tolerations pass. DaemonSets are N/A.
 - N16 is refined instead of adding a separate Resilience check: it applies only to IP-mode targets
   (instance-mode targets are N/A) and passes only when the namespace label is set AND the running
   pods carry the `target-health.elbv2.k8s.aws/...` gate, since the webhook injects it at pod creation.
@@ -24,7 +25,9 @@ replaced. Core check count 288 → 289 (Resilience 26 → 27).
   `inventory-schema.md`. No new permissions: the same objects are read.
 - Counts updated in the manifest, QA checklist, report contract, operator guide, README, SKILL.md,
   `llms.txt`, and the custom agent prompt. Evals: three scenario cases (grace period equal to
-  preStop, N16 on IP targets only, R23 with a DaemonSet).
+  preStop, N16 on IP targets only, R23 with a DaemonSet and a `NoSchedule` toleration).
+- Pillar evidence cells name the derived signals and source areas: R4 and R11 read area 35, N16
+  reads area 35 and the Networking pillar lists it.
 
 ## [1.10.0] - 2026-11-18
 Optional overlays, contributed from the `eks-guardian` proposal (PR #85) instead of adding a

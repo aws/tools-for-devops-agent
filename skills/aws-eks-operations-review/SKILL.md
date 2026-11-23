@@ -24,7 +24,7 @@ metadata:
 ## Scope boundary
 Comprehensive graded review: 289 checks across 9 pillars. For quick health checks during active incidents, use incident investigation skills instead; it suits proactive assessments.
 ## Execution scope
-A full review needs many read-only tool calls; duration varies with cluster size, API responsiveness, permissions, and telemetry. A targeted review grades only the named unit plus required AX evidence. The 49 discovery areas collect evidence; the 288 core rows are grading items across nine pillars plus AWS API/Insights. Per-unit counts and exact ID membership live in `references/runtime/check-manifest.md`; read them there each run.
+A full review needs many read-only tool calls; duration varies with cluster size, API responsiveness, permissions, and telemetry. A targeted review grades only the named unit plus required AX evidence. The 49 discovery areas collect evidence; the 289 core rows are grading items across nine pillars plus AWS API/Insights. Per-unit counts and exact ID membership live in `references/runtime/check-manifest.md`; read them there each run.
 
 ## Non-negotiable runtime contract
 - AWS DevOps Agent cannot create or store runtime files. Keep only the bounded transient in-conversation ledger below; never create inventory JSON, sidecars, reports, checkpoints, or filesystem resume state. Render the complete report directly in the final response after QA passes.

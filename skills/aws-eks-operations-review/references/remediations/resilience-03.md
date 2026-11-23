@@ -48,9 +48,9 @@ volumeBindingMode: WaitForFirstConsumer
 ### R23 — No tolerations that keep pods on failed nodes
 **Why it matters:** When a node stops reporting, the control plane taints it `node.kubernetes.io/not-ready` or `node.kubernetes.io/unreachable` with effect `NoExecute`, and pods are evicted after their `tolerationSeconds` (300s by default, added by the DefaultTolerationSeconds admission plugin). A toleration with `operator: Exists` and no key matches every taint, including these, with no time limit: the pods stay bound to the dead node, and the controller does not replace them, so the workload runs below its replica count until someone deletes the pods or the node.
 **Steps:**
-1. Find Deployments and StatefulSets that tolerate everything or tolerate the node-failure taints forever:
+1. Find Deployments and StatefulSets that tolerate the node-failure taints forever. Only `effect: NoExecute` or an empty effect with no `tolerationSeconds` counts; `NoSchedule` tolerations never block eviction:
    ```bash
-   kubectl get deploy,statefulset -A -o json | jq -r '.items[] | .metadata as $m | .spec.template.spec.tolerations[]? | select((.operator=="Exists" and (.key==null or .key=="")) or ((.key=="node.kubernetes.io/not-ready" or .key=="node.kubernetes.io/unreachable") and .tolerationSeconds==null)) | "\($m.namespace)/\($m.name) \(.)"'
+   kubectl get deploy,statefulset -A -o json | jq -r '.items[] | .metadata as $m | .spec.template.spec.tolerations[]? | select(((.effect // "") == "" or .effect == "NoExecute") and .tolerationSeconds == null) | select((.operator == "Exists" and (.key // "") == "") or .key == "node.kubernetes.io/not-ready" or .key == "node.kubernetes.io/unreachable") | "\($m.namespace)/\($m.name) \(.)"'
    ```
 2. Replace a key-less `Exists` with explicit keys for the taints the workload really needs (for example a dedicated NodePool taint).
 3. If the workload must ride out short node flaps, bound the node-failure tolerations instead of removing them.
