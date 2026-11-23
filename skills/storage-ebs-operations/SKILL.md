@@ -1,5 +1,5 @@
 ---
-name: storage-ebs-expertise
+name: storage-ebs-operations
 description: >
   Use this skill when a user wants to know why Amazon EBS storage is slow, why an
   EBS alarm fired, or whether their EBS setup is production-ready, even if they only
@@ -22,7 +22,7 @@ metadata:
   aws-devops-agent-skills.aws-services: "Amazon EBS, Amazon EC2, Amazon CloudWatch, AWS CloudTrail, AWS Service Quotas"
   aws-devops-agent-skills.technical-domains: "Storage"
 ---
-# Amazon EBS Expertise
+# Amazon EBS Operations
 
 Use this skill to troubleshoot Amazon EBS problems and to review an account's Amazon EBS setup. It has two modes. Troubleshoot mode answers "something is wrong, why?" through one of five paths and returns a fixed verdict. Review mode answers "is my EBS setup healthy before something goes wrong?" and returns a rated report. Both modes are read-only and share the same volume-type rules, instance limits and service rules. Load only the reference files the request needs.
 

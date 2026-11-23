@@ -1,4 +1,4 @@
-# Amazon EBS Expertise
+# Amazon EBS Operations
 
 This skill enables the AWS DevOps Agent to troubleshoot Amazon EBS problems and to review an account's Amazon EBS setup, with one consistent procedure every run.
 
@@ -50,7 +50,7 @@ Least-privilege policy for the actions to add:
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "StorageEbsExpertiseReadOnly",
+      "Sid": "StorageEbsOperationsReadOnly",
       "Effect": "Allow",
       "Action": [
         "ec2:GetEbsEncryptionByDefault",
@@ -68,7 +68,7 @@ Least-privilege policy for the actions to add:
 }
 ```
 
-To add the same actions with CloudFormation, deploy [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) with `EnableStorageEbsExpertise` set to `true`.
+To add the same actions with CloudFormation, deploy [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) with `EnableStorageEbsOperations` set to `true`.
 
 If a call is denied, the skill names the API under Gaps and says which conclusion stays unconfirmed, instead of guessing. AWS CloudTrail access is optional; the skill works without it. `DescribeVolumesModifications` returns only the most recent modification per volume, so without AWS CloudTrail the skill reports modification history and the 24-hour modification count as Gaps.
 
@@ -102,19 +102,19 @@ The agent needs only `SKILL.md` and `references/`. When you upload or import the
 
 **Option A: Upload as a zip file**
 
-1. From the folder that contains `storage-ebs-expertise/`, zip the directory (only including allowed extensions):
+1. From the folder that contains `storage-ebs-operations/`, zip the directory (only including allowed extensions):
    ```bash
-   zip -r -X storage-ebs-expertise.zip storage-ebs-expertise/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' '*/CHANGELOG.md' '*/evals/*' '*/.DS_Store'
+   zip -r -X storage-ebs-operations.zip storage-ebs-operations/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' '*/CHANGELOG.md' '*/evals/*' '*/.DS_Store'
    ```
 2. In the AWS DevOps Agent Operator Web App, choose **Knowledge**, then the **Skills** tab.
 3. Choose **Add skill**, then **Upload skill**.
-4. Drag and drop `storage-ebs-expertise.zip` (max 6 MB).
+4. Drag and drop `storage-ebs-operations.zip` (max 6 MB).
 5. Select the agent types: **Chat tasks** and **Incident RCA**.
 6. Choose **Upload** and confirm the status is **Active**.
 
 **Option B: Import from a repository**
 
-If your Agent Space has a repository connection, choose **Add skill**, then **Import from repository**. Import or zip only `SKILL.md` and `references/`. Pointing the import at the whole `storage-ebs-expertise` directory pulls in every file in it, including `evals/`.
+If your Agent Space has a repository connection, choose **Add skill**, then **Import from repository**. Import or zip only `SKILL.md` and `references/`. Pointing the import at the whole `storage-ebs-operations` directory pulls in every file in it, including `evals/`.
 
 **Option C: Upload via the Asset API**
 
@@ -159,7 +159,7 @@ You do not name the skill; the agent matches it from the request or the alarm.
 ## File Layout
 
 ```
-storage-ebs-expertise/
+storage-ebs-operations/
 ├── SKILL.md                     # published, read by the agent
 ├── references/                  # published, read by the agent
 │   ├── troubleshoot-performance.md

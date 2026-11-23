@@ -35,7 +35,7 @@ Metadata:
           - EnableSageMakerAIOpsReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
-          - EnableStorageEbsExpertise
+          - EnableStorageEbsOperations
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -212,10 +212,10 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
-  EnableStorageEbsExpertise:
+  EnableStorageEbsOperations:
     Type: String
     Description: >
-      Amazon EBS Expertise skill (adds read-only ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId,
+      Amazon EBS Operations skill (adds read-only ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId,
       dlm:GetLifecyclePolicies/GetLifecyclePolicy, rbin:ListRules/GetRule, fis:GetExperiment, and
       compute-optimizer:GetEBSVolumeRecommendations).
     AllowedValues: ['true', 'false']
@@ -251,7 +251,7 @@ Conditions:
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
-  SkillStorageEbsExpertise: !Equals [!Ref EnableStorageEbsExpertise, 'true']
+  SkillStorageEbsOperations: !Equals [!Ref EnableStorageEbsOperations, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   SsmAutomationExecutionRead: !Equals [!Ref EnableSsmAutomationExecutionRead, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
@@ -781,7 +781,7 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
-  # storage-ebs-expertise: adds only the read actions the skill uses that
+  # storage-ebs-operations: adds only the read actions the skill uses that
   # AIDevOpsAgentAccessPolicy does not grant: the account's EBS encryption-by-default
   # settings, Amazon Data Lifecycle Manager and Recycle Bin rules (snapshot management
   # and reversibility), AWS FIS experiment details (injected-latency check), and the
@@ -791,17 +791,17 @@ Resources:
   # already covered by the managed policy. Strictly read-only; no Modify*, Create*,
   # Delete* or Put* is granted. Without this policy the skill lists the denied calls
   # under Gaps and reports the dependent conclusions as unconfirmed.
-  PolicyStorageEbsExpertise:
+  PolicyStorageEbsOperations:
     Type: AWS::IAM::Policy
-    Condition: SkillStorageEbsExpertise
+    Condition: SkillStorageEbsOperations
     Properties:
-      PolicyName: DevOpsAgentSkill-StorageEbsExpertise
+      PolicyName: DevOpsAgentSkill-StorageEbsOperations
       Roles:
         - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: StorageEbsExpertiseReadOnly
+          - Sid: StorageEbsOperationsReadOnly
             Effect: Allow
             Action:
               - ec2:GetEbsEncryptionByDefault
@@ -869,7 +869,7 @@ Outputs:
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
-        - storage-ebs-expertise: ${EnableStorageEbsExpertise} (ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId, dlm:GetLifecyclePolicies/GetLifecyclePolicy, rbin:ListRules/GetRule, fis:GetExperiment, compute-optimizer:GetEBSVolumeRecommendations)
+        - storage-ebs-operations: ${EnableStorageEbsOperations} (ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId, dlm:GetLifecyclePolicies/GetLifecyclePolicy, rbin:ListRules/GetRule, fis:GetExperiment, compute-optimizer:GetEBSVolumeRecommendations)
         - aws-systems-manager custom agent add-on: ${EnableSsmAutomationExecutionRead} (ssm:GetAutomationExecution on this account's automation executions, for the per-location settings of multi-account runs; the aws-systems-manager skill itself needs no extra policy)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines

@@ -4,7 +4,7 @@
 
 ### Added
 
-- Initial release of `storage-ebs-expertise` for AWS DevOps Agent.
+- Initial release of `storage-ebs-operations` for AWS DevOps Agent.
 - Troubleshoot mode with five paths: performance attribution, snapshots, encryption and AWS KMS, volume modification, and billing. Each returns a fixed verdict (Answer, Evidence, Binding layer, Recommendation, Separate findings, Gaps).
 - Review mode with six rated areas: capacity and quota headroom, observability, cost hygiene, resilience, encryption posture, and deletion protection. Every Review response begins with a Summary table of the six areas.
 - Quota headroom capability: per-quota intake questions with every proposed Service Quotas request and every drafted AWS Support case (IOPS or storage, Fast Snapshot Restore, archived snapshots per volume, in-progress snapshot archives, concurrent copy-volume operations, and Provisioned Rate for Volume Initialization), worded for the customer to answer. The two archive quotas surface their extra questions only when the requested value is more than 25, and point to an archive cost comparison and the archiving best-practices link. An approval caution on both paths states that an increase is not guaranteed and the amount is decided by AWS.
@@ -27,6 +27,6 @@
 - Shared references for read-only data collection, metric math, documented volume-type limits, finding logic, and Amazon EBS service rules.
 - Agent types `CHAT` and `INCIDENT_RCA`.
 - Read-only by design: mutating actions such as raising IOPS or modifying a volume are proposals only and run only through directed actions approved on the approval card. A typed approval in chat is not approval.
-- Least-privilege read-only IAM permissions listed in README.md, and an `EnableStorageEbsExpertise` option in `cloudformation/devops-agent-skill-policies` for the actions that `AIDevOpsAgentAccessPolicy` does not grant.
+- Least-privilege read-only IAM permissions listed in README.md, and an `EnableStorageEbsOperations` option in `cloudformation/devops-agent-skill-policies` for the actions that `AIDevOpsAgentAccessPolicy` does not grant.
 - README Limitations note that Amazon EBS Multi-Attach volumes are not covered.
 - Evals for chat, investigation, an Indeterminate performance case, and negative (should not trigger) scenarios.
