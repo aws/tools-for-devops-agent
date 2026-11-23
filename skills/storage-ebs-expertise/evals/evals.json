@@ -99,6 +99,35 @@
       ]
     },
     {
+      "id": "latency-indeterminate-no-signal",
+      "task_type": "investigation",
+      "prompt": "Help me reason about an EBS case from the numbers I have, and tell me whether adding IOPS would help. An alarm on VolumeQueueLength fired for a gp3 volume. Here are the facts. The volume is provisioned at 6,000 IOPS and 250 MiB/s. Over the alarm window its actual IOPS dropped to about 900 and its throughput to about 40 MiB/s, both far below the provisioned values, while VolumeQueueLength and write latency rose. The instance EBS baseline is 12,000 IOPS and 750 MiB/s, so the instance is not the limit. DescribeVolumeStatus shows the volume status as ok with all checks passed, VolumeStalledIOCheck is 0 for the whole window, AWS Health DescribeEvents returns no open events for Amazon EBS or Amazon EC2 in the Region, and AWS FIS ListExperiments shows no running experiment. Treat these numbers as given; do not tell me the resource does not exist. Is this an AWS-side problem, and should we add more IOPS?",
+      "expected_root_cause": "Indeterminate. Latency and queue length rise while IOPS and throughput fall, and the volume and the instance are below their limits, so this is not saturation. There is no direct signal of an AWS-side impairment (volume status ok, VolumeStalledIOCheck 0, no AWS Health event) and no running AWS FIS experiment, so the cause stays open. The agent does not name AWS-side impairment, does not recommend more provisioning, points the customer to the AWS Health Dashboard and the volume status checks and VolumeStalledIOCheck, and says to escalate to AWS Support if the symptom persists.",
+      "should_trigger": true,
+      "expected_output": "A verdict that answers that adding IOPS will not help, shows the volume and instance below their limits, reports the volume status, VolumeStalledIOCheck, AWS Health and AWS FIS results, gives the Binding layer as Indeterminate, keeps the cause open, and tells the customer to watch the AWS Health Dashboard and the volume status checks and to escalate if the symptom persists.",
+      "assertions": [
+        "The Binding layer is reported as Indeterminate, not as AWS-side impairment, Volume or Instance.",
+        "The response says the volume and the instance are below their limits and the volume is not saturated.",
+        "The response does not recommend increasing IOPS, throughput or volume size.",
+        "The response tells the customer to check the AWS Health Dashboard and the volume status checks or VolumeStalledIOCheck, and to escalate if the symptom persists.",
+        {
+          "text": "Indeterminate is named",
+          "evaluator": "regex",
+          "pattern": "(?i)indeterminate"
+        },
+        {
+          "text": "AWS Health is referenced",
+          "evaluator": "regex",
+          "pattern": "(?i)aws health"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "pattern": "MiB/s"
+        }
+      ]
+    },
+    {
       "id": "modification-optimizing-not-stuck",
       "task_type": "chat",
       "prompt": "I changed the IOPS on volume vol-0123456789abcdef0 a while ago and it still hasn't taken effect. Is it stuck?",
@@ -131,12 +160,19 @@
       "task_type": "chat",
       "prompt": "My snapshot costs keep going up. Which of my snapshots can I safely delete? One backs an AMI, one has no source volume and no AMI, and one is from a volume that still exists.",
       "should_trigger": true,
-      "expected_output": "The agent classifies by lineage, not age or names. The AMI-backing snapshot is Do not delete, the orphaned one is a Candidate, the one with an existing source volume is Verify. It checks sharing, aws:dlm:* tags and Recycle Bin rules, and says savings are an upper bound because snapshots are incremental. Deletions are proposals only.",
+      "expected_output": "The agent classifies by lineage, not age or names. The AMI-backing snapshot is Do not delete, the one whose source volume still exists is Verify, and the one with no source volume and no AMI is listed as Needs owner review because it may be the only remaining copy of the data. It checks sharing, aws:dlm:* tags and Recycle Bin rules, and says savings are an upper bound because snapshots are incremental. No snapshot is recommended for deletion. Deletes are manual steps the customer runs with their own credentials after the owner confirms the data is no longer needed, never directed actions.",
       "assertions": [
         "The AMI-backing snapshot is marked Do not delete.",
-        "The orphaned snapshot is identified as the deletion candidate.",
+        "The snapshot with no source volume and no AMI is listed for owner review and is not recommended for deletion.",
+        "The snapshot whose source volume still exists is marked Verify.",
         "Sharing status and aws:dlm:* tags are checked rather than inferred from names.",
         "The response says snapshots are incremental, so savings are an upper bound.",
+        "Any deletion is described as a manual step for the customer after the owner confirms, not as a directed action the agent runs.",
+        {
+          "text": "Owner review is named",
+          "evaluator": "regex",
+          "pattern": "(?i)owner review"
+        },
         {
           "text": "Recycle Bin is mentioned for reversibility",
           "evaluator": "regex",

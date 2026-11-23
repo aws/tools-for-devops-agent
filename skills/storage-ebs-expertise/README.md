@@ -68,6 +68,8 @@ Least-privilege policy for the actions to add:
 }
 ```
 
+To add the same actions with CloudFormation, deploy [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) with `EnableStorageEbsExpertise` set to `true`.
+
 If a call is denied, the skill names the API under Gaps and says which conclusion stays unconfirmed, instead of guessing. AWS CloudTrail access is optional; the skill works without it. `DescribeVolumesModifications` returns only the most recent modification per volume, so without AWS CloudTrail the skill reports modification history and the 24-hour modification count as Gaps.
 
 ### AWS resources
@@ -84,6 +86,7 @@ If a call is denied, the skill names the API under Gaps and says which conclusio
 - Service Quotas and most Amazon EBS settings are per Region. The skill checks the Regions you name.
 - Latency, queue length and idle-time thresholds are not encoded, because no public AWS source states them. The skill compares a volume with its own history and its type's documented expectation.
 - The encryption path and Review mode are built from public documentation and are not yet live-tested.
+- Amazon EBS Multi-Attach volumes are not covered. The instance-layer checks assume each volume is attached to one instance.
 - Some Agent Spaces hold read calls such as `dlm:GetLifecyclePolicies` and `rbin:ListRules` behind an approval gate. The skill then reports the conclusion as unconfirmed.
 
 ## Agent Types
@@ -95,7 +98,7 @@ This skill is used by the following agent types:
 
 ## Uploading to AWS DevOps Agent
 
-Only `SKILL.md` and `references/` are uploaded. `README.md`, `CHANGELOG.md`, `.skilleval.yaml` and `evals/` are not.
+The agent needs only `SKILL.md` and `references/`. When you upload or import the skill yourself, include only those.
 
 **Option A: Upload as a zip file**
 
@@ -111,7 +114,7 @@ Only `SKILL.md` and `references/` are uploaded. `README.md`, `CHANGELOG.md`, `.s
 
 **Option B: Import from a repository**
 
-If your Agent Space has a repository connection, choose **Add skill**, then **Import from repository**, and point to the `storage-ebs-expertise` directory.
+If your Agent Space has a repository connection, choose **Add skill**, then **Import from repository**. Import or zip only `SKILL.md` and `references/`. Pointing the import at the whole `storage-ebs-expertise` directory pulls in every file in it, including `evals/`.
 
 **Option C: Upload via the Asset API**
 
@@ -146,7 +149,7 @@ You do not name the skill; the agent matches it from the request or the alarm.
 | In scope | Out of scope |
 |---|---|
 | Performance attribution: rule EBS in or out, AWS-side impairment and escalation, volume-limit saturation, how much IOPS or throughput, micro-bursting, instance EBS-limit bottleneck, volume initialization after restore, burst credits | Amazon S3, Amazon EFS, Amazon FSx, instance store |
-| Snapshot management: cross-Region and cross-account copy, AMI creation stuck or slow, Amazon Data Lifecycle Manager and Recycle Bin, safe-to-delete and cost, recovery, escalation | Amazon EC2 issues unrelated to Amazon EBS |
+| Snapshot management: cross-Region and cross-account copy, AMI creation stuck or slow, Amazon Data Lifecycle Manager and Recycle Bin, which snapshots need owner review before deletion, cost, recovery, escalation | Amazon EC2 issues unrelated to Amazon EBS |
 | Encryption and AWS KMS: key access blocking attach or start, sharing encrypted snapshots and AMIs, default encryption, re-encryption | OS-level changes executed by the agent (commands are given, not run) |
 | Volume modification: gp2 to gp3, sizing, file system extension commands, stuck or slow optimizing, `ModifyVolume` errors, the 4 per 24 hours limit, shrink and cancel | Any mutating action without an approved directed action |
 | Cost and billing: forecast and optimization, Recycle Bin retention, unexplained charges, pricing model, idle or over-provisioned volumes, snapshot growth | Effort, hours or FTE estimates |
@@ -157,8 +160,8 @@ You do not name the skill; the agent matches it from the request or the alarm.
 
 ```
 storage-ebs-expertise/
-├── SKILL.md                     # uploaded
-├── references/                  # uploaded
+├── SKILL.md                     # published, read by the agent
+├── references/                  # published, read by the agent
 │   ├── troubleshoot-performance.md
 │   ├── troubleshoot-snapshots.md
 │   ├── troubleshoot-encryption.md
@@ -170,12 +173,14 @@ storage-ebs-expertise/
 │   ├── metrics-thresholds.md
 │   ├── review-report-format.md
 │   └── ebs-best-practices.md
-├── README.md                    # not uploaded
-├── CHANGELOG.md                 # not uploaded
-├── .skilleval.yaml              # not uploaded
-└── evals/                       # not uploaded
-    ├── eval_queries.json
-    └── evals.json
+├── README.md                    # published
+├── CHANGELOG.md                 # not published
+├── .skilleval.yaml              # not published
+└── evals/                       # not published
+    ├── evals.json               # eval definitions
+    ├── structure/               # structure test results
+    ├── best-practices/          # best-practices test results
+    └── functional/              # functional test results and the evals.json the run executed
 ```
 
 ## Version and Change Log

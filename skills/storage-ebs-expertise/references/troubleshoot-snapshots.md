@@ -68,7 +68,7 @@ Escalate on a snapshot stuck in `pending` with no progress, a delete that fails 
 
 ## What to report
 
-The verdict template in [finding-logic.md](finding-logic.md). For safe-to-delete questions, the Answer lists the snapshots in the Needs owner review tier and asks the owner to confirm, for each one, that they no longer need the data. Evidence is a table: snapshot ID, tier, reason (AMI ID, shared with, `aws:dlm:*` policy ID, source volume state), size. Gaps say whether reversibility was confirmed.
+The verdict template in [finding-logic.md](finding-logic.md). For questions about which snapshots can be deleted, the Answer lists the snapshots in the Needs owner review tier and asks the owner to confirm, for each one, that they no longer need the data. Evidence is a table: snapshot ID, tier, reason (AMI ID, shared with, `aws:dlm:*` policy ID, source volume state), size. Gaps say whether reversibility was confirmed.
 
 ## Safety rules
 

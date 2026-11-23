@@ -8,16 +8,18 @@ description: >
   VolumeWriteBytes, VolumeQueueLength, VolumeTotalReadTime/WriteTime,
   VolumeAvgReadLatency, VolumeStalledIOCheck, BurstBalance) or
   EBSIOBalance%/EBSByteBalance%; for sizing
-  IOPS or throughput changes; for a volume modification that looks stuck or failed;
-  for deciding which snapshots or AMIs are safe to delete or how to recover them;
-  for KMS errors on encrypted volumes; for EBS quota or limit errors; for a jump in
-  the EBS bill; and for a pre-launch EBS review. Do not use it for S3, EFS, FSx,
-  instance store, or EC2 problems unrelated to EBS.
+  IOPS or throughput changes; for requests to raise IOPS or modify a volume; for a
+  volume modification that looks stuck or failed; for deciding which snapshots or
+  AMIs need owner review before deletion, or how to recover them; for KMS errors
+  on encrypted volumes; for EBS quota or limit errors; for a jump in the EBS bill;
+  and for a pre-launch EBS review. Do not use it for S3, EFS, FSx, instance store,
+  or EC2 problems unrelated to EBS.
 metadata:
   author: dewavic
   version: "1.0.0"
+  summary: "Troubleshoot Amazon EBS performance, volume modifications, snapshots, encryption, quotas and cost, and review an account's EBS setup with read-only checks."
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_RCA"
-  aws-devops-agent-skills.aws-services: "Amazon EBS, Amazon EC2, Amazon CloudWatch, AWS KMS, AWS CloudTrail, Service Quotas"
+  aws-devops-agent-skills.aws-services: "Amazon EBS, Amazon EC2, Amazon CloudWatch, AWS CloudTrail, AWS Service Quotas"
   aws-devops-agent-skills.technical-domains: "Storage"
 ---
 # Amazon EBS Expertise
@@ -28,8 +30,9 @@ Use this skill to troubleshoot Amazon EBS problems and to review an account's Am
 
 - Storage-related slowness, timeouts or high I/O latency on an Amazon EC2 instance.
 - An alarm on AWS/EBS metrics or on instance `EBSIOBalance%` / `EBSByteBalance%`.
+- A request to raise IOPS or throughput, or to modify a volume.
 - A volume modification that looks stuck, failed, or did not improve performance.
-- Snapshot, AMI, Amazon Data Lifecycle Manager, AWS Backup or Recycle Bin questions, including which snapshots are safe to delete.
+- Snapshot, AMI, Amazon Data Lifecycle Manager, AWS Backup or Recycle Bin questions, including which snapshots need owner review before deletion.
 - Encrypted-volume access errors and AWS KMS questions for Amazon EBS.
 - Amazon EBS cost increases, idle or over-provisioned volumes.
 - An operation that failed on an Amazon EBS quota, or "how close am I to my limits?"
@@ -118,6 +121,18 @@ Review the draft from Step 3 against these checks. Fix anything that fails, then
 - **No interpretation without data:** report what couldn't be checked and use fallbacks. `DescribeVolumesModifications` returns only the most recent modification per volume; modification history and counts come from the optional AWS CloudTrail `ModifyVolume` events, or are listed under Gaps.
 - **Units:** MiB/s for throughput, stated every time.
 - **Escalate** on scope signals or when the investigation can't explain the symptom.
+
+## Gotchas
+
+- A modification in `optimizing` is not stuck. The new size, IOPS or throughput already applies while it optimizes.
+- `DescribeInstanceTypes` reports EBS bandwidth in MB/s. Convert it to MiB/s before comparing it with volume throughput.
+- On io1 and io2, `VolumeThroughputPercentage` is the percentage of provisioned IOPS delivered. It is not a throughput signal.
+- `VolumeAvgIOPS`, `VolumeAvgThroughput`, `VolumeAvgReadLatency` and `VolumeAvgWriteLatency` need both `VolumeId` and `InstanceId` and exist only on Nitro instances. `VolumeAvgThroughput` is in KiB/s. `VolumeTotalReadTime` and `VolumeTotalWriteTime` are in seconds.
+- Rising latency and queue length with falling IOPS is not proof of an AWS-side impairment. Without a direct signal (failed `VolumeStalledIOCheck`, impaired volume status, or an open AWS Health event) and without a running AWS FIS experiment, the Binding layer is Indeterminate.
+- `DescribeVolumesModifications` returns only the latest modification per volume. It cannot count modifications in the last 24 hours.
+- `ListRecoveryPointsByResource` without `ManagedByAWSBackupOnly` set to true also lists snapshots that AWS Backup did not create.
+- A snapshot whose source volume is gone may be the only remaining copy of the data. List it for owner review; never call it safe to delete.
+- Snapshots are incremental, so deleting one may free less storage than its size suggests.
 
 ## Error Handling
 
