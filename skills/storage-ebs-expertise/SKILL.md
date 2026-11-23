@@ -92,6 +92,10 @@ Follow the numbered procedure in the loaded path. Discover every value from the 
 5. **Separate findings:** other true facts that do not change the Answer.
 6. **Gaps:** what could not be checked and why.
 
+In an investigation, put the Answer and the Recommendation with its exact parameters in the root cause finding, not only under Gaps. Keep the findings on the resource the user asked about. Mention another volume only when it shares the same instance EBS baseline, and then as a Separate finding.
+
+When the Binding layer is Indeterminate, report it as one finding. Do not offer AWS-side impairment as a hypothesis. List each direct check you ran (volume status, `VolumeStalledIOCheck`, AWS Health, AWS FIS) with its result as supporting evidence, say that no check confirms or rules out an EBS-side slowdown, and give the escalation path.
+
 Review mode uses the rated report in [references/review-report-format.md](references/review-report-format.md). Every Review mode response MUST begin with its Summary table, which rates all six areas (capacity and quota headroom, observability, cost hygiene, resilience, encryption posture, deletion protection), even when an area has no findings or is `Indeterminate`. The Summary table is required, not optional. Do not open with prose or an offer to run the review; start with the table, then the per-area detail.
 
 ## Step 4: Check the Draft Before Presenting It
@@ -99,7 +103,7 @@ Review mode uses the rated report in [references/review-report-format.md](refere
 Review the draft from Step 3 against these checks. Fix anything that fails, then present it.
 
 - Every number under Evidence came from an API call made in this session, has its unit and time window, and matches the resource ID it is attributed to.
-- The Binding layer agrees with the Evidence: the named layer is the one at its limit, and the other layers were checked and shown to have headroom.
+- The Binding layer agrees with the Evidence: the named layer is the one at its limit, and the other layers were checked and shown to have headroom. The Evidence gives the instance EBS baseline in MiB/s and IOPS next to the summed demand of all attached volumes.
 - Any Recommendation stays within the instance's EBS baseline and the volume type's documented limits, and it is not more provisioning for an impairment.
 - Every snapshot tier is backed by the checks it requires; if one of those checks failed, the item is not listed for owner review. No snapshot is recommended for deletion; the owner confirms first.
 - A review answer starts with the Summary table and rates all six areas.
@@ -111,6 +115,7 @@ Review the draft from Step 3 against these checks. Fix anything that fails, then
 
 - **Read-only.** Changes (ModifyVolume, quota requests) are proposed with exact parameters, cost and rollback, and run only through operator-approved directed actions (Agent Actions in the Operator Web App). Approval is given only on the approval card. A typed "approve" in chat is not approval.
 - **Deletes are manual customer steps.** AWS DevOps Agent refuses delete-class operations (for example DeleteSnapshot, DeleteVolume, DeregisterImage), so never propose them as directed actions. After the owner confirms they no longer need the resource, give the commands for the customer to run with their own credentials.
+- **Answer in one reply.** In chat, run the checks in this conversation and return the finished verdict or report as your reply. Do not hand the work to a background sub-agent and reply with a "started" or "I will report back" message, because that message becomes the answer the user sees first.
 - **Discover, don't assume:** read every configuration value from the APIs.
 - **Rule EBS in or out before tuning it.**
 - **Answer the asked question first;** other findings go under "Separate findings".
