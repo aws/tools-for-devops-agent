@@ -13,7 +13,7 @@
 Run per Region.
 
 1. **Inventory.** `DescribeSnapshots --owner-ids self`: ID, source `VolumeId`, size, `StartTime`, `State`, `Progress`, `StorageTier`, tags.
-2. **Map AMI dependencies.** `DescribeImages --owners self`: build a map from every `BlockDeviceMappings[].Ebs.SnapshotId` to its AMI.
+2. **Map AMI dependencies.** `DescribeImages --owners self`: build a map from every `BlockDeviceMappings[].Ebs.SnapshotId` to its AMI. For each AMI found, `DescribeInstances` with the `image-id` filter shows whether any instance runs from it. This is context for the owner; the snapshot stays Do not delete while the AMI is registered.
 3. **Check the source volume.** `DescribeVolumes` for each source `VolumeId`. Record whether it still exists.
 4. **Check sharing.** `DescribeSnapshotAttribute --attribute createVolumePermission`. A non-empty list means the snapshot is shared with other accounts or public.
 5. **Identify management by tags, never by names.**
@@ -68,7 +68,13 @@ Escalate on a snapshot stuck in `pending` with no progress, a delete that fails 
 
 ## What to report
 
-The verdict template in [finding-logic.md](finding-logic.md). For questions about which snapshots can be deleted, the Answer lists the snapshots in the Needs owner review tier and asks the owner to confirm, for each one, that they no longer need the data. Evidence is a table: snapshot ID, tier, reason (AMI ID, shared with, `aws:dlm:*` policy ID, source volume state), size. Gaps say whether reversibility was confirmed.
+The verdict template in [finding-logic.md](finding-logic.md). For questions about which snapshots can be deleted:
+
+- **Answer.** Start with one line per snapshot the user named (or per snapshot found): snapshot ID, tier, and the specific evidence that decided the tier, for example "`<snapshot-id>`: Do not delete. It backs AMI `<image-id>` (`available`)." Do not open with a summary such as "none is safe to delete" that does not say which snapshot is which. Then ask the owner to confirm, for each snapshot in the Needs owner review tier, that they no longer need the data.
+- **Evidence.** A table with one row per snapshot and one column per check, so every tier shows the evidence behind it: snapshot ID, size, `StartTime`, source volume and its state (exists and its state, or not found), AMI reference (AMI ID and state, and whether any instance runs from it from `DescribeInstances` with the `image-id` filter), sharing (`createVolumePermission`), lock (`DescribeLockedSnapshots`), Amazon Data Lifecycle Manager (`aws:dlm:*` tags and `GetLifecyclePolicies`), AWS Backup (`aws:backup:*` tags or `ListRecoveryPointsByResource` with `ManagedByAWSBackupOnly`), Recycle Bin rule (whether a rule would catch a delete), and tier. Write "not checked" with the reason where a read failed.
+- **Cost.** When the user asks because of cost, say whether these snapshots can explain the increase from their sizes, say that savings are an upper bound because snapshots are incremental, and point to the billing path ([troubleshoot-billing.md](troubleshoot-billing.md)) for the account-wide snapshot cost.
+- **Recommendation.** Per snapshot: what the owner decides, and the manual steps from the Safety rules for after the owner confirms.
+- **Gaps.** Whether reversibility (Recycle Bin) and lifecycle management were confirmed, and any check that failed.
 
 ## Safety rules
 

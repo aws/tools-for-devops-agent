@@ -13,7 +13,7 @@ Discover everything from the alarm. Do not assume volume type, size, provisioned
 
 ### Step 1: Identify the alarmed volume(s)
 
-- Get the alarm and its state history (when it first entered ALARM).
+- Get the alarm and its state history with `DescribeAlarmHistory` for the last 24 hours: when it first entered ALARM, and any earlier ALARM and OK transitions. Report earlier transitions as history, because they show whether the pattern recurs.
 - Extract VolumeId from the alarm's metric dimensions. For metric-math alarms, read the VolumeId from each metric in the expression.
 - If the alarm is on an instance metric (EBSIOBalance%, EBSByteBalance%), start from the InstanceId instead.
 - If there is no alarm (a chat request such as "my app is slow"), start from the InstanceId the user gives, or ask for it.
@@ -41,7 +41,7 @@ Pull the last 30 minutes of AWS/EBS metrics at 1-minute granularity.
 - Avg latency in ms per operation = Sum(VolumeTotalReadTime) / Sum(VolumeReadOps) x 1,000, and the same for writes with VolumeTotalWriteTime and VolumeWriteOps. VolumeTotalReadTime and VolumeTotalWriteTime are in seconds, so the x 1,000 converts to milliseconds. `VolumeAvgReadLatency` and `VolumeAvgWriteLatency` are already in milliseconds
 - VolumeQueueLength
 - `VolumeAvgIOPS`, `VolumeAvgThroughput`, `VolumeAvgReadLatency` and `VolumeAvgWriteLatency` need both dimensions, `VolumeId` AND `InstanceId`, and exist only on Nitro instances. `VolumeAvgThroughput` is in KiB/s; divide by 1,024 for MiB/s. `VolumeQueueLength` uses `VolumeId` only. If `VolumeAvg*` returns nothing, use the Sum-based math above.
-- Always read `VolumeIdleTime` (seconds in the period with no read or write submitted; `VolumeId` only). Idle percentage = Sum(`VolumeIdleTime`) / period seconds x 100. Report it as evidence for every volume. Near 0 means I/O was submitted for the whole period, which fits both saturation and impairment, so use Step 5 to tell them apart. A volume that is mostly idle during the alarm window is unlikely to be the binding volume. There is no fixed band; compare with the volume's own history.
+- Always read `VolumeIdleTime` (seconds in the period with no read or write submitted; `VolumeId` only). Idle percentage = Sum(`VolumeIdleTime`) / period seconds x 100. Report it as evidence for every volume. Near 0 means I/O was submitted for the whole period. That fits volume saturation, an instance limit and impairment, so use Steps 4 and 5 to tell them apart, and do not call the volume saturated on idle time alone. A volume that is mostly idle during the alarm window is unlikely to be the binding volume. There is no fixed band; compare with the volume's own history.
 
 Apply the rule for the volume's type:
 
@@ -70,17 +70,24 @@ The impairment signature is IOPS and throughput collapsing while latency and `Vo
 3. AWS Health `DescribeEvents` for Amazon EBS and Amazon EC2 events in the Region and Availability Zone.
 4. AWS FIS `ListExperiments` for a running experiment that targets the volume or instance, with actions `aws:ebs:volume-io-latency` or `aws:ebs:pause-volume-io`. If one is running, say so plainly: the latency is injected and will end with the experiment.
 
-Name AWS-side impairment only when item 1, 2 or 3 gives a direct signal (an impaired status or failed status check, a failed `VolumeStalledIOCheck`, or an open AWS Health event). If none of the four explains it, report the Binding layer as Indeterminate, keep the cause open, tell the customer to check the AWS Health Dashboard and the volume status checks, and follow the escalation rules in [finding-logic.md](finding-logic.md).
+Name AWS-side impairment only when item 1, 2 or 3 gives a direct signal (an impaired status or failed status check, a failed `VolumeStalledIOCheck`, or an open AWS Health event). If none of the four explains it, report the Binding layer as Indeterminate, keep the cause open, and present the candidate causes with their supporting observations and checks, as described in the Indeterminate section of [finding-logic.md](finding-logic.md#indeterminate-candidate-causes). Tell the customer to check the AWS Health Dashboard and the volume status checks, and follow the escalation rules in [finding-logic.md](finding-logic.md).
 
-### Step 5b: Recent changes (optional)
+If the user gives the values and asks you to treat them as given, run this step on those values only. Do not query the account for other volumes or alarms.
 
-Read `DescribeVolumesModifications` for every attached volume first. It returns only the most recent modification of each volume, so it shows the latest change and its state, not the full history. For earlier changes, an AWS CloudTrail `LookupEvents` search for `ModifyVolume`, `AttachVolume`, `DetachVolume` and `ModifyInstanceAttribute` is optional and only if available. If it is denied or empty, note under Gaps that only the latest modification per volume was checked, and continue.
+### Step 5b: Recent history
+
+Run this step for every performance verdict.
+
+- `DescribeVolumesModifications` for every attached volume. It returns only the most recent modification of each volume, so it shows the latest change and its state, not the full history.
+- AWS CloudTrail `LookupEvents` for `ModifyVolume` on the affected volume over the last 24 hours, and for `AttachVolume`, `DetachVolume` and `ModifyInstanceAttribute` on the instance. The lookup is optional for the skill to work. If it is denied or empty, note under Gaps that only the latest modification per volume was checked, and continue.
+- The affected volume's IOPS and MiB/s over a longer window (for example the last 24 hours at a 1-hour period) to see whether the same pattern happened earlier.
+- Report the result as the history line in the Evidence, for example "never modified; the same 125 MiB/s plateau ran from `<start>` to `<end>` UTC; the alarm also fired at `<time>`".
 
 ### Step 6: Report
 
 For each affected volume: type, provisioned vs actual, the binding dimension, and whether the volume or the instance is the binding layer. Recommend specific Elastic Volumes changes with target values (raise IOPS, raise gp3 throughput, change type, e.g. gp2 -> gp3), or an instance type change if the instance is the limit. Use MiB/s for throughput.
 
-Write the report with the verdict template in [finding-logic.md](finding-logic.md) (Answer, Evidence, Binding layer, Recommendation, Separate findings, Gaps).
+Write the report with the verdict template in [finding-logic.md](finding-logic.md) (Answer, Evidence, Binding layer, Recommendation, Separate findings, Gaps). Evidence always has the limits table from [finding-logic.md](finding-logic.md#limits-table-for-performance-verdicts), the tie-out arithmetic and the history line from Step 5b. In an investigation, the root cause finding description repeats the binding numbers, the history and the exact target, and the observations for the limits table, the instance check and the history are linked to it as supporting observations.
 
 Elastic Volumes rules: up to 4 modifications per volume in a rolling 24-hour window; each must finish (modifying -> optimizing -> completed) before the next can start. There is no fixed waiting period between modifications; the next one is allowed once the previous one completes (January 2026 change). Rollback is possible once the modification completes, within that limit.
 
@@ -124,7 +131,8 @@ The verdict template in [finding-logic.md](finding-logic.md). When the instance 
 
 ## Safety rules
 
-- This path is read-only. Any `ModifyVolume` or instance type change is a proposal with exact parameters, expected effect, cost direction and rollback. It runs only through a directed action approved on the approval card.
+- This path is read-only. Any `ModifyVolume` or instance type change is a proposal with exact parameters, expected effect, cost direction and rollback, written as described in [Change proposals](finding-logic.md#change-proposals). It runs only through a directed action approved on the approval card.
+- When the user asks to raise IOPS or modify a volume, first check from the data whether the change will help. Then give the full proposal, even when the user has typed an approval.
 - Never recommend more provisioning for an impairment or an injected-latency signature.
 - A typed "approve" in chat is not approval.
 

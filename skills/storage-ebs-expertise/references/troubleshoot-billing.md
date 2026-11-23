@@ -16,14 +16,14 @@
    - provisioned throughput (names containing `Throughput`)
    - snapshots (names containing `Snapshot`)
 3. **Break the change into components.** Report the change in storage, provisioned IOPS above the included baseline, provisioned throughput above the included baseline, and snapshots, using the account's own Cost Explorer amounts. These include the account's discounts and pricing agreements, so never replace them with list prices.
-4. **Explain the gp3 model when gp3 is involved.** gp3 includes 3,000 IOPS and 125 MiB/s at any size. Only IOPS above 3,000 and throughput above 125 MiB/s are billed as provisioned performance. Link the pricing page; do not type a price.
+4. **Explain the gp3 model when gp3 is involved.** State it in the answer in these terms: "gp3 includes 3,000 IOPS and 125 MiB/s at any size. Only IOPS above 3,000 and throughput above 125 MiB/s are billed as provisioned performance." Then apply it to the volumes that changed (for example "6,000 IOPS means 3,000 IOPS above the included baseline are billed"). Link the pricing page; do not type a price.
 5. **Find what changed.**
    - `DescribeVolumesModifications` for every volume: original and target size, type, IOPS and throughput, with start time. It returns only the most recent modification of each volume, so it can explain a cost change only when that latest modification falls in the period.
    - For earlier modifications, use AWS CloudTrail `LookupEvents` for `ModifyVolume` events (optional; it covers the last 90 days). If it is denied, empty, or the change is older than 90 days, write a Gap that says the change could not be traced and continue.
    - `DescribeVolumes` `CreateTime` for new volumes, and `status=available` for unattached volumes.
    - Volume type changes (for example gp2 to gp3, or gp3 to io2) from the latest modification record or the AWS CloudTrail `ModifyVolume` events.
-   - Amazon Data Lifecycle Manager `GetLifecyclePolicies` and AWS Backup `ListBackupPlans` for policies that create or retain snapshots.
-   - Recycle Bin `ListRules`: resources in Recycle Bin are still billed during retention.
+   - Always call Amazon Data Lifecycle Manager `GetLifecyclePolicies` and AWS Backup `ListBackupPlans` for policies that create or retain snapshots, and report what they return (policy IDs, schedules and retention), even when snapshot cost did not change. If a call is denied or held behind an approval gate, name it under Gaps.
+   - Always call Recycle Bin `ListRules`: resources in Recycle Bin are still billed during retention.
    - The same AWS CloudTrail events show who made a change. If the lookup is denied or empty, write a Gap and continue.
 6. **Right-sizing check** for volumes with provisioned performance.
    - Measured IOPS and MiB/s over a representative window (`VolumeAvgIOPS` / `VolumeAvgThroughput` with `VolumeId` and `InstanceId`, or the Sum-based math in [data-collection.md](data-collection.md)) against provisioned values.
@@ -39,7 +39,7 @@
 
 ## What to report
 
-The verdict template in [finding-logic.md](finding-logic.md). Evidence is a table of components (storage, IOPS, throughput, snapshots) with the account's own amounts for the two periods compared, and the change records that explain each. Binding layer is "Not applicable". Recommendation lists right-sizing or type-change proposals with exact parameters and cost direction, and lists unneeded volumes or snapshots for owner review (deletion is a manual customer step, see Safety rules).
+The verdict template in [finding-logic.md](finding-logic.md). Evidence is a table of components (storage, IOPS, throughput, snapshots) with the account's own amounts for the two periods compared, and the change records that explain each. It also states the gp3 included baseline when gp3 is involved, and the Amazon Data Lifecycle Manager, AWS Backup and Recycle Bin results from step 5. Binding layer is "Not applicable". Recommendation lists right-sizing or type-change proposals with exact parameters and cost direction, and lists unneeded volumes or snapshots for owner review (deletion is a manual customer step, see Safety rules).
 
 ## Safety rules
 

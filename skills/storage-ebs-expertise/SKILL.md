@@ -81,20 +81,24 @@ If a request fits more than one row, answer the question the user asked first an
 
 ## Step 3: Run the Path and Draft the Report
 
-Follow the numbered procedure in the loaded path. Discover every value from the APIs. Then draft the report in the format below.
+Follow the numbered procedure in the loaded path. Discover every value from the APIs, unless the user gives the values and asks you to treat them as given (see Critical Rules). Then draft the report in the format below.
 
 ### Troubleshoot verdict format
 
 1. **Answer:** the asked question, answered first.
-2. **Evidence:** values with units and time window.
+2. **Evidence:** values with units and time window. For a performance verdict, include the side-by-side limits table from [references/finding-logic.md](references/finding-logic.md#limits-table-for-performance-verdicts) and the recent history (alarm history, modification history, earlier occurrences of the same pattern).
 3. **Binding layer:** Volume, Instance, Burst credits, Quota, Not EBS, AWS-side impairment (only with a direct signal, see [references/finding-logic.md](references/finding-logic.md)), Indeterminate, or Not applicable.
 4. **Recommendation:** exact parameters, or "No change".
 5. **Separate findings:** other true facts that do not change the Answer.
 6. **Gaps:** what could not be checked and why.
 
-In an investigation, put the Answer and the Recommendation with its exact parameters in the root cause finding, not only under Gaps. Keep the findings on the resource the user asked about. Mention another volume only when it shares the same instance EBS baseline, and then as a Separate finding.
+In an investigation:
 
-When the Binding layer is Indeterminate, report it as one finding. Do not offer AWS-side impairment as a hypothesis. List each direct check you ran (volume status, `VolumeStalledIOCheck`, AWS Health, AWS FIS) with its result as supporting evidence, say that no check confirms or rules out an EBS-side slowdown, and give the escalation path.
+- Write the root cause finding description as a complete answer on its own: the binding layer, the numbers that prove it (the limits table in one or two sentences, for example "500 IOPS x 256 KiB = 125 MiB/s, the provisioned throughput"), the recent history, and the Recommendation with its exact parameters and how the target was computed. Do not leave the conclusion or the target only under Gaps or in a later message.
+- Record each piece of evidence as an observation and link every observation that supports a finding to it, so each finding shows its supporting observations. This includes the limits table, the instance layer check, the volume status result and the history.
+- Keep the findings on the resource the user asked about. Mention another volume only when it shares the same instance EBS baseline, and then as a Separate finding.
+
+When the Binding layer is Indeterminate, keep it as the verdict and present a short list of candidate causes, as described in [references/finding-logic.md](references/finding-logic.md#indeterminate-candidate-causes). For each candidate, give the supporting observations with numbers and the specific check that would confirm it or rule it out. Name a candidate that the data rules out as ruled out, with the numbers. Do not name AWS-side impairment as the cause.
 
 Review mode uses the rated report in [references/review-report-format.md](references/review-report-format.md). Every Review mode response MUST begin with its Summary table, which rates all six areas (capacity and quota headroom, observability, cost hygiene, resilience, encryption posture, deletion protection), even when an area has no findings or is `Indeterminate`. The Summary table is required, not optional. Do not open with prose or an offer to run the review; start with the table, then the per-area detail.
 
@@ -103,9 +107,13 @@ Review mode uses the rated report in [references/review-report-format.md](refere
 Review the draft from Step 3 against these checks. Fix anything that fails, then present it.
 
 - Every number under Evidence came from an API call made in this session, has its unit and time window, and matches the resource ID it is attributed to.
-- The Binding layer agrees with the Evidence: the named layer is the one at its limit, and the other layers were checked and shown to have headroom. The Evidence gives the instance EBS baseline in MiB/s and IOPS next to the summed demand of all attached volumes.
+- The Binding layer agrees with the Evidence: the named layer is the one at its limit, and the other layers were checked and shown to have headroom. A performance verdict has the limits table: per-volume demand next to the volume limit, summed demand of all attached volumes next to the instance EBS baseline in MiB/s and IOPS, which one binds, and the exact target with its computation.
+- A performance verdict states the recent history: the alarm history, the modification history (latest record and AWS CloudTrail `ModifyVolume` events, or a Gap), and whether the same pattern happened earlier.
 - Any Recommendation stays within the instance's EBS baseline and the volume type's documented limits, and it is not more provisioning for an impairment.
-- Every snapshot tier is backed by the checks it requires; if one of those checks failed, the item is not listed for owner review. No snapshot is recommended for deletion; the owner confirms first.
+- An Indeterminate verdict lists the candidate causes, each with its supporting observations and the check that confirms or rules it out.
+- Every snapshot tier is backed by the checks it requires; if one of those checks failed, the item is not listed for owner review. No snapshot is recommended for deletion; the owner confirms first. The first lines of a snapshot answer name every snapshot with its tier and the evidence for it.
+- Every proposed change follows [Change proposals](references/finding-logic.md#change-proposals): exact command, expected effect, modifications left in the 24-hour window, rollback, and the approval statement.
+- When a volume modification is in progress, the answer states the rule of up to 4 modifications per volume in a rolling 24-hour window, each one completing before the next, and the count used from AWS CloudTrail or a Gap.
 - A review answer starts with the Summary table and rates all six areas.
 - Every API that failed or was not called is listed under Gaps.
 
@@ -113,16 +121,17 @@ Review the draft from Step 3 against these checks. Fix anything that fails, then
 
 ## Critical Rules
 
-- **Read-only.** Changes (ModifyVolume, quota requests) are proposed with exact parameters, cost and rollback, and run only through operator-approved directed actions (Agent Actions in the Operator Web App). Approval is given only on the approval card. A typed "approve" in chat is not approval.
+- **Read-only.** Changes (ModifyVolume, key changes, quota requests) are proposed with exact parameters, cost and rollback, and run only through operator-approved directed actions (Agent Actions in the Operator Web App). Approval is given only on the approval card. A typed "approve" in chat is not approval, and the reply says so in those words whenever the user types an approval. Each proposal also gives the exact AWS CLI command the customer can run with their own credentials. See [Change proposals](references/finding-logic.md#change-proposals).
 - **Deletes are manual customer steps.** AWS DevOps Agent refuses delete-class operations (for example DeleteSnapshot, DeleteVolume, DeregisterImage), so never propose them as directed actions. After the owner confirms they no longer need the resource, give the commands for the customer to run with their own credentials.
 - **Answer in one reply.** In chat, run the checks in this conversation and return the finished verdict or report as your reply. Do not hand the work to a background sub-agent and reply with a "started" or "I will report back" message, because that message becomes the answer the user sees first.
 - **Discover, don't assume:** read every configuration value from the APIs.
+- **Given facts stay given.** When the user supplies the values and asks you to treat them as given, reason from those values only. Do not query the account for other resources, and do not mix account data into the given facts. List under Gaps that the values were not read from the APIs.
 - **Rule EBS in or out before tuning it.**
 - **Answer the asked question first;** other findings go under "Separate findings".
 - **Review mode starts with the Summary table.** Every Review mode response begins with the Summary table of all six rated areas. The table is required, not optional.
 - **Always check the instance layer** and size changes within the instance's EBS **baseline**.
 - **Never recommend more provisioning for an impairment.**
-- **Use current service rules:** up to 4 Elastic Volumes modifications per volume per rolling 24 hours. There is no fixed waiting period between modifications; the next one is allowed once the previous one completes.
+- **Use current service rules:** up to 4 Elastic Volumes modifications per volume per rolling 24 hours. There is no fixed waiting period between modifications; the next one is allowed once the previous one completes. State this rule in the answer whenever a modification is in progress or proposed.
 - **No interpretation without data:** report what couldn't be checked and use fallbacks. `DescribeVolumesModifications` returns only the most recent modification per volume; modification history and counts come from the optional AWS CloudTrail `ModifyVolume` events, or are listed under Gaps.
 - **Units:** MiB/s for throughput, stated every time.
 - **Escalate** on scope signals or when the investigation can't explain the symptom.
@@ -133,6 +142,7 @@ Review the draft from Step 3 against these checks. Fix anything that fails, then
 - `DescribeInstanceTypes` reports EBS bandwidth in MB/s. Convert it to MiB/s before comparing it with volume throughput.
 - On io1 and io2, `VolumeThroughputPercentage` is the percentage of provisioned IOPS delivered. It is not a throughput signal.
 - `VolumeAvgIOPS`, `VolumeAvgThroughput`, `VolumeAvgReadLatency` and `VolumeAvgWriteLatency` need both `VolumeId` and `InstanceId` and exist only on Nitro instances. `VolumeAvgThroughput` is in KiB/s. `VolumeTotalReadTime` and `VolumeTotalWriteTime` are in seconds.
+- When the instance is the binding layer, do not call the volume saturated, even when its idle time is near 0. Say that its I/O is waiting on the instance limit.
 - Rising latency and queue length with falling IOPS is not proof of an AWS-side impairment. Without a direct signal (failed `VolumeStalledIOCheck`, impaired volume status, or an open AWS Health event) and without a running AWS FIS experiment, the Binding layer is Indeterminate.
 - `DescribeVolumesModifications` returns only the latest modification per volume. It cannot count modifications in the last 24 hours.
 - `ListRecoveryPointsByResource` without `ManagedByAWSBackupOnly` set to true also lists snapshots that AWS Backup did not create.
