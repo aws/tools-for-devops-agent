@@ -36,7 +36,7 @@ For other types the public documentation does not give a latency number. Compare
 
 ## Not encoded on purpose
 
-The drafts carried latency bands (for example "io2 below 1 ms, gp3 below 2 ms, st1 below 10 ms"), a queue length rule ("1 per 1,000 provisioned IOPS"), `VolumeIdleTime` bands, `BurstBalance` bands and percentage triggers ("below 95%", "above 90% of provisioned"). No public AWS source states these, so they are not in this skill. They are listed as open questions for SME review in BUILD-REPORT.md.
+The drafts carried latency bands (for example "io2 below 1 ms, gp3 below 2 ms, st1 below 10 ms"), a queue length rule ("1 per 1,000 provisioned IOPS"), `VolumeIdleTime` bands, `BurstBalance` bands and percentage triggers ("below 95%", "above 90% of provisioned"). No public AWS source states these, so they are not in this skill.
 
 ## Saturation and impairment signatures
 

@@ -126,7 +126,7 @@ Errors, gated reads and missing metrics are handled with the fallback table in [
 ## References
 
 - [references/troubleshoot-performance.md](references/troubleshoot-performance.md): performance attribution, the live-tested procedure
-- [references/troubleshoot-snapshots.md](references/troubleshoot-snapshots.md): safe-to-delete tiers, copy, AMI, lifecycle and recovery
+- [references/troubleshoot-snapshots.md](references/troubleshoot-snapshots.md): snapshot tiers (owner review), copy, AMI, lifecycle and recovery
 - [references/troubleshoot-encryption.md](references/troubleshoot-encryption.md): AWS KMS access, sharing encrypted snapshots, default encryption
 - [references/troubleshoot-volume-modification.md](references/troubleshoot-volume-modification.md): modification states, limits, errors, sizing, file system extension
 - [references/troubleshoot-billing.md](references/troubleshoot-billing.md): cost breakdown, change records, right-sizing
