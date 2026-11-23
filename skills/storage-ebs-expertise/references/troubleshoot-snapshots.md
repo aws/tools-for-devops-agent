@@ -37,9 +37,9 @@ Check the rows top to bottom. The first row that matches decides the tier.
 | Locked (listed by `DescribeLockedSnapshots`) | **Locked** | Cannot be deleted while the lock applies. Report the lock mode and expiry from `DescribeLockedSnapshots`. Do not propose deletion. If the operator wants it gone, they decide on the lock first, per the snapshot lock guide |
 | Managed by AWS Backup: the snapshot has an `aws:backup:*` tag, or `ListRecoveryPointsByResource` with `ManagedByAWSBackupOnly` set to true returns it. A recovery point from a call without that parameter is not evidence, because that call also lists snapshots that AWS Backup did not create | **Manage in AWS Backup** | Change retention in AWS Backup, not with Amazon EC2 calls |
 | Managed by Amazon Data Lifecycle Manager (`aws:dlm:*` tags), or the source volume still exists (any snapshot of a volume that still exists, manual or not) | **Verify** | Confirm the owner and the retention need. For DLM snapshots, adjust the policy retention instead of deleting by hand. For a manual snapshot of an existing volume, ask whether it is still a needed restore point |
-| Source volume gone, no AMI, not shared, not locked, not managed | **Candidate** | Can be proposed for deletion |
+| Source volume gone, no AMI, not shared, not locked, not managed | **Needs owner review** | Do not recommend deletion. This snapshot may be the only remaining copy of the data. List it for the owner and ask them to confirm that they no longer need the data before anyone deletes it |
 
-Every snapshot matches at least one row, and the first match decides. An AMI-backing, shared or locked snapshot can never be in the Candidate tier. Age alone never decides a tier.
+Every snapshot matches at least one row, and the first match decides. An AMI-backing, shared or locked snapshot can never be in the Needs owner review tier. Age alone never decides a tier. No tier is a deletion recommendation: the skill only reports what it found, and the owner decides.
 
 ### Cost
 
@@ -68,16 +68,22 @@ Escalate on a snapshot stuck in `pending` with no progress, a delete that fails 
 
 ## What to report
 
-The verdict template in [finding-logic.md](finding-logic.md). For safe-to-delete questions, the Answer lists the Candidate snapshots. Evidence is a table: snapshot ID, tier, reason (AMI ID, shared with, `aws:dlm:*` policy ID, source volume state), size. Gaps say whether reversibility was confirmed.
+The verdict template in [finding-logic.md](finding-logic.md). For safe-to-delete questions, the Answer lists the snapshots in the Needs owner review tier and asks the owner to confirm, for each one, that they no longer need the data. Evidence is a table: snapshot ID, tier, reason (AMI ID, shared with, `aws:dlm:*` policy ID, source volume state), size. Gaps say whether reversibility was confirmed.
 
 ## Safety rules
 
 - This path is read-only.
-- `DeleteSnapshot` and `DeregisterImage` are proposals for a directed action approved on the approval card. Present one list the operator reviews. Never generate shell loops that delete in bulk.
-- State for each proposed deletion whether a Recycle Bin rule will catch it.
-- A typed "approve" in chat is not approval.
+- Deleting is a manual step for the customer, not a directed action. AWS DevOps Agent refuses delete-class operations, even with operator approval, so never propose `DeleteSnapshot` or `DeregisterImage` as a directed action.
+- Give manual steps only after the owner has confirmed, for each snapshot, that they no longer need it. The customer runs them with their own credentials, one snapshot at a time:
+  1. Re-read the snapshot with `aws ec2 describe-snapshots --snapshot-ids <snapshot-id>` and confirm it is the one the owner approved.
+  2. If it backs an AMI the owner no longer needs, deregister the AMI first: `aws ec2 deregister-image --image-id <image-id>`.
+  3. Delete the snapshot: `aws ec2 delete-snapshot --snapshot-id <snapshot-id>`.
+- Never generate shell loops that delete in bulk.
+- State for each snapshot whether a Recycle Bin rule will catch it if the customer deletes it.
 
 ## Sources
+
+- AWS DevOps Agent directed actions (Operations the agent will not perform): https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-working-with-directed-actions.html
 
 - Snapshots (incremental): https://docs.aws.amazon.com/ebs/latest/userguide/ebs-snapshots.html
 - Deleting a snapshot (AMI root snapshot, AWS Backup snapshots): https://docs.aws.amazon.com/ebs/latest/userguide/ebs-deleting-snapshot.html

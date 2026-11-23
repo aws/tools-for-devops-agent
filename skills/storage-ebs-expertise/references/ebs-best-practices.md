@@ -42,7 +42,8 @@ Load this file for any statement about how Amazon EBS behaves. Per-type limits a
 |---|---|
 | `VolumeThroughputPercentage` on io1/io2 | Reports the percentage of provisioned IOPS delivered. Not a throughput signal |
 | `VolumeAvg*` metrics | Need `VolumeId` and `InstanceId`; Nitro only; `VolumeAvgThroughput` is KiB/s |
-| Change history | `DescribeVolumesModifications` is the authoritative modification record. AWS CloudTrail is optional and may be blocked or outside retention |
+| Change history | `DescribeVolumesModifications` returns only the most recent modification request per volume. Use it for the current or latest modification state. Earlier modifications and the 24-hour count come from AWS CloudTrail `ModifyVolume` events (optional, last 90 days); if unavailable, record a Gap |
+| Deletes | AWS DevOps Agent refuses delete-class operations, even with approval. Deletes are manual steps the customer runs with their own credentials, after the owner confirms |
 | Units | Throughput in MiB/s every time. Instance limits arrive in MB/s; convert |
 | Approval | A typed "approve" in chat is not approval. Only the approval card of a directed action approves a mutating action |
 
@@ -51,6 +52,8 @@ Load this file for any statement about how Amazon EBS behaves. Per-type limits a
 - Modify a volume (4 modifications in 24 hours, size increase only, no cancel): https://docs.aws.amazon.com/ebs/latest/userguide/ebs-modify-volume.html
 - January 2026 What's New post: https://aws.amazon.com/about-aws/whats-new/2026/01/amazon-ebs-up-to-four-volume-modifications/
 - Monitoring modifications (states, optimizing performance): https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
+- DescribeVolumesModifications (most recent modification request only): https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVolumesModifications.html
+- AWS DevOps Agent directed actions (Operations the agent will not perform): https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-working-with-directed-actions.html
 - Modification duration example (1 TiB, about six hours, more than 24 hours): https://docs.aws.amazon.com/ebs/latest/userguide/ebs-modify-volume.html and https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
 - Elastic Volumes requirements: https://docs.aws.amazon.com/ebs/latest/userguide/modify-volume-requirements.html
 - Extend the file system: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/recognize-expanded-volume-linux.html

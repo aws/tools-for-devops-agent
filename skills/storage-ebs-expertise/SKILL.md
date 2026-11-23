@@ -84,7 +84,7 @@ Follow the numbered procedure in the loaded path. Discover every value from the 
 
 1. **Answer:** the asked question, answered first.
 2. **Evidence:** values with units and time window.
-3. **Binding layer:** Volume, Instance, Burst credits, Quota, Not EBS, AWS-side impairment, or Not applicable.
+3. **Binding layer:** Volume, Instance, Burst credits, Quota, Not EBS, AWS-side impairment (only with a direct signal, see [references/finding-logic.md](references/finding-logic.md)), Indeterminate, or Not applicable.
 4. **Recommendation:** exact parameters, or "No change".
 5. **Separate findings:** other true facts that do not change the Answer.
 6. **Gaps:** what could not be checked and why.
@@ -98,7 +98,7 @@ Review the draft from Step 3 against these checks. Fix anything that fails, then
 - Every number under Evidence came from an API call made in this session, has its unit and time window, and matches the resource ID it is attributed to.
 - The Binding layer agrees with the Evidence: the named layer is the one at its limit, and the other layers were checked and shown to have headroom.
 - Any Recommendation stays within the instance's EBS baseline and the volume type's documented limits, and it is not more provisioning for an impairment.
-- Every "safe to delete" verdict is backed by the checks its tier requires; if one of those checks failed, the item is not safe to delete.
+- Every snapshot tier is backed by the checks it requires; if one of those checks failed, the item is not listed for owner review. No snapshot is recommended for deletion; the owner confirms first.
 - A review answer starts with the Summary table and rates all six areas.
 - Every API that failed or was not called is listed under Gaps.
 
@@ -106,7 +106,8 @@ Review the draft from Step 3 against these checks. Fix anything that fails, then
 
 ## Critical Rules
 
-- **Read-only.** Changes (ModifyVolume, DeleteSnapshot, quota requests) are proposed with exact parameters, cost and rollback, and run only through operator-approved directed actions (Agent Actions in the Operator Web App). Approval is given only on the approval card. A typed "approve" in chat is not approval.
+- **Read-only.** Changes (ModifyVolume, quota requests) are proposed with exact parameters, cost and rollback, and run only through operator-approved directed actions (Agent Actions in the Operator Web App). Approval is given only on the approval card. A typed "approve" in chat is not approval.
+- **Deletes are manual customer steps.** AWS DevOps Agent refuses delete-class operations (for example DeleteSnapshot, DeleteVolume, DeregisterImage), so never propose them as directed actions. After the owner confirms they no longer need the resource, give the commands for the customer to run with their own credentials.
 - **Discover, don't assume:** read every configuration value from the APIs.
 - **Rule EBS in or out before tuning it.**
 - **Answer the asked question first;** other findings go under "Separate findings".
@@ -114,7 +115,7 @@ Review the draft from Step 3 against these checks. Fix anything that fails, then
 - **Always check the instance layer** and size changes within the instance's EBS **baseline**.
 - **Never recommend more provisioning for an impairment.**
 - **Use current service rules:** up to 4 Elastic Volumes modifications per volume per rolling 24 hours. There is no fixed waiting period between modifications; the next one is allowed once the previous one completes.
-- **No interpretation without data:** report what couldn't be checked and use fallbacks. AWS CloudTrail is optional; `DescribeVolumesModifications` is the change record.
+- **No interpretation without data:** report what couldn't be checked and use fallbacks. `DescribeVolumesModifications` returns only the most recent modification per volume; modification history and counts come from the optional AWS CloudTrail `ModifyVolume` events, or are listed under Gaps.
 - **Units:** MiB/s for throughput, stated every time.
 - **Escalate** on scope signals or when the investigation can't explain the symptom.
 

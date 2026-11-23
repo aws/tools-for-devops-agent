@@ -11,13 +11,13 @@
 ## Procedure
 
 1. **Find the volume.** Use the volume ID the user gives, or discover it with `DescribeVolumes` (by instance attachment or by the volumes that have recent modifications). Never pick a volume by its Name tag alone; confirm the ID with the user if more than one matches.
-2. **Read the modification record.** `DescribeVolumesModifications` for the volume: `ModificationState`, `Progress`, original and target values (size, type, IOPS, throughput), `StartTime`, `EndTime`, `StatusMessage`.
+2. **Read the latest modification record.** `DescribeVolumesModifications` for the volume: `ModificationState`, `Progress`, original and target values (size, type, IOPS, throughput), `StartTime`, `EndTime`, `StatusMessage`. This API returns only the most recent modification request for each volume. Use it for the current or latest modification state, not for history.
 3. **Answer the asked question first, in plain words.**
    - `modifying` or `optimizing`: not stuck. In `optimizing` the new configuration already applies and performance is between the source and the target. It completes on its own.
    - `completed`: done. The new values apply.
    - `failed`: read `StatusMessage` and translate it (step 5).
    - Duration is best effort. The Amazon EBS User Guide says a 1 TiB volume typically takes up to about six hours to modify, and some performance changes take more than 24 hours, for example when the volume is not fully initialized.
-4. **Count the modifications in the rolling 24 hours.** Up to 4 per volume in a rolling 24-hour period. There is no fixed waiting period between modifications; the next one is allowed once the previous one completes. Report how many remain in the current window.
+4. **Count the modifications in the rolling 24 hours.** Up to 4 per volume in a rolling 24-hour period. There is no fixed waiting period between modifications; the next one is allowed once the previous one completes. `DescribeVolumesModifications` cannot give this count, because it returns only the latest modification. Count the `ModifyVolume` events for the volume in the last 24 hours with the optional AWS CloudTrail `LookupEvents` call (filter on the volume ID as the resource name, or on the event name `ModifyVolume`). Report how many remain in the current window. As a cross-check, the latest record from step 2 should appear among those events if its `StartTime` is in the last 24 hours. If the lookup is denied or unavailable, record a Gap ("the number of modifications in the last 24 hours could not be confirmed") and do not state how many remain.
 5. **Translate errors.**
    - io2 "Iops to volume size ratio of ... is too high; maximum is 1000": io2 allows up to 1,000 IOPS per GiB. To reach the target IOPS, the size must be at least target IOPS / 1,000 GiB. Propose that size together with the IOPS.
    - gp3: up to 500 IOPS per GiB, and throughput up to 0.25 MiB/s per provisioned IOPS. If a request breaks either rule, give the size or IOPS that satisfies it.
@@ -49,7 +49,7 @@ The verdict template in [finding-logic.md](finding-logic.md). The Answer names t
 ## Safety rules
 
 - The agent never runs `ModifyVolume` on its own. It proposes it as a directed action, approved on the approval card. A typed "approve" in chat is not approval.
-- The proposal includes: the exact call (`--volume-id`, and only the changed fields among `--size`, `--volume-type`, `--iops`, `--throughput`), the expected state sequence (`modifying`, `optimizing`, `completed`), how many of the 4 modifications in the rolling 24 hours remain after this change, cost direction, and rollback.
+- The proposal includes: the exact call (`--volume-id`, and only the changed fields among `--size`, `--volume-type`, `--iops`, `--throughput`), the expected state sequence (`modifying`, `optimizing`, `completed`), how many of the 4 modifications in the rolling 24 hours remain after this change (only when step 4 confirmed the count; otherwise say it is unconfirmed), cost direction, and rollback.
 - Rollback: after the change completes, a reverse change of IOPS, throughput or type is possible and counts toward the 4. Size cannot roll back.
 - Recommend a snapshot before a type change or a large resize on a volume with data the user cannot lose.
 
@@ -58,6 +58,8 @@ The verdict template in [finding-logic.md](finding-logic.md). The Answer names t
 - Modify a volume: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-modify-volume.html
 - January 2026 What's New post: https://aws.amazon.com/about-aws/whats-new/2026/01/amazon-ebs-up-to-four-volume-modifications/
 - Monitoring modifications: https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
+- DescribeVolumesModifications (most recent modification request only): https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVolumesModifications.html
+- AWS CloudTrail LookupEvents: https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_LookupEvents.html
 - Modification duration (1 TiB, about six hours, more than 24 hours): https://docs.aws.amazon.com/ebs/latest/userguide/ebs-modify-volume.html and https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
 - Requirements: https://docs.aws.amazon.com/ebs/latest/userguide/modify-volume-requirements.html
 - Extend the file system: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/recognize-expanded-volume-linux.html

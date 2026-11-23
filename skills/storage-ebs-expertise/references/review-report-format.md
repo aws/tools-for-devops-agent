@@ -44,7 +44,7 @@ Scope: read-only. Inventoried <n> volumes, <n> snapshots, <n> alarms, Service Qu
 - <API or area>: <reason> (for example "dlm:GetLifecyclePolicies held behind an approval gate")
 
 ## Proposed actions
-Numbered list of mutating fixes, each with exact parameters, expected effect, cost direction and rollback. None was executed. Each needs a directed action approved on the approval card.
+Numbered list of mutating fixes, each with exact parameters, expected effect, cost direction and rollback. None was executed. Each needs a directed action approved on the approval card. Deletes are not directed actions: list them as manual customer steps that wait for owner confirmation.
 ```
 
 The area rating is the highest severity of its findings. If every check in an area was unreadable, the rating is `Indeterminate`.

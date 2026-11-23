@@ -38,7 +38,8 @@ Pull the last 30 minutes of AWS/EBS metrics at 1-minute granularity.
 
 - Actual IOPS = (VolumeReadOps + VolumeWriteOps) / period seconds
 - Actual throughput = (VolumeReadBytes + VolumeWriteBytes) / period, in MiB/s
-- Avg latency = VolumeTotalRead/WriteTime / ops; VolumeQueueLength
+- Avg latency in ms per operation = Sum(VolumeTotalReadTime) / Sum(VolumeReadOps) x 1,000, and the same for writes with VolumeTotalWriteTime and VolumeWriteOps. VolumeTotalReadTime and VolumeTotalWriteTime are in seconds, so the x 1,000 converts to milliseconds. `VolumeAvgReadLatency` and `VolumeAvgWriteLatency` are already in milliseconds
+- VolumeQueueLength
 - `VolumeAvgIOPS`, `VolumeAvgThroughput`, `VolumeAvgReadLatency` and `VolumeAvgWriteLatency` need both dimensions, `VolumeId` AND `InstanceId`, and exist only on Nitro instances. `VolumeAvgThroughput` is in KiB/s; divide by 1,024 for MiB/s. `VolumeQueueLength` uses `VolumeId` only. If `VolumeAvg*` returns nothing, use the Sum-based math above.
 - Always read `VolumeIdleTime` (seconds in the period with no read or write submitted; `VolumeId` only). Idle percentage = Sum(`VolumeIdleTime`) / period seconds x 100. Report it as evidence for every volume. Near 0 means I/O was submitted for the whole period, which fits both saturation and impairment, so use Step 5 to tell them apart. A volume that is mostly idle during the alarm window is unlikely to be the binding volume. There is no fixed band; compare with the volume's own history.
 
@@ -46,9 +47,9 @@ Apply the rule for the volume's type:
 
 - gp3: IOPS and throughput are provisioned independently. Compare actual IOPS to Iops AND actual MiB/s to Throughput; either can bind.
 - gp2: baseline IOPS = 3 x GiB (min 100), burst to 3,000 while BurstBalance > 0. Check BurstBalance draining or at 0.
-- io1/io2 (incl. Block Express): compare actual IOPS to provisioned Iops. Throughput is derived from IOPS x I/O size, not provisioned separately. Do NOT use VolumeThroughputPercentage to judge throughput on io1/io2; it reports the % of provisioned IOPS delivered.
+- io1/io2 (incl. Block Express): compare actual IOPS to provisioned Iops AND actual MiB/s to the volume's throughput limit; either can bind. Throughput is not provisioned separately, but the documented throughput limit depends on the provisioned IOPS (see the io1 and io2 rows in [metrics-thresholds.md](metrics-thresholds.md)). Compute the limit from `Iops` with those rules, then compare. Do NOT use VolumeThroughputPercentage to judge throughput on io1/io2; it reports the % of provisioned IOPS delivered.
 - st1/sc1: throughput-oriented with burst credits; compare MiB/s to the baseline/burst for the size and check BurstBalance.
-- Judge io2 by IOPS; judge gp3 by throughput and IOPS. Per-type limits are in [metrics-thresholds.md](metrics-thresholds.md).
+- Judge io1, io2 and gp3 by both IOPS and throughput. Per-type limits are in [metrics-thresholds.md](metrics-thresholds.md).
 
 ### Step 4: Check the instance layer
 
@@ -65,15 +66,15 @@ If queue length and latency are elevated but the volume and instance are both be
 The impairment signature is IOPS and throughput collapsing while latency and `VolumeQueueLength` rise. Saturation looks different: metrics flat at the provisioned limit with modest latency. When you see the impairment signature, check in this order:
 
 1. The `DescribeVolumeStatus` result from Step 2 (impaired status, failing checks, scheduled events). Read it again if the symptom started after Step 2.
-2. The `VolumeStalledIOCheck` metric for the volume (`VolumeId`, Nitro instances only; 0 passed, 1 failed). A failed check (value 1) means the volume's IO is stalled, which is an AWS-side impairment. Escalate per the rules in [finding-logic.md](finding-logic.md) and never recommend adding IOPS.
+2. The `VolumeStalledIOCheck` metric for the volume (dimensions `VolumeId` AND `InstanceId`, Nitro instances only; 0 passed, 1 failed). A failed check (value 1) means the volume's IO is stalled, which is an AWS-side impairment. Escalate per the rules in [finding-logic.md](finding-logic.md) and never recommend adding IOPS.
 3. AWS Health `DescribeEvents` for Amazon EBS and Amazon EC2 events in the Region and Availability Zone.
 4. AWS FIS `ListExperiments` for a running experiment that targets the volume or instance, with actions `aws:ebs:volume-io-latency` or `aws:ebs:pause-volume-io`. If one is running, say so plainly: the latency is injected and will end with the experiment.
 
-If none explains it, follow the escalation rules in [finding-logic.md](finding-logic.md).
+Name AWS-side impairment only when item 1, 2 or 3 gives a direct signal (an impaired status or failed status check, a failed `VolumeStalledIOCheck`, or an open AWS Health event). If none of the four explains it, report the Binding layer as Indeterminate, keep the cause open, tell the customer to check the AWS Health Dashboard and the volume status checks, and follow the escalation rules in [finding-logic.md](finding-logic.md).
 
 ### Step 5b: Recent changes (optional)
 
-Read `DescribeVolumesModifications` for every attached volume first. It is the authoritative change record. An AWS CloudTrail `LookupEvents` search for `ModifyVolume`, `AttachVolume`, `DetachVolume` and `ModifyInstanceAttribute` is optional and only if available. If it is denied or empty, note it under Gaps and continue.
+Read `DescribeVolumesModifications` for every attached volume first. It returns only the most recent modification of each volume, so it shows the latest change and its state, not the full history. For earlier changes, an AWS CloudTrail `LookupEvents` search for `ModifyVolume`, `AttachVolume`, `DetachVolume` and `ModifyInstanceAttribute` is optional and only if available. If it is denied or empty, note under Gaps that only the latest modification per volume was checked, and continue.
 
 ### Step 6: Report
 
@@ -87,6 +88,7 @@ Sizing rules for any recommended target:
 
 - Keep the SUM of all volumes attached to the instance within the instance's EBS BASELINE (DescribeInstanceTypes), not its burst maximum. If the target would exceed it, say so and lower the target, or recommend an instance type change.
 - gp3 throughput must not exceed 0.25 MiB/s per provisioned IOPS.
+- For io1 and io2, the throughput the volume can deliver depends on the provisioned IOPS. If measured MiB/s is at the throughput limit for the current IOPS, a higher IOPS value raises that limit, up to the documented maximum for the type (see [metrics-thresholds.md](metrics-thresholds.md)).
 - State how the target was computed (measured demand, type rule, instance baseline minus other volumes' usage).
 
 ## Other performance topics
@@ -107,7 +109,7 @@ A volume created from a snapshot loads blocks from Amazon S3 the first time they
 ### How much IOPS or throughput to provision
 
 1. Measure peak demand per volume over a representative window (IOPS and MiB/s, Step 3 math).
-2. Apply the type rules (gp3: up to 500 IOPS per GiB and 0.25 MiB/s per IOPS; io2: up to 1,000 IOPS per GiB) from [metrics-thresholds.md](metrics-thresholds.md).
+2. Apply the type rules (gp3: up to 500 IOPS per GiB and 0.25 MiB/s per IOPS; io2: up to 1,000 IOPS per GiB, and throughput up to 0.256 MiB/s per provisioned IOPS; io1: up to 50 IOPS per GiB) from [metrics-thresholds.md](metrics-thresholds.md). For io1 and io2, check that the IOPS value also gives the throughput limit the workload needs.
 3. Check the instance's remaining EBS baseline: baseline minus the measured usage of the other attached volumes.
 4. Propose the smaller of the measured need and what the instance can deliver. If the need exceeds the instance baseline, say so and recommend an instance type change.
 5. State how the target was computed.
@@ -137,4 +139,5 @@ The verdict template in [finding-logic.md](finding-logic.md). When the instance 
 - Volume status checks: https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-status.html
 - AWS FIS actions: https://docs.aws.amazon.com/fis/latest/userguide/fis-actions-reference.html
 - Elastic Volumes: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-modify-volume.html and https://aws.amazon.com/about-aws/whats-new/2026/01/amazon-ebs-up-to-four-volume-modifications/
-- gp3, gp2, io2 rules: https://docs.aws.amazon.com/ebs/latest/userguide/general-purpose.html and https://docs.aws.amazon.com/ebs/latest/userguide/provisioned-iops.html
+- gp3, gp2, io1 and io2 rules, including io1 and io2 throughput limits: https://docs.aws.amazon.com/ebs/latest/userguide/general-purpose.html and https://docs.aws.amazon.com/ebs/latest/userguide/provisioned-iops.html
+- DescribeVolumesModifications (most recent modification request only): https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVolumesModifications.html

@@ -12,18 +12,18 @@ It is one skill with two modes. Troubleshoot mode answers "something is wrong, w
 
 - **Troubleshoot: performance.** Rules Amazon EBS in or out, then decides whether the volume, the instance's EBS limits, burst credits, a quota or an AWS-side impairment is the binding layer. Tells saturation apart from impairment and checks for a running AWS FIS experiment. Sizes IOPS and throughput within the instance's EBS baseline.
 - **Troubleshoot: volume modification.** Explains Elastic Volumes states (`optimizing` already applies the change), the limit of 4 modifications per rolling 24 hours, `ModifyVolume` errors such as the io2 IOPS-to-size ratio, gp2 to gp3 sizing, and file system extension commands.
-- **Troubleshoot: snapshots.** Safe-to-delete tiers by lineage (AMI-backing, shared, AWS Backup, Amazon Data Lifecycle Manager by `aws:dlm:*` tags, orphaned), reversibility through Recycle Bin, copy and AMI problems, recovery.
+- **Troubleshoot: snapshots.** Snapshot tiers by lineage (AMI-backing, shared, AWS Backup, Amazon Data Lifecycle Manager by `aws:dlm:*` tags, and snapshots whose source volume is gone, listed for owner review instead of recommended for deletion), reversibility through Recycle Bin, copy and AMI problems, recovery.
 - **Troubleshoot: encryption.** AWS KMS key state and permissions blocking attach or start, sharing encrypted snapshots, encryption by default, re-encryption steps.
-- **Troubleshoot: billing.** Breaks a cost change into storage, provisioned IOPS, provisioned throughput and snapshots using the account's own AWS Cost Explorer data, finds the change with `DescribeVolumesModifications`, and checks right-sizing.
+- **Troubleshoot: billing.** Breaks a cost change into storage, provisioned IOPS, provisioned throughput and snapshots using the account's own AWS Cost Explorer data, finds the change with `DescribeVolumesModifications` (latest modification) and the optional AWS CloudTrail `ModifyVolume` events (earlier modifications), and checks right-sizing.
 - **Review mode.** A rated report over six areas: capacity and quota headroom, observability, cost hygiene, resilience, encryption posture and deletion protection.
 - **Shared capabilities.** Metric interpretation, quota headroom with a pre-filled Service Quotas request, escalation, and stuck attach or detach diagnosis.
-- **Read-only.** Every change is a proposal with exact parameters, cost direction and rollback, run only through an operator-approved directed action.
+- **Read-only.** Every change is a proposal with exact parameters, cost direction and rollback, run only through an operator-approved directed action. Deletes are manual steps for the customer after the owner confirms.
 
 ## Prerequisites
 
 ### IAM permissions
 
-The DevOps Agent role needs **read-only** permissions for the APIs in `references/data-collection.md`. The skill makes no write calls. Most actions are covered by the AWS managed policy [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html) (checked against policy version v14). The actions marked **Add** are not in that policy and must be added to the agent role.
+The DevOps Agent role needs **read-only** permissions for the APIs in `references/data-collection.md`. The skill makes no write calls. Most actions are covered by the AWS managed policy [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AIDevOpsAgentAccessPolicy.html). The actions marked **Add** are not in that policy and must be added to the agent role.
 
 | Service | IAM actions | In `AIDevOpsAgentAccessPolicy` |
 |---|---|---|
@@ -68,13 +68,14 @@ Least-privilege policy for the actions to add:
 }
 ```
 
-If a call is denied, the skill names the API under Gaps and says which conclusion stays unconfirmed, instead of guessing. AWS CloudTrail access is optional; the skill works without it and uses `DescribeVolumesModifications` as the change record.
+If a call is denied, the skill names the API under Gaps and says which conclusion stays unconfirmed, instead of guessing. AWS CloudTrail access is optional; the skill works without it. `DescribeVolumesModifications` returns only the most recent modification per volume, so without AWS CloudTrail the skill reports modification history and the 24-hour modification count as Gaps.
 
 ### AWS resources
 
 - An Agent Space with access to the account and Regions that hold the Amazon EBS volumes and Amazon EC2 instances to investigate.
 - For alarm-driven investigations: Amazon CloudWatch alarms on AWS/EBS metrics or on instance `EBSIOBalance%` / `EBSByteBalance%`, routed to the Agent Space.
-- For mutating proposals (for example `ec2:ModifyVolume`, `ec2:DeleteSnapshot`, `servicequotas:RequestServiceQuotaIncrease`): directed actions enabled in the Agent Space with their own role. Each action needs operator approval on the approval card. The skill itself never runs them.
+- For mutating proposals (for example `ec2:ModifyVolume`, `servicequotas:RequestServiceQuotaIncrease`): directed actions enabled in the Agent Space with their own role. Each action needs operator approval on the approval card. The skill itself never runs them.
+- Deletes (for example `ec2:DeleteSnapshot`, `ec2:DeleteVolume`) are never directed actions, because AWS DevOps Agent refuses delete-class operations. The skill lists the resource for owner review and gives manual steps for the customer to run with their own credentials.
 
 ## Limitations
 

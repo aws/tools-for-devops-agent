@@ -6,7 +6,7 @@ Every troubleshoot answer uses these six headings in this order.
 
 1. **Answer.** The question the user asked, answered first in one or two sentences. For example "Not stuck. The modification is in `optimizing`, which already applies the new IOPS."
 2. **Evidence.** The values that support the answer, each with units and the time window (for example "average `<value>` IOPS, `<start>` to `<end>` UTC"). Throughput in MiB/s.
-3. **Binding layer.** One of: Volume, Instance, Burst credits, Quota, Not EBS, AWS-side impairment, Not applicable.
+3. **Binding layer.** One of: Volume, Instance, Burst credits, Quota, Not EBS, AWS-side impairment, Indeterminate, Not applicable.
 4. **Recommendation.** Exact parameters (volume ID, dimension, target value, how the target was computed), or "No change". Mutating steps are proposals for a directed action.
 5. **Separate findings.** Other true facts, labelled so they never change the Answer. For example a modification that succeeded on a volume whose instance caps delivered IOPS: the cap goes here, never as "the modification failed".
 6. **Gaps.** What could not be checked and why (API denied, approval gate, metric absent).
@@ -25,8 +25,15 @@ Work through it in order. Use measured values and the limits read from the APIs.
    - Yes: **Quota**. Use the Capacity and quota headroom section of [review-operational.md](review-operational.md).
 5. Are all layers below their limits, latency at the volume's normal level, and queue length low?
    - Yes: **Not EBS**. Check CPU, memory, network and the application.
-6. Are all layers below their limits but latency and `VolumeQueueLength` up while IOPS and throughput collapse?
-   - Yes: **AWS-side impairment** (or injected latency). Never recommend more provisioning. Follow the escalation rules below.
+6. Are all layers below their limits but latency and `VolumeQueueLength` up while IOPS and throughput collapse? This pattern alone does not prove an AWS-side impairment. Check for a direct signal:
+   - `VolumeStalledIOCheck` failed (value 1) for the volume, or
+   - `DescribeVolumeStatus` reports the volume as impaired or a status check as failed, or
+   - an open AWS Health event for the volume, its Availability Zone or its Region.
+
+   Then decide:
+   - A running AWS FIS experiment targets the volume or instance: the latency is injected. Say so plainly; it ends with the experiment (see Step 5 of [troubleshoot-performance.md](troubleshoot-performance.md)). Never recommend more provisioning.
+   - One or more direct signals: **AWS-side impairment**. Never recommend more provisioning. Follow the escalation rules below.
+   - No direct signal and no FIS experiment: **Indeterminate**. Keep the cause open. Do not name AWS-side impairment and do not recommend more provisioning. Tell the customer to check the AWS Health Dashboard for an ongoing AWS-side issue and to watch the volume status checks and `VolumeStalledIOCheck`. If the symptom persists, follow the escalation rules below.
 
 ### Qualitative attribution matrix for "is it storage?"
 
@@ -50,7 +57,7 @@ Escalate to AWS Support when either is true:
 
 Specific cases:
 
-- Attach or detach stuck: the attachment stays in `attaching` or `detaching` and does not progress. Diagnose (instance state, device name, whether the volume is still mounted, any forced detach already tried), then escalate. A backend action can be needed.
+- Attach or detach stuck: the attachment stays in `attaching` or `detaching` and does not progress. Diagnose (instance state, device name, whether the volume is still mounted, any forced detach already tried), then contact AWS Support.
 - Modification in `optimizing` with `Progress` not increasing across several reads, or still optimizing after 24 hours. Tell the user the Amazon EBS User Guide says some performance changes take more than 24 hours, so this is a check, not a fault finding. Escalate with the evidence.
 - Snapshot stuck in `pending` with no progress change over the same kind of window.
 
@@ -60,7 +67,7 @@ Evidence pack to include:
 2. The time window (first ALARM time, symptom start)
 3. Metric evidence with units (IOPS, MiB/s, latency, queue length, `EBSIOBalance%`, `BurstBalance`)
 4. Volume status and AWS Health results
-5. `DescribeVolumesModifications` records, and AWS CloudTrail results if that optional lookup was available
+5. The latest `DescribeVolumesModifications` record per volume, and AWS CloudTrail `ModifyVolume` events if that optional lookup was available
 6. What was ruled out and how
 7. The Gaps list
 
@@ -82,6 +89,8 @@ Every Review mode response MUST begin with the Summary table that rates all six 
 ## Sources
 
 - Volume status checks: https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-status.html
+- `VolumeStalledIOCheck`: https://docs.aws.amazon.com/ebs/latest/userguide/using_cloudwatch_ebs.html
+- AWS Health Dashboard: https://docs.aws.amazon.com/health/latest/ug/what-is-aws-health.html
 - Detaching volumes: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-detaching-volume.html
 - Monitoring volume modifications: https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
 - Modification duration (more than 24 hours in some cases): https://docs.aws.amazon.com/ebs/latest/userguide/ebs-modify-volume.html and https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html

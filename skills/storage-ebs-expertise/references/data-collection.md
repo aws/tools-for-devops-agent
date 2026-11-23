@@ -27,15 +27,15 @@ AWS/EBS publishes 1-minute data.
 
 | Namespace | Metrics | Dimensions |
 |---|---|---|
-| AWS/EBS | `VolumeAvgIOPS` (Ops/s), `VolumeAvgThroughput` (KiB/s), `VolumeAvgReadLatency`, `VolumeAvgWriteLatency` | `VolumeId` AND `InstanceId`. Nitro instances only |
-| AWS/EBS | `VolumeReadOps`, `VolumeWriteOps`, `VolumeReadBytes`, `VolumeWriteBytes`, `VolumeTotalReadTime`, `VolumeTotalWriteTime`, `VolumeQueueLength`, `VolumeIdleTime`, `BurstBalance`, `VolumeThroughputPercentage` (Provisioned IOPS SSD only) | `VolumeId` |
+| AWS/EBS | `VolumeAvgIOPS` (Ops/s), `VolumeAvgThroughput` (KiB/s), `VolumeAvgReadLatency` (milliseconds), `VolumeAvgWriteLatency` (milliseconds), `VolumeStalledIOCheck` (0 passed, 1 failed) | `VolumeId` AND `InstanceId`. Nitro instances only |
+| AWS/EBS | `VolumeReadOps`, `VolumeWriteOps`, `VolumeReadBytes`, `VolumeWriteBytes`, `VolumeTotalReadTime` (seconds), `VolumeTotalWriteTime` (seconds), `VolumeQueueLength`, `VolumeIdleTime` (seconds), `BurstBalance`, `VolumeThroughputPercentage` (Provisioned IOPS SSD only) | `VolumeId` |
 | AWS/EC2 | `EBSIOBalance%`, `EBSByteBalance%`, `EBSReadOps`, `EBSWriteOps`, `EBSReadBytes`, `EBSWriteBytes` | `InstanceId` |
 
 Metric math from the Amazon CloudWatch metrics page for Amazon EBS. Use `Sum` statistics for ops, bytes and time.
 
 - IOPS = Sum(`VolumeReadOps` + `VolumeWriteOps`) / period in seconds
 - MiB/s = Sum(`VolumeReadBytes` + `VolumeWriteBytes`) / period in seconds / 1,048,576
-- Average latency per operation = `VolumeTotalReadTime` / `VolumeReadOps` (and the write equivalent)
+- Average read latency in milliseconds per operation = Sum(`VolumeTotalReadTime`, in seconds) / Sum(`VolumeReadOps`) x 1,000 (and the write equivalent with `VolumeTotalWriteTime` and `VolumeWriteOps`). Without the x 1,000 the result is in seconds. Always state latency in milliseconds
 - Idle percentage = Sum(`VolumeIdleTime`) / period in seconds x 100
 - MiB/s from `VolumeAvgThroughput` = value in KiB/s / 1,024
 
@@ -52,13 +52,15 @@ What a 1-minute average hides: sub-minute peaks can reach a limit while the minu
 | No `VolumeAvg*` data | The instance is not Nitro, or the `InstanceId` dimension is missing | Add `InstanceId`. If still empty, use the Sum-based math above |
 | `EBSIOBalance%` absent | The instance size does not publish it | Compare the summed IOPS and MiB/s of all attached volumes to the `DescribeInstanceTypes` baseline |
 | `DescribeInstanceTypes` values in MB/s | The API reports instance throughput in MB/s (bandwidth in Mbps) | Convert to MiB/s before comparing (1 MB/s = 1,000,000 bytes/s; 1 MiB/s = 1,048,576 bytes/s) |
-| AWS CloudTrail optional lookup denied or empty | No access, or the event is outside retention | Use `DescribeVolumesModifications` for the change record. It is not bound by AWS CloudTrail retention |
+| AWS CloudTrail optional lookup denied or empty | No access, or the event is older than the 90 days that `LookupEvents` covers | Use `DescribeVolumesModifications` for the current or latest modification only; it returns only the most recent modification per volume. Record a Gap for the modification history and for the 24-hour modification count |
 | No metric data for a volume | The volume is new, detached, or the window is wrong | Check `DescribeVolumes` state and attachment times, widen the window, report the Gap |
 
 ## Sources
 
-- Amazon CloudWatch metrics for Amazon EBS: https://docs.aws.amazon.com/ebs/latest/userguide/using_cloudwatch_ebs.html
+- Amazon CloudWatch metrics for Amazon EBS (units, dimensions, `VolumeStalledIOCheck` with `VolumeId` and `InstanceId`, and the latency formula Sum(`VolumeTotalReadTime`) / Sum(`VolumeReadOps`) x 1000 in ms/op): https://docs.aws.amazon.com/ebs/latest/userguide/using_cloudwatch_ebs.html
 - Instance metrics, including `EBSIOBalance%` and `EBSByteBalance%`: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html
 - Amazon EBS-optimized instances (baseline and maximum, MB/s): https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-optimized.html
 - Monitoring volume modifications: https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
+- DescribeVolumesModifications (most recent modification request only): https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVolumesModifications.html
+- AWS CloudTrail LookupEvents (last 90 days): https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_LookupEvents.html
 - AWS FIS actions: https://docs.aws.amazon.com/fis/latest/userguide/fis-actions-reference.html

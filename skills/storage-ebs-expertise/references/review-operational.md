@@ -21,7 +21,7 @@ Run every check below even when the error looks simple. A user who reports a quo
 
 **Rating rule**
 
-- Usage at or above 80% of the applied quota is flagged. The 80% value is configurable; ask the operator if they use a different one.
+- Usage at or above 80% of the applied quota is flagged. The 80% value is this skill's own heuristic, not an AWS rule or limit. It is configurable; ask the operator if they use a different one, and say in the report which value was used.
 - A quota that blocked an operation is `High`.
 - A quota flagged at or above the threshold is `Medium`, or `High` if the user states a planned increase that would exceed it.
 - Unreadable quota or usage is `Indeterminate`.
@@ -32,11 +32,21 @@ Run every check below even when the error looks simple. A user who reports a quo
 - Not adjustable: draft the AWS Support case text (service, quota name, Region, desired value, business justification). Include the intake questions for the matching quota below, and show the case-path approval caution.
 - Name the quotas that commonly cause problems: per-Region IOPS for io1 and io2, per-Region storage per volume type, snapshots per Region, and fast snapshot restore.
 
-**Intake questions to include with the request or case**
+**Suggested intake questions to include with the request or case**
 
-Add the questions for the quota being proposed. These are for the agent to ask the customer in plain, customer-facing wording. Answering these in the request gives the AWS team the detail they need to review it, which helps them action it faster. Do not promise approval or a timeframe.
+These are this skill's suggested questions, not an AWS requirement or form. Add the questions for the quota being proposed. The agent asks them in plain, customer-facing wording. Answering them in the request gives the reviewer more context about the need. Do not promise approval or a timeframe.
 
 The archiving best practices are at https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/archiving-guidelines.html.
+
+**How to reason about archiving daily or weekly snapshots (guidance, not an AWS rule)**
+
+There is no fixed change-rate threshold for archiving. Compare costs with the model in the archive documentation, using the current rates from the Amazon EBS pricing page. Do not type a price.
+
+1. What archiving saves: only the blocks of the snapshot that no other snapshot references leave the standard tier. Their size times the standard tier snapshot rate, for the time you keep the snapshot, is the saving. The archiving best practices page shows how the customer can count those blocks.
+2. What archiving costs: the archived snapshot is a full snapshot (`FullSnapshotSizeInBytes` in `DescribeSnapshots`). Its size times the archive tier rate, for at least the 90-day minimum archive period, plus the restore charge per GB for each expected restore, plus standard tier storage while a restored copy is kept.
+3. Archiving lowers cost only when step 1 is larger than step 2. The archiving best practices page shows that when later snapshots reference an archived snapshot's data, the standard tier cost does not go down and the total cost goes up. Check the numbers for the customer's snapshots instead of assuming.
+
+Sources: snapshot archive (https://docs.aws.amazon.com/ebs/latest/userguide/snapshot-archive.html), pricing and billing for archiving (https://docs.aws.amazon.com/ebs/latest/userguide/snapshot-archive-pricing.html), archiving best practices (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/archiving-guidelines.html), Amazon EBS pricing (https://aws.amazon.com/ebs/pricing/).
 
 - IOPS or storage:
   - What workload is driving the need for more storage or IOPS? Is there a planned launch or event, or is this organic growth you want to secure capacity for?
@@ -50,11 +60,11 @@ The archiving best practices are at https://docs.aws.amazon.com/AWSEC2/latest/Us
   - What is the size of the snapshots you are enabling FSR on?
   - For how long will FSR stay enabled?
 - Maximum number of archived snapshots per volume (include these only when the requested value is more than 25):
-  - Is this for daily or weekly snapshots? Archiving daily or weekly snapshots is usually only worthwhile when their change rate is above 25 percent.
+  - Is this for daily or weekly snapshots? If so, have you compared the archive cost with the standard tier saving, as described in the archiving reasoning above?
   - Is this for monthly, quarterly, or yearly snapshots? If so, why do you need more than 25 archived snapshots per volume?
   - Is this for new or existing snapshots? EBS Snapshots Archive stores full versions of snapshots. Have you reviewed the archiving best practices linked above?
 - Maximum number of in-progress snapshot archives (include these only when the requested value is more than 25):
-  - Is this for daily or weekly snapshots? Archiving daily or weekly snapshots is usually only worthwhile when their change rate is above 25 percent.
+  - Is this for daily or weekly snapshots? If so, have you compared the archive cost with the standard tier saving, as described in the archiving reasoning above?
   - Is this for monthly, quarterly, or yearly snapshots?
   - Is this for new or existing snapshots? EBS Snapshots Archive stores full versions of snapshots. Have you reviewed the archiving best practices linked above?
   - Is this a one-time archival? Can you archive in batches of 25?
@@ -99,7 +109,7 @@ The archiving best practices are at https://docs.aws.amazon.com/AWSEC2/latest/Us
 
 **Rating rule**: `Low` by default. `Medium` when the operator names cost as a goal or the resource is large relative to the account's Amazon EBS spend as shown in Cost Explorer.
 
-**Fix**: `ModifyVolume` to gp3 with IOPS and throughput sized as in [troubleshoot-volume-modification.md](troubleshoot-volume-modification.md) step 6; snapshot then delete for unattached volumes. All as directed-action proposals.
+**Fix**: `ModifyVolume` to gp3 with IOPS and throughput sized as in [troubleshoot-volume-modification.md](troubleshoot-volume-modification.md) step 6, as a directed-action proposal. For unattached volumes, ask the owner to confirm they no longer need the data; then the customer creates a snapshot and deletes the volume as manual steps with their own credentials. AWS DevOps Agent refuses delete-class operations, so a delete is never a directed-action proposal.
 
 ## Resilience
 
@@ -145,7 +155,7 @@ The archiving best practices are at https://docs.aws.amazon.com/AWSEC2/latest/Us
 ## Safety rules
 
 - Review mode is entirely read-only. It never runs a mutating call.
-- Every fix is listed under "Proposed actions" in the report with exact parameters, expected effect, cost direction and rollback. Each one needs a directed action approved on the approval card.
+- Every fix is listed under "Proposed actions" in the report with exact parameters, expected effect, cost direction and rollback. Each one needs a directed action approved on the approval card, except deletes, which are manual customer steps after owner confirmation (AWS DevOps Agent refuses delete-class operations).
 
 ## Sources
 
