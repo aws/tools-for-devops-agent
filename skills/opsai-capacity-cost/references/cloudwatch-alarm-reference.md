@@ -1,83 +1,41 @@
 # CloudWatch Alarm Reference
 
-Recommended alarms for Bedrock and SageMaker GenAI workloads with exact settings.
+Recommended alarms for Bedrock token spend, quota use and throttling (SKILL.md Step 7). Guardrail, Agents, SageMaker and evaluation-quality alarms belong to the sibling skills in `related-skills.md`.
 
 Columns: alarm | namespace / metric | statistic | threshold approach | period | datapoints-to-alarm / evaluation-periods | source.
 
 `source` marks each threshold as:
 - **AWS-published** — a numeric threshold AWS documents.
-- **Derived** — a defensible default from AWS guidance/general operational practice; tune per workload.
-- **Workload-specific** — AWS publishes no number; the operator must set a baseline from observed traffic.
+- **Derived** — a defensible default from AWS guidance or general operational practice (for example "any server error"); tune per workload.
+- **Workload-specific** — AWS publishes no number; the operator sets a baseline from observed traffic. A figure in brackets is an illustration of the form, not a recommended value.
 
-> AWS does not publish fixed numeric alarm thresholds for most Bedrock/SageMaker metrics. The vast majority below are **Derived** or **Workload-specific**. Treat the numbers as starting points, not compliance values.
+> AWS publishes no fixed numeric alarm thresholds for Bedrock metrics. Every row below is **Derived** or **Workload-specific**; present the numbers as starting points, never as compliance values, and name the source class next to each one (SKILL.md "Guardrails — details", Thresholds).
+
+Metric reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html. Alarm mechanics: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Alarms.html.
 
 ---
 
-## Bedrock — model invocation alarms
+## Bedrock — capacity and throttling alarms
 
 | alarm | namespace / metric | statistic | threshold approach | period | datapoints/eval | source |
 |---|---|---|---|---|---|---|
+| Elevated throttling | `AWS/Bedrock` / `InvocationThrottles` (per `ModelId` **and** the no-dimension series) | Sum | `> 0` sustained; raise the threshold to the observed retry-absorbed baseline | 300s | 3 of 3 | Derived |
+| Quota rejections present | `AWS/Bedrock` / `InvocationClientErrors` (no dimension) | Sum | `>` baseline; split by invocation-log `errorCode` = `ServiceQuotaExceededException` where logs exist, because quota rejections are counted here and not in `InvocationThrottles` | 300s | 3 of 3 | Workload-specific |
+| Quota consumption high | `AWS/Bedrock` / `EstimatedTPMQuotaUsage` (per `ModelId`) | Sum | metric math `100 * m1 / <TPM quota>` `> <percent>` (80 is a common starting point); `<TPM quota>` read from Service Quotas for that model and form (on-demand / cross-region / global, `api-quirks.md` §18); the metric is an absolute count, not a percentage | 60s | 3 of 3 | Workload-specific |
 | Server errors present | `AWS/Bedrock` / `InvocationServerErrors` | Sum | `> 0` | 300s | 1 of 1 | Derived |
-| Elevated throttling | `AWS/Bedrock` / `InvocationThrottles` (also the no-dimension series) | Sum | `>` baseline (e.g. `>5` sustained) | 300s | 3 of 3 | Derived |
-| Client-error surge | `AWS/Bedrock` / `InvocationClientErrors` | Sum | `>` 5% of `Invocations` (metric math) | 300s | 3 of 3 | Derived |
-| Latency regression | `AWS/Bedrock` / `InvocationLatency` | p90 | `>` baseline p90 (set from history) | 300s | 3 of 3 | Workload-specific |
-| First-token latency (chat) | `AWS/Bedrock` / `TimeToFirstToken` | p90 | `>` UX budget (e.g. 1500 ms) | 300s | 3 of 3 | Workload-specific |
-| Quota consumption high | `AWS/Bedrock` / `EstimatedTPMQuotaUsage` (per `ModelId`) | Sum | metric math `100 * m1 / <TPM quota>` `> 80` — `<TPM quota>` read from Service Quotas for that model, matching the `ModelId` form (on-demand / cross-region / global); the metric is an absolute count, not a percentage | 60s | 3 of 3 | Derived |
-| Quota rejections present | `AWS/Bedrock` / `InvocationClientErrors` (no dimension) | Sum | `>` baseline; split by invocation-log `errorCode` = `ServiceQuotaExceededException` where logs exist | 300s | 3 of 3 | Workload-specific |
-| Token-spend spike | `AWS/Bedrock` / `OutputTokenCount` | Sum | `>` daily baseline (anomaly detection) | 3600s | 1 of 1 | Workload-specific |
 
-Prefer **CloudWatch anomaly detection** bands for `Invocations`, `InputTokenCount`, and `OutputTokenCount` rather than static thresholds — traffic and cost patterns are workload-specific.
-
-`EstimatedTPMQuotaUsage` is an approximation that does not reflect the up-front `max_tokens` reservation that drives throttling (AWS: do not use it as the sole capacity indicator). Pair the quota alarm with the throttling and quota-rejection alarms rather than relying on it alone.
+`EstimatedTPMQuotaUsage` is an approximation that does not reflect the up-front input + `max_tokens` reservation that drives throttling (AWS: do not use it as the sole indicator of quota use). Pair the quota alarm with the throttling and quota-rejection alarms rather than relying on it alone. Models on the bedrock-mantle endpoint publish no throttle or quota metric (`api-quirks.md` §20): no alarm covers their rejections.
 
 ---
 
-## Bedrock Guardrails alarms
+## Bedrock — token spend alarms
 
 | alarm | namespace / metric | statistic | threshold approach | period | datapoints/eval | source |
 |---|---|---|---|---|---|---|
-| Intervention spike | `AWS/Bedrock/Guardrails` / `InvocationsIntervened` | Sum | `>` baseline (anomaly band) | 300s | 3 of 3 | Workload-specific |
-| Guardrail latency add | `AWS/Bedrock/Guardrails` / `InvocationLatency` | p90 | `>` tolerance | 300s | 3 of 3 | Workload-specific |
+| Output-token spike | `AWS/Bedrock` / `OutputTokenCount` (per `ModelId`) | Sum | anomaly-detection band, or `>` the observed daily baseline | 3600s | 1 of 1 | Workload-specific |
+| Input-token spike | `AWS/Bedrock` / `InputTokenCount` (per `ModelId`) | Sum | anomaly-detection band | 3600s | 1 of 1 | Workload-specific |
+| Cache not paying off | metric math `CacheWriteInputTokenCount / CacheReadInputTokenCount` (per `ModelId`) | Sum | `>` the ratio at which the model's write and read rates stop saving money (price them per `cost-analysis.md` §1b) | 86400s | 1 of 1 | Workload-specific |
+| Capped generations | custom metric from the metric filter `{ $.output.outputBodyJson.stopReason = "max_tokens" }` on the invocation log group (`metrics-and-logs.md`) | Sum | `>` baseline share of records | 3600s | 3 of 3 | Workload-specific |
+| Legacy-model traffic | `AWS/Bedrock` / `LegacyModelInvocations` | Sum | `> 0` | 3600s | 1 of 1 | Derived |
 
-A sudden rise in `InvocationsIntervened` is both a safety signal (possible attack) and a quality signal (prompt/model regression). Route to a security/on-call channel.
-
----
-
-## Bedrock Agents alarms
-
-| alarm | namespace / metric | statistic | threshold approach | period | datapoints/eval | source |
-|---|---|---|---|---|---|---|
-| Agent server errors | `AWS/Bedrock/Agents` / `InvocationServerErrors` | Sum | `> 0` | 300s | 1 of 1 | Derived |
-| Agent throttling | `AWS/Bedrock/Agents` / `InvocationThrottles` | Sum | `>` baseline | 300s | 3 of 3 | Derived |
-| Agent latency | `AWS/Bedrock/Agents` / `InvocationLatency` | p90 | `>` baseline | 300s | 3 of 3 | Workload-specific |
-
----
-
-## SageMaker inference endpoint alarms
-
-Reference: https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html and https://docs.aws.amazon.com/sagemaker/latest/dg/endpoint-auto-scaling.html
-
-| alarm | namespace / metric | statistic | threshold approach | period | datapoints/eval | source |
-|---|---|---|---|---|---|---|
-| 5xx errors | `AWS/SageMaker` / `Invocation5XXErrors` | Sum | `> 0` | 60s | 1 of 1 | Derived |
-| Model latency | `AWS/SageMaker` / `ModelLatency` | p90 (µs) | `>` latency SLO | 60s | 3 of 3 | Workload-specific |
-| Overhead latency | `AWS/SageMaker` / `OverheadLatency` | p90 (µs) | `>` tolerance | 60s | 3 of 3 | Workload-specific |
-| Scaling signal | `AWS/SageMaker` / `InvocationsPerInstance` | Sum/Average | target-tracking target value | 60s | n/a (scaling policy) | Workload-specific |
-| CPU saturation | `/aws/sagemaker/Endpoints` / `CPUUtilization` | Average | `> 80%` | 60s | 3 of 3 | Derived |
-| Memory saturation | `/aws/sagemaker/Endpoints` / `MemoryUtilization` | Average | `> 80%` | 60s | 3 of 3 | Derived |
-| GPU under-use (cost) | `/aws/sagemaker/Endpoints` / `GPUUtilization` | Average | `< 30%` sustained | 300s | 12 of 12 | Workload-specific |
-
-For auto-scaling (LLM-SM-001), use a **target-tracking** policy on `InvocationsPerInstance` rather than a step alarm; set the target from a load test / Inference Recommender run.
-
----
-
-## Evaluation-quality alarms (custom metrics)
-
-Evaluation scores are not native CloudWatch metrics — publish them (LLM-EVAL-005) then alarm:
-
-| alarm | namespace / metric | statistic | threshold approach | period | datapoints/eval | source |
-|---|---|---|---|---|---|---|
-| Quality regression | `OpsAI/Evaluation` / `<metric>` (e.g. `Accuracy`) | Average | `<` baseline − margin | per eval run | 1 of 1 | Workload-specific |
-| Safety regression | `OpsAI/Evaluation` / `Toxicity` | Average | `>` baseline + margin | per eval run | 1 of 1 | Workload-specific |
-
-Baseline + margin are set by the regression gate (LLM-EVAL-007).
+Prefer **CloudWatch anomaly detection** bands for `Invocations`, `InputTokenCount` and `OutputTokenCount` over static thresholds: traffic and cost patterns are workload-specific. For spend itself, recommend an AWS Budgets cost budget filtered to the Bedrock service names read in Step 3 (https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-create.html); Cost Explorer figures lag CloudWatch by up to a day, so a token alarm fires first.

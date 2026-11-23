@@ -35,6 +35,7 @@ Metadata:
           - EnableSageMakerAIOpsReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
+          - EnableOpsaiCapacityCost
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -210,6 +211,16 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableOpsaiCapacityCost:
+    Type: String
+    Description: >
+      opsai-capacity-cost skill. Bedrock, Cost Explorer, CloudWatch, Logs Insights,
+      Service Quotas and s3:GetLifecycleConfiguration reads are already covered by
+      AIDevOpsAgentAccessPolicy; this parameter adds only pricing:GetProducts (published
+      per-token prices for the estimated-cost cross-check; a metadata read, no account data).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -228,6 +239,7 @@ Conditions:
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
+  SkillOpsaiCapacityCost: !Equals [!Ref EnableOpsaiCapacityCost, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -637,6 +649,32 @@ Resources:
               - pricing:DescribeServices
             Resource: '*'
 
+  # opsai-capacity-cost: adds ONLY pricing:GetProducts, the Price List read the skill uses to
+  # price CloudWatch token counts for its (estimated) cross-check against Cost Explorer. Every
+  # other read the skill makes -- bedrock:List*/GetFoundationModel/GetInferenceProfile/
+  # GetProvisionedModelThroughput/GetModelInvocationLoggingConfiguration, ce:Get*/List*,
+  # cloudwatch:GetMetricData/ListMetrics/DescribeAlarms, logs:Describe*/StartQuery/
+  # GetQueryResults, servicequotas:Get*/List*, s3:GetLifecycleConfiguration -- is already in
+  # AIDevOpsAgentAccessPolicy (v16). Metadata only: the Price List API returns published prices
+  # and no account data. Without this policy the skill reads prices from the Bedrock pricing
+  # page or reports the model as "unpriced: pricing:GetProducts denied"; billed figures, token
+  # reconciliation, Provisioned Throughput and quota checks run unchanged.
+  PolicyOpsaiCapacityCost:
+    Type: AWS::IAM::Policy
+    Condition: SkillOpsaiCapacityCost
+    Properties:
+      PolicyName: DevOpsAgentSkill-OpsaiCapacityCost
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: OpsaiCapacityCostPricingRead
+            Effect: Allow
+            Action:
+              - pricing:GetProducts
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -789,6 +827,7 @@ Outputs:
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
+        - opsai-capacity-cost: ${EnableOpsaiCapacityCost} (pricing:GetProducts — Bedrock, Cost Explorer, CloudWatch, Logs, Service Quotas and s3:GetLifecycleConfiguration reads are covered by the managed policy; without it prices fall back to the pricing page or "unpriced")
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)

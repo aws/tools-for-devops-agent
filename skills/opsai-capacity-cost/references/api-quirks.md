@@ -1,23 +1,20 @@
 # API Quirks
 
-Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** or misleading. Each entry: the trap, why it misleads, and the correct interpretation. Misreading these produces false positives (phantom findings) or false negatives (missed CRITICALs).
+Read-only API responses whose obvious reading is **wrong** or misleading for cost, Provisioned Throughput and quota work. Each entry: the trap, why it misleads, and the correct interpretation. Section numbers are stable because `SKILL.md` and `cost-analysis.md` cite them; sections that belong to a sibling skill are kept as one-line pointers.
 
 ---
 
 ## 1. `GetModelInvocationLoggingConfiguration` — empty vs disabled
 
-- **Trap:** When logging has never been configured, the API returns a response with **no `loggingConfig`** (effectively empty), not an explicit `enabled: false`. An agent that only checks for a falsy "enabled" flag may skip the check.
-- **Correct reading:** Absence of `loggingConfig` **means logging is disabled** → raise LLM-INV-001 (CRITICAL). Logging is enabled only if `loggingConfig` is present with at least one of `cloudWatchConfig` / `s3Config`. Also: `loggingConfig` can be present while the specific data-delivery flags (`textDataDeliveryEnabled`, etc.) are false — "configured" ≠ "capturing content".
+- Belongs to `opsai-bedrock-review` (LLM-INV-001). Here the logging configuration is read only to find the log destination for LLM-COST-006 and the Step 2b queries; an absent `loggingConfig` means no log group to query, disclosed as a missing signal, never a finding.
 
 ## 2. `ListEvaluationJobs` — empty in unsupported regions
 
-- **Trap:** An empty list reads as "no evaluation jobs → raise LLM-EVAL-001 CRITICAL." But Bedrock evaluation is **not available in every region**. In an unsupported region the API may return empty (or error) regardless of maturity.
-- **Correct reading:** Before firing LLM-EVAL-001, confirm the region supports Bedrock evaluation. If unsupported, the finding is "evaluation not available in this region; verify workloads run where evaluation is supported" (INFO/advisory), not CRITICAL. Only raise CRITICAL when evaluation is supported **and** the list is empty.
+- Belongs to `opsai-ml-eval-check` (LLM-EVAL). Not used here.
 
 ## 3. Model access / `ListFoundationModels` — listed ≠ accessible
 
-- **Trap:** `ListFoundationModels` returns models that exist in the region. Presence in the list does **not** mean the account has been granted access to invoke them.
-- **Correct reading:** A model can appear in `ListFoundationModels` yet `InvokeModel` fails with `AccessDeniedException` because access was never requested/granted. Use model access status (and actual invocation errors in logs) to judge access, not list membership.
+- Belongs to `opsai-bedrock-review` (LLM-INV-014). Relevant here only for what-ifs: a model listed by `ListFoundationModels` is not necessarily enabled for the account, so a LLM-COST-004 model switch needs access confirmed first.
 
 ## 4. `modelLifecycle.status` — ACTIVE now, deprecated soon
 
@@ -26,28 +23,23 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 
 ## 5. Guardrail `DRAFT` — exists but not what's enforced
 
-- **Trap:** `GetGuardrail` on the DRAFT returns a fully populated policy, reading as "guardrail is configured and strong."
-- **Correct reading:** DRAFT is editable and may differ from the **published version** the application actually references. Evaluate the specific `guardrailVersion` used at invoke time. A strong DRAFT with production pointing at an older/weaker version is still a finding (LLM-GRD-006).
+- Belongs to `opsai-bedrock-security` (LLM-GRD). Guardrail *spend* stays here as a labelled `USE1-Guardrail-*` line (cost-analysis.md §1a), never a finding.
 
 ## 6. Agent `PREPARED` status vs alias in use
 
-- **Trap:** `GetAgent` showing `agentStatus: PREPARED` reads as "the latest config is live."
-- **Correct reading:** Applications invoke an **alias**, which maps to a specific version — not necessarily the latest prepared DRAFT. A newly prepared DRAFT does not change production until an alias is pointed at a new published version (LLM-AGT-007). Always resolve alias → version.
+- Belongs to `opsai-bedrock-agentcore` (LLM-AGT). Not used here.
 
 ## 7. SageMaker endpoint `InService` with `CurrentInstanceCount` = 0
 
-- **Trap:** `DescribeEndpoint` `EndpointStatus: InService` reads as healthy and serving.
-- **Correct reading:** A variant can be `InService` yet report `CurrentInstanceCount: 0` (scaled in, scale-to-zero async/serverless, or a misconfigured leftover). `InService` is control-plane state, not proof of serving capacity → check instance count and recent `Invocations` (LLM-SM-003).
+- Belongs to `opsai-sagemaker-inference` (LLM-SM). Not used here.
 
 ## 8. Knowledge Base exists ≠ data ingested
 
-- **Trap:** `GetKnowledgeBase` returning `status: ACTIVE` reads as "KB is ready and populated."
-- **Correct reading:** KB `ACTIVE` only means the resource/vector-index wiring is valid. If no `StartIngestionJob` has completed (`ListIngestionJobs` empty), the vector store is empty and retrieval returns nothing (LLM-KB-001). Always verify ingestion-job history, not KB status.
+- Belongs to `opsai-bedrock-review` (LLM-KB). Not used here.
 
 ## 9. `DescribeScalableTargets` empty ≠ no scaling intended
 
-- **Trap:** An empty scalable-targets response reads as "auto-scaling is simply off, low severity."
-- **Correct reading:** For a production endpoint, empty means **fixed capacity** — it cannot absorb spikes or scale in to save cost (LLM-SM-001, HIGH). Confirm it's registered under `application-autoscaling` with namespace `sagemaker`, resource id `endpoint/<name>/variant/<variant>`; a wrong resource-id lookup also returns empty and can be mistaken for "no scaling."
+- Belongs to `opsai-sagemaker-inference` (LLM-SM-001). Not used here.
 
 ## 10. CloudWatch "no datapoints" ≠ metric is zero
 
@@ -56,8 +48,7 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 
 ## 11. Guardrail `InvocationsIntervened` high ≠ guardrail broken
 
-- **Trap:** A spike in `InvocationsIntervened` reads as a misconfigured/overly-aggressive guardrail to loosen.
-- **Correct reading:** A spike is often the guardrail **working** against an attack campaign or a prompt/model regression. Investigate the cause (attack vs false-positive) before weakening the guardrail.
+- Belongs to `opsai-bedrock-security` (LLM-GRD). Not used here.
 
 ## 12. Provisioned Throughput `InService` ≠ in use
 
@@ -66,13 +57,12 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 
 ## 13. `GetDataSource` chunking default
 
-- **Trap:** A missing/absent chunking configuration reads as "default is fine."
-- **Correct reading:** The default behavior depends on the data-source/API version and may be "no chunking" (whole-document) — poor for long heterogeneous docs. Treat an unset strategy as a tuning gap to confirm (LLM-KB-003), not a safe default.
+- Belongs to `opsai-bedrock-review` (LLM-KB-003). Not used here.
 
 ## 14. Cross-region inference profile IDs look region-prefixed but aren't a region override
 
 - **Trap:** A profile id like `us.anthropic.claude-...` reads as "pinned to us-east-1 only."
-- **Correct reading:** The prefix (`us.`, `eu.`, `apac.`, `jp.`, `au.`, `ca.`, `in.`, `global.` in testing; AWS adds more) denotes the **routing scope**, and requests may be served from any member region in that scope; don't assume single-region behavior (LLM-INV-002, LLM-COST-005). Don't tell profiles from model IDs by prefix: `GetInferenceProfile` accepts any profile ID and rejects a model ID. **Metrics follow the source region:** `AWS/Bedrock` metrics for profile traffic are published in the region the request was sent from, not the member region that served it, so a member region can show no metrics while serving traffic (in testing, `us.` traffic sent from us-east-1 left us-east-2 and us-west-2 empty). Pull metrics in the source region. Geographic profiles (every prefix except `global.`) bill at the source-region rate. `global.` profiles bill under their own usage type and unit price. Spellings vary (`-cross-region-global`, `_global_standard`, …): match any usage type containing `global`, in any case, rather than a list. The global rate can be lower or higher than the in-region rate (in testing, lower for Claude Sonnet 5), so do not assume either direction. Quote a price difference only with a citation to the billed usage-type line or the Bedrock pricing page, and do not assert that there is no data-transfer charge — say it must be confirmed (LLM-COST-005, INFO).
+- **Correct reading:** The prefix (`us.`, `eu.`, `apac.`, `jp.`, `au.`, `ca.`, `in.`, `global.` in testing; AWS adds more) denotes the **routing scope**, and requests may be served from any member region in that scope; don't assume single-region behavior (LLM-INV-002, LLM-COST-005). Don't tell profiles from model IDs by prefix: `GetInferenceProfile` accepts any profile ID and rejects a model ID. **Metrics follow the source region:** `AWS/Bedrock` metrics for profile traffic are published in the region the request was sent from, not the member region that served it, so a member region can show no metrics while serving traffic (in testing, `us.` traffic sent from us-east-1 left us-east-2 and us-west-2 empty). Pull metrics in the source region. Geographic profiles (every prefix except `global.`) bill at the source-region rate. `global.` profiles bill under their own usage type and unit price. Spellings vary (`-cross-region-global`, `_global_standard`, …): match any usage type containing `global`, in any case, rather than a list. AWS documents global profiles at approximately 10% savings against geographic pricing (https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html; in testing, lower for Claude Sonnet 5). Quote the model's actual difference only from the billed usage-type line or the Bedrock pricing page. The same page documents no additional routing cost for cross-Region inference: the price follows the calling Region (LLM-COST-005, INFO).
 
 ## 15. Cache token metrics — measured zero vs no datapoints
 
@@ -152,5 +142,5 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 ## 22. Exclusive `End` date — an off-by-one window hides most of the spend
 
 - **Trap:** the window is set to end "yesterday" with `End` = yesterday's date, to allow for Cost Explorer lag. Billed and token figures then agree inside the window, and the result is reported as "exact".
-- **Correct reading:** `ce:GetCostAndUsage` `TimePeriod.End` is **exclusive**, and so is CloudWatch `EndTime`. `End` = yesterday leaves out yesterday, and today is left out too. Both sources leave out the same days, so they still agree with each other. For a model whose traffic is recent (newly adopted, bursty, or launched this week), most of its spend can sit in the days that were left out. A matching cross-check proves only that the two sources agree, not that the window covers the spend.
+- **Correct reading:** `ce:GetCostAndUsage` `TimePeriod.End` is **exclusive** (API_DateInterval), and so is CloudWatch `GetMetricData` `EndTime` (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_GetMetricData.html). `End` = yesterday leaves out yesterday, and today is left out too. Both sources leave out the same days, so they still agree with each other. For a model whose traffic is recent (newly adopted, bursty, or launched this week), most of its spend can sit in the days that were left out. A matching cross-check proves only that the two sources agree, not that the window covers the spend.
 - **Do:** compute dates from today's UTC date at run time. Set `End` = today (UTC) so yesterday is included, and mark yesterday as possibly incomplete. Then run the coverage check (SKILL.md Step 3b): pull daily billed cost and daily tokens per model up to now. If billed cost or tokens fall outside the window, extend the window or report those days separately. Never call a figure "exact" or "complete" until that check passes. Source: https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_DateInterval.html

@@ -79,8 +79,10 @@ Mixing up a billed figure and an estimate is this skill's worst failure. Full me
 - **No `SERVICE = "Amazon Bedrock"` filter:** Bedrock bills under several service names. Omit the
   filter, or list the names with `ce:GetDimensionValues` (`SERVICE`, search `Bedrock`).
 - **Guardrail spend** (`USE1-Guardrail-*`, in `model$`) is a labelled line, not a finding.
-- **Per caller or application** is billed only with IAM principal attribution (CUR 2.0) or application
-  inference profiles / project tags with activated cost allocation tags; otherwise it is an estimate.
+- **Per caller or application** is billed only through IAM principal attribution (identity captured
+  automatically; per-identity rows need a CUR 2.0 export with caller identity, tag dimensions need
+  activated tags), application inference profiles, or Projects/Workspaces tags with activated cost
+  allocation tags (cost-analysis §1a.5); otherwise it is an estimate.
 
 **Token model** (the cross-check; the result when Cost Explorer is denied or empty; per-caller splits;
 what-ifs): price all four token types (`InputTokenCount`, `OutputTokenCount`,
@@ -244,8 +246,8 @@ Run the steps in order. Each step is bounded: a denied API, no datapoints or an 
 ## Check Families
 
 Detection rules, remediations, citations: [cost-analysis.md](references/cost-analysis.md) (PT, COST),
-[checks-model-invocation.md](references/checks-model-invocation.md) (INV). Families of other skills in
-those files (GRD, KB, AGT, SM, EVAL, AC, TEL, other INV) are never raised here.
+[checks-model-invocation.md](references/checks-model-invocation.md) (INV-002, INV-007). Check families
+of other skills (GRD, KB, AGT, SM, EVAL, AC, TEL, other INV) are never raised here.
 
 | check-id | Detects | Severity |
 |---|---|---|
@@ -256,7 +258,7 @@ those files (GRD, KB, AGT, SM, EVAL, AC, TEL, other INV) are never raised here.
 | LLM-COST-002 | Repeated prefixes with no prompt caching, or cache writes far above reads | MEDIUM |
 | LLM-COST-003 | Large latency-tolerant jobs on-demand instead of Batch | MEDIUM |
 | LLM-COST-004 | A high-cost model on simple high-volume tasks (validate a smaller one first) | MEDIUM |
-| LLM-COST-005 | Cross-region profile with its billed rate and data transfer unconfirmed (geographic: source-region rate; `global.`: a usage type containing `global`, own rate) | INFO |
+| LLM-COST-005 | Cross-region profile with its billed rate unconfirmed (geographic: source-region rate; `global.`: a usage type containing `global`, own rate, documented at about 10% below geographic) | INFO |
 | LLM-COST-006 | Invocation-log destination with no retention or lifecycle policy. Give `aws logs put-retention-policy --log-group-name <log-group> --retention-in-days <N>` (N workload-specific); data-delivery flags are configuration, out of scope here | MEDIUM |
 | LLM-INV-002 | Direct model ID while a cross-region profile exists for that model (none: don't raise) | HIGH |
 | LLM-INV-007 | Sustained throttles or quota rejections (> 0) with no backoff retry and no profile spreading | MEDIUM |
@@ -308,8 +310,9 @@ Also:
   `CacheWriteInputTokenCount`) ÷ `OutputTokenCount`, all `Sum` over one window (cache reads count 0;
   10.0x for Claude Sonnet 5 in testing). Pasted `Sum` values: compute it. Another statistic: re-read
   once, one `GetMetricData` with the four metrics, `Sum`, `Period` 86400 (daily Sums give the same
-  totals); no cache-write datapoints = 0. Report only the weight measured (other models: cost-analysis
-  §Quota link) and say burndown counts against the TPM quota, not the bill.
+  totals); no cache-write datapoints = 0. Report only the weight measured; the documented rate is
+  model-specific (2.5x to 15x for current Anthropic models, 1:1 for most others: cost-analysis §Quota
+  link, read it for the exact model) and burndown counts against the TPM quota, not the bill.
 - **"A `us.` profile uses the on-demand quota."** Geographic profiles use `Cross-region model inference
   tokens per minute for <model>`, `global.` uses `Global cross-region …`, direct calls `On-demand …`
   (api-quirks §18 step 4). "No matching quota" or "no tokens-per-day quota for <model>" only after a

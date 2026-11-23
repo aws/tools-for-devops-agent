@@ -11,8 +11,9 @@ Built 2026-11-08 from `ListServiceQuotas` (service code `bedrock`) in us-east-1 
 listed with ✓ has the same name in both Regions (110 of 133); codes marked `us-east-1 only` were not
 found in us-west-2. `NoSuchResourceException` shows only that this code does not exist in your Region,
 not that the quota is absent. Models and quotas change: for a model missing here, ask the user for the
-code (api-quirks §18 step 2b). Checked live on 2026-11-12: all 133 codes exist in us-east-1 and every
-returned name names its model; 91 newer model names (e.g. Claude Fable 5, GPT-6 Sol, Gemma 3) have no row.
+code (api-quirks §18 step 2b). Checked live on 2026-11-23: all 133 codes exist in us-east-1, and every
+returned name names its model, form and quota type with the Adjustable value shown. On 2026-11-12, 91 newer
+model names (e.g. Claude Fable 5, GPT-6 Sol, Gemma 3) had no row.
 
 Form: `on-demand` = direct model ID; `cross-region` = geographic profile (`us.`, `eu.`, `apac.`, …);
 `global` = `global.` profile; `mantle` = bedrock-mantle endpoint (separate input and output TPM);

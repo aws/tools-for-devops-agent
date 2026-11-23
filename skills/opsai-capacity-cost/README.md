@@ -111,7 +111,7 @@ which takes the agent over ten minutes. To keep answers fast and accurate, the s
    size of an increase or a percent-of-quota alarm, or when your account shows throttles. Otherwise
    the answer says that headroom was not computed and why.
 2. **Uses a verified table of quota codes.** `references/quota-codes.md` holds 133 codes for 46 model
-   families, each checked against Service Quotas on 2026-11-12. The skill takes the code for your
+   families, each checked against Service Quotas on 2026-11-23. The skill takes the code for your
    model and the way you call it (direct, cross-Region or global inference profile), reads the applied
    value with a single `GetServiceQuota` call, and checks that the returned quota name matches your
    model before using it. Values are always read from your account, never taken from the table or
@@ -166,15 +166,19 @@ The agent role needs these read-only actions in each account and Region you want
 |---|---|---|
 | Amazon Bedrock | `bedrock:ListFoundationModels`, `bedrock:GetFoundationModel`, `bedrock:ListInferenceProfiles`, `bedrock:GetInferenceProfile`, `bedrock:ListProvisionedModelThroughputs`, `bedrock:GetProvisionedModelThroughput`, `bedrock:GetModelInvocationLoggingConfiguration` | Models, profiles, Provisioned Throughput, log destination |
 | AWS Cost Explorer | `ce:GetCostAndUsage`, `ce:GetDimensionValues` | Billed spend per model |
-| AWS Price List | `pricing:GetProducts`, `pricing:DescribeServices`, `pricing:GetAttributeValues` | Per-token prices for estimates |
+| AWS Price List | `pricing:GetProducts` | Per-token prices for estimates |
 | Service Quotas | `servicequotas:GetServiceQuota`, `servicequotas:ListServiceQuotas`, `servicequotas:ListRequestedServiceQuotaChangeHistory` | Applied quotas and headroom |
 | Amazon CloudWatch | `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics`, `cloudwatch:ListMetrics` | Token counts, throttles, quota usage |
 | Amazon CloudWatch Logs | `logs:DescribeLogGroups`, `logs:StartQuery`, `logs:GetQueryResults` | Log retention, output-token and cache analysis |
-| Amazon S3 | `s3:GetBucketLifecycleConfiguration` | Retention of an S3 log destination, if one is configured |
+| Amazon S3 | `s3:GetLifecycleConfiguration` | Retention of an S3 log destination, if one is configured |
 
-The default DevOps Agent policy, `AIDevOpsAgentAccessPolicy`, does not include the `pricing:*`
-actions. Add them to the agent role. Without them the skill reads prices from the Bedrock pricing
-page and, if that page cannot be read, marks the affected figures "unpriced".
+The default DevOps Agent policy, `AIDevOpsAgentAccessPolicy`, grants every action above except
+`pricing:GetProducts`. The `EnableOpsaiCapacityCost` parameter of the
+[`devops-agent-skill-policies`](../../cloudformation/devops-agent-skill-policies/README.md)
+CloudFormation template adds it (a metadata read: the Price List API returns published prices, no
+account data). Without it the skill reads prices from the Bedrock pricing page and, if that page
+cannot be read, marks the affected figures "unpriced: pricing:GetProducts denied"; every other check
+runs unchanged.
 
 No write permissions are required. If a call is denied, the skill names the API, skips only the checks
 that need it and lists the gap in the answer.

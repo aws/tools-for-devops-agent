@@ -1,0 +1,96 @@
+{
+  "version": "v15",
+  "iteration": 3,
+  "eval_id": "burndown-sum-not-maximum",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-capacity-cost' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identifies the flaw in the user's conclusion: Maximum returns per-minute peak values, not the minute's total quota use, so summing Maximums doesn't give quota consumed and understates EstimatedTPMQuotaUsage. It correctly states that quota use needs Sum statistic, re-reads the data with Sum (using a connected account), and computes the output weight formula: (Sum(EstimatedTPMQuotaUsage) - InputTokenCount - CacheWriteInputTokenCount) / OutputTokenCount = 10.0x, matching the expected formula exactly (treating cache writes as 0). It explicitly states input and cache writes are at 1x implicitly via the formula. It clarifies burndown affects quota accounting (TPM quota) not billing, which matches the expected 'burndown applies to quota accounting, not billing' point. It also appropriately notes AWS documents a 10x rate but frames it as validated by the account's own data rather than asserting other models' rates as fact - though it does mention 'AWS documents a 10x output burndown for Claude Sonnet 5' as a documented fact, but this is about the same model in question, not other models, so it doesn't violate the 'does not state other models' rates as facts' criterion. All key elements are present: identifying the Maximum/Sum confusion, re-reading with Sum, computing the weight formula correctly, arriving at ~10x, and distinguishing quota from billing.",
+      "evidence": "\"`Maximum` at a 60-second period returns the largest single value in each minute. It doesn't return the total for that minute... Quota use has to be read as `Sum`.\" and \"Quota use per output token comes out as (106,836,786 \u2212 27,487,746 \u2212 0) \u00f7 7,934,904, which is exactly 10.0x\" and \"Burndown affects your tokens-per-minute quota only. You're billed on actual tokens, not on the weighted figure.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the Maximum statistic is the largest single request and understates per-minute quota use",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Response says: \"`Maximum` at a 60-second period returns the largest single value in each minute. It doesn't return the total for that minute.\" This describes Maximum as largest value in the minute (not explicitly 'largest single request'), and frames the issue as non-comparability rather than explicit understatement, though the implication is similar.",
+          "reasoning": "The response describes Maximum as 'the largest single value in each minute' not 'the largest single request'. It doesn't explicitly say Maximum understates per-minute quota use in those terms - it says Maximum doesn't return the total for the minute, and summing peaks isn't comparable to tokens sent. This is close in substance but the specific framing 'largest single request' is not used, and it doesn't explicitly say it 'understates' - rather it says it's not comparable/not the total."
+        },
+        {
+          "text": "The response says per-minute quota use must be read as Sum at a 60-second period",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Quota use has to be read as `Sum`.\" However the re-read used 'a daily period' not 60-second period: \"The metric is `Sum` with a daily period over the rolling 14 days\". So the assertion that per-minute quota use must be read as Sum at a 60-second period is only partially matched - the Sum requirement is stated but the period used in practice is daily, not 60s.",
+          "reasoning": "The response explicitly states that quota use must be read as Sum, though it then uses a daily period rather than 60-second period for the re-read."
+        },
+        {
+          "text": "The response does not conclude from these numbers that there is no burndown",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Burndown is visible in your numbers. It's about 10x on output tokens for Claude Sonnet 5, and `Maximum` was hiding it.\"",
+          "reasoning": "The response explicitly contradicts the no-burndown conclusion, stating burndown is visible and about 10x."
+        },
+        {
+          "text": "The response re-reads the series with Sum and reports the observed output weight (about 10x in this account)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The metric is `Sum` with a daily period over the rolling 14 days... Quota use per output token comes out as (106,836,786 \u2212 27,487,746 \u2212 0) \u00f7 7,934,904, which is **exactly 10.0x**.\"",
+          "reasoning": "The response re-reads using Sum and reports the 10x output weight observed."
+        },
+        {
+          "text": "The response says burndown applies to quota accounting, not the bill",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Burndown affects your tokens-per-minute quota only. You're billed on actual tokens, not on the weighted figure.\"",
+          "reasoning": "The response explicitly states burndown affects the TPM quota only, not billing."
+        },
+        {
+          "text": "Names the Sum statistic",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'sum'"
+        },
+        {
+          "text": "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No occurrence of 'LLM-COST', 'LLM-PT', 'LLM-INV', or any severity labeling (e.g., 'High', 'Medium') appears in the response. Findings like 'Quota use is about 3.9x the tokens you send' and 'A generous `max_tokens` therefore lowers your effective headroom' are presented without any check-id or severity tag.",
+          "reasoning": "The response does not use any check-id format like LLM-COST, LLM-PT, or LLM-INV anywhere, nor does it label findings with severities. Since it does appear to raise findings (e.g., about burndown, quota consumption, max_tokens reservation), lacking check-ids and severities fails this assertion."
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 6,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 8,
+        "pass_rate": 0.75
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "31s",
+    "cost": "$0.26",
+    "context_window": {
+      "utilization": "7.5%",
+      "compaction_count": 0
+    }
+  }
+}

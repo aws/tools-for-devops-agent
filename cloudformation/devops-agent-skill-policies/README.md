@@ -57,6 +57,7 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableSageMakerAIOpsReview` | `sagemaker-ai-ops-review` | `savingsplans:DescribeSavingsPlans` |
 | `EnableLiveStreamingEventReadinessReview` | `live-streaming-event-readiness-review` | `mediatailor:ListPlaybackConfigurations`, `mediatailor:GetPlaybackConfiguration`, `mediatailor:ListPrefetchSchedules`, `route53-recovery-cluster:ListRoutingControls` |
 | `EnableEosCostAnalysis` | `eos-cost-analysis` | `pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`. Resource discovery is already covered by the managed policy |
+| `EnableOpsaiCapacityCost` | `opsai-capacity-cost` | `pricing:GetProducts` only (published prices, a metadata read). Bedrock, Cost Explorer, CloudWatch, Logs Insights, Service Quotas and `s3:GetLifecycleConfiguration` reads are already covered by the managed policy. Without it the skill prices tokens from the Bedrock pricing page or reports "unpriced: pricing:GetProducts denied"; billed, Provisioned Throughput and quota checks run unchanged |
 | `EnableEksOperationReview` | `aws-eks-operations-review` | None — already covered by the managed policy |
 | `EnableEnrichWithSecurityAgent` | `enrich-with-aws-security-agent` | None — already covered by the managed policy |
 | `EnableCrmInvestigationGuidelines` | `crm-production-investigation-guidelines` | None — already covered by the managed policy |

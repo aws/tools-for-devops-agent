@@ -1,129 +1,59 @@
 # Metrics & Logs Reference
 
-The exact CloudWatch metric set per resource type for Bedrock + SageMaker GenAI workloads, plus the Bedrock invocation-log error-pattern table.
+The CloudWatch metrics and Bedrock invocation-log fields this skill reads for token, cost, Provisioned Throughput and quota analysis. Guardrail, Agents, Knowledge Base, AgentCore and SageMaker metrics belong to the sibling skills in `related-skills.md` and are not listed here.
 
-All metric names are as published by AWS. "AWS-published" means the metric/namespace is documented by AWS; thresholds live in `cloudwatch-alarm-reference.md`, not here.
+All metric names are as published by AWS. Thresholds live in `cloudwatch-alarm-reference.md`, not here.
 
 ---
 
 ## AWS/Bedrock — model invocation metrics
 
-Namespace: `AWS/Bedrock`. Common dimensions: `ModelId` (and for some, operation/region). Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html
+Namespace: `AWS/Bedrock`, published by the `bedrock-runtime` endpoint. Dimension: `ModelId` (every metric), plus `ModelId + ContextWindow` for long-context billed requests. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html
 
-| Metric | Unit | Meaning | Typical statistic |
+| Metric | Unit | Meaning (per the reference) | Statistic used here |
 |---|---|---|---|
-| `Invocations` | Count | Number of model invocation requests | Sum |
-| `InvocationLatency` | Milliseconds | End-to-end latency of an invocation | Average, p50/p90/p99 |
-| `InvocationClientErrors` | Count | 4xx-class client errors (bad request, access denied, validation) | Sum |
-| `InvocationServerErrors` | Count | 5xx-class server/service errors | Sum |
-| `InvocationThrottles` | Count | Requests throttled (quota / capacity) | Sum |
-| `InputTokenCount` | Count | Tokens in the input/prompt | Sum, Average |
-| `OutputTokenCount` | Count | Tokens generated in the output | Sum, Average |
+| `Invocations` | Count | Requests Bedrock accepted for processing (Converse, ConverseStream, InvokeModel, InvokeModelWithResponseStream, OpenAI-compatible Responses and Chat Completions). Includes requests that later failed; **excludes** throttled requests and requests rejected in input validation | Sum |
+| `InvocationLatency` | Milliseconds | Request sent to last token received | Average, p50/p90/p99 |
+| `InvocationClientErrors` | Count | Client-side errors; also counted in `Invocations`. **Includes requests rejected for exceeding a service quota; those are not counted as throttles** | Sum |
+| `InvocationServerErrors` | Count | AWS server-side errors; also counted in `Invocations` | Sum |
+| `InvocationThrottles` | Count | Throttled invocations. Throttled requests are **not** counted in `Invocations`, `InvocationClientErrors` or `InvocationServerErrors`; the count depends on SDK retry settings | Sum |
+| `InputTokenCount` | Count | Tokens in the input (excludes cached tokens) | Sum |
+| `OutputTokenCount` | Count | Tokens in the output | Sum |
 | `OutputImageCount` | Count | Images generated (image models) | Sum |
-| `TimeToFirstToken` | Milliseconds | Latency to first streamed token (streaming calls) | Average, p90 |
-| `CacheReadInputTokenCount` | Count | Input tokens served from the prompt cache (0 when caching is not used; excluded from `InputTokenCount` and from TPM quota) | Sum |
-| `CacheWriteInputTokenCount` | Count | Input tokens written to the prompt cache (0 when caching is not used; counts toward TPM quota) | Sum |
-| `LegacyModelInvocations` | Count | Invocations of models Bedrock has marked legacy — direct signal for LLM-INV-003 / LLM-PT-003; no datapoints = no legacy calls | Sum |
-| `EstimatedTPMQuotaUsage` | Count | Estimated tokens-per-minute quota consumption (absolute count, approximation; ÷ Service Quotas TPM limit for share used — see `api-quirks.md` §18) | Sum at 60 s period, peak over window |
+| `TimeToFirstToken` | Milliseconds | Request sent to first token, streaming operations only | Average, p90 |
+| `CacheReadInputTokenCount` | Count | Input tokens read from the prompt cache: charged at a reduced rate, not counted toward the TPM quota; 0 when caching is not used | Sum |
+| `CacheWriteInputTokenCount` | Count | Input tokens written to the prompt cache: count toward the TPM quota; 0 when caching is not used | Sum |
+| `LegacyModelInvocations` | Count | Invocations of models with Legacy lifecycle status: signal for LLM-PT-003; no datapoints = no legacy calls | Sum |
+| `EstimatedTPMQuotaUsage` | Count | Estimated TPM quota consumption, an approximation that does not reflect the reservation (input tokens + `max_tokens`) that drives throttling; AWS says not to use it as the sole indicator of quota use (`api-quirks.md` §18) | Sum at 60 s period, peak over the trailing 15 days |
 
-**Dimensions — three behaviors that change totals** (source: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html):
+Log-delivery metrics, same namespace, dimension `Across all model IDs`: `ModelInvocationLogsCloudWatchDeliverySuccess` / `Failure`, `ModelInvocationLogsS3DeliverySuccess` / `Failure`, `ModelInvocationLargeDataS3DeliverySuccess` / `Failure`. A delivery failure explains an empty log group despite traffic (report it; the logging configuration itself is `opsai-bedrock-review`'s check).
 
-- Metrics are published **both with and without** `ModelId`. Requests that fail before Bedrock resolves the model appear only in the dimensionless series, so per-`ModelId` error and throttle counts undercount. Query `InvocationThrottles` and `InvocationClientErrors` without a dimension too.
-- `InvocationClientErrors` **includes requests rejected for exceeding a service quota**; those are not counted as throttles. `Invocations` **excludes** throttled requests.
-- `ModelId` + `ContextWindow` is a **subset** of the `ModelId` series (long-context billed requests). Use the `ModelId` series alone for totals; adding both double-counts.
+**Dimensions — behaviours that change totals** (same reference):
+
+- Metrics are published **both with and without** `ModelId`. A request that fails before Bedrock determines the target model is published without the dimension, so per-`ModelId` error and throttle counts undercount. Query `InvocationThrottles` and `InvocationClientErrors` without a dimension too.
+- `ModelId + ContextWindow` (value `1M`, requests billed at a long-context rate) is a **subset** of the `ModelId` series. Use the `ModelId` series alone for totals; adding both double-counts. Subtract it from the `ModelId` series for standard-context usage.
 - One model can appear under several `ModelId` values (short profile ID, profile ARN, foundation-model ARN). Each form carries different traffic: add all forms of a model together.
-- 1-minute data is kept for 15 days only. Take 60 s `EstimatedTPMQuotaUsage` peaks from the last 15 days.
+- CloudWatch keeps 1-minute datapoints for 15 days: take 60 s `EstimatedTPMQuotaUsage` peaks from the trailing 15 days (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/cloudwatch_concepts.html#Metric).
 
-Token metrics (`InputTokenCount` / `OutputTokenCount`) are the primary signal for cost analysis — see `cost-analysis.md`. Traffic through the bedrock-mantle endpoint is not here: it publishes to `AWS/BedrockMantle` (`TotalInputTokens`, `TotalOutputTokens`, `Inferences`, `InferenceClientErrors`, by `Model`) — see `api-quirks.md` §20.
-
----
-
-## AWS/Bedrock/Guardrails — guardrail metrics
-
-Namespace: `AWS/Bedrock/Guardrails`. Dimensions typically include guardrail identifier/version. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-monitor.html
-
-| Metric | Meaning |
-|---|---|
-| `InvocationsIntervened` | Count of invocations where the guardrail took action (blocked/masked) |
-| `Invocations` | Count of invocations evaluated by the guardrail |
-| `InvocationLatency` | Added latency contributed by guardrail evaluation |
-| `TextUnitCount` | Text units processed (billing/throughput signal) |
-
-A spike in `InvocationsIntervened` can indicate an attack campaign or a prompt/model regression — alarm on it (see alarm reference).
+Token metrics are the primary signal for cost analysis (`cost-analysis.md`). Traffic through the bedrock-mantle endpoint is not here: it publishes to `AWS/BedrockMantle` (`Inferences`, `TotalInputTokens`, `TotalOutputTokens`, `InferenceClientErrors`, by `Model`; https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-mantle-metrics.html), see `api-quirks.md` §20. Batch inference publishes to `AWS/Bedrock/Batch`; Provisioned Throughput traffic appears under the provisioned-model ARN as `ModelId`.
 
 ---
 
-## AWS/Bedrock/Agents — agent metrics
+## Bedrock invocation logs — fields this skill reads
 
-Namespace: `AWS/Bedrock/Agents`. Dimensions include agent id/alias. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html
-
-| Metric | Meaning |
-|---|---|
-| `InvocationCount` / `Invocations` | Number of `InvokeAgent` calls |
-| `InvocationLatency` | Agent end-to-end orchestration latency |
-| `InvocationClientErrors` | Client-side (4xx) errors on agent invoke |
-| `InvocationServerErrors` | Server-side (5xx) errors on agent invoke |
-| `InvocationThrottles` | Throttled agent invocations |
-
-Zero invocation data over a long window is the signal for the idle-agent check (LLM-AGT-004).
-
----
-
-## Knowledge Base signals
-
-Knowledge Base ingestion health is read primarily from the data-plane/control-plane APIs (`GetIngestionJob` statistics), not a dedicated CloudWatch namespace. Underlying vector store (e.g., OpenSearch Serverless) exposes its own metrics in `AWS/AOSS`. Retrieval latency surfaces through the invoking agent/application. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-sync-ingest.html
-
----
-
-## aws/sagemaker/Endpoints — SageMaker inference metrics
-
-Two namespaces. Invocation metrics are in `AWS/SageMaker`; instance resource metrics are in `/aws/sagemaker/Endpoints`. Dimensions: `EndpointName`, `VariantName`. Reference: https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html
-
-Invocation metrics (`AWS/SageMaker`):
-
-| Metric | Unit | Meaning |
-|---|---|---|
-| `Invocations` | Count | Requests sent to the variant |
-| `InvocationsPerInstance` | Count | Invocations normalized per instance (scaling signal) |
-| `ModelLatency` | Microseconds | Time the model/container took to respond |
-| `OverheadLatency` | Microseconds | SageMaker overhead added to the request |
-| `Invocation4XXErrors` | Count | Client errors |
-| `Invocation5XXErrors` | Count | Server errors |
-| `ModelSetupTime` | Microseconds | Cold-start/model load time (async/serverless) |
-
-Instance resource metrics (`/aws/sagemaker/Endpoints`):
-
-| Metric | Meaning |
-|---|---|
-| `CPUUtilization` | CPU across the container(s) |
-| `MemoryUtilization` | Memory utilization |
-| `DiskUtilization` | Storage volume utilization |
-| `GPUUtilization` | GPU compute utilization (GPU instances) |
-| `GPUMemoryUtilization` | GPU memory utilization (GPU instances) |
-
----
-
-## Bedrock invocation-log error-pattern table
-
-When model invocation logging is enabled (LLM-INV-001), scan the delivered logs (CloudWatch Logs Insights over the Bedrock log group, or Athena over the S3 destination) for these patterns. Each log record contains `input`, `output`, `errorCode`, token counts, model ID, and timestamps.
+When model invocation logging is enabled, each record in the CloudWatch log group (or S3 prefix) named by `GetModelInvocationLoggingConfiguration` carries `modelId`, `input.inputTokenCount`, `output.outputTokenCount`, `input.cacheReadInputTokenCount`, `input.cacheWriteInputTokenCount`, `errorCode` (when failed requests are logged) and, for Converse, `output.outputBodyJson.stopReason`. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html. Whether logging is enabled or scoped correctly is `opsai-bedrock-review`'s check; here the logs are only a confirmation signal.
 
 | Pattern / field value | What it indicates | Linked check |
 |---|---|---|
-| `ThrottlingException` / `errorCode` throttle | Capacity/quota pressure; consider inference profile or PT | LLM-INV-007, LLM-PT |
-| `ServiceQuotaExceededException` | Request rejected for exceeding a service quota — counted in `InvocationClientErrors`, **not** `InvocationThrottles`; treat as capacity pressure (only visible here if logs record rejected requests) | LLM-INV-007, LLM-PT-002 |
-| `AccessDeniedException` | Model access not granted or IAM too narrow | LLM-INV-004 |
-| `ValidationException` | Malformed request / unsupported parameter / context too long | LLM-INV-011 |
-| `ModelErrorException` / `ModelNotReadyException` | Model-side failure or warm-up | LLM-INV-005 |
-| `ServiceUnavailableException` / 5xx | Transient service errors; needs retry/backoff | LLM-INV-007 |
-| High `inputTokenCount` outliers | Prompt bloat / unbounded context — cost + latency | LLM-COST, LLM-INV-011 |
-| High `outputTokenCount` outliers | Runaway generations / missing `maxTokens` | LLM-INV-011 |
-| `stopReason` = `guardrail_intervened` (a stop reason, not an `errorCode`) | Guardrail actively blocking — review for attack vs false-positive | LLM-GRD-002 |
-| Missing/empty log stream despite traffic | Logging misconfigured or delivery failing | LLM-INV-001, LLM-INV-005 |
-| Deprecated `modelId` appearing in records | Still invoking an end-of-life model | LLM-INV-003 |
+| `errorCode` = `ThrottlingException` | Capacity or quota pressure | LLM-INV-007, LLM-PT-002 |
+| `errorCode` = `ServiceQuotaExceededException` | Rejected for exceeding a service quota; counted in `InvocationClientErrors`, **not** `InvocationThrottles`; capacity pressure (visible only if rejected requests are logged) | LLM-INV-007, LLM-PT-002 |
+| `stopReason` = `max_tokens` on records with a heavy `output.outputTokenCount` tail | Runaway or uncapped generations | LLM-COST-001 |
+| `input.cacheReadInputTokenCount` measured 0 with a repeated prefix or a high input floor; or cache writes far above reads | Prompt caching not used, or not paying off | LLM-COST-002 |
+| High `input.inputTokenCount` floor (10th percentile) | Candidate for prompt caching | LLM-COST-002 |
 
-`StartQuery` takes Unix epoch seconds (2026-10-15T00:00Z = 1792022400); compute them with a tool.
+`StartQuery` takes Unix epoch seconds (2026-10-15T00:00Z = 1792022400); compute them with a tool. Records start at the log group's `creationTime` (`api-quirks.md` §19).
 
-Example CloudWatch Logs Insights query to surface error codes. `errorCode` is absent when failed requests aren't logged, so no rows is **not** a measured 0: compare with `InvocationClientErrors` (in testing: 6 client errors, 0 `errorCode` rows). `guardrail_intervened` is a `stopReason`, not an error.
+Error-code query. `errorCode` is absent when failed requests aren't logged, so no rows is **not** a measured 0: compare with `InvocationClientErrors` (in testing: 6 client errors, 0 `errorCode` rows). `guardrail_intervened` is a `stopReason`, not an error.
 
 ```
 fields @timestamp, modelId, errorCode, input.inputTokenCount, output.outputTokenCount
@@ -132,7 +62,7 @@ fields @timestamp, modelId, errorCode, input.inputTokenCount, output.outputToken
 | sort errors desc
 ```
 
-Cache tokens in logs: `input.cacheReadInputTokenCount`, `input.cacheWriteInputTokenCount`. LLM-COST-002 confirmation query, run over the same window as the cost data:
+LLM-COST-002 confirmation query, run over the same window as the cost data:
 
 ```
 stats count(*) as records, sum(ispresent(input.cacheReadInputTokenCount)) as cache_field,
@@ -140,7 +70,7 @@ stats count(*) as records, sum(ispresent(input.cacheReadInputTokenCount)) as cac
       min(input.inputTokenCount) as min_in, pct(input.inputTokenCount, 10) as p10_in by modelId
 ```
 
-`cache_field` > 0 with `cache_read` = 0 shows caching is not used. It confirms LLM-COST-002 only with a repeated prefix (next query) or a high floor (`p10_in` at or above the model's minimum cache-checkpoint size); see cost-analysis.md §1. A low `min_in`/`p10_in` under a high `avg_in` means mixed prompt sizes.
+`cache_field` > 0 with `cache_read` = 0 shows caching is not used. It confirms LLM-COST-002 only with a repeated prefix (next query) or a high floor (`p10_in` at or above the model's minimum cache-checkpoint size); see `cost-analysis.md` §1. A low `min_in`/`p10_in` under a high `avg_in` means mixed prompt sizes.
 
 Repeated-prefix query: `md5` returns a hash, so the prompt text never appears in the results (Converse path; check it with `ispresent()` first):
 
@@ -152,32 +82,28 @@ filter ispresent(input.inputBodyJson.system.0.text)
 
 A hash on a large share of a model's calls is a repeated prefix. Report counts and shares only, never prompt text.
 
+LLM-COST-001 confirmation query (output tail by stop reason):
+
+```
+filter ispresent(output.outputBodyJson.stopReason)
+| stats count(*) as records, sum(output.outputTokenCount) as out_tokens,
+      pct(output.outputTokenCount, 99) as p99_out, max(output.outputTokenCount) as max_out
+      by modelId, output.outputBodyJson.stopReason
+| sort out_tokens desc
+```
+
 **Check field paths before trusting a total.** A wrong path returns an empty result, not an error, which would wrongly leave LLM-COST-001/002 unconfirmed. Run `stats count(*) as records, sum(ispresent(<field>)) as present` first. Converse records carry the same counts twice: `input.inputTokenCount` / `output.outputTokenCount` / `input.cacheReadInputTokenCount`, and `output.outputBodyJson.usage.inputTokens` / `outputTokens` / `cacheReadInputTokens`. Embedding records have only `input.inputTokenCount`, so prefer the first form. (Verified on 1,317 records: identical totals.)
 
 ---
 
-## Finish-reason distribution (quality signal)
+## Finish-reason distribution (LLM-COST-001 signal)
 
-The `stopReason` field in Bedrock invocation logs (Converse: `output.outputBodyJson.stopReason`; check one sample record, the path varies by API) records why the model stopped generating. Possible values: `end_turn` (natural completion), `max_tokens` (hit the token limit), `stop_sequence` (hit a stop sequence), `tool_use` (invoked a tool), `guardrail_intervened` (guardrail blocked).
+`stopReason` records why the model stopped generating. In Converse invocation logs it sits under `output.outputBodyJson.stopReason` (a top-level `$.stopReason` filter matches nothing); for `InvokeModel` the field name and path are the model provider's, so check one sample record first. Converse values (https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html): `end_turn`, `tool_use`, `max_tokens`, `stop_sequence`, `guardrail_intervened`, `content_filtered`, `malformed_model_output`, `malformed_tool_use`, `model_context_window_exceeded`.
 
-A shift in the distribution of `stopReason` from `end_turn` toward `max_tokens` is an early indicator that outputs are being truncated — either because prompts grew longer (crowding the output budget), because `maxTokens` was reduced, or because a model version change altered generation behavior. This signal precedes visible quality complaints by hours or days.
+For this skill only `max_tokens` matters: a shift toward it, **together with** a heavy `output.outputTokenCount` tail made of those records, confirms LLM-COST-001 (`cost-analysis.md` §1). Long outputs that stop on `tool_use` or `end_turn`, or a `max_tokens` share with uniformly small outputs, do not. Output quality and truncation as a quality problem are `opsai-ml-eval-check`'s area.
 
-Recommended metric filter (CloudWatch Logs):
+Metric filter for an alarm on the share of capped generations (threshold `workload-specific`, `cloudwatch-alarm-reference.md`):
+
 ```
 { $.output.outputBodyJson.stopReason = "max_tokens" }
 ```
-Publish as a custom metric (e.g., `OpsAI/FinishReason/MaxTokens` with dimension `ModelId`) and alarm when the 1-hour rate exceeds the baseline by >10 percentage points. See LLM-TEL-002 and LLM-EVAL-012.
-
-## Telemetry coverage signals
-
-Beyond the per-service metrics above, the strategy requires verifying stage-level telemetry across the agent processing pipeline:
-
-| Stage | What to look for | Source |
-|---|---|---|
-| Retrieval (KB/RAG) | Retrieval latency, documents returned, relevance scores | AgentCore OTLP spans or application logs |
-| Inference (model call) | Model latency, token counts, finish reason | AWS/Bedrock metrics + invocation logs |
-| Tool execution | Tool call latency, success/failure per tool | AgentCore OTLP spans |
-| Response generation | Post-processing latency, guardrail eval time | AWS/Bedrock/Guardrails metrics |
-| End-to-end | Total session latency, trace propagation | AgentCore Observability |
-
-If any stage is invisible (no metrics, no spans, no logs), the operator cannot isolate where slowness or failure originates. See LLM-TEL-001 and LLM-AC-005.

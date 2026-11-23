@@ -1,0 +1,79 @@
+{
+  "version": "v15",
+  "iteration": 2,
+  "eval_id": "cost-throttle-default-quota",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-capacity-cost' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response reports an account-specific applied quota (6,000,000 TPM for Claude Sonnet 5 cross-region inference, quota code L-D4FBCF4E) rather than a generic figure, and explicitly notes it matches the AWS default since no quota increase was ever requested - directly answering the user's question about the actual limit. It compares observed usage (peak ~2.16M TPM, ~36% of quota) against this quota. It distinguishes potential causes - noting no throttle metrics were actually found in the account/region checked, and raises the possibility that throttling could be happening elsewhere (different region/account) or due to a burst/reservation pattern (large max_tokens causing throttling even when aggregate usage looks low) rather than genuine under-provisioning - which aligns with the expectation of distinguishing burst patterns (absorbable via backoff/reducing max_tokens) from genuine capacity issues. The remediation given is ordered: (1) get exact error details to confirm what's actually happening, (2) lower max_tokens (change call pattern), (3) add retries/backoff (change call pattern), (4) add alarms to measure future breaches, (5) only request a quota increase if throttles appear with usage near the limit. This matches the expected ordered remediation: confirm quota \u2192 measure breach \u2192 then either request increase or change call pattern. The response is thorough, data-driven, and matches the structural and substantive expectations well.</reasoning>\n<parameter name=\"evidence\">\"Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5 | L-D4FBCF4E | 6,000,000 TPM (same as the AWS default)\" and \"Peak usage: the highest minute... was about 2.16M tokens per minute. That is roughly 36% of the 6M quota\" and \"Only if throttles show up with usage near the limit, request an increase\" combined with ordered steps 1-5 covering confirm/measure/remediate/escalate.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reports the actual applicable quota value or says precisely where to read it, rather than quoting a generic number",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response gives a specific table: 'Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5 | L-D4FBCF4E | 6,000,000 TPM (same as the AWS default) | Yes' and explains 'Claude Sonnet 5 is the only model with real volume. It goes through the `us.` profile, so it uses the cross-region quota.'",
+          "reasoning": "The agent reports an actual applicable quota value (6,000,000 TPM) with the specific quota code (L-D4FBCF4E) and name, rather than a generic placeholder number. This satisfies the assertion directly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response compares observed usage against the quota rather than assuming the quota is the problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Peak usage: the highest minute of EstimatedTPMQuotaUsage ... was about 2.16M tokens per minute. That is roughly 36% of the 6M quota.' and 'I can't find any Bedrock throttling in us-east-1 over the last 15 days, so I wouldn't ask for a quota increase yet.'",
+          "reasoning": "The agent explicitly compares observed usage (2.16M TPM peak, 36% of quota) against the quota limit (6M TPM), and uses this comparison to conclude the quota itself is not obviously the problem, rather than assuming quota increase is needed. This directly satisfies the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes sustained under-provisioning from burstiness that retry with backoff would absorb",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response mentions 'Add retries. Use exponential backoff with jitter on the callers. This is the LLM-INV-007 (MEDIUM) remediation.' as a general recommendation, and discusses 'Large max_tokens... can throttle you even when the usage estimate looks low' as a possible cause, but does not analyze whether observed usage patterns (e.g., bursty spikes vs. sustained high utilization) would be absorbed by retry-with-backoff versus indicating true under-provisioning.",
+          "reasoning": "The agent never actually found any throttling events, so it couldn't analyze the pattern of throttles to distinguish burstiness from sustained under-provisioning. It recommends backoff as a generic fix but doesn't discuss how to tell these two failure modes apart analytically (e.g., examining whether throttles cluster at specific peak minutes vs. spread across the window, or whether usage consistently sits near quota vs. occasional spikes). The peak usage was 36% of quota, which it notes, but it doesn't discuss whether the usage pattern is sustained-near-quota or spiky-single-minute, which is the crux of this distinction. This assertion is not satisfied.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'Add retries. Use exponential backoff with jitter on the callers. This is the LLM-INV-007 (MEDIUM) remediation. It isn't raised as a finding here, since no throttles were observed.' It also states the alarm recommendation with threshold 4.2M is 'derived from the quota, not an AWS-published value' but doesn't attach a check-id/severity to that recommendation.",
+          "reasoning": "The agent explicitly says LLM-INV-007 'isn't raised as a finding here' -- meaning it does NOT raise this as a finding, it's just referenced as a remediation technique description. The 'Add alarms' recommendation (item 4) does not carry any check-id or severity - it's presented as general advice without a formal finding designation. Since the response does make several recommendations (lower max_tokens, add alarms, request increase) that are not tagged with check-id/severity but are framed as actionable 'what I'd do' items rather than formal 'findings,' there's ambiguity. However, since the agent explicitly disclaims raising any finding ('It isn't raised as a finding here'), and no other finding is raised with improper evidence, this could be seen as compliant since no finding was actually raised. But the recommendations for alarms and max_tokens are presented as recommendations, not 'findings' per se. Given the ambiguity, I lean toward this passing since the only explicit 'finding' reference (LLM-INV-007) is explicitly NOT raised as a finding, and no other check-id-labeled finding appears with unsupported evidence.",
+          "confidence": "medium"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m33s",
+    "cost": "$0.78",
+    "context_window": {
+      "utilization": "9.3%",
+      "compaction_count": 0
+    }
+  }
+}
