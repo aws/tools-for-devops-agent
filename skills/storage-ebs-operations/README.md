@@ -4,13 +4,25 @@ This skill enables the AWS DevOps Agent to troubleshoot Amazon EBS problems and 
 
 ## What It Does
 
-Without a skill, AWS DevOps Agent gathers the right Amazon EBS data but can interpret it inconsistently. It can frame an answer in a way that pushes toward the wrong fix, such as "buy a bigger volume" when the instance is the ceiling, or "your modification failed" when it succeeded. This skill encodes Amazon EBS interpretation as a fixed procedure, so the correct and correctly framed answer is the default.
+The skill gives AWS DevOps Agent a fixed, read-only procedure for Amazon EBS. It has two modes.
 
-It is one skill with two modes. Troubleshoot mode answers "something is wrong, why?". Review mode answers "is my EBS setup healthy before something goes wrong?".
+- **Troubleshoot mode** answers "something is wrong, why?" through five paths: performance, volume modification, snapshots, encryption and AWS KMS, and billing. Each answer names the binding layer (volume, instance, burst credits, quota, not EBS, AWS-side impairment or Indeterminate) and gives the evidence, an exact recommendation, separate findings and gaps.
+- **Review mode** answers "is my EBS setup healthy before something goes wrong?" with a Summary table that rates six areas: capacity and quota headroom, observability, cost hygiene, resilience, encryption posture and deletion protection.
+
+On the performance path the agent reads the CloudWatch exceeded checks (`VolumeIOPSExceededCheck`, `VolumeThroughputExceededCheck`, `InstanceEBSIOPSExceededCheck` and `InstanceEBSThroughputExceededCheck`), which show directly whether the volume or the instance limit binds, and the `VolumeStalledIOCheck` stalled I/O check. When the 1-minute CloudWatch data cannot settle the question, the agent gives the customer the documented commands to read the Amazon EBS detailed performance statistics on the instance. The customer runs that step; the agent does not.
+
+Safety rules the skill applies:
+
+- Snapshots are sorted by lineage. A snapshot whose source volume is gone needs owner review, and no snapshot is recommended for deletion.
+- Deletes are manual steps the customer runs with their own credentials after the owner confirms.
+- AWS-side impairment is named only with a direct signal: a failed `VolumeStalledIOCheck`, an impaired volume status or an open AWS Health event. Without one, the result is Indeterminate and the agent does not recommend more provisioning.
+- Every proposed quota request includes the intake questions for the customer and a caution that an increase is not guaranteed and the amount is decided by AWS.
+
+The skill is read-only by design. Every change is a proposal with the exact command, expected effect, rollback and cost direction. It runs only as a directed action that an operator approves on the approval card. A typed approval in chat is not approval.
 
 ## Key Capabilities
 
-- **Troubleshoot: performance.** Rules Amazon EBS in or out, then decides whether the volume, the instance's EBS limits, burst credits, a quota or an AWS-side impairment is the binding layer. Tells saturation apart from impairment and checks for a running AWS FIS experiment. Sizes IOPS and throughput within the instance's EBS baseline.
+- **Troubleshoot: performance.** Rules Amazon EBS in or out, then decides whether the volume, the instance's EBS limits, burst credits, a quota or an AWS-side impairment is the binding layer. Reads the four CloudWatch exceeded checks and `VolumeStalledIOCheck`, tells saturation apart from impairment and checks for a running AWS FIS experiment. Gives the detailed performance statistics as a step the customer runs on the instance. Sizes IOPS and throughput within the instance's EBS baseline.
 - **Troubleshoot: volume modification.** Explains Elastic Volumes states (`optimizing` already applies the change), the limit of 4 modifications per rolling 24 hours, `ModifyVolume` errors such as the io2 IOPS-to-size ratio, gp2 to gp3 sizing, and file system extension commands.
 - **Troubleshoot: snapshots.** Snapshot tiers by lineage (AMI-backing, shared, AWS Backup, Amazon Data Lifecycle Manager by `aws:dlm:*` tags, and snapshots whose source volume is gone, listed for owner review instead of recommended for deletion), reversibility through Recycle Bin, copy and AMI problems, recovery.
 - **Troubleshoot: encryption.** AWS KMS key state and permissions blocking attach or start, sharing encrypted snapshots, encryption by default, re-encryption steps.

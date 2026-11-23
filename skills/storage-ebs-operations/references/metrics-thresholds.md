@@ -20,10 +20,11 @@ The io1 and io2 values above are from the Provisioned IOPS SSD volumes page in S
 - `VolumeThroughputPercentage` exists only for Provisioned IOPS SSD volumes. It reports the percentage of provisioned IOPS delivered, not MiB/s. Never use it as a throughput signal on io1 or io2. A healthy io2 volume can read 100% while its MiB/s is low.
 - Judge io1, io2 and gp3 by both IOPS and throughput. For io1 and io2, compute the throughput limit from the provisioned IOPS with the rules in the table.
 - `VolumeAvgIOPS`, `VolumeAvgThroughput`, `VolumeAvgReadLatency` and `VolumeAvgWriteLatency` need both the `VolumeId` and `InstanceId` dimensions and exist only for Nitro instances. `VolumeAvgThroughput` is in KiB/s; divide by 1,024 to get MiB/s.
-- `VolumeStalledIOCheck` also uses the `VolumeId` and `InstanceId` dimensions and exists only for Nitro instances.
+- `VolumeStalledIOCheck`, `VolumeIOPSExceededCheck` and `VolumeThroughputExceededCheck` also use the `VolumeId` and `InstanceId` dimensions and exist only for Nitro instances. With `VolumeId` alone they return no datapoints, which is not the same as 0.
+- `InstanceEBSIOPSExceededCheck` and `InstanceEBSThroughputExceededCheck` are in AWS/EC2 with the `InstanceId` dimension, on Nitro instances that are not bare metal.
 - `VolumeQueueLength` uses `VolumeId` only.
 - `VolumeTotalReadTime` and `VolumeTotalWriteTime` are in seconds. Average latency in ms per operation = Sum(time) / Sum(ops) x 1,000.
-- A 1-minute average hides sub-minute peaks. If the minute average is below a limit but latency and queue length rise, say that micro-bursting is possible and that headroom is not proven.
+- A 1-minute average hides sub-minute peaks. If the minute average is below a limit but latency and queue length rise, say that micro-bursting is possible and that headroom is not proven. `VolumeIOPSExceededCheck` and `VolumeThroughputExceededCheck` at 1 show a burst within the minute; the detailed performance statistics in troubleshoot-performance.md show it at up to 1-second granularity.
 
 ## Latency expectations (documented only)
 
@@ -42,10 +43,10 @@ The drafts carried latency bands (for example "io2 below 1 ms, gp3 below 2 ms, s
 
 | Signature | What you see | What it means | What to recommend |
 |---|---|---|---|
-| Volume saturation | IOPS or MiB/s flat at the volume's provisioned limit. Latency modest. Instance layer healthy | The volume is the binding layer | Raise the bound dimension, sized within the instance's EBS baseline |
-| Instance saturation | Sum across all attached volumes flat at the instance EBS baseline, or `EBSIOBalance%` / `EBSByteBalance%` draining or at 0. Each volume below its own limit | The instance is the binding layer | Change the instance type. Raising volume provisioning will not help |
+| Volume saturation | IOPS or MiB/s flat at the volume's provisioned limit, and `VolumeIOPSExceededCheck` or `VolumeThroughputExceededCheck` at 1. Latency modest. Instance layer healthy | The volume is the binding layer | Raise the bound dimension, sized within the instance's EBS baseline |
+| Instance saturation | Sum across all attached volumes flat at the instance EBS baseline, `InstanceEBSIOPSExceededCheck` or `InstanceEBSThroughputExceededCheck` at 1, or `EBSIOBalance%` / `EBSByteBalance%` draining or at 0. Each volume below its own limit | The instance is the binding layer | Change the instance type. Raising volume provisioning will not help |
 | Burst credits exhausted | gp2, st1 or sc1 `BurstBalance` at or near 0, throughput or IOPS dropped to baseline | Burst credits are the binding layer | gp2 to gp3 migration, or a type or size change that gives the needed baseline |
-| Impairment or injected latency | IOPS and throughput collapse while latency and `VolumeQueueLength` rise. Volume and instance below their limits | Not saturation. An AWS-side impairment, a fault injection, or a non-EBS cause. The pattern alone does not prove which | Never recommend more provisioning. Check volume status, `VolumeStalledIOCheck`, AWS Health and AWS FIS (see troubleshoot-performance.md Step 5). Name AWS-side impairment only with a direct signal; otherwise the cause stays Indeterminate |
+| Impairment or injected latency | IOPS and throughput collapse while latency and `VolumeQueueLength` rise. Volume and instance below their limits, and the four exceeded checks at 0 | Not saturation. An AWS-side impairment, a fault injection, or a non-EBS cause. The pattern alone does not prove which | Never recommend more provisioning. Check volume status, `VolumeStalledIOCheck`, AWS Health and AWS FIS (see troubleshoot-performance.md Step 5). Name AWS-side impairment only with a direct signal; otherwise the cause stays Indeterminate |
 
 ## Sources
 
@@ -54,4 +55,4 @@ The drafts carried latency bands (for example "io2 below 1 ms, gp3 below 2 ms, s
 - Volume type comparison: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-volume-types.html
 - st1 and sc1: https://docs.aws.amazon.com/ebs/latest/userguide/hdd-vols.html
 - Amazon CloudWatch metrics for Amazon EBS (units, dimensions, `VolumeThroughputPercentage`): https://docs.aws.amazon.com/ebs/latest/userguide/using_cloudwatch_ebs.html
-- Instance metrics `EBSIOBalance%` and `EBSByteBalance%`: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html
+- Instance metrics `EBSIOBalance%`, `EBSByteBalance%`, `InstanceEBSIOPSExceededCheck` and `InstanceEBSThroughputExceededCheck`, and the status check metrics: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html#status-check-metrics

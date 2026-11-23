@@ -27,9 +27,11 @@ AWS/EBS publishes 1-minute data.
 
 | Namespace | Metrics | Dimensions |
 |---|---|---|
-| AWS/EBS | `VolumeAvgIOPS` (Ops/s), `VolumeAvgThroughput` (KiB/s), `VolumeAvgReadLatency` (milliseconds), `VolumeAvgWriteLatency` (milliseconds), `VolumeStalledIOCheck` (0 passed, 1 failed) | `VolumeId` AND `InstanceId`. Nitro instances only |
+| AWS/EBS | `VolumeAvgIOPS` (Ops/s), `VolumeAvgThroughput` (KiB/s), `VolumeAvgReadLatency` (milliseconds), `VolumeAvgWriteLatency` (milliseconds), `VolumeStalledIOCheck` (0 passed, 1 failed), `VolumeIOPSExceededCheck` and `VolumeThroughputExceededCheck` (0 not exceeded, 1 the application tried to drive more than the volume's provisioned IOPS or throughput in that minute; not for Multi-Attach volumes) | `VolumeId` AND `InstanceId`. Nitro instances only. A query with `VolumeId` alone returns no datapoints |
 | AWS/EBS | `VolumeReadOps`, `VolumeWriteOps`, `VolumeReadBytes`, `VolumeWriteBytes`, `VolumeTotalReadTime` (seconds), `VolumeTotalWriteTime` (seconds), `VolumeQueueLength`, `VolumeIdleTime` (seconds), `BurstBalance`, `VolumeThroughputPercentage` (Provisioned IOPS SSD only) | `VolumeId` |
-| AWS/EC2 | `EBSIOBalance%`, `EBSByteBalance%`, `EBSReadOps`, `EBSWriteOps`, `EBSReadBytes`, `EBSWriteBytes` | `InstanceId` |
+| AWS/EC2 | `EBSIOBalance%`, `EBSByteBalance%`, `EBSReadOps`, `EBSWriteOps`, `EBSReadBytes`, `EBSWriteBytes`, `InstanceEBSIOPSExceededCheck`, `InstanceEBSThroughputExceededCheck` (0 not exceeded, 1 the application tried to drive more than the instance's maximum EBS IOPS or throughput in that minute; Nitro instances that are not bare metal) | `InstanceId` |
+
+The four exceeded checks and `VolumeStalledIOCheck` are not available in AWS Outposts, Local Zones or Wavelength Zones. They are ordinary CloudWatch metrics read with `GetMetricData`, so they need no extra permission. For the exceeded and stalled checks, report the `Maximum` per minute, the number of minutes at 1 and the time window. "No datapoints" is not the same as 0: say which one you got, and list "no datapoints" under Gaps.
 
 Metric math from the Amazon CloudWatch metrics page for Amazon EBS. Use `Sum` statistics for ops, bytes and time.
 
@@ -49,6 +51,7 @@ What a 1-minute average hides: sub-minute peaks can reach a limit while the minu
 |---|---|---|
 | `AccessDenied` on any call | The role cannot read that data | Name the exact API in Gaps. Continue with the rest |
 | A read call is held behind an operator-approval gate (for example `dlm:GetLifecyclePolicies` or `rbin:ListRules`) | The Agent Space treats it as an action | Report it as a Gap and say which conclusion stays unconfirmed. Never ask the operator to bypass the gate |
+| No datapoints for `VolumeIOPSExceededCheck`, `VolumeThroughputExceededCheck` or `VolumeStalledIOCheck` | The `InstanceId` dimension is missing, the instance is not Nitro, or the volume is Multi-Attach (exceeded checks only) | Query again with `VolumeId` and `InstanceId`. If still empty, report "no datapoints" under Gaps, not 0, and judge the limit from the measured IOPS and MiB/s |
 | No `VolumeAvg*` data | The instance is not Nitro, or the `InstanceId` dimension is missing | Add `InstanceId`. If still empty, use the Sum-based math above |
 | `EBSIOBalance%` absent | The instance size does not publish it | Compare the summed IOPS and MiB/s of all attached volumes to the `DescribeInstanceTypes` baseline |
 | `DescribeInstanceTypes` values in MB/s | The API reports instance throughput in MB/s (bandwidth in Mbps) | Convert to MiB/s before comparing (1 MB/s = 1,000,000 bytes/s; 1 MiB/s = 1,048,576 bytes/s) |
@@ -58,7 +61,9 @@ What a 1-minute average hides: sub-minute peaks can reach a limit while the minu
 ## Sources
 
 - Amazon CloudWatch metrics for Amazon EBS (units, dimensions, `VolumeStalledIOCheck` with `VolumeId` and `InstanceId`, and the latency formula Sum(`VolumeTotalReadTime`) / Sum(`VolumeReadOps`) x 1000 in ms/op): https://docs.aws.amazon.com/ebs/latest/userguide/using_cloudwatch_ebs.html
-- Instance metrics, including `EBSIOBalance%` and `EBSByteBalance%`: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html
+- Volume exceeded checks (`VolumeIOPSExceededCheck`, `VolumeThroughputExceededCheck`): https://docs.aws.amazon.com/ebs/latest/userguide/using_cloudwatch_ebs.html
+- Instance metrics, including `EBSIOBalance%`, `EBSByteBalance%`, `InstanceEBSIOPSExceededCheck` and `InstanceEBSThroughputExceededCheck`: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html
+- Status check metrics, including `VolumeStalledIOCheck`: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html#status-check-metrics
 - Amazon EBS-optimized instances (baseline and maximum, MB/s): https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-optimized.html
 - Monitoring volume modifications: https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
 - DescribeVolumesModifications (most recent modification request only): https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeVolumesModifications.html

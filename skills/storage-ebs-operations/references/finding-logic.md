@@ -22,7 +22,7 @@ Every performance verdict puts the numbers side by side in one table under Evide
 | Each other attached volume, including the root volume | `<n>` IOPS, `<n>` MiB/s | its own limits | | |
 | Instance EBS baseline (sum of all attached volumes) | `<n>` IOPS, `<n>` MiB/s | `<n>` IOPS, `<n>` MB/s from `DescribeInstanceTypes` = `<n>` MiB/s | `<n>` IOPS, `<n>` MiB/s | Yes or No |
 
-Below the table:
+Below the table, first give the exceeded checks from Step 2a of [troubleshoot-performance.md](troubleshoot-performance.md): for `VolumeIOPSExceededCheck`, `VolumeThroughputExceededCheck`, `InstanceEBSIOPSExceededCheck` and `InstanceEBSThroughputExceededCheck`, the number of minutes at 1 in the window, or "no datapoints". Then:
 
 - Show the tie-out arithmetic that links the numbers, for example "500 IOPS x 256 KiB average I/O size = 125 MiB/s, which is the provisioned throughput". Average I/O size = bytes / operations over the same period.
 - Give the exact target and how it was computed, for example "instance baseline 149 MiB/s minus 8 MiB/s used by the other volumes = 141 MiB/s available, so the target is 140 MiB/s". Also give the next limit after the change (the instance baseline, or the type rule) and, when the instance becomes the next limit, the baseline of the next larger instance size from `DescribeInstanceTypes`.
@@ -32,9 +32,9 @@ Below the table:
 
 Work through it in order. Use measured values and the limits read from the APIs. Do not use fixed percentage triggers.
 
-1. Is the summed IOPS or MiB/s of all attached volumes flat at the instance EBS baseline, or are `EBSIOBalance%` / `EBSByteBalance%` draining or at 0?
+1. Is `InstanceEBSIOPSExceededCheck` or `InstanceEBSThroughputExceededCheck` at 1, is the summed IOPS or MiB/s of all attached volumes flat at the instance EBS baseline, or are `EBSIOBalance%` / `EBSByteBalance%` draining or at 0?
    - Yes: **Instance**. Say "the volume has headroom; raising volume IOPS will not help; change the instance type". If a volume is also flat at its own limit, report both and fix the instance first, because volume changes cannot deliver above the instance ceiling.
-2. Is the instance healthy and one volume flat at its own provisioned limit on the dimension its type is judged by?
+2. Is the instance healthy and one volume flat at its own provisioned limit on the dimension its type is judged by, or is its `VolumeIOPSExceededCheck` or `VolumeThroughputExceededCheck` at 1?
    - Yes: **Volume**.
 3. Is a gp2, st1 or sc1 volume's `BurstBalance` draining or at 0?
    - Yes: **Burst credits**.
@@ -42,7 +42,7 @@ Work through it in order. Use measured values and the limits read from the APIs.
    - Yes: **Quota**. Use the Capacity and quota headroom section of [review-operational.md](review-operational.md).
 5. Are all layers below their limits, latency at the volume's normal level, and queue length low?
    - Yes: **Not EBS**. Check CPU, memory, network and the application.
-6. Are all layers below their limits but latency and `VolumeQueueLength` up while IOPS and throughput collapse? This pattern alone does not prove an AWS-side impairment. Check for a direct signal:
+6. Are all layers below their limits, with the four exceeded checks at 0, but latency and `VolumeQueueLength` up while IOPS and throughput collapse? This pattern alone does not prove an AWS-side impairment. Check for a direct signal:
    - `VolumeStalledIOCheck` failed (value 1) for the volume, or
    - `DescribeVolumeStatus` reports the volume as impaired or a status check as failed, or
    - an open AWS Health event for the volume, its Availability Zone or its Region.
@@ -54,33 +54,48 @@ Work through it in order. Use measured values and the limits read from the APIs.
 
 ## Indeterminate: candidate causes
 
-An Indeterminate verdict is a short list of candidate causes, not a single sentence. The Binding layer stays Indeterminate. For each candidate give:
+An Indeterminate verdict is a short list of candidate causes, not a single sentence. The Binding layer stays Indeterminate, and the answer says so in those words: "Binding layer: Indeterminate".
+
+Start with the answer to the user's question and the reason, for example "Binding layer: Indeterminate. Adding IOPS will not help: the volume uses 15 percent of its provisioned IOPS and 16 percent of its throughput, and the four exceeded checks are 0." Then give the candidates. For each candidate give:
 
 - a title that matches what the data shows (for a cause the data rules out, say so in the title, for example "Volume or instance limit: ruled out"),
 - the supporting observations, with numbers derived from the measured or given values,
 - the specific check that would confirm it or rule it out, and its result if you ran it.
 
+Keep the list short and specific:
+
+- List only the candidates that fit the volume type and the data, most likely first. Burst credits apply to gp2, st1 and sc1, not to gp3 or io2.
+- Merge candidates that overlap. Each candidate needs its own observations and its own check; if two would share them, they are one candidate.
+- Put candidates that the data makes unlikely (for example sub-minute bursts when the exceeded checks are 0) in the ruled-out candidate with the numbers, instead of listing each one on its own.
+- Describe the pattern in plain terms ("latency and queue length rose while IOPS fell, below every limit"). Do not call it an impairment pattern, because without a direct signal it is not one.
+
 Useful derived numbers for the observations:
 
 - Percentage of each limit in use (measured IOPS and MiB/s against the volume and the instance limits).
-- Time per I/O from queue length and IOPS (Little's law): time per I/O in ms = average queue length / IOPS x 1,000. A queue that grows while IOPS falls means each I/O takes longer, not that a rate limit was reached.
-- Average I/O size = throughput / IOPS. A change in I/O size changes how much throughput a given IOPS value delivers.
+- Time per I/O from queue length and IOPS (Little's law): time per I/O in ms = average queue length / IOPS x 1,000. When the queue value is not known, give the time each unit of queue adds at the measured IOPS (for example "at 900 IOPS, each 1.0 of queue length adds about 1.1 ms"). A queue that grows while IOPS falls means each I/O takes longer, not that a rate limit was reached.
+- Average I/O size = throughput / IOPS, compared with the 256 KiB maximum I/O size that SSD volumes count as one operation (larger I/O is split into 256 KiB operations). A change in I/O size changes how much throughput a given IOPS value delivers, and the throughput limit binds first when IOPS x average I/O size reaches it.
 
-List only the candidates that fit the volume type and the data. For example, burst credits apply to gp2, st1 and sc1, not to gp3 or io2. Typical candidates and their checks:
+Typical candidates and their checks:
 
 | Candidate | Check that confirms it or rules it out |
 |---|---|
 | A slowdown in the Amazon EBS storage path that the checks have not flagged | `DescribeVolumeStatus` (status and the I/O performance check, which covers attached io1, io2 and gp3 volumes), `VolumeStalledIOCheck` (1 means failed), AWS Health `DescribeEvents` for Amazon EBS and Amazon EC2 in the Region and Availability Zone. Recheck while the symptom lasts. If it persists with all checks clean, escalate to AWS Support with the evidence pack |
 | Injected latency from a fault injection experiment | AWS FIS `ListExperiments` for a running experiment with `aws:ebs:volume-io-latency` or `aws:ebs:pause-volume-io` that targets the volume or instance |
 | A change in the workload's I/O pattern (larger I/O, more random I/O, more writes) | Average I/O size and the read and write split before and during the alarm window, from `VolumeReadBytes`, `VolumeWriteBytes`, `VolumeReadOps` and `VolumeWriteOps` |
+| The instance EBS limit, shared with the other attached volumes | Summed IOPS and MiB/s of every attached volume, including the root volume, against the `DescribeInstanceTypes` baseline; `InstanceEBSIOPSExceededCheck` and `InstanceEBSThroughputExceededCheck`; `EBSIOBalance%` and `EBSByteBalance%` |
 | A cause outside Amazon EBS on the instance (application locks, file system, CPU) | `CPUUtilization` and the attribution matrix below. OS-level data such as `iostat` is outside this skill, so ask the customer for it |
-| Sub-minute bursts at a limit | Not visible in 1-minute data. Say that headroom is not proven from averages alone |
 | Volume initialization after a restore from a snapshot | `DescribeVolumes` `SnapshotId` and `CreateTime` |
-| Volume or instance limit | The limits table. When demand is far below every limit, title it as ruled out |
+| Volume or instance limit, including sub-minute bursts | The limits table and the four exceeded checks. When demand is far below every limit and the checks are 0, title it as ruled out. The customer can confirm with the [detailed performance statistics](troubleshoot-performance.md#detailed-performance-statistics-a-step-the-customer-runs) |
 
-Close with the answer to the user's question (for example "adding IOPS will not help, because the volume uses 15 percent of its provisioned IOPS"), what to watch (AWS Health Dashboard, volume status checks, `VolumeStalledIOCheck`), and when to escalate.
+Close with what to watch (AWS Health Dashboard, volume status checks, `VolumeStalledIOCheck`), the detailed performance statistics as a step the customer runs during the symptom, and when to escalate.
 
-When the user gives the values and asks you to treat them as given, build the candidates from those values only. Do not query the account for other resources and do not mix account data into the given facts. List under Gaps that the values were not read from the APIs.
+In an investigation, record this as findings so the summary carries it:
+
+- The first finding is titled with the verdict and the answer, for example "Binding layer: Indeterminate. Adding IOPS will not help", and its description gives the reason with the numbers, the clean direct signals, what to watch and when to escalate.
+- Each candidate is its own finding. Link to it the observations that support it or rule it out, so each one shows its supporting observations.
+- Link a gap only to the candidates it affects. A gap that applies to everything (for example "the values were given by the user, not read from the APIs") is recorded once and not repeated under every candidate.
+
+When the user gives the values and asks you to treat them as given, build the candidates from those values only. Do not query the account for other resources and do not mix account data into the given facts. List under Gaps that the values were not read from the APIs. Describe the impact from the given values (percent of each limit in use, time each unit of queue adds, average I/O size) instead of writing that it is unknown.
 
 ### Qualitative attribution matrix for "is it storage?"
 
@@ -156,4 +171,6 @@ Every Review mode response MUST begin with the Summary table that rates all six 
 - Monitoring volume modifications: https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
 - Modification duration (more than 24 hours in some cases): https://docs.aws.amazon.com/ebs/latest/userguide/ebs-modify-volume.html and https://docs.aws.amazon.com/ebs/latest/userguide/monitoring-volume-modifications.html
 - Amazon EBS performance: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-performance.html
+- I/O characteristics (256 KiB maximum I/O size for SSD volumes, exceeded checks): https://docs.aws.amazon.com/ebs/latest/userguide/ebs-io-characteristics.html
+- CloudWatch exceeded checks and status check metrics: https://docs.aws.amazon.com/ebs/latest/userguide/using_cloudwatch_ebs.html and https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html#status-check-metrics
 - Published S3 skill rating scale (format only): https://github.com/aws/tools-for-devops-agent
