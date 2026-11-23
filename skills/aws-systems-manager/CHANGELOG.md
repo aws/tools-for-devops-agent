@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Added a Demo videos subsection to the README's "How to Use This Skill" section, linking two demo recordings hosted as GitHub attachments. Only README text changes; the published skill package gains no files.
+
 ## 1.0.0
 
 - Initial version: one Systems Manager skill with a routing table, a shared safety contract and task chapters loaded on demand.

@@ -76,6 +76,11 @@ Use the AWS DevOps Agent Asset API to manage the skill programmatically. Assign 
 
 ## How to Use This Skill
 
+### Demo videos
+
+- [Demo 1: diagnosing an SSH connection timeout with an Automation runbook (3 min)](VIDEO_1_USER_ATTACHMENTS_URL)
+- [Demo 2: reviewing and hardening an Automation runbook (3 min)](VIDEO_2_USER_ATTACHMENTS_URL)
+
 ### Find a runbook
 
 - "Is there an AWS runbook that can fix SSH access to my EC2 instance?"
