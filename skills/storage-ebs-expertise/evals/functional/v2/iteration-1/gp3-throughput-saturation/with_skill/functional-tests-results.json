@@ -1,0 +1,79 @@
+{
+  "version": "v2",
+  "iteration": 1,
+  "eval_id": "gp3-throughput-saturation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'storage-ebs-expertise' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'storage-ebs-expertise' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies the root cause as the gp3 volume being throughput-bound at the provisioned 125 MiB/s limit (not IOPS-bound), with VolumeThroughputExceededCheck=1 and IOPS at only ~500 of 3000 provisioned. It explicitly states that raising IOPS won't help and the Throughput parameter must be raised instead, matching the expected root cause's point that gp3 IOPS and throughput are provisioned independently. It also correctly notes the instance EBS baseline (149.0/156.25 MiB/s for c6i.xlarge) caps how far throughput can be raised, matching the expected mention of the instance baseline constraint. All key identifying details (volume ID, instance type, throughput value, IOPS value, exceeded check metric) align with the expected root cause.",
+      "evidence": "\"vol-0123456789abcdef0 (gp3, 20 GiB, 3000 IOPS / 125 MiB/s defaults, never modified) is pinned at 125.04\u2013125.10 MiB/s from 16:20\u201316:47 UTC while using only ~500 of 3000 IOPS... VolumeThroughputExceededCheck = 1 every 5-min period from 16:15; VolumeIOPSExceededCheck = 0... Raising IOPS won't help; the volume's Throughput must be raised. The c6i.xlarge EBS baseline (149.0 MiB/s) limits how far it can go.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says gp3 IOPS and throughput are provisioned independently and identifies throughput as the binding dimension.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Raising IOPS won't help; the volume's Throughput must be raised.' combined with 'VolumeThroughputExceededCheck = 1 every 5-min period from 16:15; VolumeIOPSExceededCheck = 0' and 'vol-0123456789abcdef0 ... pinned at 125.04\u2013125.10 MiB/s ... while using only ~500 of 3000 IOPS'",
+          "reasoning": "The output clearly distinguishes IOPS and throughput as separately provisioned gp3 attributes and concludes throughput is the binding/limiting dimension, not IOPS.",
+          "confidence": "high"
+        },
+        {
+          "text": "The instance EBS baseline is checked before the volume is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Instance-wide EBS traffic is ~132.9 MiB/s and ~1501 IOPS, below the c6i.xlarge baseline of 156.25 MB/s and 6000 IOPS.' and 'The c6i.xlarge EBS baseline (149.0 MiB/s) limits how far it can go.'",
+          "reasoning": "The agent checked the instance-level EBS baseline (c6i.xlarge baseline throughput/IOPS and InstanceEBSThroughputExceededCheck=0) before concluding the volume's own throughput provisioning is the binding constraint, confirming the instance is not itself the bottleneck.",
+          "confidence": "high"
+        },
+        {
+          "text": "The proposed throughput target respects the gp3 rule of at most 0.25 MiB/s per provisioned IOPS.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'the volume's Throughput must be raised' and mentions baseline limits (149.0 MiB/s instance baseline) but does not give a specific numeric throughput target, nor does it reference the 0.25 MiB/s per IOPS gp3 ratio rule at all.",
+          "reasoning": "No explicit throughput target value is proposed in the summary, and there is no mention of the 0.25 MiB/s-per-IOPS gp3 constraint being respected. The assertion requires a specific proposed target that respects this rule, which is absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        },
+        {
+          "text": "The gp3 throughput per IOPS rule is cited",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m41s",
+    "cost": "$2.83",
+    "context_window": {
+      "utilization": "9.8%",
+      "compaction_count": 0
+    }
+  }
+}

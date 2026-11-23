@@ -1,0 +1,78 @@
+{
+  "version": "v2",
+  "iteration": 2,
+  "eval_id": "instance-ebs-limit",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'storage-ebs-expertise' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "Most elements match: the agent read instance baselines (500 IOPS / 10.375 MiB/s baseline, 11,800 burst) presumably from DescribeInstanceTypes, checked EBSIOBalance% draining to 0%, concluded the instance is the binding layer (\"Binding layer: Instance (burst credits drained)\"), stated the volume has headroom (\"volume is barely used,\" \"~3% of its provisioned IOPS\"), explicitly said raising volume IOPS won't help, and recommended an instance type change with specific options. It also checked the root volume (vol-1234567890abcdef0_25) and included it, noting it's negligible \u2014 satisfying \"sums IOPS across all attached volumes including the root volume\" in spirit, though it didn't explicitly show a summed total.\n\nHowever, the expected output explicitly states the agent should NOT call the volume saturated. The agent's response includes a \"Saturated, not idle\" section stating: \"The volume's idle time is near 0 s per 5 minutes, so I/O is being submitted continuously and is waiting on the cap.\" This explicitly uses the term \"saturated\" in reference to the volume's I/O queue being saturated/waiting, which contradicts the explicit requirement \"It does not call the volume saturated.\" Even though the agent is saturating on the instance-side cap, the language \"Saturated, not idle\" is presented as a volume-level ovation and directly violates this instruction.\n\nGiven this specific contradiction with an explicit criterion in the expected output, I judge this as a failure, despite the response being very strong in all other aspects.",
+      "evidence": "\"**Saturated, not idle:** The volume's idle time is near 0 s per 5 minutes, so I/O is being submitted continuously and is waiting on the cap.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The instance, not the volume, is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "**Answer:** The instance is the bottleneck, not the volume. ... **Binding layer:** Instance (burst credits drained).",
+          "reasoning": "The agent explicitly names the instance as the binding layer and bottleneck, contrasting it with the volume.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says raising volume IOPS will not help and recommends an instance type change.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Don't raise the volume's IOPS or throughput. Volume changes can't deliver more than the instance's EBS limit.\" and \"Change the instance type to one whose EBS baseline covers your sustained demand.\"",
+          "reasoning": "The agent explicitly states raising volume IOPS won't help and recommends changing the instance type, with a table of candidate instance types.",
+          "confidence": "high"
+        },
+        {
+          "text": "The volume is not described as saturated.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The volume is barely used, so raising its IOPS won't help.\" and \"It uses about 3% of its provisioned IOPS and about 1.6% of its throughput.\" The saturation description is reserved for the instance's EBS limit/queue, not the volume itself: \"Saturated, not idle: The volume's idle time is near 0 s per 5 minutes, so I/O is being submitted continuously and is waiting on the cap.\"",
+          "reasoning": "The volume is explicitly described as underutilized (3% IOPS, 1.6% throughput), not saturated. The 'Saturated, not idle' section refers to I/O submission waiting on the instance's cap, not volume saturation in terms of its own provisioned capacity being exceeded.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The volume headroom is stated",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'headroom'"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m15s",
+    "cost": "$0.62",
+    "context_window": {
+      "utilization": "8.4%",
+      "compaction_count": 0
+    }
+  }
+}

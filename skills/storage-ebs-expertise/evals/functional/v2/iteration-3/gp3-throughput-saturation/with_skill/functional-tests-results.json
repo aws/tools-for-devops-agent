@@ -1,0 +1,78 @@
+{
+  "version": "v2",
+  "iteration": 3,
+  "eval_id": "gp3-throughput-saturation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'storage-ebs-expertise' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'storage-ebs-expertise' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies that vol-0123456789abcdef0's reads are pinned flat at the provisioned 125 MiB/s throughput limit while IOPS (~500) is far below the provisioned 3,000, matching the expected root cause of a throughput-bound gp3 volume. It correctly concludes that gp3 IOPS and throughput are independent and that raising throughput (not IOPS) is the fix. It also notes the instance EBS baseline (156.25 MB/s for c6i.xlarge) as a constraint, consistent with the expected answer's note about capping useful gain. Minor gaps (e.g., not explicitly citing VolumeThroughputExceededCheck metric, not computing read+write sum) exist but the core causal identification matches the expected root cause closely enough to pass.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says gp3 IOPS and throughput are provisioned independently and identifies throughput as the binding dimension.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'gp3 volume vol-0123456789abcdef0 ... is 20 GiB with 3,000 IOPS and 125 MiB/s, the gp3 defaults... That is ~500 IOPS, 17% of the 3,000 provisioned. ... Raising the gp3 Throughput setting is the fix; raising IOPS is not.'",
+          "reasoning": "The output explicitly distinguishes IOPS (3,000 provisioned, only 500 used, 17%) from throughput (125 MiB/s, fully saturated), implying these are independently provisioned dimensions of gp3, and clearly identifies throughput as the binding/limiting dimension while explicitly stating IOPS is not the issue.",
+          "confidence": "high"
+        },
+        {
+          "text": "The instance EBS baseline is checked before the volume is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Instance EBS bandwidth not exhausted: Instance i-1234567890abcdef0_3 totals ~132.9 MiB/s and ~1,501 IOPS of EBS traffic in 5-minute periods starting 16:20. That is under the c6i.xlarge baseline of 156.25 MB/s and 6,000 IOPS... EBSByteBalance% and EBSIOBalance% stay at 99%'",
+          "reasoning": "The agent explicitly checked the instance-level EBS baseline (c6i.xlarge throughput/IOPS limits, EBSByteBalance%, EBSIOBalance%, InstanceEBSThroughputExceededCheck) and ruled out the instance as the bottleneck before/alongside naming the volume's own 125 MiB/s limit as the binding constraint in the Root Cause section. This confirms the instance layer was checked as part of establishing which layer binds.",
+          "confidence": "high"
+        },
+        {
+          "text": "The proposed throughput target respects the gp3 rule of at most 0.25 MiB/s per provisioned IOPS.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'Raising the gp3 Throughput setting is the fix; raising IOPS is not' and identifies a gap: 'Batch job's real throughput demand unknown... That number is needed to size the final throughput target.' No specific numeric throughput target value is proposed anywhere in the text.",
+          "reasoning": "The assertion requires that a proposed throughput target respect the 0.25 MiB/s per IOPS ratio rule. However, the output does not propose any specific throughput target value at all -- it explicitly says this cannot be determined yet due to the gap about the batch job's real throughput demand. Since no concrete target is given, there is nothing to check against the 0.25 MiB/s-per-IOPS rule, so this assertion fails for lack of evidence of compliance.",
+          "confidence": "high"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        },
+        {
+          "text": "The gp3 throughput per IOPS rule is cited",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m39s",
+    "cost": "$2.32",
+    "context_window": {
+      "utilization": "10.2%",
+      "compaction_count": 0
+    }
+  }
+}
