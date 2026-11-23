@@ -1,0 +1,80 @@
+{
+  "version": "v6",
+  "iteration": 1,
+  "eval_id": "silent-failure-correlation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'serverless-operation-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response thoroughly correlates configuration with metrics/logs to surface silent failure modes, exactly as the expected output specifies.\n\n1. Async invocations dropped with no OnFailure destination: SLS-LMB-002 explicitly shows AsyncEventsDropped=1 for two hourly buckets on slsreview-legacy-runtime, correlated with SLS-LMB-001 showing DeadLetterConfig null / no event-invoke config for that function and others (exb-dispatcher, example-publisher), with observed values and check ids.\n\n2. Event source mappings missing error-handling controls: SLS-STR-001 through SLS-STR-006 detail MaximumRetryAttempts unset, MaximumRecordAgeInSeconds unset, BisectBatchOnFunctionError false, OnFailure empty, and FunctionResponseTypes empty for the DynamoDB stream consumer mapping \u2014 each with observed values, source API, and check id. Similarly SLS-SQS-002/003/006 cover SQS-related ESM controls (DLQ, visibility timeout, ReportBatchItemFailures).\n\n3. Dead-letter queues with depth / absence: SLS-SQS-003 covers a queue with no RedrivePolicy; SLS-SQS-017 covers a DLQ target with no depth alarm; SLS-EVB-001 and SLS-SCH-001 cover missing DLQs on EventBridge targets and Scheduler schedules.\n\n4. Absent CloudWatch alarms for each: SLS-LMB-080 (no Errors alarm), SLS-LMB-084 (no IteratorAge alarm), SLS-SQS-016 (no queue age alarm), SLS-SQS-017 (no DLQ depth alarm), SLS-EVB-006 (no EventBridge alarms), SLS-SFN-034/035/036 (no Step Functions alarms), SLS-APG-063 (no 5XXError alarm) \u2014 all with observed values and check ids.\n\nEach finding includes a check id, severity, observed value, source API, threshold source, and an explanation of why it goes unnoticed (the \"silent failure\" mechanism) and the absent control \u2014 matching the expected output's requirement precisely. The response goes well beyond the minimum bar, providing a structured 'Silent failures' table specifically designed to match this exact framing.\n\nThis substantively and comprehensively satisfies the expected output criteria.\"",
+      "evidence": "\"SLS-STR-001 | CRITICAL | `slsreview-stream-consumer` mapping on `slsreview-unprotected-table`: `MaximumRetryAttempts` -1 (unset), `MaximumRecordAgeInSeconds` -1 (unset), `BisectBatchOnFunctionError` false, `OnFailure` empty | `lambda.ListEventSourceMappings` | Lens, Failure management | One poison-pill record blocks the shard until it expires. | All four stream error controls\" and \"SLS-LMB-002 | CRITICAL | `slsreview-legacy-runtime`: `AsyncEventsDropped` = 1 in each of the 18:00 and 19:00 UTC hourly buckets (2 events lost) ... | No `OnFailure` destination or DLQ, no alarm\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response ties each silent failure to the specific absent control that makes it silent \u2014 a missing destination, a missing redrive policy, or a missing alarm \u2014 rather than listing errors on their own",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Each row in the 'Silent failures' table has an 'Absent control' column explicitly naming the missing piece, e.g. 'No OnFailure destination or DLQ, no alarm' for SLS-LMB-002, 'All four stream error controls' for SLS-STR-001, 'DLQ and redrive policy' for SLS-SQS-003, and '`ReportBatchItemFailures`' for SLS-SQS-006.",
+          "reasoning": "The response systematically pairs each silent-failure finding with a named absent control rather than just listing an error metric.",
+          "confidence": "high"
+        },
+        {
+          "text": "Alarm coverage is assessed per resource, identifying which specific metrics have no alarm rather than stating that monitoring is insufficient",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Rows like SLS-LMB-080 ('No `Errors` alarm on `slsreview-legacy-runtime`, `-sqs-consumer`, ...'), SLS-LMB-084 ('No `IteratorAge` alarm on `slsreview-stream-consumer`'), SLS-SQS-016 ('No `ApproximateAgeOfOldestMessage` alarm'), SLS-EVB-006 ('No alarms in `AWS/Events` for `FailedInvocations` or `ThrottledRules`'), SLS-SFN-034/035/036, and SLS-APG-063 ('No `5XXError` alarm') each name a specific metric and specific resource lacking an alarm.",
+          "reasoning": "The alarm gaps are broken out per resource and per specific CloudWatch metric name, not described generically as 'insufficient monitoring'.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains why each finding would go unnoticed, not only that it is a problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The 'Why it goes unnoticed' column gives a specific causal explanation for each finding, e.g. for SLS-LMB-002: 'Lambda discards the event after retries are exhausted. Nothing records it.'; for SLS-STR-001: 'One poison-pill record blocks the shard until it expires.'; for SLS-SCH-001: 'A dropped scheduled run leaves no record.'",
+          "reasoning": "Every row in the silent-failures table includes a distinct explanation of the mechanism causing invisibility, going beyond simply flagging a problem.",
+          "confidence": "high"
+        },
+        {
+          "text": "Findings are ordered so the reader can tell which to act on first, with a stated basis for the ordering",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'Rows are ordered by severity, then by blast radius.' and the Recommendations section says 'In order of priority' with numbered items 1-7 going from CRITICAL (legacy-runtime event loss) down through MEDIUM security follow-ups.",
+          "reasoning": "An explicit ordering basis (severity, then blast radius) is stated for the findings tables, and the Recommendations section is explicitly numbered in priority order with a stated rationale tying back to severity.",
+          "confidence": "high"
+        },
+        {
+          "text": "Findings cite the skill's check identifiers",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'SLS-LMB-002'"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m57s",
+    "cost": "$2.47",
+    "context_window": {
+      "utilization": "15.4%",
+      "compaction_count": 0
+    }
+  }
+}
