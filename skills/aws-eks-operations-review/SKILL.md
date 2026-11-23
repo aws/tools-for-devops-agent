@@ -15,7 +15,7 @@ description: >
   active incident investigation.
 metadata:
   author: shyamkulkarni
-  version: "1.10.0"
+  version: "1.10.1"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon EKS"
   aws-devops-agent-skills.technical-domains: "Containers, Operations"

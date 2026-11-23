@@ -113,43 +113,74 @@ supplies query references for manual execution.
 This skill is used by the following agent types (selected in the Operator Web App at
 upload time):
 
-- **Chat tasks** — interactive health checks, targeted category checks, and follow-up
+- **On-demand** — interactive health checks, targeted category checks, and follow-up
   investigation
 - **Incident RCA** — root cause analysis where database performance may be a contributing
   factor
 
-Select **All agents** instead if you want the skill available to all agent types.
+Select **Generic** instead if you want the skill available to all agent types.
 
 ## Uploading to AWS DevOps Agent
 
-To deploy this skill to your Agent Space, you can use any of three ways:
+Grant the IAM permissions and enable the CloudWatch Logs exports in [Prerequisites](#prerequisites) first, and deploy the optional `rds-aidba` MCP server if you want database-level diagnostics, or add the skill as **Inactive** until it's done. You can add this skill in two ways:
 
-**Option A: Import from GitHub (recommended)**
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`) and **Incident RCA** (`INCIDENT_RCA`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** and **Incident RCA** recommended | Yes: files and agent types | Re-upload a new zip |
 
-If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html) in your Agent Space, you can import this skill directly from the repository. In the DevOps Agent web app, go to Settings → Add Skill → Import from repository, then point to the `skills/database-rds-devops` directory. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
+This skill runs on-demand health checks in chat and helps root cause analysis when database performance may be a factor, so target **On-demand** and **Incident RCA**. **Generic** would load it for every agent type, incident triage and evaluation included, and add context those agents don't need.
 
-> **Note:** You cannot connect the `aws` GitHub organization directly because the GitHub connection setup requires admin rights on the organization. Instead, connect your personal GitHub account and select any repository from it during the connection setup. Once a GitHub connection is established, you can import skills from any public repository, including this one, even if it wasn't selected during the connection setup.
+### Option A: Add from the Skills Catalog (recommended)
 
-**Option B: Upload as a zip file**
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent types.
 
-1. Zip the `database-rds-devops/` directory (only including allowed extensions):
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `database-rds-devops`, or filter by AWS service **Amazon RDS**.
+4. Choose **Details** and check that the agent types are **On-demand** and **Incident RCA**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to tune the severity thresholds in `references/mysql-health-checks.md` to your workload, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/database-rds-devops/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
 
    ```bash
-   cd skills
-   zip -r database-rds-devops.zip database-rds-devops/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' '*/CHANGELOG.md' '*/evals/*'
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f database-rds-devops.zip
+   zip -r database-rds-devops.zip database-rds-devops/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l database-rds-devops.zip | tail -1   # expect 8 files
    ```
 
-2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
-3. Click **Add skill** → **Upload skill**.
-4. Drag and drop the `database-rds-devops.zip` file (max 6 MB).
-5. Select the agent types: **Chat tasks** and **Incident RCA**.
-6. Click **Upload**.
+2. Check that the zip has this structure:
 
-**Option C: Upload via the Asset API**
+   ```text
+   database-rds-devops.zip
+   └── database-rds-devops/
+       ├── SKILL.md                # required: frontmatter with name and description
+       ├── DEPLOYMENT.md
+       └── references/             # 6 files: MySQL and PostgreSQL health checks, best practices, runbooks, validation checklist, MCP setup
+   ```
 
-Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT` and `INCIDENT_RCA` agent types. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
+   The zip leaves out `evals/`, `CHANGELOG.md`, and `README.md`.
 
-For more details, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) in the AWS DevOps Agent User Guide.
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `database-rds-devops.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand** and **Incident RCA**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## How to Use This Skill
 

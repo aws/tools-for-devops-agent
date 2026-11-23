@@ -14,7 +14,7 @@ description: Use this skill whenever a user asks about End of Standard Support (
   not upgrade execution — for EKS upgrade planning/readiness use eks-upgrade-readiness.
 metadata:
   author: rajatgoy
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Finds EKS, RDS/Aurora, Lambda, ElastiCache, and OpenSearch resources near or past End of Standard Support and estimates their Extended Support cost from live AWS pricing."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon EKS, Amazon RDS, AWS Lambda, Amazon ElastiCache, Amazon OpenSearch Service"

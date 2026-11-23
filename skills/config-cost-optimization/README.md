@@ -55,23 +55,75 @@ The skill operates entirely in **read-only** mode — it never calls `PutConfigu
 
 ## Agent Types
 
-- **Chat tasks** — "why is my Config bill so high", "should I use daily or continuous recording".
+- **On-demand** — "why is my Config bill so high", "should I use daily or continuous recording".
 
-Select **All agents** if you want the skill available to all agent types — required if you use it with the `unified-security-cost-optimizer` custom agent.
+Select **Generic** if you want the skill available to all agent types — required if you use it with the `unified-security-cost-optimizer` custom agent.
 
 ## Uploading to AWS DevOps Agent
 
-> Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
+Configure the target account as a cloud source (see [Prerequisites](#prerequisites)) first, and the [optional Athena CI-driver add-on](#optional-the-athena-ci-driver-attribution-path) if you want it, or add the skill as **Inactive** until it's done. You can add this skill in two ways:
 
-Build the zip from **inside** the skill directory so `SKILL.md` sits at the archive root, excluding development-only files:
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
 
-```bash
-cd skills/config-cost-optimization
-zip -r ../config-cost-optimization.zip . \
-  -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' '.skilleval.yml' 'evals/*'
-```
+This skill answers on-demand cost questions and isn't meant for incident investigation, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add context those agents don't need. The exception is the `unified-security-cost-optimizer` custom agent, which needs **Generic**: upload a zip (Option B) and leave **Generic** selected if you use it.
 
-Then in the Operator Web App: **Skills → Add skill → Upload skill**, drag in the zip, select agent types (**Chat tasks**, or **All agents** for the custom agent), review validation, and **Upload**.
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `config-cost-optimization`, or filter by AWS service **AWS Config**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to change the opportunity checks in `references/opportunities.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/config-cost-optimization/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f config-cost-optimization.zip
+   zip -r config-cost-optimization.zip config-cost-optimization/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l config-cost-optimization.zip | tail -1   # expect 5 files
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   config-cost-optimization.zip
+   └── config-cost-optimization/
+       ├── SKILL.md                # required: frontmatter with name and description
+       ├── assets/
+       │   └── report-template.md
+       └── references/
+           ├── opportunities.md
+           ├── data-collection.md
+           └── billing-model.md
+   ```
+
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `config-cost-optimization.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## How to Use This Skill
 

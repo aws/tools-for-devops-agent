@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.8.4] - 2026-11-19
+- README: rewrote the skill upload steps: Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (16 files). Agent types: On-demand (`CHAT`), the names the web app shows, instead of `Chat tasks` and `All agents`. The section is still Step 3 of the setup, "Create the redshift-support-specialist Skill". Removed the GitHub import option.
+
 ## [1.8.3] - 2026-11-10
 - `metadata.author` is the author's GitHub username, `andrehass`, rather than the `aws-samples` organization, so catalogs link to their profile.
 

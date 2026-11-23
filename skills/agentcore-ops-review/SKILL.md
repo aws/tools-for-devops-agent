@@ -13,7 +13,7 @@ description: Comprehensive operational review procedures for Amazon Bedrock
   memory pipelines", or "ORR for AgentCore".
 metadata:
   author: pamvas
-  version: "1.0.4"
+  version: "1.0.5"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock AgentCore, Amazon Bedrock"
   aws-devops-agent-skills.technical-domains: "AI/ML"

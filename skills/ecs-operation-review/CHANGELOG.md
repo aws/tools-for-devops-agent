@@ -1,5 +1,8 @@
 # Changelog
 
+## [2.5.5] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (11 files). Agent types: On-demand (`CHAT`). The separate "Packaging the skill" section is merged into Option B, which now uses the standard zip command. The Agent Types section says **On-demand** and **Generic** instead of **Chat tasks** and **All agents**.
+
 ## [2.5.4] - 2026-11-10
 - Added `technical-domains` (`Containers, Operations`), so catalogs list the skill under those domains.
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.3] - 2026-11-19
+- README: added "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (1 file). Agent types: **On-demand** (`CHAT`). The README had no upload section before. "How to Use with DevOps Agent" now says **On-demand** instead of "Chat tasks".
+
 ## [1.0.2] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

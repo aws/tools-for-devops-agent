@@ -98,48 +98,80 @@ There is no CloudFormation template to deploy for this skill.
 
 ## Agent Types
 
-- **Incident RCA**: primary use. Triggered by an alarm or incident on a training cluster.
-- **Chat tasks**: on-demand ("why did my HyperPod job fail last night?").
+- **Incident RCA** (`INCIDENT_RCA`): primary use. Triggered by an alarm or incident on a training cluster.
+- **On-demand** (`CHAT`): on-demand ("why did my HyperPod job fail last night?").
 
 ## Uploading to AWS DevOps Agent
 
-**Option A: Import from GitHub (recommended)**
+No additional IAM permissions or other setup are needed first (see [Prerequisites](#prerequisites)). You can add this skill in two ways:
 
-If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html)
-in your Agent Space, go to Settings → Add Skill → Import from repository and point to
-the `skills/aiml-gpu-training-cluster-investigation` directory.
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`) and **Incident RCA** (`INCIDENT_RCA`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** and **Incident RCA** recommended | Yes: files and agent types | Re-upload a new zip |
 
-**Option B: Upload as a zip file**
+This skill investigates GPU training cluster faults during root cause analysis of an incident, and answers on-demand questions such as pre-flight readiness checks in chat, so target **On-demand** and **Incident RCA**. **Generic** would load it for every agent type, incident triage and evaluation included, and add GPU fault and readiness context those agents don't need.
 
-Zip the skill's **contents** so that `SKILL.md` sits at the root of the archive:
+### Option A: Add from the Skills Catalog (recommended)
 
-```bash
-cd skills/aiml-gpu-training-cluster-investigation
-zip -rD ../../aiml-gpu-training-cluster-investigation.zip . \
-  -i '*.md' '*.json' '*.yaml' '*.yml' \
-  -x './README.md' './CHANGELOG.md' './.skilleval.yaml' './evals/*'
-unzip -l ../../aiml-gpu-training-cluster-investigation.zip
-```
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent types.
 
-Expected layout:
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `aiml-gpu-training-cluster-investigation`, or filter by AWS service **Amazon SageMaker HyperPod**.
+4. Choose **Details** and check that the agent types listed are **On-demand** and **Incident RCA**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
 
-```text
-aiml-gpu-training-cluster-investigation.zip
-├── SKILL.md
-└── references/
-    ├── report-format.md
-    ├── signals-and-thresholds.md
-    └── xid-triage.md
-```
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
 
-> **Do not zip the parent directory.** A `skill-name/` prefix in the archive breaks
-> `read_skill_resource` path lookups, and the skill silently runs without its references.
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to adjust the heuristics in `references/signals-and-thresholds.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/aiml-gpu-training-cluster-investigation/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f aiml-gpu-training-cluster-investigation.zip
+   zip -r aiml-gpu-training-cluster-investigation.zip aiml-gpu-training-cluster-investigation/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l aiml-gpu-training-cluster-investigation.zip | tail -1   # expect 10 files
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   aiml-gpu-training-cluster-investigation.zip
+   └── aiml-gpu-training-cluster-investigation/
+       ├── SKILL.md                          # required: frontmatter with name and description
+       └── references/
+           ├── coverage-audit.md
+           ├── inventory-and-timeline.md
+           ├── xid-triage.md
+           ├── signals-and-thresholds.md
+           ├── nccl-nvlink-efa.md
+           ├── incident-branches.md
+           ├── cluster-edge-cases.md
+           ├── preflight.md
+           └── report-format.md
+   ```
+
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `aiml-gpu-training-cluster-investigation.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand** and **Incident RCA**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 After uploading or replacing the skill, wait up to 15 minutes before testing, and confirm the new version by asking the agent to quote a line that only exists in it. In live testing the Agent Space kept serving the previous version for 5 to 12 minutes after an upload, and reads of its reference files could fail during that window.
-
-Upload the zip in the Operator Web App under **Skills**, and select the **Incident RCA**
-and **Chat tasks** agent types. See
-[Creating and uploading skills](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html).
 
 ## How to Use This Skill
 
@@ -151,13 +183,13 @@ and **Chat tasks** agent types. See
 - "ParallelCluster `training-b200` in us-west-2: a job on the `gpu` queue died at
   14:20 UTC. Were there any GPU Xid errors on the compute nodes?"
 
-### Pre-flight (Chat tasks)
+### Pre-flight (On-demand)
 
 - "Is HyperPod cluster `llm-pretrain` ready for a 5-day run starting tomorrow?"
 - "Our Capacity Block ends Friday. What do we need to do before then?"
 - "Are we actually using the B200 GPUs we reserved?"
 
-### Chat tasks
+### On-demand
 
 - "Training throughput on cluster `ft-cluster` dropped by half since yesterday. Is it
   storage, network, or the GPUs?"

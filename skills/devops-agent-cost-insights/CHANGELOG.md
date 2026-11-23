@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.3
+- README: added "Uploading to AWS DevOps Agent", after Getting started: Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (1 file). Agent types: On-demand (`CHAT`). Setup step 3 now points to that section; it no longer offers the GitHub import or pasting into the skill form, and its single-file zip command is replaced by the standard one.
+
 ## 1.0.2
 - `aws-services` lists `AWS DevOps Agent`, the service this skill reports on, plus the approved names `Amazon CloudWatch` and `AWS CloudTrail`. It no longer lists `AIDevOps`, which is a metric namespace rather than a service name.
 - `metadata.author` uses the co-authors' GitHub usernames, `tipuq, inesttia`, so catalogs link to their profiles.

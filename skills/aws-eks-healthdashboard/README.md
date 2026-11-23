@@ -184,16 +184,66 @@ Attach these skills to the agent:
 
 The agent role needs read-only access to: EKS, EC2/AutoScaling, CloudWatch + CloudWatch Logs (`GetMetricData`, `ListMetrics`, `StartQuery`/`GetQueryResults`), and read Kubernetes access (node objects). No mutating permissions are used.
 
-## Packaging
+## Uploading to AWS DevOps Agent
 
-From the directory **containing** `aws-eks-healthdashboard/`:
+Give the agent role the [read-only permissions](#read-only-permissions) and Kubernetes read access first, or add the skill as **Inactive** until it's done. You can add this skill in two ways:
 
-```bash
-cd aws-eks-healthdashboard
-zip -rX ../aws-eks-healthdashboard.zip SKILL.md references -x '*.DS_Store'
-```
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
 
-`SKILL.md` sits at the zip root with `references/` beside it. Do not zip via macOS Finder (it injects `__MACOSX/._*` files that inflate the file count).
+This skill builds an on-demand health dashboard that you ask for in chat and isn't meant for active incident investigation, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add dashboard context those agents don't need.
+
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `aws-eks-healthdashboard`, or filter by AWS service **Amazon EKS**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to adjust grading thresholds in `references/thresholds.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/aws-eks-healthdashboard/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f aws-eks-healthdashboard.zip
+   zip -r aws-eks-healthdashboard.zip aws-eks-healthdashboard/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l aws-eks-healthdashboard.zip | tail -1   # expect 14 files
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   aws-eks-healthdashboard.zip
+   └── aws-eks-healthdashboard/
+       ├── SKILL.md                          # required: frontmatter with name and description
+       └── references/                       # 13 files: health checks, CP1–CP25 queries, thresholds, metric sources, remediations, report format
+   ```
+
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `aws-eks-healthdashboard.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## Usage
 

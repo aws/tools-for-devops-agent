@@ -2,6 +2,9 @@
 
 All notable changes to the `analytics-opensearch-expertise` skill are documented here.
 
+## [2.6.4] - 2026-11-19
+- README: added "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (2 files). Agent types: **On-demand** (`CHAT`). "How to use it with DevOps Agent" now points to that section and uses **On-demand** instead of the stale `Chat tasks` label.
+
 ## [2.6.3] - 2026-11-10
 - Added `aws-services` (`Amazon OpenSearch Service`) and `technical-domains` (`Analytics`), so catalogs list the skill under OpenSearch Service and Analytics.
 - `metadata.author` is the contributor's GitHub username, `genedragon`, so catalogs link to their profile. The README's Maintainers list uses it too.

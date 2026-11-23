@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.5.5] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (5 files). Agent types: On-demand (`CHAT`); the `unified-security-cost-optimizer` custom agent still needs **Generic**, through a zip upload. The Agent Types section says **On-demand** and **Generic** instead of **Chat tasks** and **All agents**.
+
 ## [1.5.4] - 2026-11-10
 - `metadata.author` is the contributor's GitHub username, `kaiserschmarm`, so catalogs link to their profile.
 

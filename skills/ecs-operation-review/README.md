@@ -30,9 +30,9 @@ Pillars graded: **Resiliency & HA (REL), Observability (OBS), Security (SEC), Op
 
 Intended for these agent types (selected in the Operator Web App at upload time):
 
-- **Chat tasks** — conversational invocation in Chat ("run an ECS operations review on service X", "ECS security review").
+- **On-demand** — conversational invocation in Chat ("run an ECS operations review on service X", "ECS security review").
 
-Select **All agents** to make the skill available to all agent types.
+Select **Generic** to make the skill available to all agent types.
 
 ## Prerequisites
 
@@ -48,40 +48,71 @@ The Agent Space IAM role needs read-only (`describe*` / `list*` / `get*`) access
 
 Used for documentation-link lookups on findings and alarm recommendations. This is built into AWS DevOps Agent.
 
-## Packaging the skill
-
-From the directory **containing** `ecs-operation-review/`:
-
-```bash
-zip -r ecs-operation-review.zip ecs-operation-review/ \
-  -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' \
-  -x '*/.git/*' '*/evals/*' '*/CHANGELOG.md' '*/README.md' '*.DS_Store'
-```
-
-The uploaded zip contains:
-
-```
-ecs-operation-review/
-├── SKILL.md                    # frontmatter + skill instructions (required)
-└── references/
-    ├── checks.md               # checks index (read first)
-    ├── alarm-thresholds.md      # recommended CloudWatch alarm thresholds
-    ├── common-checks-coverage.md
-    ├── report-format.md
-    └── pillars/                # one file per pillar (REL/OBS/SEC/OPS/PERF/ADD)
-```
-
-Upload-time constraints: `SKILL.md` required with `name` + `description` frontmatter; **no `scripts/` directory**. `evals/`, `README.md`, and `CHANGELOG.md` are dev-only and excluded above.
-
 ## Uploading to AWS DevOps Agent
 
-> Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
+Grant the read-only permissions in [Prerequisites](#prerequisites) first, including `compute-optimizer:GetECSServiceRecommendations` if you want the PERF8 rightsizing check, or add the skill as **Inactive** until it's done. You can add this skill in two ways:
 
-1. Open the **Skills** page in your Agent Space Operator Web App.
-2. **Add skill** → **Upload skill**.
-3. Drag and drop `ecs-operation-review.zip`.
-4. Select agent types: **Chat tasks** (or **All agents** if you want to apply the skill to all agent types).
-5. Review validation results → **Upload**.
+| Option | Agent type | Can you edit it? | Updates |
+|---|---|---|---|
+| A. Skills Catalog (recommended) | **On-demand** (`CHAT`), set by the skill | No | **Sync** on the skill's row |
+| B. Zip upload | You choose at upload; **On-demand** recommended | Yes: files and agent types | Re-upload a new zip |
+
+This skill runs on-demand operations reviews and isn't meant for active incident investigation, so target **On-demand** only. **Generic** would load it for every agent type, incident triage and RCA included, and add context those agents don't need.
+
+### Option A: Add from the Skills Catalog (recommended)
+
+You don't need a GitHub account or a zip file. The catalog copy keeps the published name, description, files, and agent type.
+
+1. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+2. Next to **Add skill**, choose **Browse catalog**.
+3. In **Find skills**, enter `ecs-operation-review`, or filter by AWS service **Amazon ECS**.
+4. Choose **Details** and check that the agent type is **On-demand**.
+5. Optional: to add the skill without activating it, choose the dropdown arrow next to **Add to agent space** and set **Status** to **Inactive**.
+6. Choose **Add to agent space**. When the button shows **Installed**, choose **View in Skills**.
+
+Catalog skills don't update automatically. To get a newer version, choose **Sync** on the skill's row. Your operator role needs the `AIDevOpsOperatorAppAccessPolicy` AWS managed policy, or the catalog and asset actions listed in [Skills Catalog](https://docs.aws.amazon.com/devopsagent/latest/userguide/devops-agent-skills-skills-catalog.html).
+
+### Option B: Upload as a zip file (customizable)
+
+Use this option to change the skill, for example to adjust thresholds in `references/alarm-thresholds.md`, or to choose different agent types.
+
+1. Clone the repository, make your changes under `skills/ecs-operation-review/`, and build the zip from `skills/`. Delete any old archive first so removed files don't linger in it:
+
+   ```bash
+   git clone https://github.com/aws/tools-for-devops-agent.git
+   cd tools-for-devops-agent/skills
+   rm -f ecs-operation-review.zip
+   zip -r ecs-operation-review.zip ecs-operation-review/ \
+     -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' \
+        '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' \
+     -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' \
+        '*/CHANGELOG.md' '*/evals/*'
+   unzip -l ecs-operation-review.zip | tail -1   # expect 11 files
+   ```
+
+2. Check that the zip has this structure:
+
+   ```text
+   ecs-operation-review.zip
+   └── ecs-operation-review/
+       ├── SKILL.md                # required: frontmatter with name and description
+       └── references/
+           ├── checks.md           # checks index (read first)
+           ├── alarm-thresholds.md
+           ├── common-checks-coverage.md
+           ├── report-format.md
+           └── pillars/            # 6 files: one per pillar (REL/OBS/SEC/OPS/PERF/ADD)
+   ```
+
+   The zip leaves out `evals/`, `.skilleval.yaml`, `CHANGELOG.md`, and `README.md`.
+
+3. In the DevOps Agent web app, open the **Knowledge** page and choose the **Skills** tab.
+4. Choose **Add skill**, and then choose **Upload skill**.
+5. Drag and drop `ecs-operation-review.zip`, or browse to it.
+6. For **Agent Type**, clear **Generic** and select **On-demand**.
+7. Review the validation results, and then choose **Upload**.
+
+If you also added the catalog copy, delete one of them. Agents might use only one of two skills that share a name. For more information, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill).
 
 ## Usage
 

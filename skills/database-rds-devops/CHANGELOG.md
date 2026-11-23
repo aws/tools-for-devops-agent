@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.0.4] - 2026-11-19
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (8 files). Agent types: On-demand (`CHAT`) and Incident RCA (`INCIDENT_RCA`). Removed the GitHub import option, the GitHub-connection note, and the Asset API option. The Agent Types section says **On-demand** and **Generic** instead of **Chat tasks** and **All agents**.
+
 ## [1.0.3] - 2026-11-10
 - Added `aws-services` (`Amazon RDS`) and `technical-domains` (`Databases`), so catalogs list the skill under RDS and Databases.
 

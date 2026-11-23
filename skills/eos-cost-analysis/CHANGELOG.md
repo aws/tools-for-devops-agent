@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 (2026-11-19)
+
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (2 files). Agent type: **Generic** (`GENERIC`). Removed the GitHub import and Asset API options. The Agent Types section says **Generic** and **On-demand** instead of "All agents" and "Chat tasks".
+
 ## 1.0.0 (2026-11-04)
 
 Initial release.

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.8
+- README: rewrote "Uploading to AWS DevOps Agent": Option A (recommended) adds the skill from the Skills Catalog; Option B uploads a zip for customization, with the zip command and expected structure (10 files, `SKILL.md` inside the `aiml-gpu-training-cluster-investigation/` folder). Agent types: **On-demand** (`CHAT`) and **Incident RCA** (`INCIDENT_RCA`). The Agent Types section and the sample prompt headings use **On-demand** instead of the stale `Chat tasks` label. Removed the GitHub import option. The note on waiting up to 15 minutes after an upload is kept at the end of the section.
+
 ## 1.0.7
 - `technical-domains` uses `AI/ML` instead of `Machine Learning` and `GenAI`, so catalogs list every AI skill under one domain.
 
