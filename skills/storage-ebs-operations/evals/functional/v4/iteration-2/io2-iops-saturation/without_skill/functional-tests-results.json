@@ -1,0 +1,79 @@
+{
+  "version": "v4",
+  "iteration": 2,
+  "eval_id": "io2-iops-saturation",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's root cause matches the expected root cause: both identify the io2 volume (vol-0123456789abcdef0) as the binding constraint, with write IOPS pinned at the provisioned 1,000 IOPS level, instance-level EBS limits (c6i.xlarge baseline 6,000 IOPS/156.25 MB/s) not being exceeded (InstanceEBSIOPSExceededCheck/ThroughputExceededCheck at 0, balances at 99%), and the recommended fix being to raise the volume's provisioned IOPS via ModifyVolume. The investigation correctly isolates the volume layer vs. instance layer, consistent with the expected reasoning. Minor discrepancy: the investigation notes VolumeIOPSExceededCheck returned no datapoints (a gap) rather than confirming it was 1 as expected, and doesn't explicitly break down the other attached volumes' throughput - but the core causal identification (io2 volume under-provisioned, instance not constrained, fix = increase provisioned IOPS) matches the expected root cause closely.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The io2 volume is judged by IOPS against its provisioned Iops, not by VolumeThroughputPercentage as a throughput signal.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The investigation explicitly states 'Write IOPS pinned at provisioned 1000: Write IOPS on vol-0123456789abcdef0 held at exactly 1,000 (the provisioned io2 value)' and frames the root cause as 'io2 volume under-provisioned at 1,000 IOPS for its write workload' with 'Raising provisioned IOPS through ModifyVolume removes it.' VolumeThroughputPercentage is never mentioned as a signal; throughput is only referenced in MB/s terms (7.8 MiB/s, 133 MiB/s) for context, not as the basis for judging the volume's constraint.",
+          "reasoning": "The agent consistently measures the io2 volume against its provisioned IOPS (1000) rather than using a throughput percentage metric to make its determination.",
+          "confidence": "high"
+        },
+        {
+          "text": "The summed IOPS and throughput of all attached volumes are compared with the instance EBS baseline from DescribeInstanceTypes before the volume is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The 'Instance EBS limits not constrained' observation states: 'c6i.xlarge i-1234567890abcdef0_5 is rated for 6,000 baseline / 40,000 burst IOPS and 156.25 / 1,250 MB/s... EBSIOBalance% and EBSByteBalance% stayed at 99%. Instance totals are about 1,500 IOPS and about 133 MiB/s.' This shows a comparison of instance-level totals (summed across attached volumes, described as 'Instance totals') against the instance EBS baseline (6,000 IOPS / 156.25 MB/s baseline) before concluding the volume is the binding constraint.",
+          "reasoning": "The output does present instance-level totals (1,500 IOPS, 133 MiB/s) compared against the instance's rated baseline/burst limits (6,000/40,000 IOPS, 156.25/1,250 MB/s) prior to naming the volume as the binding layer. However, it's not explicitly stated that these instance totals are a 'sum of all attached volumes' nor is DescribeInstanceTypes explicitly cited as the source of the baseline numbers, though the rated specs match typical DescribeInstanceTypes output format. This is a reasonable but not fully explicit match to the assertion's specific requirements, hence medium confidence.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The recommendation gives an exact target IOPS and is presented as a proposal for operator approval, not as an executed change.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states 'Raising provisioned IOPS through ModifyVolume removes it' and in Gaps: 'Check the OS-level queue (iostat aqu-sz) or the app's write rate before choosing the final IOPS value.' No specific numeric target IOPS (e.g., 'set to 2000 IOPS') is given anywhere in the text; the recommendation is directional only ('raising provisioned IOPS') without a concrete target value, and the gap explicitly says the final value should still be chosen based on further investigation.",
+          "reasoning": "The assertion requires an exact target IOPS number to be proposed for operator approval. The output only recommends raising IOPS via ModifyVolume in general terms and explicitly defers determining 'the final IOPS value' to further investigation (checking iostat/app write rate), so no concrete target figure is given. This fails the 'exact target IOPS' requirement, even though the change is correctly framed as a proposal (ModifyVolume) rather than an executed action.",
+          "confidence": "high"
+        },
+        {
+          "text": "The binding layer is reported",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        },
+        {
+          "text": "No ModifyVolume call is reported as executed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m41s",
+    "cost": "$2.34",
+    "context_window": {
+      "utilization": "6.2%",
+      "compaction_count": 0
+    }
+  }
+}

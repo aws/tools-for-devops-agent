@@ -1,0 +1,73 @@
+{
+  "version": "v4",
+  "iteration": 2,
+  "eval_id": "instance-ebs-limit",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response correctly identifies the instance (t3.micro burstable EBS performance) as the binding constraint, not the volume. It explicitly states the volume is over-provisioned ('volume size vs instance limit' section) noting the gp3 volume is provisioned at 16,000 IOPS / 125 MB/s while the instance can only drive ~11,800 IOPS at burst and 500 IOPS baseline - showing the volume has headroom relative to what the instance can deliver. It explicitly says 'The extra provisioned IOPS add cost without adding performance' and that right-sizing the volume down 'won't fix the slowness, since the instance is the bottleneck' - directly stating raising/changing volume IOPS will not help. It recommends an instance type change ('Move to a larger or non-burstable instance') as the primary fix. It never calls the volume saturated; instead it attributes the issue to EBSIOBalance% depletion at the instance level. This aligns well with the expected output: instance identified as binding layer, volume has headroom, volume IOPS change won't help, instance type change recommended, volume not called saturated.\n\nOne minor gap: the response doesn't explicitly mention reading from DescribeInstanceTypes API or explicitly summing IOPS across all attached volumes including root volume - but the substantive conclusion matches expectations. Given the instructions to focus on substance/meaning rather than exact mechanism citations, and that the core diagnostic conclusions align correctly, this should pass.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The instance, not the volume, is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'the t3.micro can only drive about 11,800 IOPS, and it can only sustain about 500. The extra provisioned IOPS add cost without adding performance' and 'the instance is the bottleneck' \u2014 explicitly naming the instance as the binding/limiting layer, not the volume.",
+          "reasoning": "The agent repeatedly attributes the throttling to the instance's EBS burst balance (an instance-level limit on t3.micro), not to the volume itself being the constraint. It explicitly says 'the instance is the bottleneck' and that right-sizing the volume 'won't fix the slowness, since the instance is the bottleneck.'",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says raising volume IOPS will not help and recommends an instance type change.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Right-size the volume: If you stay on t3.micro, drop the volume to the 3,000 IOPS included with gp3 and stop paying for IOPS the instance can't use. This won't fix the slowness, since the instance is the bottleneck.' and 'Move to a larger or non-burstable instance: Pick a type whose baseline EBS IOPS covers the workload... This needs a stop and start, and I can do it with your approval.'",
+          "reasoning": "The agent explicitly states that adjusting volume IOPS won't fix the slowness, and recommends moving to a different instance type as the real fix.",
+          "confidence": "high"
+        },
+        {
+          "text": "The volume is not described as saturated.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'EBSByteBalance% is healthy at 85\u201391%, so throughput isn't the limit.' and volume queue length is described as low (about 10 during burst, about 1.2 during throttled), with the issue attributed to 'EBS IO burst balance ran out' at the instance level rather than the volume being saturated.",
+          "reasoning": "The agent does not describe the volume as saturated; it attributes the issue to the EBS IO balance (an instance-level construct in the EBS optimization context) running out, and explicitly notes the volume's byte balance is healthy, indicating the volume itself is not the saturated resource.",
+          "confidence": "high"
+        },
+        {
+          "text": "The volume headroom is stated",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "31s",
+    "cost": "$0.26",
+    "context_window": {
+      "utilization": "5.5%",
+      "compaction_count": 0
+    }
+  }
+}

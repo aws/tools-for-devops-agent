@@ -1,0 +1,80 @@
+{
+  "version": "v4",
+  "iteration": 1,
+  "eval_id": "io2-iops-saturation",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies the io2 volume (vol-0123456789abcdef0) as the binding constraint, with write IOPS pinned exactly at the provisioned 1,000 IOPS, VolumeThroughputPercentage at 100%, and queue length matching IOPS \u00d7 latency - consistent with the expected root cause. It also confirms the instance EBS layer (6,000 IOPS / 156 MB/s baseline for c6i.xlarge) is not the limiting factor, with headroom remaining (~17 MB/s, ~2,000 more IOPS), matching the expected finding that summed volume IOPS/MiB/s stay below the instance baseline. The proposed fix (ModifyVolume to raise IOPS, sized within instance headroom, up to ~3,000 before instance bandwidth becomes limiting) aligns with the expected fix of a proposed IOPS increase sized within instance headroom. One minor discrepancy: the investigation states VolumeIOPSExceededCheck returned 'no datapoints' (a gap) rather than confirming it was 1 as the expected root cause states, but the agent still correctly inferred the IOPS cap from the flat 1,000 IOPS and 100% throughput percentage, reaching the same causal conclusion. The core root cause - io2 volume capped at provisioned IOPS while instance has headroom - matches the expected root cause well.",
+      "evidence": "\"vol-0123456789abcdef0 ... is the binding constraint. Write IOPS has been exactly 1,000/s since 18:10 UTC, VolumeThroughputPercentage is 100%... The instance is not the limit: its EBS IOPS/throughput exceeded checks read 0 and its burst balances are 99%. Fix: raise provisioned IOPS online with ModifyVolume to about 3,000...\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The io2 volume is judged by IOPS against its provisioned Iops, not by VolumeThroughputPercentage as a throughput signal.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Write IOPS has been exactly 1,000/s since 18:10 UTC, VolumeThroughputPercentage is 100%, and there are no reads. Writes average 8 KiB (~8.2 MB/s), so IOPS runs out long before bandwidth.' and 'io2 write IOPS pinned at provisioned 1000 IOPS: ... sustains ~1000 write IOPS ... matching its provisioned 1000 IOPS.'",
+          "reasoning": "The agent uses VolumeQueueLength, write IOPS at exactly 1000/s, and VolumeThroughputPercentage at 100% together to judge the io2 volume. It explicitly identifies 'Write IOPS has been exactly 1,000/s since 18:10 UTC' as the key signal, and notes 'Writes average 8 KiB (~8.2 MB/s), so IOPS runs out long before bandwidth' - meaning IOPS is the binding metric, with throughput percentage used as corroborating evidence (both IOPS and bandwidth use are correlated since IOPS*size=throughput), not substituted for IOPS judgment.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The summed IOPS and throughput of all attached volumes are compared with the instance EBS baseline from DescribeInstanceTypes before the volume is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Instance EBS limits not reached: Instance i-1234567890abcdef0_5 (c6i.xlarge): InstanceEBSIOPSExceededCheck and InstanceEBSThroughputExceededCheck read 0, and EBSIOBalance% / EBSByteBalance% stay at 99%. Total EBS traffic is ~139 MB/s and ~1,500 IOPS against a ~156 MB/s / 6,000 IOPS baseline, so about 89% of sustained bandwidth is in use, mostly from the 131 MB/s of reads on gp3 vol-1234567890abcdef0_19. That leaves ~17 MB/s, or about 2,000 more 8 KiB writes per second, before the instance becomes the limit.'",
+          "reasoning": "The agent explicitly compares total EBS traffic across attached volumes against the instance EBS baseline before concluding the io2 volume (not the instance) is the binding constraint. It states the instance's total traffic (~139 MB/s, ~1,500 IOPS) against baseline (~156 MB/s / 6,000 IOPS), concluding the instance is not the limit, which supports naming the io2 volume as the binding layer.",
+          "confidence": "high"
+        },
+        {
+          "text": "The recommendation gives an exact target IOPS and is presented as a proposal for operator approval, not as an executed change.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Fix: raise provisioned IOPS online with ModifyVolume to about 3,000 (a 10 GiB io2 volume allows up to 10,000; ~6 h cooldown between modifications). Above ~3,000 IOPS the instance's EBS bandwidth becomes the limit.'",
+          "reasoning": "The agent gives a specific exact target IOPS number (3,000) and frames it as a suggested fix/proposal rather than stating it was executed. The language 'Fix: raise provisioned IOPS online with ModifyVolume to about 3,000' is a recommendation, not a confirmation of an executed action; no mention of 'I have modified' or similar executed-action language appears.",
+          "confidence": "high"
+        },
+        {
+          "text": "The binding layer is reported",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        },
+        {
+          "text": "No ModifyVolume call is reported as executed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.8333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m29s",
+    "cost": "$2.23",
+    "context_window": {
+      "utilization": "7.0%",
+      "compaction_count": 0
+    }
+  }
+}
