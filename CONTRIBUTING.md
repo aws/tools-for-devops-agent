@@ -43,6 +43,17 @@ Follow these guidelines for each tool:
 5. Create a `CHANGELOG.md` file for your tool, inside your tool's directory
 6. Include a non-production disclaimer in your tool's `README.md` file. Add a note stating that it's a sample code, not intended for production use without additional review and testing, and that users should validate in a non-production environment first
 
+### Images and Videos in a README
+
+The docs site publishes every skill, custom agent and MCP server README, so media in a README has to work both on GitHub and on the site.
+
+- **Don't commit videos.** `.mp4` isn't an allowed skill file type, a published file can be at most 1 MiB, and a committed video stays in git history. Drag the video into a comment box on github.com instead; GitHub hosts it and returns a `https://github.com/user-attachments/assets/...` URL. Use H.264.
+- **Link a video with a Markdown link**, for example `[Watch the demo (2 min)](https://github.com/user-attachments/assets/...)`. A bare URL shows as plain text on the docs site, and GitHub removes a `<video>` tag. Use Markdown rather than HTML for images too: skill previews don't render raw HTML, and the skill check warns on `<img>`.
+- **Give every image an absolute URL**, including a thumbnail. Upload it the same way as a video. A skill's docs page is generated in a different folder from its README, so a relative image path breaks `mkdocs build --strict`.
+- **In a skill README, put demo videos in a `### Demo videos` subsection at the top of "How to Use This Skill"**, not under the title. The skill's catalog card takes its text from the first line after the title.
+- **Check recordings before you upload them.** Uploads are public, so remove account IDs, internal tool names and console URLs.
+- **Changing a skill README needs a higher `metadata.version`** and a CHANGELOG entry, because the README is a published file (see [Skill Publishing Rules](#skill-publishing-rules)).
+
 ## Tool-Specific Guidelines
 
 ### Skills

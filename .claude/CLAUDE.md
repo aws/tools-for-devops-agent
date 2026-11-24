@@ -124,7 +124,7 @@ Each skill must have a README.md following this structure (see `skills/support-c
 5. **Limitations** — known constraints or boundaries
 6. **Agent Types** — which DevOps Agent types use this skill
 7. **Uploading to AWS DevOps Agent** — zip command and upload steps
-8. **How to Use This Skill** — sample prompts organized by agent type/use-case
+8. **How to Use This Skill** — sample prompts organized by agent type/use-case. Demo videos go in a `### Demo videos` subsection at the top; see [Images and Videos in a README](../CONTRIBUTING.md#images-and-videos-in-a-readme).
 
 ### Changelog
 
@@ -267,6 +267,7 @@ The docs site renders each skill's and custom agent's `README.md` as a page one 
 - In a custom agent README, link required skills in the Prerequisites section as `../../skills/<skill-name>/`. `docs/hooks/agents_catalog.py` reads skill tags for the agent card from that relative form only, so an absolute URL drops the tag.
 - The agent card lists only tools named `use_*` in backticks in the "Creating the Agent" section. Other tools (for example `verify_aws_claim`) don't appear on the card.
 - A skill's display name comes from its folder name: each hyphenated word is capitalized unless it is in `acronyms` in `docs/hooks/skills_catalog.py`, so `eos-cost-analysis` shows as "Eos Cost Analysis" until `eos` is added. Add a new acronym there in the same PR if the name needs one. A custom agent's display name is its README title, minus any " — Custom Agent" suffix.
+- Images and videos: link a video hosted as a GitHub attachment with a Markdown link, not a bare URL (plain text on the site) or a `<video>` tag (GitHub removes it), and give every image an absolute URL, because a relative image path breaks `mkdocs build --strict`. Don't commit videos. See [Images and Videos in a README](../CONTRIBUTING.md#images-and-videos-in-a-readme).
 
 ### IAM permissions
 
