@@ -43,7 +43,7 @@ For each finding:
 
 ## Disclosed Assumptions & Gaps
 
-- <APIs that returned AccessDenied and the fallback used (e.g. `SimulatePrincipalPolicy` denied → policies read directly), and what that leaves unconfirmed>
+- <APIs that returned AccessDenied and the fallback used (e.g. `SimulatePrincipalPolicy` not called → evaluated from policy documents, not simulated), and what that leaves unconfirmed>
 - <Organizations membership: not in an Organization (LLM-INV-015 not applicable) / member account, SCPs not readable / readable>
 - <features unsupported in the reviewed region>
 - <anything inferred vs observed>

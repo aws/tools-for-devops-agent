@@ -4,6 +4,7 @@
 
 - PR #268 review item 1 (IAM reads and action names):
   - IAM: the reads `AIDevOpsAgentAccessPolicy` lacks come from the `EnableOpsaiBedrockSecurity` template parameter (now also the AgentCore status reads); invoke actions name `bedrock:InvokeModel` / `InvokeModelWithResponseStream`, which authorize Converse / ConverseStream.
+  - SCP assets: removed the Converse and ConverseStream entries, which are not IAM actions; `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`, already in the statements, authorize those API calls.
 
 ## 1.0.0
 

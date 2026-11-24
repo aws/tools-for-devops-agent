@@ -3,6 +3,7 @@
 
 - PR #268 review item 1 (IAM reads and action names):
   - IAM: `servicequotas:` prefix (was `service-quotas:`); artifact and channel checks use `s3:ListBucket` only (no HeadObject / `s3:GetObject`); `iam:SimulatePrincipalPolicy` replaced by a static policy read.
+  - Report template: input-check hint reads `ListObjectsV2` key metadata (`s3:ListBucket`), no HeadObject.
 
 ## 1.0.0
 - Initial release. Merges the earlier SageMaker training and Model Registry skills into one skill.
