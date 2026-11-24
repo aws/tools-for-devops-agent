@@ -17,7 +17,7 @@
 
 | Job | Type (training / customization) | Status (`TrainingJobStatus`) | `SecondaryStatus` | `FailureReason` (summarized — no secret/data content) | Checkpoint / output produced? (from S3) |
 |---|---|---|---|---|---|
-| `<name>` | `<type>` | `<InProgress / Completed / Failed / Stopped>` | `<Starting / Pending / Training / …>` | `<one-line summary, no raw data>` | `<yes/no — from HeadObject/ListObjectsV2>` |
+| `<name>` | `<type>` | `<InProgress / Completed / Failed / Stopped>` | `<Starting / Pending / Training / …>` | `<one-line summary, no raw data>` | `<yes/no — from ListObjectsV2>` |
 
 > `InProgress` with `SecondaryStatus` `Starting`/`Pending` waiting on GPU capacity is **NOT** `Failed`
 > (api-quirks §1). A Pending-on-capacity job is reported as Pending, never as a failure, and gets no
@@ -31,7 +31,7 @@ For each **failed** job, name the bucket and the matching `LLM-SM-TRAIN-*` check
 |---|---|---|---|
 | `<name>` | `<bucket>` | `<LLM-SM-TRAIN-00X>` | `<the FailureReason signal that placed it in this bucket>` |
 
-> **Capacity vs quota (api-quirks §2):** `InsufficientInstanceCapacity` is an AWS-side shortfall
+> **Capacity vs quota (api-quirks §2):** `InsufficientCapacityError` is an AWS-side shortfall
 > (LLM-SM-TRAIN-002 — retry/alternate instance, do **not** request a quota increase); a
 > `service-quotas get-service-quota` `Value` of **0** for the instance type is a customer quota
 > (LLM-SM-TRAIN-003 — request an increase). Cite the observed `service-quotas` value when classifying.
@@ -51,8 +51,9 @@ publish are marked `workload-specific` at `INFO`.
 |---|---|---|---|
 | `<name>` | `<failed / empty-output / stalled>` | `<BillableTimeInSeconds or instance-hours>` | `<LLM-SM-TRAIN-002 / 007 / 008>` |
 
-Every failed, empty-output, or stalled GPU run is billed. Surface the cost so a repeated failure is
-not silently re-billed.
+Every failed or empty-output GPU run that started on instances is billed, from `TrainingStartTime`
+to `TrainingEndTime`; a job that never started (for example a capacity failure) is not. Surface the
+cost so a repeated failure is not silently re-billed.
 
 ## Prioritized Recommendations
 

@@ -47,7 +47,7 @@ token, and names what the signal is folded into.
 
 | Binding | `CLIENT_ERRORS` | `SERVER_ERRORS` | `THROTTLES` | Provider health | Doc |
 |---|---|---|---|---|---|
-| `bedrock` | `AWS/Bedrock` `InvocationClientErrors` | `AWS/Bedrock` `InvocationServerErrors` | `AWS/Bedrock` `InvocationThrottles` | `health:DescribeEvents`, service `bedrock` | [Bedrock CloudWatch monitoring](https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html) |
+| `bedrock` | `AWS/Bedrock` `InvocationClientErrors` | `AWS/Bedrock` `InvocationServerErrors` | `AWS/Bedrock` `InvocationThrottles` | `health:DescribeEvents`, service `bedrock` | [Bedrock runtime metrics](https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html) |
 | `sagemaker` | `AWS/SageMaker` `Invocation4XXErrors` | `AWS/SageMaker` `Invocation5XXErrors` | `not-separable` — 429 folds into `Invocation4XXErrors` | `health:DescribeEvents`, service `sagemaker` | [SageMaker CloudWatch metrics](https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html) |
 | `agentcore` | the model stage binds to `bedrock`; the runtime stage is workload-emitted | same | same | `health:DescribeEvents`, service `bedrock` | [Agentic AI Lens — observability](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/agentrel08-bp02.html) |
 | `self-hosted-alb` | `AWS/ApplicationELB` `HTTPCode_Target_4XX_Count` | `AWS/ApplicationELB` `HTTPCode_Target_5XX_Count` | `RejectedConnectionCount`, plus app-emitted queue depth | `not-applicable` — the customer is the provider | [ALB CloudWatch metrics](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-cloudwatch-metrics.html) |

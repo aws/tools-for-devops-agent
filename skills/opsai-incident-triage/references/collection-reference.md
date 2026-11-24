@@ -2,7 +2,7 @@
 
 The exact **read-only** API calls this skill uses to collect incident state, and the fields each contributes. All calls are describe/list/get/lookup — none mutate state. Use ReadOnly or least-privilege credentials (production safety).
 
-Bedrock has two control-plane clients: `bedrock` (model and logging config) and `bedrock-agent` (agents, knowledge bases). The data-plane clients `bedrock-runtime` and `bedrock-agent-runtime` are **not** used for collection — they invoke models, which costs money and proves nothing about the incident.
+The API column names **IAM actions**. Bedrock has two control-plane clients, `bedrock` (model and logging config) and `bedrock-agent` (agents, knowledge bases); both authorize under the `bedrock:` IAM prefix (`bedrock-agent` is a CLI and SDK client name, not an IAM prefix). Every read below is in the AWS managed policy `AIDevOpsAgentAccessPolicy`, so this skill needs no extra template parameter. The data-plane clients `bedrock-runtime` and `bedrock-agent-runtime` are **not** used for collection — they invoke models, which costs money and proves nothing about the incident.
 
 This is the triage subset. The companion catalogue `references/metrics-and-logs.md` says how to *read* each metric and log pattern; this file says *which call to make*. Load both with any router row.
 
@@ -19,14 +19,7 @@ This is the triage subset. The companion catalogue `references/metrics-and-logs.
 
 A `locus=PROVIDER` asserted without a `health:DescribeEvents` result is unsupported — except on a self-hosted binding, where that call is `not-applicable` and the locus is `INFRASTRUCTURE` instead. A `locus=APPLICATION` asserted without a `cloudtrail:LookupEvents` window is equally unsupported. Every metric and log source named below is the `bedrock` binding's; bind at Step 0 (`hosting-bindings.md`) and substitute.
 
-**Use `EventSource`, not `EventName`, for the Step 5b lookup.** `AttributeKey=EventName,
-AttributeValue=InvokeModel` returns **zero events**: `InvokeModel` and `Converse` are CloudTrail
-**data** events, and the data-event selector is off by default. The same calls are reachable through
-the event *source*, which is why the per-principal error enumeration is possible at all without
-turning data events on. Measured 2026-10-26: the `EventName` form returned 0 while the `EventSource`
-form returned 49 `Converse` events over the same 35-minute window, carrying
-`ValidationException` and `AccessDenied` against two distinct roles.
-
+**Use `EventSource`, not `EventName`, for the Step 5b lookup.** `InvokeModel`, `InvokeModelWithResponseStream`, `Converse` and `ConverseStream` are CloudTrail **management** events, logged by default ([Bedrock and CloudTrail](https://docs.aws.amazon.com/bedrock/latest/userguide/logging-using-cloudtrail.html)). In a measured run on 2026-10-26 the `AttributeKey=EventName, AttributeValue=InvokeModel` form returned 0 events while the `EventSource` form returned 49 `Converse` events over the same 35-minute window, carrying `ValidationException` and `AccessDenied` against two distinct roles. The callers used `Converse`, so an `EventName=InvokeModel` lookup could not match them; query by `EventSource` and read `eventName` off the results. Count only `eventType` `AwsApiCall`: a streaming call also writes an `AwsServiceEvent` stream-completion event with the same `eventName`.
 ## Error and latency signal (CloudWatch)
 
 | API (service) | Fields contributed | Feeds |
@@ -54,16 +47,16 @@ If logging was off during the incident window, say so plainly and stop claiming 
 | `bedrock:ListFoundationModels` | `modelLifecycle.status`, modality and streaming support — is the model even valid here | LLM-INV-003, `ValidationException` triage |
 | `bedrock:ListInferenceProfiles` / `GetInferenceProfile` | profile type and member regions — cross-region routing surprises | LLM-INV-002 |
 | `bedrock:ListProvisionedModelThroughputs` | `status`, `modelUnits` — throttling with PT present reads differently | LLM-PT-001/002, `InvocationThrottles` |
-| `bedrock-agent:GetAgentAlias` / `ListAgentAliases` | alias → version pinning, the usual cause of "the agent changed by itself" | LLM-AGT-007, `api-quirks.md` §6 |
-| `bedrock-agent:ListIngestionJobs` | per-source job history; empty means never synced | LLM-KB-001, `api-quirks.md` §8 |
+| `bedrock:GetAgentAlias` / `bedrock:ListAgentAliases` | alias → version pinning, the usual cause of "the agent changed by itself" | LLM-AGT-007, `api-quirks.md` §6 |
+| `bedrock:ListIngestionJobs` | per-source job history and per-job `statistics`; empty means never synced | LLM-KB-001, `api-quirks.md` §8 |
 
 ## Access and policy, for 4xx that look like outages
 
 | API (service) | Fields contributed | Feeds |
 |---|---|---|
-| `iam:SimulatePrincipalPolicy` | whether `bedrock:InvokeModel*` is actually permitted for the caller | `AccessDeniedException` triage, LLM-INV-013 |
+| `iam:ListAttachedRolePolicies` / `iam:GetRolePolicy` / `iam:GetPolicyVersion` | whether the caller's identity policies allow `bedrock:InvokeModel*`, read action by action and labelled "read from policy documents, not simulated" (`iam:SimulatePrincipalPolicy` is refused in the DevOps Agent runtime) | `AccessDeniedException` triage, LLM-INV-013 |
 | `organizations:ListPoliciesForTarget` / `DescribePolicy` | SCP denies that mask as service failures | LLM-INV-015 |
-| `bedrock:GetFoundationModelAvailability` (where available) | model access / subscription state in region | LLM-INV-014 |
+| The `AccessDeniedException` message and `cloudtrail:LookupEvents` `errorMessage` | model access / subscription state (for example "model is not available for this account"); `bedrock:GetFoundationModelAvailability` is not in the managed policy, so triage does not call it | LLM-INV-014 |
 
 An `AccessDeniedException` and a `ResourceNotFoundException` on a non-entitled model are both **customer config**, not service transient, however much the symptom looks like an outage. `ValidationException` is config too. Only the 5xx family and `ServiceUnavailableException` point at the service, and `AWS/Bedrock InvocationServerErrors` is frequently flat zero even during a real incident — see `metrics-and-logs.md`.
 

@@ -88,7 +88,7 @@ Activate this skill when the user:
 - Reports a **transform job that Failed** — an input format or `ContentType` mismatch, or an S3 access error on the
   input/output path.
 - Reports a job that is **under-parallelized** — `MaxConcurrentTransforms` of one on a large dataset.
-- Reports a job that reports **`Completed` but wrote fewer output objects than input records**, or **transform
+- Reports a job that reports **`Completed` but wrote fewer output objects than input files**, or **transform
   output written without a customer-managed key** where the scored data is sensitive.
 - Reports a **break-fix error** — records that fail to parse, timeouts on large records, a capacity or quota error
   at start, intermittent internal errors, or predictions that cannot be matched to their input rows.
@@ -138,7 +138,7 @@ How to read each API is in [collection-reference.md](references/collection-refer
 | Is my model being monitored, there's no data capture | Real-time | `DescribeEndpointConfig` `DataCaptureConfig`, `ListMonitoringSchedules` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-002) |
 | This endpoint looks idle, a variant shows zero instances | Real-time | `DescribeEndpoint` `CurrentInstanceCount`, then recent `Invocations` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-003), [api-quirks.md](references/api-quirks.md) §1 |
 | Do I have an A/B or canary variant | Real-time | `DescribeEndpoint` production-variant count and weights | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-004) |
-| Is my endpoint right-sized, did we run inference recommender | Real-time | `ListInferenceRecommenderJobs`, then both metric namespaces | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-005) |
+| Is my endpoint right-sized, did we run inference recommender | Real-time | `ListInferenceRecommendationsJobs`, then both metric namespaces | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-005) |
 | Is the endpoint in a VPC, is it encrypted | Real-time | `DescribeModel` `VpcConfig`, `DescribeEndpointConfig` `KmsKeyId` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-006, 007) |
 | Am I wasting money on an always-on endpoint | Real-time | `Invocations` volume vs provisioned capacity (idle cost), then the fit decision in Step 4 (LLM-SM-SERVE-005) | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-008) |
 | Latency is rising, I'm seeing 5xx errors | Real-time | `ModelLatency`, `Invocation5XXErrors`, then `DescribeAlarms` | [cloudwatch-alarm-reference.md](references/cloudwatch-alarm-reference.md) (LLM-SM-009) |
@@ -153,7 +153,7 @@ How to read each API is in [collection-reference.md](references/collection-refer
 | My batch transform job failed, input format or content type error | Batch | `DescribeTransformJob` `FailureReason`, `TransformInput.ContentType` and `SplitType` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-BATCH-001), [metrics-and-logs.md](references/metrics-and-logs.md) §3 |
 | The job failed with access denied on the input or output bucket | Batch | `DescribeTransformJob` `FailureReason`, then the job role against the S3 prefixes | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-BATCH-001) |
 | Bulk scoring is slow, it runs one record at a time | Batch | `MaxConcurrentTransforms`, `MaxPayloadInMB`, `BatchStrategy` from `DescribeTransformJob` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-BATCH-002) |
-| It says Completed but I'm missing results, some records weren't scored | Batch | `ListObjectsV2` on the output prefix vs the input record count | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-BATCH-003), [api-quirks.md](references/api-quirks.md) §4 |
+| It says Completed but I'm missing results, some records weren't scored | Batch | `ListObjectsV2` on the output prefix vs the input file count | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-BATCH-003), [api-quirks.md](references/api-quirks.md) §4 |
 | Is the scored output encrypted, is the data protected | Batch | `DescribeTransformJob` `TransformOutput.KmsKeyId` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-BATCH-004) |
 | No errors in the metrics, so is the job healthy | Batch | CloudWatch job metrics, then the transform logs | [api-quirks.md](references/api-quirks.md) §3, [metrics-and-logs.md](references/metrics-and-logs.md) §3 |
 
@@ -225,12 +225,12 @@ intentionally off" ([api-quirks.md](references/api-quirks.md) §2).
 
 **Async.** Confirm Application Auto Scaling tracks `ApproximateBacklogSizePerInstance` (LLM-SM-SERVE-004).
 
-**Batch transform.** Reconcile the output `.out` object count against input records via `ListObjectsV2`
+**Batch transform.** Reconcile the output `.out` object count against input files via `ListObjectsV2`
 (LLM-SM-BATCH-003) — a `Completed` status can mask partial scoring ([api-quirks.md](references/api-quirks.md) §4).
 
 ### Step 4 — Check right-sizing, fit and lineage
 
-**Real-time endpoint.** `ListInferenceRecommenderJobs` (LLM-SM-005); `ListModelPackages` / `DescribeModelPackage`
+**Real-time endpoint.** `ListInferenceRecommendationsJobs` (LLM-SM-005); `ListModelPackages` / `DescribeModelPackage`
 for registry lineage (LLM-SM-011). A right-sizing conclusion needs **both** metric namespaces — see Step 5.
 
 **Fit decision (one decision, made here).** Low or bursty traffic on an always-on real-time endpoint is the
@@ -355,7 +355,7 @@ Non-negotiable, at every step:
 - "Inference Recommender returned nothing, so the instance type is wrong." In a region that does not support the feature, empty or an error is not evidence of a finding. Record region-unsupported as a disclosed assumption, not an LLM-SM-005 finding.
 - "Async failures would show up as errors, so no notification config is fine." Without `OutputConfig.NotificationConfig` SNS success and error topics, callers get no completion signal and failures are silent. That is LLM-SM-SERVE-003 (HIGH), not a cosmetic gap.
 - "Throttling means raise `MaxConcurrency` to the maximum." Raising it is only the fix when it is the binding limit. Read the configured value against the observed throttling first, and treat the tuning number as `workload-specific` (LLM-SM-SERVE-002).
-- "The job is `Completed`, so every record was scored." `Completed` means the job ran to the end. The output `.out` object count can be short of the input record count when records fail or are skipped. Reconcile with `ListObjectsV2` before clearing it (api-quirks §4, LLM-SM-BATCH-003).
+- "The job is `Completed`, so every record was scored." `Completed` means the job ran to the end. Batch transform writes one `.out` per input file, only when every record in that file succeeded, so the `.out` count can be short of the input file count. Reconcile with `ListObjectsV2` before clearing it (api-quirks §4, LLM-SM-BATCH-003).
 - "It failed, so the model container is broken." A `Failed` job is often an input `ContentType` or `SplitType` mismatch or an S3 access error on the input or output path. Read `FailureReason` and fix the data or role before blaming the container (LLM-SM-BATCH-001).
 - "`MaxConcurrentTransforms` is 1, so the job is misconfigured and high severity." It is under-parallelization with a workload-specific threshold, catalogued LOW. Report the observed value against dataset size and do not invent a target (LLM-SM-BATCH-002).
 - "A collection call returned AccessDenied, so the check doesn't apply." AccessDenied is a gap, not a clean result. Report the specific API and resource you could not read, continue with the rest, and disclose the gap — never infer the finding either way.
@@ -391,7 +391,7 @@ cause false positives and false negatives in this review (traps §1–§4):
   idle endpoint; an absent `ModelSetupTime` or `ApproximateBacklogSizePerInstance` must not be read as "no cold
   start" or "empty queue".
 - **A transform job `Completed` ≠ every record scored** (§4). The output `.out` object count can be short of the
-  input record count; reconcile output against input with `ListObjectsV2` and treat `Completed` as "ran to the
+  input file count (one `.out` per fully scored input file); reconcile output against input with `ListObjectsV2` and treat `Completed` as "ran to the
   end", not "scored everything" (LLM-SM-BATCH-003).
 
 Operational failures: on **AccessDenied** for a collection call, report the specific API and resource you could not

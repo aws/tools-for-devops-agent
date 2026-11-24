@@ -23,10 +23,10 @@ document and do not use the row. Each version is the one at the time of writing;
 
 | Policy (version) | Invoke on `*` | Canary on `*` | Escalation | Condition keys in the document |
 |---|---|---|---|---|
-| `AdministratorAccess` (v1): Allow `*` on `*` | All six | All six | All three on `*` | None |
-| `PowerUserAccess` (v12): Allow `NotAction` [`iam:*`, `organizations:*`, `account:*`] on `*`; Allow nine listed `account:`, `iam:` and `organizations:` actions on `*` | All six | All six | `aws-marketplace:Subscribe`, `bedrock:CreateMarketplaceModelEndpoint`; not `iam:CreateServiceSpecificCredential` (excluded by `iam:*`, not listed) | None |
-| `AmazonBedrockFullAccess` (v11): Allow `bedrock:*` and `bedrock-mantle:*` on `*`, plus related statements | All six | All six | `bedrock:CreateMarketplaceModelEndpoint`; `aws-marketplace:Subscribe` only under `aws:CalledViaLast` (W1); not `iam:CreateServiceSpecificCredential` | `aws:CalledViaLast`, `aws:ResourceTag/sagemaker-sdk:bedrock`, `aws:TagKeys`, `aws:RequestTag/sagemaker-sdk:bedrock`, `aws:RequestTag/bedrock:marketplace-registration-status`, `aws:RequestTag/sagemaker-studio:hub-content-arn`, `aws:ResourceTag/bedrock:marketplace-registration-status`, `aws:ResourceTag/sagemaker-studio:hub-content-arn`, `iam:PassedToService` |
-| `AmazonBedrockLimitedAccess` (v9): an explicit list of `bedrock:` actions on `*`, `bedrock-mantle:CallWithBearerToken` on `*`, Marketplace actions under `aws:CalledViaLast` | `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `bedrock:CallWithBearerToken`, `bedrock-mantle:CallWithBearerToken` (not `bedrock:Converse`, `bedrock:ConverseStream`) | `bedrock:DeleteCustomModel`, `bedrock:DeleteGuardrail`, `bedrock:CreateProvisionedModelThroughput` only (not all six) | None counted; `aws-marketplace:Subscribe` only under `aws:CalledViaLast` (W1) | `aws:CalledViaLast` |
+| `AdministratorAccess` (v1): Allow `*` on `*` | All four | All six | All three on `*` | None |
+| `PowerUserAccess` (v12): Allow `NotAction` [`iam:*`, `organizations:*`, `account:*`] on `*`; Allow nine listed `account:`, `iam:` and `organizations:` actions on `*` | All four | All six | `aws-marketplace:Subscribe`, `bedrock:CreateMarketplaceModelEndpoint`; not `iam:CreateServiceSpecificCredential` (excluded by `iam:*`, not listed) | None |
+| `AmazonBedrockFullAccess` (v11): Allow `bedrock:*` and `bedrock-mantle:*` on `*`, plus related statements | All four | All six | `bedrock:CreateMarketplaceModelEndpoint`; `aws-marketplace:Subscribe` only under `aws:CalledViaLast` (W1); not `iam:CreateServiceSpecificCredential` | `aws:CalledViaLast`, `aws:ResourceTag/sagemaker-sdk:bedrock`, `aws:TagKeys`, `aws:RequestTag/sagemaker-sdk:bedrock`, `aws:RequestTag/bedrock:marketplace-registration-status`, `aws:RequestTag/sagemaker-studio:hub-content-arn`, `aws:ResourceTag/bedrock:marketplace-registration-status`, `aws:ResourceTag/sagemaker-studio:hub-content-arn`, `iam:PassedToService` |
+| `AmazonBedrockLimitedAccess` (v9): an explicit list of `bedrock:` actions on `*`, `bedrock-mantle:CallWithBearerToken` on `*`, Marketplace actions under `aws:CalledViaLast` | `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `bedrock:CallWithBearerToken`, `bedrock-mantle:CallWithBearerToken` (all four) | `bedrock:DeleteCustomModel`, `bedrock:DeleteGuardrail`, `bedrock:CreateProvisionedModelThroughput` only (not all six) | None counted; `aws-marketplace:Subscribe` only under `aws:CalledViaLast` (W1) | `aws:CalledViaLast` |
 
 None of the four has a `Resource` entry that is an Amazon Bedrock ARN in a statement that covers an
 invoke action, so none adds named probes, and all four reach GRANT `broad` on `*`.
@@ -89,7 +89,7 @@ tier, reasons, CHECKS and action for an active, recent, in-use access key on a u
    `Remove aws-marketplace:Subscribe, bedrock:CreateMarketplaceModelEndpoint, iam:CreateServiceSpecificCredential from <user>'s policies, then rotate access key <key> and move the workload to an IAM role.`
 2. **`PowerUserAccess` (NotAction).** Its first statement has a `NotAction` list (`iam:*`,
    `organizations:*`, `account:*`) on `*`, so it covers every evaluated action that none of those
-   entries matches: all six invoke actions, all six canary actions, `aws-marketplace:Subscribe` and
+   entries matches: all four invoke actions, all six canary actions, `aws-marketplace:Subscribe` and
    `bedrock:CreateMarketplaceModelEndpoint`. `iam:CreateServiceSpecificCredential` matches `iam:*`,
    and the second statement does not list it, so it is allowed neither on `*` nor on the user's
    ARN. GRANT `broad`. Critical, with the reasons `Can invoke Amazon Bedrock models.`,
@@ -98,7 +98,7 @@ tier, reasons, CHECKS and action for an active, recent, in-use access key on a u
    `Can also enable more models or create new API keys: aws-marketplace:Subscribe, bedrock:CreateMarketplaceModelEndpoint.`;
    CHECKS `LLM-BPA-002, LLM-BPA-003, LLM-BPA-004`; action
    `Remove aws-marketplace:Subscribe, bedrock:CreateMarketplaceModelEndpoint from <user>'s policies, then rotate access key <key> and move the workload to an IAM role.`
-3. **`AmazonBedrockFullAccess`.** `bedrock:*` on `*` covers the five `bedrock:` invoke actions, all
+3. **`AmazonBedrockFullAccess`.** `bedrock:*` on `*` covers the three `bedrock:` invoke actions, all
    six canary actions and `bedrock:CreateMarketplaceModelEndpoint`; `bedrock-mantle:*` on `*`
    covers `bedrock-mantle:CallWithBearerToken`. `aws-marketplace:Subscribe` is allowed on `*` only
    under a condition on `aws:CalledViaLast`, a key outside the table, so it is allowed only in the
@@ -112,8 +112,7 @@ tier, reasons, CHECKS and action for an active, recent, in-use access key on a u
    `<user>: whether aws-marketplace:Subscribe is allowed depends on a condition the audit cannot evaluate (condition key aws:CalledViaLast in AmazonBedrockFullAccess); it was not counted.`
 4. **`AmazonBedrockLimitedAccess`.** Its list allows `bedrock:InvokeModel`,
    `bedrock:InvokeModelWithResponseStream` and `bedrock:CallWithBearerToken` on `*`, and
-   `bedrock-mantle:CallWithBearerToken` on `*`; it does not list `bedrock:Converse` or
-   `bedrock:ConverseStream`. GRANT `broad`. Canary: three of six, so not effectively `bedrock:*`.
+   `bedrock-mantle:CallWithBearerToken` on `*`, which are all four invoke actions. GRANT `broad`. Canary: three of six, so not effectively `bedrock:*`.
    No escalation action is counted, and W1 is added for `aws-marketplace:Subscribe`
    (`aws:CalledViaLast`). Access key: Medium, reason
    `Can invoke any model in any Region; the key is recent and in use.`, CHECKS `LLM-BPA-010`, action
@@ -172,7 +171,7 @@ tier, reasons, CHECKS and action for an active, recent, in-use access key on a u
    AWS documents: the result is example 1.
 9. **A condition the audit cannot evaluate.** Allow `bedrock:*` on `*`, and Deny `bedrock:*` on `*`
    with `NotIpAddress` on `aws:SourceIp`. The key is outside the table, so the Deny is unresolved.
-   Least access: the Deny applies, the five `bedrock:` invoke actions are denied on `*` and on every
+   Least access: the Deny applies, the three `bedrock:` invoke actions are denied on `*` and on every
    probe, and no policy names a resource: `none`. Most access: the Deny does not apply: `broad`.
    The readings differ, so GRANT is `unknown`, with U2:
    `<user>: whether Amazon Bedrock models can be invoked depends on a condition the audit cannot evaluate (condition key aws:SourceIp in <policy>). Review it manually.`

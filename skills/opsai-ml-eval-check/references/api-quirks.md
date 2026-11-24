@@ -17,7 +17,7 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 ## 3. Model access / `ListFoundationModels` — listed ≠ accessible
 
 - **Trap:** `ListFoundationModels` returns models that exist in the region. Presence in the list does **not** mean the account has been granted access to invoke them.
-- **Correct reading:** A model can appear in `ListFoundationModels` yet `InvokeModel` fails with `AccessDeniedException` because access was never requested/granted. Use model access status (and actual invocation errors in logs) to judge access, not list membership.
+- **Correct reading:** A model can appear in `ListFoundationModels` yet `InvokeModel` fails with `AccessDeniedException`. Access to many models is enabled by default with the right AWS Marketplace permissions; the usual causes are a missing `aws-marketplace` permission for the first (subscribing) call, an IAM or SCP deny, the Anthropic first-time-use form for Anthropic models earlier than Claude Opus 4.7, or additional account-level access the model needs ([model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html)). Judge access from those and from actual invocation errors, not list membership.
 
 ## 4. `modelLifecycle.status` — ACTIVE now, deprecated soon
 
@@ -66,8 +66,8 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 
 ## 13. `GetDataSource` chunking default
 
-- **Trap:** A missing/absent chunking configuration reads as "default is fine."
-- **Correct reading:** The default behavior depends on the data-source/API version and may be "no chunking" (whole-document) — poor for long heterogeneous docs. Treat an unset strategy as a tuning gap to confirm (Knowledge Bases / RAG area), not a safe default.
+- **Trap:** A missing chunking configuration reads as "no chunking" (whole documents), or as a fault.
+- **Correct reading:** When the data source has no chunking configuration, Amazon Bedrock splits content into chunks of about 300 tokens, preserving sentence boundaries; whole-document chunking is the explicit `NONE` strategy ([customize ingestion](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-customize-ingestion.html)). An unset strategy is therefore a known default, not "no chunking"; treat it as a tuning question for long or heterogeneous documents (LLM-KB-003), not as a fault.
 
 ## 14. Cross-region inference profile IDs look region-prefixed but aren't a region override
 

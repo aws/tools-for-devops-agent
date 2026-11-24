@@ -83,7 +83,7 @@ Accounts audited with incomplete coverage (findings still reported):
 
 Accounts that could not be audited:
 
-- `<alias>`: `<API and error code, for example iam:GetAccountAuthorizationDetails AccessDenied>`. `<For a permission error: add the read-only IAM policy in the opsai-bedrock-security README as an inline policy on the AWS DevOps Agent role in this account.>`
+- `<alias>`: `<API and error code, for example iam:GetAccountAuthorizationDetails AccessDenied>`. `<For a permission error: deploy the skill policies template with EnableOpsaiBedrockSecurity set to true for the AWS DevOps Agent role in this account.>`
 
 `<Write "None" under a heading with no entry.>`
 

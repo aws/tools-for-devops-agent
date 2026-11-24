@@ -105,7 +105,7 @@ projected out of the nested `output` struct.
 
 Namespace `AWS/Bedrock`, dimension `ModelId`, read with
 `cloudwatch:GetMetricData` / `GetMetricStatistics`. Reference:
-https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html
+https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html
 
 | Metric | Unit | Statistic | What it tells this skill |
 |---|---|---|---|
@@ -130,7 +130,7 @@ not from the distribution:
 logs:DescribeMetricFilters --log-group-name <the group from §1>
 ```
 
-An absent `{ $.stopReason = "max_tokens" }` filter is LLM-EVAL-013 — the shift is invisible,
+An absent `{ $.output.outputBodyJson.stopReason = "max_tokens" }` filter (or one written on the top-level `$.stopReason`, which never matches) is LLM-EVAL-013 — the shift is invisible,
 which is a finding in its own right even when the current distribution looks fine. The filter's
 definition and the derived alarm bar are in `references/finish-reason-analysis.md`; the
 telemetry-coverage view of the same filter is outside this skill.

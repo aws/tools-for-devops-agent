@@ -41,8 +41,10 @@ Step 1 — Provider health
 Step 2 — SERVER_ERRORS rate across models/endpoints
   Call cloudwatch:GetMetricData for the bound SERVER_ERRORS slot, broken out
   by model/endpoint, over the incident window.
-    → >5% server-error rate across MULTIPLE UNRELATED models in the SAME region?
-                                    Strong PROVIDER signal.
+    → Server errors elevated above each model's own baseline across MULTIPLE UNRELATED
+      models in the SAME region?    Strong PROVIDER signal. AWS publishes no server-error
+                                    threshold; compare with the baseline, never a fixed
+                                    percentage.
     → Elevated for only one model?  Weak signal; could be model-specific capacity or config.
 
 Step 3 — Blast radius: one vs many
@@ -74,10 +76,11 @@ Step 6 — Rule on the TOTAL precedence ladder R1→R5.
   this is the same ladder in brief. Walk it in order, first rule satisfied wins, and note
   that it is TOTAL — exactly one rule fires for every question that got here, because R5 is
   a terminal catch-all. There is no fall-through and no "does not apply" exit.
-    R1. CLIENT_ERRORS `measured N>=1` AND SERVER_ERRORS `measured 0` or
+    R1. CLIENT_ERRORS or THROTTLES `measured N>=1` AND SERVER_ERRORS `measured 0` or
         `no-datapoints`                                    → locus=APPLICATION,
         transience=PERSISTENT. Client-error dominance is satisfied by definition; there
-        is no share or volume test. Where the only code is ThrottlingException and
+        is no share or volume test. Where THROTTLES is the only non-zero slot (a ThrottlingException is
+        counted there, not in CLIENT_ERRORS) and
         Step 4 shows it cleared, transience=TRANSIENT and the locus moves to
         INFRASTRUCTURE if quota posture rather than request shape is the cause.
         On self-hosted-lambda the platform metric cannot split client from server, so an
@@ -148,4 +151,4 @@ State explicitly that the cause is not yet isolated and name the single addition
 
 ## AWS-doc-citation
 
-https://docs.aws.amazon.com/bedrock/latest/userguide/troubleshooting.html
+https://docs.aws.amazon.com/bedrock/latest/userguide/troubleshooting-api-error-codes.html

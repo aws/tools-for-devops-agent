@@ -34,7 +34,7 @@ Instance resource metrics (`/aws/sagemaker/Endpoints`):
 
 ## 2. Serverless and asynchronous inference signals
 
-Serverless and asynchronous endpoints emit the same invocation metrics in `AWS/SageMaker` (table in §1). Dimensions: `EndpointName`, `VariantName`. Reference: https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html
+Serverless and asynchronous endpoints emit the same invocation metrics in `AWS/SageMaker` (table in §1), with dimensions `EndpointName`, `VariantName`. The async queue metrics `ApproximateBacklogSize`, `ApproximateBacklogSizePerInstance`, `ApproximateAgeOfOldestRequest` and `HasBacklogWithoutCapacity` are published with **`EndpointName` only**; a query that adds `VariantName` returns no datapoints. References: https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html, https://docs.aws.amazon.com/sagemaker/latest/dg/async-inference-monitor.html
 
 Serverless & asynchronous inference signals (`AWS/SageMaker`): `ModelSetupTime` is the **cold-start** signal for serverless endpoints — a sustained high value with no Provisioned Concurrency on the `ServerlessConfig` is LLM-SM-SERVE-001; `OverheadLatency` also tracks serverless cold start. AWS documents `ModelSetupTime` for serverless endpoints; for async cold starts read `ApproximateBacklogSizePerInstance`/`ApproximateAgeOfOldestRequest` and the container log. Asynchronous endpoints additionally emit `ApproximateBacklogSizePerInstance` (queue depth, the scaling signal for LLM-SM-SERVE-004) and `ApproximateAgeOfOldestRequest` (how long the oldest queued request has waited); a growing backlog or oldest-request age with no scaling policy means the queue is backing up.
 

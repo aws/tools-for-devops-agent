@@ -18,14 +18,14 @@ rather than filling the gap.
 
 ## 2. Failed fast with no CloudWatch logs
 
-- **Read `FailureReason` first**, then the log group `/aws/sagemaker/TrainingJobs` (streams `[training-job-name]/algo-[n]-[timestamp]`) ([DescribeTrainingJob](https://docs.aws.amazon.com/sagemaker/latest/dg/API_DescribeTrainingJob.html), [log groups](https://docs.aws.amazon.com/sagemaker/latest/dg/logging-cloudwatch.html)).
+- **Read `FailureReason` first**, then the log group `/aws/sagemaker/TrainingJobs` (streams `[training-job-name]/algo-[n]-[timestamp]`) ([DescribeTrainingJob](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeTrainingJob.html), [log groups](https://docs.aws.amazon.com/sagemaker/latest/dg/logging-cloudwatch.html)).
 - **No log stream at all is also what an execution role without CloudWatch Logs permissions looks like** — AWS's training-role policy includes `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` and `logs:DescribeLogStreams`; check them before concluding the container never started ([CreateTrainingJob execution role](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-roles.html)).
 - **An image the role cannot pull** fails before any training code runs — the same policy lists `ecr:GetAuthorizationToken`, `ecr:BatchCheckLayerAvailability`, `ecr:GetDownloadUrlForLayer` and `ecr:BatchGetImage` for the training image repository ([CreateTrainingJob execution role](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-roles.html)).
 
 ## 3. Capacity versus quota
 
 - **`ResourceLimitExceeded` is an account resource limit** — request an increase through Service Quotas (LLM-SM-TRAIN-003) ([CreateTrainingJob errors](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateTrainingJob.html), [quotas](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.html)).
-- **`InsufficientInstanceCapacity` means AWS lacks capacity for that request at that moment**; EC2 documents retrying after a few minutes, requesting fewer instances, or using a different instance type. A quota increase does not add capacity — this skill's reading, consistent with the catalog row (LLM-SM-TRAIN-002) ([EC2 insufficient capacity](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/troubleshooting-launch.html)).
+- **`InsufficientCapacityError` means SageMaker found no capacity for the requested instance type within the pending wait** (`MaxPendingTimeInSeconds`, 30 minutes to 28 days); the documented options are an ordered list of candidate instance types, a longer wait, or another instance type or Region ([training capacity](https://docs.aws.amazon.com/sagemaker/latest/dg/train-get-capacity.html)). EC2's equivalent launch error is `InsufficientInstanceCapacity` ([EC2 insufficient capacity](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/troubleshooting-launch.html)). A quota increase does not add capacity — this skill's reading, consistent with the catalog row (LLM-SM-TRAIN-002).
 
 ## 4. Spot interruptions and checkpoints that do not resume
 

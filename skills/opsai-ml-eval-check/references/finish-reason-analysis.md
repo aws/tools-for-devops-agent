@@ -30,7 +30,7 @@ a user-reported quality incident into a quiet, pre-emptive fix.
 ---
 
 ## The `stopReason` field values
-
+The Converse API defines nine values ([Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)). In invocation logs the field sits under `output.outputBodyJson.stopReason`, not at the top level of the record ([model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html)); native `InvokeModel` bodies use each provider's own field.
 | Value | Meaning |
 |---|---|
 | `end_turn` | Natural completion — the model finished its answer on its own. The healthy majority case. |
@@ -38,6 +38,10 @@ a user-reported quality incident into a quiet, pre-emptive fix.
 | `stop_sequence` | The model emitted a configured stop sequence and halted (usually expected). |
 | `tool_use` | The model paused to invoke a tool (agentic / tool-calling flows). |
 | `guardrail_intervened` | A guardrail blocked or altered the response before completion. |
+| `content_filtered` | The response was stopped by content filtering. |
+| `malformed_model_output` | The model produced output that could not be parsed. |
+| `malformed_tool_use` | The model produced a tool-use request that could not be parsed. |
+| `model_context_window_exceeded` | **Truncation by context** — input plus output reached the model's context window. Read it with `max_tokens`: a rise here is the "prompts grew" cause below. |
 
 A stable workload is dominated by `end_turn` (plus `tool_use` for agentic flows). A rising
 `max_tokens` share is the regression indicator.
@@ -72,8 +76,10 @@ Once logging is on:
 
 1. Create a CloudWatch Logs **metric filter** on the Bedrock invocation log group:
    ```
-   { $.stopReason = "max_tokens" }
+   { $.output.outputBodyJson.stopReason = "max_tokens" }
    ```
+   A filter on the top-level `$.stopReason` matches nothing, because the field is nested under
+   `output.outputBodyJson`. Report such a filter under LLM-EVAL-013 as present but never matching.
 2. Publish it as a **custom metric** (for example namespace `OpsAI/FinishReason/MaxTokens` with a
    `ModelId` dimension).
 3. **Alarm** when the 1-hour `max_tokens` rate exceeds the established baseline by **more than 10
@@ -89,9 +95,9 @@ To see the full distribution (not just the `max_tokens` count), run this CloudWa
 query over the invocation log group:
 
 ```
-fields @timestamp, modelId, output.stopReason
-| filter ispresent(output.stopReason)
-| stats count(*) as invocations by output.stopReason, modelId
+fields @timestamp, modelId, output.outputBodyJson.stopReason as stopReason
+| filter ispresent(output.outputBodyJson.stopReason)
+| stats count(*) as invocations by stopReason, modelId
 | sort invocations desc
 ```
 

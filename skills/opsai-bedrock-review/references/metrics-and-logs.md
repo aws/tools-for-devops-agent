@@ -40,7 +40,7 @@ Token metrics (`InputTokenCount` / `OutputTokenCount`) are the primary signal fo
 
 ## AWS/Bedrock/Guardrails — guardrail metrics
 
-Namespace: `AWS/Bedrock/Guardrails`. Dimensions typically include guardrail identifier/version. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-monitor.html
+Namespace: `AWS/Bedrock/Guardrails`. Dimensions typically include guardrail identifier/version. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-guardrails-cw-metrics.html
 
 | Metric | Meaning |
 |---|---|
@@ -55,7 +55,7 @@ A spike in `InvocationsIntervened` can indicate an attack campaign or a prompt/m
 
 ## AWS/Bedrock/Agents — agent metrics
 
-Namespace: `AWS/Bedrock/Agents`. Dimensions include agent id/alias. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html and https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-agents-cw-metrics.html
+Namespace: `AWS/Bedrock/Agents`. Dimensions include agent id/alias. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html and https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-agents-cw-metrics.html
 
 | Metric | Meaning |
 |---|---|
@@ -71,7 +71,7 @@ Zero invocation data over a long window is the signal for the idle-agent check (
 
 ## Knowledge Base signals
 
-Knowledge Base ingestion health is read primarily from the data-plane/control-plane APIs (`GetIngestionJob` statistics), not a dedicated CloudWatch namespace. Underlying vector store (e.g., OpenSearch Serverless) exposes its own metrics in `AWS/AOSS`. Retrieval latency surfaces through the invoking agent/application. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-sync-ingest.html
+Knowledge Base ingestion health is read primarily from the data-plane/control-plane APIs (`GetIngestionJob` statistics), not a dedicated CloudWatch namespace. Underlying vector store (e.g., OpenSearch Serverless) exposes its own metrics in `AWS/AOSS`. Retrieval latency surfaces through the invoking agent/application. References: https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-sync-ingest.html (ingestion), https://docs.aws.amazon.com/opensearch-service/latest/developerguide/monitoring-cloudwatch.html (`AWS/AOSS`)
 
 ---
 

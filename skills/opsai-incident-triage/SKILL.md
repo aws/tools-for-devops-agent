@@ -325,8 +325,9 @@ over 24h, which is LLM-INV-011 (HIGH)". Open the prose with the locus in words a
 "The model-path evidence points to the application (locus APPLICATION, LLM-INV-011)". A block or
 table can be dropped when the answer is summarized; a sentence usually survives.
 
-**"Ruled out errors" requires both metric reads, named.** Read `InvocationClientErrors` **and**
-`InvocationServerErrors` from `AWS/Bedrock` over the stated window, each with its own row. A log scan
+**"Ruled out errors" requires three metric reads, named.** Read `InvocationClientErrors`,
+`InvocationServerErrors` **and** `InvocationThrottles` from `AWS/Bedrock` over the stated window, each
+with its own row; throttled requests are counted only in `InvocationThrottles`. A log scan
 alone does not support it — the invocation log does not capture pre-flight rejects, so
 `filter ispresent(errorCode) → 0 records` is true of the log and says nothing about the metric.
 
@@ -363,7 +364,9 @@ Step 1 — Provider health
 
 Step 2 — SERVER_ERRORS rate across models/endpoints
   cloudwatch:GetMetricData for the bound SERVER_ERRORS slot, by model/endpoint, over window.
-    → >5% server-error rate across MULTIPLE UNRELATED models, SAME region?  Strong PROVIDER.
+    → Server errors elevated above each model's own baseline in the window, across MULTIPLE
+      UNRELATED models, SAME region?  Strong PROVIDER. AWS publishes no server-error
+      threshold, so compare with the baseline; never apply a fixed percentage.
     → Elevated for only one model?  Weak signal; model-specific capacity or config.
 
 Step 3 — Blast radius: one vs many
@@ -401,7 +404,8 @@ Step 5b — Resolve every error to its CODE and its PRINCIPAL, never to its 4xx/
   principal goes in the Observed value cell after the token: `measured 15 AccessDenied by
   role <role-name>`.
   Then reconcile: the per-code counts must SUM to the metric total over the same window
-  (the bound CLIENT_ERRORS + SERVER_ERRORS slots).
+  (the bound CLIENT_ERRORS + SERVER_ERRORS + THROTTLES slots; on the bedrock binding a
+  ThrottlingException is counted in InvocationThrottles, not in InvocationClientErrors).
     → Sum equals the metric?        Report the enumeration; each code gets its own cause
                                     and its own remediation.
     → Sum does NOT equal?           Say so, give both numbers, name what is unaccounted for,
@@ -417,9 +421,11 @@ Step 5b — Resolve every error to its CODE and its PRINCIPAL, never to its 4xx/
                                     Pre-flight rejects (bad/unresolvable model id, denied
                                     caller) never reach the invocation log and carry NO
                                     ModelId dimension, so the metric sees them and the log
-                                    does not — that gap IS the remainder. EventName=InvokeModel
-                                    returns NOTHING: InvokeModel/Converse are data events and
-                                    the selector is normally off. Read the codes and the
+                                    does not — that gap IS the remainder. InvokeModel and
+                                    Converse are CloudTrail management events, logged by
+                                    default; query by EventSource, because EventName=InvokeModel
+                                    misses every Converse call (measured: 0 vs 49 events).
+                                    Count only eventType AwsApiCall. Read the codes and the
                                     principals off these events.
   NEVER name a code for the unaccounted remainder by inference. An unresolvable model id
   produces ValidationException and a denied caller produces AccessDenied; guessing
@@ -442,15 +448,16 @@ Step 6 — Rule. A TOTAL PRECEDENCE LADDER on COUNTS, never a share calculation.
   The ladder rules on the BOUND SLOTS, never on a literal metric name. Substitute the
   binding's names from Step 0; the logic below does not change with the hosting.
 
-  R1. CLIENT_ERRORS `measured N`, N >= 1, AND SERVER_ERRORS `measured 0`
-      or `no-datapoints`                                      → locus=APPLICATION.
+  R1. CLIENT_ERRORS `measured N` or THROTTLES `measured N`, N >= 1, AND SERVER_ERRORS
+      `measured 0` or `no-datapoints`                         → locus=APPLICATION.
       Client-error dominance is SATISFIED BY DEFINITION here, whatever N is relative to
       successes. One 4xx in 21 calls with zero 5xx is an APPLICATION ruling, not noise: a
       client error is a rejected request, and this slot pair cannot express a share.
       transience=PERSISTENT — a rejected request shape does not clear on retry. EXCEPTION:
-      where the only client-error code is ThrottlingException, transience=TRANSIENT if
-      Step 4 shows the throttle cleared within the window, and the locus moves to
-      INFRASTRUCTURE if quota posture rather than request shape is the cause.
+      where THROTTLES is the only non-zero slot (ThrottlingException is counted there, not
+      in CLIENT_ERRORS), transience=TRANSIENT if Step 4 shows the throttle cleared within
+      the window, and the locus moves to INFRASTRUCTURE if quota posture rather than
+      request shape is the cause.
       BINDING CAVEAT: on self-hosted-lambda the platform metric cannot split client from
       server (references/hosting-bindings.md). An undifferentiated error count does NOT
       satisfy R1 — go to R3 or R4 and name the un-splittable slot.
@@ -553,7 +560,7 @@ never one row per error class:
 | `ResourceNotFoundException` | 4xx | The named resource (model, agent, alias, KB) **does not resolve in this region**. Distinct from being entitled-but-denied. | LLM-INV-003 | `bedrock-configuration` (model/alias lifecycle) |
 | `AccessDeniedException` | 4xx | The model or action **exists** but the caller is **not entitled** — IAM, SCP, or model access not granted. Never a service fault. | LLM-INV-004 | `bedrock-configuration` (access) |
 | `ThrottlingException` | 4xx | Quota or capacity pressure. Check backoff before quota. | LLM-INV-007 | quota/backoff |
-| `ModelNotReadyException` | 5xx-like | Model warm-up; clusters at cold start. | LLM-INV-005 | retry/backoff |
+| `ModelNotReadyException` | 4xx (429) | The model is not ready to serve inference requests; the AWS SDK retries it automatically, up to 5 times ([Converse errors](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)). Provider-side readiness, not the caller's request shape, despite the 4xx status. | LLM-INV-005 | retry/backoff |
 | `ServiceUnavailableException` / `InternalServerException` | 5xx | Service-side transient. | LLM-INV-007 | retry/backoff/failover |
 
 Three distinctions are load-bearing and must survive into the output, because each one changes the
@@ -825,7 +832,7 @@ responses that cause false positives and false negatives in triage:
 - **CloudWatch "no datapoints" ≠ zero** (§10). No datapoints usually means no traffic / metric not
   emitted — not a measured zero. Misreading this invents a healthy signal that is not there.
 - **An invocation log with no errors ≠ no errors** (§15). Pre-flight rejects — bad model id, denied
-  caller — are counted by `InvocationClientErrors`, absent from the log, and absent from the
+  caller — are counted by `InvocationClientErrors` (throttles by `InvocationThrottles`), absent from the log, and absent from the
   per-`ModelId` breakdown. The metric total minus the logged codes is a real error population;
   resolve it per Step 5b, never by inference.
 - **Agent `PREPARED` ≠ what the alias serves** (§6) — **`agentcore` binding only.** On that binding,

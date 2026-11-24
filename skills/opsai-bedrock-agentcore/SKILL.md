@@ -44,9 +44,9 @@ example which Region or resource), and give what you can answer without it in th
 
 These are two different services with different resources and different checks, and the first thing to
 establish is which one the user is running. **AgentCore is where new work goes.** Bedrock Agents Classic
-is in **maintenance mode**: per the AWS product-page End of Support Notice it is "no longer available to
-new customers", and for existing customers it remains available with **no planned end-of-life date** but
-"no new features are planned", and AWS recommends migrating to AgentCore. Classic still runs real
+is in **maintenance mode**: per the [Agents Classic maintenance mode](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html) page it is no
+longer open to new customers from July 30, 2026, and for existing customers it remains available with **no
+planned end-of-life date** but "no new features are planned", and AWS recommends migrating to AgentCore. Classic still runs real
 production workloads and existing customers still raise cases, so the Classic checks remain in force —
 but a reader must know that half of this skill is **not growing**.
 
@@ -83,10 +83,10 @@ Gateway and Memory through resource-based policies (LLM-AC-014). It does **not y
 Evaluations** behaviour — that is stated here as
 known scope; do not invent checks for them.
 
-**API namespace note.** The `bedrock-agentcore-control` API namespace is being superseded by
-`agent-registry-control` for registry operations, and AWS docs label the `bedrock-agentcore-control`
-namespace "to be deprecated" in those examples. Do not write new checks against the older namespace
-without accounting for this.
+**API namespace note.** AWS Agent Registry has moved to its own `agent-registry` namespace, and support
+for the public-preview `bedrock-agentcore` namespace for registry operations ends on October 30, 2026
+([Agent Registry prerequisites](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/registry-prerequisites.html)).
+This affects registry operations only; runtime, gateway and memory reads stay under `bedrock-agentcore:`.
 
 ## When to Use
 
@@ -129,7 +129,7 @@ maintenance-mode coverage.
 | Runtime role permission denied | The runtime role's identity policies, action by action (`iam:SimulatePrincipalPolicy` only where the runtime allows it) | `references/checks-agentcore.md` (LLM-AC-001), `references/api-quirks.md` |
 | It is denied even though the role looks right (for example an admin role) | How the caller got its credentials: Full method: [`references/router-details.md`](references/router-details.md) §1 | [Session policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session), `references/checks-agentcore.md` (LLM-AC-002) |
 | An SCP denies `InvokeModel` only when the call goes through an application inference profile, while direct model calls succeed | The SCP `Deny` statement itself (`DescribePolicy`): Full method: [`references/router-details.md`](references/router-details.md) §2 | [Condition operators](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html), `references/checks-agentcore.md` (LLM-AC-002) |
-| Missing VPC endpoint / no private path | `ec2:DescribeVpcEndpoints` for bedrock-runtime, bedrock-agent-runtime, S3, logs, monitoring | `references/checks-agentcore.md` (LLM-AC-003) |
+| Missing VPC endpoint / no private path | `ec2:DescribeVpcEndpoints` for `ecr.dkr`, `ecr.api`, the S3 gateway endpoint, `logs`, and each AWS service the agent code calls (for example `bedrock-runtime`) | `references/checks-agentcore.md` (LLM-AC-003) |
 | Gateway target is failing | `GetGateway` / `ListGateways` and each target (`ListGatewayTargets` / `GetGatewayTarget`): endpoint, credential provider, schema | `references/checks-agentcore.md` (LLM-AC-004, LLM-AC-008) |
 | A call through a gateway returns 403 / `insufficient_scope` or another token error | The gateway's `authorizerConfiguration.customJWTAuthorizer`: Full method: [`references/router-details.md`](references/router-details.md) §3 | [Inbound JWT authorizer](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/inbound-jwt-authorizer.html), `references/checks-agentcore.md` (LLM-AC-004) |
 | Deploy, create or update of a runtime fails with a credentials or AccessDenied error, while model calls with the same identity work | The deploying identity's policies for `bedrock-agentcore:*` control-plane actions and `iam:PassRole` on the execution role (`bedrock:*` does not cover the `bedrock-agentcore` prefix) | [Runtime permissions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html), `references/checks-agentcore.md` (LLM-AC-001) |
@@ -171,17 +171,19 @@ Handling and `api-quirks.md`).
   access is still denied anything the session policy omits. The fix is in the code or auth system that
   calls `AssumeRole` (allow the needed actions in its session policy), not a broader role policy. Check
   the role's permissions boundary the same way.
-- [ ] Step 4: For a VPC-deployed runtime, check required endpoints with `ec2:DescribeVpcEndpoints`
-  (`bedrock-runtime`, `bedrock-agent-runtime`, S3 gateway, `logs`, `monitoring`); any absent is
-  **LLM-AC-003**.
-- [ ] Step 5: Check the gateway and its targets (`GetGateway` / `ListGateways`, `ListGatewayTargets` / `GetGatewayTarget`) for an
+- [ ] Step 4: For a VPC-deployed runtime in subnets without internet access, check the endpoints with
+  `ec2:DescribeVpcEndpoints`: the documented set (`ecr.dkr`, `ecr.api`, the S3 gateway endpoint, `logs`)
+  plus one for each AWS service the agent code calls (for example `bedrock-runtime` for model calls);
+  any absent is **LLM-AC-003**.
+- [ ] Step 5: Check the gateway and its targets (`GetGateway` / `ListGateways`, `ListGatewayTargets` /
+  `GetGatewayTarget`) for an
   unconfigured gateway or an invalid/failing target (LLM-AC-004), and for unrotated/long-lived target
   credentials (LLM-AC-008).
 - [ ] Step 6: Check observability — OTLP/AgentCore Observability enabled with stage-level spans
   (LLM-AC-005, CRITICAL), trace-context propagation across hops (LLM-AC-006), and structured JSON logs
   (LLM-AC-007).
-- [ ] Step 7: Check runtime version currency (LLM-AC-009) and session recording/replay (LLM-AC-010);
-  both are `workload-specific`.
+- [ ] Step 7: Check which version each runtime endpoint serves (LLM-AC-009) and whether sessions can be
+  reviewed in AgentCore Observability (LLM-AC-010); both are `workload-specific`.
 - [ ] Step 8: For throttling (429) or slowdown under load, name the throttling layer and the documented
   quota it hit before recommending anything (**LLM-AC-011**); same-session slowdown is shared session
   compute, not a network limit.
@@ -300,7 +302,7 @@ Non-negotiable, at every step:
 - "The Classic agent still works, so we can skip the migration advisory." Bedrock Agents Classic is in maintenance mode — closed to new customers, no new features. A still-working agent is **not** a reason to skip LLM-AGT-011; raise it anyway as advisory.
 - "CloudWatch returned no datapoints, so the agent is idle — decommission it." No datapoints and a measured zero are different (`api-quirks.md` §10). Confirm a measured zero over the window before calling an agent abandoned (LLM-AGT-004).
 - "There is a guardrail configured somewhere, so the agent is protected." This skill only checks that a guardrail **is attached** to the agent (LLM-AGT-001); strength is out of scope. An unattached guardrail protects nothing — for strength, follow *Related skills (optional)*.
-- "I'll write the new AgentCore check against `bedrock-agentcore-control`." That namespace is being superseded by `agent-registry-control` for registry operations and is labelled "to be deprecated"; account for the newer namespace before adding checks.
+- "I'll write a new Agent Registry check against `bedrock-agentcore`." Registry operations moved to the `agent-registry` namespace, and the public-preview `bedrock-agentcore` registry namespace is discontinued on October 30, 2026; runtime, gateway and memory checks are unaffected.
 
 ## Severity Definitions
 
@@ -372,8 +374,9 @@ Output template under `assets/`:
 AWS documentation:
 
 - [Bedrock Agents](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
-- [Agents and guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-guardrails.html)
+- [Agents and guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-guardrail.html)
 - [Create an action group](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-action-create.html)
 - [Deploy an agent (versions & aliases)](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-deploy.html)
-- [Bedrock AgentCore](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html)
+- [Bedrock AgentCore Developer Guide](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html)
+- [Agents Classic maintenance mode](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html)
 - [Agentic AI Lens — observability (AGENTREL08-BP02)](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/agentrel08-bp02.html)

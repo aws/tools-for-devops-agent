@@ -48,7 +48,7 @@ invented id. Where AWS says nothing (for example on input "mount" errors), say s
 ## 9. Capacity versus quota (endpoints and transform jobs)
 
 - **`ResourceLimitExceeded` is an account resource limit** — raise it through Service Quotas ([CreateEndpoint errors](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateEndpoint.html), [CreateTransformJob errors](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateTransformJob.html), [quotas](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.html)).
-- **`InsufficientInstanceCapacity` means AWS lacks capacity for that request right now**; EC2 documents retrying after a few minutes, requesting fewer instances, or using a different instance type. A quota increase does not add capacity — this skill's reading ([EC2 insufficient capacity](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/troubleshooting-launch.html)).
+- **A capacity shortfall means AWS lacks capacity for that request right now**: read the wording of the endpoint's or transform job's `FailureReason` rather than assuming an error name (EC2's own launch error is `InsufficientInstanceCapacity`; SageMaker training reports `InsufficientCapacityError`). EC2 documents retrying after a few minutes, requesting fewer instances, or using a different instance type. A quota increase does not add capacity — this skill's reading ([EC2 insufficient capacity](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/troubleshooting-launch.html)).
 
 ## 10. Serverless: cold start, concurrency limits and feature exclusions
 

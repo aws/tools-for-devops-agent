@@ -8,20 +8,20 @@ All metric names are as published by AWS. "AWS-published" means the metric/names
 
 ## AWS/Bedrock — model invocation metrics
 
-Namespace: `AWS/Bedrock`. Common dimensions: `ModelId` (and for some, operation/region). Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html
+Namespace: `AWS/Bedrock`. Common dimensions: `ModelId` (and for some, operation/region). Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html
 
 | Metric | Unit | Meaning | Typical statistic |
 |---|---|---|---|
 | `Invocations` | Count | Number of model invocation requests | Sum |
 | `InvocationLatency` | Milliseconds | End-to-end latency of an invocation | Average, p50/p90/p99 |
-| `InvocationClientErrors` | Count | 4xx-class client errors (bad request, access denied, validation) | Sum |
-| `InvocationServerErrors` | Count | 5xx-class server/service errors | Sum |
-| `InvocationThrottles` | Count | Requests throttled (quota / capacity) | Sum |
+| `InvocationClientErrors` | Count | 4xx-class client errors (bad request, access denied, validation), including requests rejected for exceeding a service quota. Throttled requests are **not** counted here | Sum |
+| `InvocationServerErrors` | Count | 5xx-class server/service errors. Throttled requests are **not** counted here | Sum |
+| `InvocationThrottles` | Count | Requests throttled. Counted only here, not in `Invocations`, `InvocationClientErrors` or `InvocationServerErrors`, so an error total or a per-code reconciliation must add this metric | Sum |
 | `InputTokenCount` | Count | Tokens in the input/prompt | Sum, Average |
 | `OutputTokenCount` | Count | Tokens generated in the output | Sum, Average |
 | `OutputImageCount` | Count | Images generated (image models) | Sum |
 | `TimeToFirstToken` | Milliseconds | Latency to first streamed token (streaming calls) | Average, p90 |
-| `EstimatedQuotaConsumption` | Count/percent | Estimated consumption against the invocation quota | Maximum |
+| `EstimatedTPMQuotaUsage` | Count | Estimated tokens-per-minute quota consumption across `Converse`, `ConverseStream`, `InvokeModel` and `InvokeModelWithResponseStream`; an approximation in tokens, not a percentage. There is no `EstimatedQuotaConsumption` metric | Sum |
 
 Token metrics (`InputTokenCount` / `OutputTokenCount`) are the primary signal for cost analysis — see `cost-analysis.md`.
 
@@ -29,7 +29,7 @@ Token metrics (`InputTokenCount` / `OutputTokenCount`) are the primary signal fo
 
 ## AWS/Bedrock/Guardrails — guardrail metrics
 
-Namespace: `AWS/Bedrock/Guardrails`. Dimensions typically include guardrail identifier/version. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-monitor.html
+Namespace: `AWS/Bedrock/Guardrails`. Dimensions typically include guardrail identifier/version. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-guardrails-cw-metrics.html
 
 | Metric | Meaning |
 |---|---|
@@ -44,7 +44,7 @@ A spike in `InvocationsIntervened` can indicate an attack campaign or a prompt/m
 
 ## AWS/Bedrock/Agents — agent metrics
 
-Namespace: `AWS/Bedrock/Agents`. Dimensions include agent id/alias. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html
+Namespace: `AWS/Bedrock/Agents`. Dimensions include agent id/alias. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-agents-cw-metrics.html
 
 | Metric | Meaning |
 |---|---|
@@ -60,7 +60,7 @@ Zero invocation data over a long window is the signal for the idle-agent check (
 
 ## Knowledge Base signals
 
-Knowledge Base ingestion health is read primarily from the data-plane/control-plane APIs (`GetIngestionJob` statistics), not a dedicated CloudWatch namespace. Underlying vector store (e.g., OpenSearch Serverless) exposes its own metrics in `AWS/AOSS`. Retrieval latency surfaces through the invoking agent/application. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-sync-ingest.html
+Knowledge Base ingestion health is read primarily from the data-plane/control-plane APIs (`GetIngestionJob` statistics), not a dedicated CloudWatch namespace. Underlying vector store (e.g., OpenSearch Serverless) exposes its own metrics in `AWS/AOSS`. Retrieval latency surfaces through the invoking agent/application. References: https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-sync-ingest.html (ingestion), https://docs.aws.amazon.com/opensearch-service/latest/developerguide/monitoring-cloudwatch.html (`AWS/AOSS`)
 
 ---
 
@@ -122,13 +122,13 @@ fields @timestamp, modelId, errorCode, input.inputTokenCount, output.outputToken
 
 ## Finish-reason distribution (quality signal)
 
-The `stopReason` field in Bedrock invocation logs records why the model stopped generating. Possible values: `end_turn` (natural completion), `max_tokens` (hit the token limit), `stop_sequence` (hit a stop sequence), `tool_use` (invoked a tool), `guardrail_intervened` (guardrail blocked).
+The `stopReason` field records why the model stopped generating. In Converse invocation logs it sits under `output.outputBodyJson.stopReason` ([model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html)). The Converse API defines nine values ([Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)): `end_turn`, `tool_use`, `max_tokens`, `stop_sequence`, `guardrail_intervened`, `content_filtered`, `malformed_model_output`, `malformed_tool_use` and `model_context_window_exceeded`.
 
 A shift in the distribution of `stopReason` from `end_turn` toward `max_tokens` is an early indicator that outputs are being truncated — either because prompts grew longer (crowding the output budget), because `maxTokens` was reduced, or because a model version change altered generation behavior. This signal precedes visible quality complaints by hours or days.
 
 Recommended metric filter (CloudWatch Logs):
 ```
-{ $.stopReason = "max_tokens" }
+{ $.output.outputBodyJson.stopReason = "max_tokens" }
 ```
 Publish as a custom metric (e.g., `OpsAI/FinishReason/MaxTokens` with dimension `ModelId`) and alarm when the 1-hour rate exceeds the baseline by >10 percentage points. See LLM-TEL-002 and LLM-EVAL-012.
 

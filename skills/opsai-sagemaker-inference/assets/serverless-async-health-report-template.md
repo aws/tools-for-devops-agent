@@ -20,7 +20,7 @@
 |---|---|---|---|---|
 | Cold start | `AWS/SageMaker` / `ModelSetupTime` | `<window>` | `<value / no datapoints>` | LLM-SM-SERVE-001 |
 | Throttling vs `MaxConcurrency` | invocation throttle metrics | `<window>` | `<value / no datapoints>` | LLM-SM-SERVE-002 |
-| Async queue depth | `AWS/SageMaker` / `ApproximateBacklogSizePerInstance` | `<window>` | `<value / no datapoints>` | LLM-SM-SERVE-004 |
+| Async queue depth | `AWS/SageMaker` / `ApproximateBacklogSizePerInstance` (dimension `EndpointName` only) | `<window>` | `<value / no datapoints>` | LLM-SM-SERVE-004 |
 > No datapoints ≠ zero (api-quirks §3). An absent `ModelSetupTime` is not "no cold start", and an
 > absent backlog is not "empty queue".
 ## Fit Decision (LLM-SM-SERVE-005)

@@ -27,7 +27,7 @@ DIRECT ANSWER: <the narrower yes/no the user literally asked for, when the line 
 ```
 
 Deciding signal: `<name the single Step 0-6 signal that decided it>`
-(e.g. "Step 2 — server-error rate >5% across 3 unrelated models in the same region").
+(e.g. "Step 2 — server errors above baseline across 3 unrelated models in the same region").
 
 **This line covers the model path.** Weigh it with everything else the investigation found, then
 state the conclusion and the one next step below it.

@@ -74,7 +74,7 @@ that log group only). Report what you read as evidence under LLM-INV-010 (destin
 restriction); there is no separate check-id for it.
 
 Raise LLM-INV-010 when text (or image) data delivery is on and a destination is weak. Remediation for
-a log group: `aws logs associate-kms-key --log-group-name <name> --kms-key-arn <cmk-arn>` (the key
+a log group: `aws logs associate-kms-key --log-group-name <name> --kms-key-id <cmk-arn>` (the key
 policy must allow the CloudWatch Logs service principal) and
 `aws logs put-retention-policy --log-group-name <name> --retention-in-days <n>`.
 
@@ -231,12 +231,13 @@ the account on first invocation. The Model access page applies to AWS GovCloud (
   `authorizationStatus`, `entitlementAvailability`, `regionAvailability`.
 - Prerequisites for the first invocation of a Marketplace-sold model: the invoking principal has
   `aws-marketplace:Subscribe`, `aws-marketplace:Unsubscribe`, `aws-marketplace:ViewSubscriptions`;
-  the account has a valid payment method. Anthropic models also need the first-time-use form
-  (`PutUseCaseForModelAccess`, or the console), once per account or at the Organization's
-  management account.
+  the account has a valid payment method. Anthropic models earlier than Claude Opus 4.7 also need
+  the first-time-use form (`PutUseCaseForModelAccess`, or the console), once per account or at the
+  Organization's management account; it does not apply to Opus 4.7 and later or to the
+  `bedrock-mantle` endpoint.
 - Remediation: make the first invocation from a principal that has the Marketplace permissions and
-  satisfies any condition keys on `bedrock:InvokeModel`; for Anthropic, submit the use-case form
-  first. If prerequisites are met, the model is supported in the Region, and AccessDenied persists,
+  satisfies any condition keys on `bedrock:InvokeModel`; for an Anthropic model earlier than Claude
+  Opus 4.7, submit the use-case form first. If prerequisites are met, the model is supported in the Region, and AccessDenied persists,
   the account needs additional access: contact AWS.
 
 ---

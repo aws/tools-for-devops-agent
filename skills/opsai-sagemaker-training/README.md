@@ -13,7 +13,7 @@ Covers two areas and returns findings grounded in one catalog, each with a stabl
 the concrete observed evidence, an AWS-doc citation, and a recommended (never executed) remediation:
 
 - **Training / customization (`LLM-SM-TRAIN-*`)** — a SageMaker training / customization job (Nova
-  fine-tuning/SFT/LoRA or JumpStart): corrupt/malformed training data, `InsufficientInstanceCapacity` vs an
+  fine-tuning/SFT/LoRA or JumpStart): corrupt/malformed training data, `InsufficientCapacityError` vs an
   instance quota of zero, recipe/hyperparameter validation, IAM/S3 access, an empty/misconfigured data
   channel, a job stuck **Pending on capacity** (not Failed), a completed job with no checkpoint, and the GPU
   cost billed for a failed or empty run.

@@ -17,7 +17,7 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 ## 3. Model access / `ListFoundationModels` — listed ≠ accessible
 
 - **Trap:** `ListFoundationModels` returns models that exist in the region. Presence in the list does **not** mean the account has been granted access to invoke them.
-- **Correct reading:** A model can appear in `ListFoundationModels` yet `InvokeModel` fails with `AccessDeniedException` because access was never requested/granted. Use model access status (and actual invocation errors in logs) to judge access, not list membership.
+- **Correct reading:** A model can appear in `ListFoundationModels` yet `InvokeModel` fails with `AccessDeniedException`. Access to many models is enabled by default with the right AWS Marketplace permissions; the usual causes are a missing `aws-marketplace` permission for the first (subscribing) call, an IAM or SCP deny, the Anthropic first-time-use form for Anthropic models earlier than Claude Opus 4.7, or additional account-level access the model needs ([model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html)). Judge access from those and from actual invocation errors, not list membership.
 
 ## 4. `modelLifecycle.status` — ACTIVE now, deprecated soon
 
@@ -66,8 +66,8 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 
 ## 13. `GetDataSource` chunking default
 
-- **Trap:** A missing/absent chunking configuration reads as "default is fine."
-- **Correct reading:** The default behavior depends on the data-source/API version and may be "no chunking" (whole-document) — poor for long heterogeneous docs. Treat an unset strategy as a tuning gap to confirm (LLM-KB-003), not a safe default.
+- **Trap:** A missing chunking configuration reads as "no chunking" (whole documents), or as a fault.
+- **Correct reading:** When the data source has no chunking configuration, Amazon Bedrock splits content into chunks of about 300 tokens, preserving sentence boundaries; whole-document chunking is the explicit `NONE` strategy ([customize ingestion](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-customize-ingestion.html)). An unset strategy is therefore a known default, not "no chunking"; treat it as a tuning question for long or heterogeneous documents (LLM-KB-003), not as a fault.
 
 ## 14. Cross-region inference profile IDs look region-prefixed but aren't a region override
 
@@ -77,6 +77,6 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 ## 15. Invocation log shows no errors ≠ there were no errors (pre-flight rejects)
 
 - **Trap:** `filter ispresent(errorCode) -> 0 records` over the invocation log reads as "no API errors in the window", and the answer goes out as a total claim.
-- **Correct reading:** A request rejected **before** model resolution — an unresolvable or malformed model id, a caller without `bedrock:InvokeModel` — never produces an invocation-log record and carries **no `ModelId` dimension**. `InvocationClientErrors` counts it; the log does not; the per-model breakdown does not. So a 0-record log scan is a fact about the log, and the metric total minus the sum of logged codes is a real population of errors nobody has attributed yet.
-- **How to attribute it:** `cloudtrail:LookupEvents` with `AttributeKey=EventSource`, `AttributeValue=bedrock.amazonaws.com` returns the `Converse`/`InvokeModel` events with their `errorCode` and `userIdentity.arn`. `AttributeKey=EventName, AttributeValue=InvokeModel` returns **nothing** — those are data events and the selector is off by default.
+- **Correct reading:** A request rejected **before** model resolution — an unresolvable or malformed model id, a caller without `bedrock:InvokeModel` — never produces an invocation-log record and carries **no `ModelId` dimension**. `InvocationClientErrors` counts it (throttled requests are counted in `InvocationThrottles` instead); the log does not; the per-model breakdown does not. So a 0-record log scan is a fact about the log, and the metric total minus the sum of logged codes is a real population of errors nobody has attributed yet.
+- **How to attribute it:** `cloudtrail:LookupEvents` with `AttributeKey=EventSource`, `AttributeValue=bedrock.amazonaws.com` returns the `Converse`/`InvokeModel` events with their `errorCode` and `userIdentity.arn`. These calls are CloudTrail **management** events, logged by default ([Bedrock and CloudTrail](https://docs.aws.amazon.com/bedrock/latest/userguide/logging-using-cloudtrail.html)). Query by `EventSource` and read `eventName` off the results: in the measured run below the callers used `Converse`, and an `EventName=InvokeModel` lookup returned 0 events. Count only `eventType` `AwsApiCall`; a streaming call also writes an `AwsServiceEvent` stream-completion event.
 - **Measured 2026-10-26:** account `InvocationClientErrors` 476/24h; invocation log 30 `ValidationException`; per-`ModelId` metric 30. The 446-error remainder was invisible to both the log and the model dimension, and CloudTrail resolved it to `ValidationException` plus `AccessDenied` across two execution roles. An agent that inferred `ResourceNotFoundException` for that remainder reported a 403 as a 404 (LLM-INV-004 mistaken for LLM-INV-003).

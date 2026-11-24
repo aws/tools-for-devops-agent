@@ -22,7 +22,7 @@ For each **failed** job, name the cause and cite `LLM-SM-BATCH-001`:
 > A `Failed` job is usually the data or the role, not the model container. Read `FailureReason` before
 > blaming the container.
 ## Output Reconciliation
-| Job | Input records | Output `.out` objects (`ListObjectsV2`) | Reconciled? | check-id |
+| Job | Input files | Output `.out` objects (`ListObjectsV2`) | Reconciled? | check-id |
 |---|---|---|---|---|
 | `<name>` | `<n>` | `<n>` | `<yes / short by n / output prefix empty>` | `<LLM-SM-BATCH-003 if short>` |
 > `Completed` means the job ran to the end, not that every record was scored (api-quirks §4).

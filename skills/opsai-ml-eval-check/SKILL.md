@@ -100,7 +100,7 @@ Assess only what the question or incident touches.
 
 A first-class capability of this skill, not a footnote. The finish-reason distribution is **a small check with outsized value** — an early, otherwise-invisible indicator of quality regression that no AWS alarm watches by default. A shift from `end_turn` (natural completion) toward `max_tokens` (truncation) means outputs are being cut off — because prompts grew and crowded the output budget, because `maxTokens` was reduced, or because a model version changed generation length. It **precedes visible quality complaints by hours or days.**
 
-When a quality regression is suspected, examine the finish-reason distribution early. The full analysis — the `stopReason` field values, the metric filter `{ $.stopReason = "max_tokens" }`, the derived >10pp alarm threshold, the Logs Insights distribution query, and the correlated signals (`OutputTokenCount` spikes, `InvocationLatency` rising, truncation complaints) — lives in [finish-reason-analysis.md](references/finish-reason-analysis.md) (load when a truncation or finish-reason shift is in question).
+When a quality regression is suspected, examine the finish-reason distribution early. The full analysis — the `stopReason` field values, the metric filter `{ $.output.outputBodyJson.stopReason = "max_tokens" }`, the derived >10pp alarm threshold, the Logs Insights distribution query, and the correlated signals (`OutputTokenCount` spikes, `InvocationLatency` rising, truncation complaints) — lives in [finish-reason-analysis.md](references/finish-reason-analysis.md) (load when a truncation or finish-reason shift is in question).
 
 **`stopReason` is not a CloudWatch metric.** The distribution can only be measured from the Bedrock invocation logs, so resolve the log group from `bedrock:GetModelInvocationLoggingConfiguration` before reasoning about truncation — the group name is a customer choice and must never be assumed. The collection mechanics (that probe, the record schema and the `stopReason` field path, the distribution query, and the fact that `OutputTokenCount`/`Invocations` are a *precursor* and not a measurement) are in [metrics-and-logs.md](references/metrics-and-logs.md) (load before querying the invocation logs).
 
@@ -155,7 +155,7 @@ Findings
 
 - An unqualified "zero API errors", "no errors in the window", "nothing failing", "no drift" may **not** appear in the prose. A negative lives in a `Findings` line, which forces the token, the window and the source API onto the same line as the claim.
 - A signal you did not query is `not-queried` — the claim is that you did not look, never that there was nothing there. Listing a metric in `cloudwatch:ListMetrics` is **not** querying it.
-- **"Ruled out errors" requires both metric reads, named.** Read `InvocationClientErrors` **and** `InvocationServerErrors` from `AWS/Bedrock` over the stated window, each with its own row. A log scan alone cannot carry it: the invocation log does not capture pre-flight rejects, so `0 records` is a fact about the log.
+- **"Ruled out errors" requires three metric reads, named.** Read `InvocationClientErrors`, `InvocationServerErrors` **and** `InvocationThrottles` from `AWS/Bedrock` over the stated window, each with its own row. Throttled requests are counted only in `InvocationThrottles`, not in either error metric ([Bedrock runtime metrics](https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html)). A log scan alone cannot carry it: the invocation log does not capture pre-flight rejects, so `0 records` is a fact about the log.
 
 ## What You Can and Cannot Verify from AWS APIs
 
@@ -279,8 +279,8 @@ Severities are assigned by the catalog, not improvised. SLAs are **operational g
 | Severity | Meaning | Example | Response SLA (derived) |
 |---|---|---|---|
 | **CRITICAL** | No quality safety net on a production GenAI path | No evaluation ever run (LLM-EVAL-001) in a region that supports evaluation | Immediate — same day |
-| **HIGH** | Serious quality risk likely to ship a regression | No regression gate before promotion (LLM-EVAL-007); finish-reason shift to `max_tokens` (LLM-EVAL-012); no metric filter on `stopReason` (LLM-EVAL-013); SageMaker eval job `Failed` (LLM-SM-EVAL-002) | Days |
-| **MEDIUM** | Meaningful gap vs best practice | Evaluation run manually, not in CI/CD (LLM-EVAL-002); `OutputTokenCount` rising with flat `Invocations` (LLM-EVAL-014); customized model promoted with no SageMaker eval run (LLM-SM-EVAL-001) | Next sprint |
+| **HIGH** | Serious quality risk likely to ship a regression | Evaluation run manually, not in CI/CD (LLM-EVAL-002); no regression gate before promotion (LLM-EVAL-007); finish-reason shift to `max_tokens` (LLM-EVAL-012); no metric filter on `stopReason` (LLM-EVAL-013); SageMaker eval job `Failed` (LLM-SM-EVAL-002) | Days |
+| **MEDIUM** | Meaningful gap vs best practice | `OutputTokenCount` rising with flat `Invocations` (LLM-EVAL-014); customized model promoted with no SageMaker eval run (LLM-SM-EVAL-001) | Next sprint |
 | **LOW** | Minor hardening or tidiness | A failed/stopped eval job never re-run (LLM-EVAL-011); eval dataset tidiness / coverage gaps of limited blast radius; SageMaker eval output not retained for comparison (LLM-SM-EVAL-003) | Backlog |
 | **INFO** | Observation with no AWS-published threshold | Quality-score bar is workload-specific; evaluation unsupported in region (advisory); a Bedrock-native job presented as SageMaker (LLM-SM-EVAL-004) | Document / monitor |
 
@@ -337,8 +337,8 @@ Output templates and delegation:
 AWS documentation:
 
 - [Bedrock model evaluation](https://docs.aws.amazon.com/bedrock/latest/userguide/evaluation.html)
-- [Model evaluation jobs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-evaluation-jobs.html)
-- [Bedrock model evaluation (overview)](https://docs.aws.amazon.com/bedrock/latest/userguide/model-evaluation.html)
+- [Model evaluation jobs](https://docs.aws.amazon.com/bedrock/latest/userguide/evaluation-automatic.html)
+- [Bedrock model evaluation (overview)](https://docs.aws.amazon.com/bedrock/latest/userguide/evaluation.html)
 - [RAG evaluation](https://docs.aws.amazon.com/bedrock/latest/userguide/evaluation-kb.html)
 - [GetEvaluationJob API](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_GetEvaluationJob.html)
 - [Model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html)

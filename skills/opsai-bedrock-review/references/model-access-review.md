@@ -79,7 +79,8 @@ if the user asks for a policy up front, give one only after the class is an IAM 
   GovCloud (US)). Read `GetFoundationModelAvailability` (`agreementAvailability.status` `AVAILABLE` /
   `PENDING` / `NOT_AVAILABLE` / `ERROR`). Fix: make the first invocation from a principal with
   `aws-marketplace:Subscribe`, `aws-marketplace:Unsubscribe`, and `aws-marketplace:ViewSubscriptions`;
-  for Anthropic models submit the first-time-use form first. A model in `ListFoundationModels` is
+  for Anthropic models earlier than Claude Opus 4.7 submit the first-time-use form first (not needed
+  for Opus 4.7 and later, or on the `bedrock-mantle` endpoint). A model in `ListFoundationModels` is
   **not** proof of access.
 
 ## Before You Present — Validate Your Own Output

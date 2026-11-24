@@ -3,15 +3,7 @@
 Per-step method for the RAG Health Review in `SKILL.md`: the exact read-only calls, the fields to
 read, and how to decide each LLM-KB check. This file belongs to this skill only. Where it is more
 specific than a shared reference (`collection-reference.md`, `api-quirks.md`, `metrics-and-logs.md`),
-**this file governs**. Known conflicts it overrides:
-
-- `collection-reference.md` lists a "KMS config" for `GetKnowledgeBase`. The `KnowledgeBase`
-  response has no KMS field. Encryption is read from the data source and the vector store (Step 7).
-- `collection-reference.md` says the data-plane clients are not used. This skill may run one
-  bounded `Retrieve` probe (Step 8). It never calls `RetrieveAndGenerate`.
-- `api-quirks.md` §13 says an unset chunking configuration "may be no chunking". It is not: the
-  service then chunks at about 300 tokens (Step 6).
-
+**this file governs**.
 All calls are read-only. Never call `StartIngestionJob`, `StopIngestionJob`, `UpdateDataSource`,
 `CreateSecurityPolicy`, `UpdateSecurityPolicy` or any other create/update/delete/start/stop API.
 

@@ -41,7 +41,7 @@ actions:
 - `sagemaker:DescribeEndpointConfig` (including `ServerlessConfig` / `AsyncInferenceConfig`),
   `sagemaker:DescribeModel`
 - `sagemaker:ListMonitoringSchedules`, `sagemaker:DescribeMonitoringSchedule`
-- `sagemaker:ListInferenceRecommenderJobs`
+- `sagemaker:ListInferenceRecommendationsJobs`
 - `sagemaker:ListModelPackages`, `sagemaker:DescribeModelPackage`
 - `sagemaker:ListTransformJobs`, `sagemaker:DescribeTransformJob`
 - `application-autoscaling:DescribeScalableTargets`, `application-autoscaling:DescribeScalingPolicies`

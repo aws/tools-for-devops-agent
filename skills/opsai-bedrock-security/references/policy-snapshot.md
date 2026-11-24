@@ -224,7 +224,7 @@ it switches to the short form.
 | One group's entry: still a preview with that name alone (S2 or S2s), S2s rejected for that name, or not in the snapshot | That group's evaluated users: U4 |
 | A customer managed policy: `iam:GetPolicy` or `iam:GetPolicyVersion` refused, a preview, or a persistent error other than a permission error | The users who hold it: U4. `NoSuchEntity`: the policy was deleted during the scan; evaluate without it and add W4 |
 | A needed AWS managed policy: S4 refused, unfiltered, rejected filter, unexpected or failed (not a permission error); S4 not made because an earlier snapshot call was refused or unfiltered; its entry still a preview alone; not in the snapshot; an empty `Statement` or a null `Version`; a name that cannot go in a filter | `AdministratorAccess`, `PowerUserAccess`, `AmazonBedrockFullAccess` or `AmazonBedrockLimitedAccess`: the catalog (`evaluation-outcomes.md` section 2), with W3. Any other: GRANT `unknown` for the users who hold it, U3 with the reason |
-| A permission or credential error on any snapshot or policy call | The account is failed, with the API, the error code and the fix (add the read-only IAM policy in the skill's README) |
+| A permission or credential error on any snapshot or policy call | The account is failed, with the API, the error code and the fix (deploy the `EnableOpsaiBedrockSecurity` parameter of the skill policies template) |
 
 There is no other source for AWS managed documents. The AWS tool rejects an `iam:GetPolicy` or
 `iam:GetPolicyVersion` request that names an AWS managed policy, so never send one.

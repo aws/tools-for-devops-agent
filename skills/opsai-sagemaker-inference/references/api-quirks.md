@@ -23,4 +23,4 @@ SageMaker read-only API responses whose obvious reading is **wrong** or misleadi
 ## 4. A transform job `Completed` ≠ every record scored
 
 - **Trap:** A transform job `TransformJobStatus: Completed` reads as "every record was scored."
-- **Correct reading:** A transform job `TransformJobStatus: Completed` is not proof every record was scored — the output `.out` object count can be short of the input record count (partial/failed records). Reconcile output against input with `ListObjectsV2`; treat `Completed` as "ran to the end", not "scored everything" (LLM-SM-BATCH-003).
+- **Correct reading:** A transform job `TransformJobStatus: Completed` is not proof every record was scored — batch transform writes one `<input>.out` per input file, only when every record in that file succeeded, so the `.out` count can be short of the input **file** count ([batch transform](https://docs.aws.amazon.com/sagemaker/latest/dg/batch-transform.html)). Reconcile output files against input files with `ListObjectsV2`; treat `Completed` as "ran to the end", not "scored everything" (LLM-SM-BATCH-003).

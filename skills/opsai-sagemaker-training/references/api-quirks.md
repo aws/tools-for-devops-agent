@@ -9,10 +9,10 @@ SageMaker read-only API responses whose obvious reading is **wrong** or misleadi
 - **Trap:** A training/customization job that has not started training yet — `TrainingJobStatus: InProgress` with `SecondaryStatus: Starting`/`Pending` while it waits on GPU capacity — reads to an impatient operator as "failing", and gets reported as a failure.
 - **Correct reading:** A job waiting on capacity is **control-plane-healthy**, not failed. Reporting it as a failure is a false positive. Report the true Pending-on-capacity status and prescribe **no** config change for a job that has not failed (LLM-SM-TRAIN-007). Only a `TrainingJobStatus: Failed` with a `FailureReason` is a failure.
 
-## 2. `InsufficientInstanceCapacity` ≠ a quota problem
+## 2. `InsufficientCapacityError` ≠ a quota problem
 
 - **Trap:** Any "the job won't get instances" symptom reads as "request a quota increase."
-- **Correct reading:** `InsufficientInstanceCapacity` is an **AWS-side** shortfall of the GPU instance type at that moment; a service quota of **zero** for the instance type is a **customer** limit. The remediations are **opposite** — retry/alternate instance or region for capacity (LLM-SM-TRAIN-002) versus `request-service-quota-increase` for a zero quota (LLM-SM-TRAIN-003). Distinguish by reading **both** the `FailureReason` and `service-quotas get-service-quota`; a quota increase does nothing for a capacity shortfall, and a retry does nothing for a zero quota.
+- **Correct reading:** `InsufficientCapacityError` (SageMaker's capacity failure; EC2 calls its own launch error `InsufficientInstanceCapacity`) is an **AWS-side** shortfall of the GPU instance type at that moment; a service quota of **zero** for the instance type is a **customer** limit. The remediations are **opposite** — retry/alternate instance or region for capacity (LLM-SM-TRAIN-002) versus `request-service-quota-increase` for a zero quota (LLM-SM-TRAIN-003). Distinguish by reading **both** the `FailureReason` and `service-quotas get-service-quota`; a quota increase does nothing for a capacity shortfall, and a retry does nothing for a zero quota.
 
 ## 3. `allow_percentage_invalid_samples` silently drops records
 

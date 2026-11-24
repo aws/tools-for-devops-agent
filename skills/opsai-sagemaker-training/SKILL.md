@@ -2,7 +2,7 @@
 name: opsai-sagemaker-training
 description: Diagnose an Amazon SageMaker training or customization job, including Nova and JumpStart fine-tuning,
   and review Model Registry governance of the models it produces. Use this skill when a training job is denied
-  access to S3, a KMS key or iam:PassRole, fails with InsufficientInstanceCapacity, ResourceLimitExceeded or out
+  access to S3, a KMS key or iam:PassRole, fails with InsufficientCapacityError, ResourceLimitExceeded or out
   of memory, goes to Failed with no logs, restarts after a spot interruption or skips its checkpoints, stalls as a
   multi-node run, times out in VPC mode, finds no input files, hides loss metrics or bills GPU time for a run with no model, and when a pipeline registers no model package version, deploys are not gated on approval
   status, a served model has no approved package, a package group must be shared across accounts, a package is
@@ -49,7 +49,7 @@ Activate this skill when the user:
 - Says a **Nova SFT+LoRA (or JumpStart) training/customization job failed or is stuck** and wants to know why.
 - Reports **corrupt or malformed training data**: a Bedrock Converse JSONL that does not parse, a wrong schema,
   or the invalid-sample tolerance exceeded.
-- Reports a job that **will not start**: `InsufficientInstanceCapacity`, a training instance quota of zero, or a
+- Reports a job that **will not start**: `InsufficientCapacityError`, a training instance quota of zero, or a
   job **stuck Pending on capacity**.
 - Reports a **recipe / hyperparameter validation error**, an **IAM/S3 access** failure on the training or recipe
   data, or an **empty / misconfigured data channel**.
@@ -79,7 +79,7 @@ reference; the table below is a what-it-catches index.
 | check-id | area | severity | what it catches |
 |---|---|---|---|
 | LLM-SM-TRAIN-001 | Training | HIGH | Job `Failed` on malformed/corrupt training data (JSONL parse, missing keys, invalid-sample tolerance exceeded). |
-| LLM-SM-TRAIN-002 | Training | HIGH | `InsufficientInstanceCapacity`: AWS-side GPU shortfall (retry/alternate, not a quota fix). |
+| LLM-SM-TRAIN-002 | Training | HIGH | `InsufficientCapacityError`: AWS-side GPU shortfall (retry/alternate, not a quota fix). |
 | LLM-SM-TRAIN-003 | Training | HIGH | Training instance-type service quota = 0: customer quota (request an increase). |
 | LLM-SM-TRAIN-004 | Training | HIGH | Recipe/hyperparameter validation failure (null or out-of-range `HyperParameters`). |
 | LLM-SM-TRAIN-005 | Training | HIGH | Execution-role `AccessDenied` on the training/recipe/output S3 (or KMS). |
@@ -105,11 +105,11 @@ any row.
 | The job won't start, there's no GPU capacity | Training | `DescribeTrainingJob` `FailureReason` and `SecondaryStatus` | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-002, 003), [api-quirks.md](references/api-quirks.md) |
 | It says the quota is exceeded, do I need a quota increase | Training | `service-quotas get-service-quota` for the training instance type | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-003) |
 | The recipe or hyperparameters were rejected | Training | `DescribeTrainingJob` `HyperParameters` and the S3 recipe object | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-004), [api-quirks.md](references/api-quirks.md) |
-| The job got access denied on S3 or KMS | Training | `DescribeTrainingJob` `RoleArn`, then `iam:SimulatePrincipalPolicy` on the data and output prefixes | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-005) |
+| The job got access denied on S3 or KMS | Training | `DescribeTrainingJob` `RoleArn`, then the role's policies (`iam:GetRolePolicy` / `iam:GetPolicyVersion`) for the data and output prefixes and the KMS key | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-005) |
 | The job ran but read no data, the channel is empty | Training | `InputDataConfig` S3 URIs, then `ListObjectsV2` on each prefix | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-006) |
 | The job has been Pending for hours, is it broken | Training | `TrainingJobStatus` and `SecondaryStatus` | [api-quirks.md](references/api-quirks.md) §1 (LLM-SM-TRAIN-007) |
-| It says Completed but I can't find the model | Training | `ModelArtifacts.S3ModelArtifacts`, then `HeadObject` | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-008), [metrics-and-logs.md](references/metrics-and-logs.md) |
-| Why was I billed for a run that gave nothing | Training | `BillableTimeInSeconds`, status and artifact check | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-002, 007, 008) |
+| It says Completed but I can't find the model | Training | `ModelArtifacts.S3ModelArtifacts`, then `ListObjectsV2` on that prefix | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-008), [metrics-and-logs.md](references/metrics-and-logs.md) |
+| Why was I billed for a run that gave nothing | Training | `BillableTimeInSeconds`, status and artifact check | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-007, 008; a capacity failure, LLM-SM-TRAIN-002, is not billed) |
 | Our fine-tuned model isn't in the registry, it was never registered | Model Registry | `ListModelPackages` for the artifact's S3 location | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-REG-001) |
 | The model in production isn't approved, it's pending or rejected | Model Registry | `DescribeEndpoint` deployed model, then `DescribeModelPackage` `ModelApprovalStatus` | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-REG-002), [api-quirks.md](references/api-quirks.md) §7 |
 | Is the registry group approved, which version is live | Model Registry | `ListModelPackages` versions vs the deployed or staged version | [api-quirks.md](references/api-quirks.md) §7 (LLM-SM-REG-002) |
@@ -183,13 +183,14 @@ remediations: read **both** the `FailureReason` and the quota value ([api-quirks
 
 ### Step 5 — Confirm the artifact and note billed GPU cost
 
-**Training / customization.** If `Completed`, confirm an artifact exists: `s3:HeadObject`/`ListObjectsV2` on
+**Training / customization.** If `Completed`, confirm an artifact exists: `ListObjectsV2` (`s3:ListBucket`) on
 `ModelArtifacts.S3ModelArtifacts` / the recipe output path. A succeeded job with no checkpoint is
 LLM-SM-TRAIN-008. Note that `allow_percentage_invalid_samples` can let a job `Complete` while silently dropping
 corrupt records ([api-quirks.md](references/api-quirks.md) §3); a "success" is not proof all data was used.
 
-**Cost.** Note billed GPU cost (`BillableTimeInSeconds`) for any failed, empty, or stalled run
-(LLM-SM-TRAIN-002/007/008).
+**Cost.** Note billed GPU cost (`BillableTimeInSeconds`) for any failed, empty, or stalled run that
+started on instances (LLM-SM-TRAIN-007/008). Billing runs from `TrainingStartTime` to `TrainingEndTime`,
+so a job that never started, such as a capacity failure (LLM-SM-TRAIN-002), was not billed.
 
 ### Step 6 — Review Model Registry governance
 
@@ -266,7 +267,7 @@ Non-negotiable, at every step:
 ## Common wrong answers
 
 - "The job is `InProgress` with `Pending`, so it is failing." A job waiting on GPU capacity is control-plane-healthy, not `Failed`. Report the true status and prescribe no config change (`api-quirks.md` §1, LLM-SM-TRAIN-007).
-- "It won't get instances, so request a quota increase." `InsufficientInstanceCapacity` is an AWS-side shortfall and the fix is retry or an alternate instance type or region; a quota of zero is a customer limit and needs `request-service-quota-increase`. Read both the `FailureReason` and `service-quotas get-service-quota` before choosing (`api-quirks.md` §2, LLM-SM-TRAIN-002, 003).
+- "It won't get instances, so request a quota increase." `InsufficientCapacityError` is an AWS-side shortfall and the fix is retry or an alternate instance type or region; a quota of zero is a customer limit and needs `request-service-quota-increase`. Read both the `FailureReason` and `service-quotas get-service-quota` before choosing (`api-quirks.md` §2, LLM-SM-TRAIN-002, 003).
 - "The job `Completed`, so all the training data was used." With an invalid-sample tolerance such as `allow_percentage_invalid_samples`, corrupt records are silently dropped and the job still completes. Check the drop count in the log, not just the status (`api-quirks.md` §3, LLM-SM-TRAIN-001).
 - "A required hyperparameter was left out, so it falls back to a default." Nova rejects a null or omitted required `HyperParameters` value at create time. It is a hard validation failure (`api-quirks.md` §4, LLM-SM-TRAIN-004).
 - "The recipe error is in the launch call parameter." Recipes are passed by S3 reference because the inline field is capped near 2500 characters. Inspect the S3 recipe object and confirm the execution role can read it (`api-quirks.md` §5, LLM-SM-TRAIN-004, 005, 006).
@@ -296,7 +297,7 @@ read-only responses that cause false positives and false negatives in this revie
 
 - **`InProgress`/`SecondaryStatus Pending` is NOT `Failed`** (§1). A job waiting on GPU capacity is
   control-plane-healthy; report Pending-on-capacity and prescribe no config change (LLM-SM-TRAIN-007).
-- **`InsufficientInstanceCapacity` (AWS-side) ≠ instance-type quota = 0 (customer)** (§2). Opposite remediations:
+- **`InsufficientCapacityError` (AWS-side) ≠ instance-type quota = 0 (customer)** (§2). Opposite remediations:
   retry/alternate for capacity (LLM-SM-TRAIN-002) vs a quota-increase request for a zero quota
   (LLM-SM-TRAIN-003). Read both the `FailureReason` and `service-quotas get-service-quota`.
 - **`allow_percentage_invalid_samples` silently drops records** (§3). A job can report `Completed` while dropping
@@ -372,11 +373,11 @@ Output templates under `assets/` (one per area; load the one for the area when a
 
 AWS documentation:
 
-- [Fine-tuning Amazon Nova models](https://docs.aws.amazon.com/nova/latest/userguide/customize-fine-tune.html)
+- [Fine-tuning Amazon Nova models](https://docs.aws.amazon.com/nova/latest/userguide/nova-fine-tune-1.html)
 - [Preparing data for Nova fine-tuning](https://docs.aws.amazon.com/nova/latest/userguide/fine-tune-prepare-data-understanding.html)
-- [DescribeTrainingJob](https://docs.aws.amazon.com/sagemaker/latest/dg/API_DescribeTrainingJob.html)
+- [DescribeTrainingJob](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeTrainingJob.html)
 - [How SageMaker provides training information](https://docs.aws.amazon.com/sagemaker/latest/dg/your-algorithms-training-algo-running-container.html)
-- [Training environment variables](https://docs.aws.amazon.com/sagemaker/latest/dg/your-algorithms-training-algo-envvariables.html)
+- [Training environment variables](https://docs.aws.amazon.com/sagemaker/latest/dg/your-algorithms-training-algo-running-container.html)
 - [SageMaker execution roles](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-roles.html)
 - [SageMaker endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/sagemaker.html)
 - [Model Registry](https://docs.aws.amazon.com/sagemaker/latest/dg/model-registry.html)
