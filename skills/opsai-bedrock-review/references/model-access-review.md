@@ -16,7 +16,7 @@ How to read each API and metric is in `references/collection-reference.md`. Load
 | Is log delivery actually landing in s3 or cloudwatch, is it encrypted | `loggingConfig` destination plus S3/KMS/log-group permissions | `references/checks-model-invocation.md` (LLM-INV-005, 010), `references/metrics-and-logs.md` |
 | Should i stream or use Converse, should this move to batch | Invocation pattern against streaming, Converse and batch adoption | `references/checks-model-invocation.md` (LLM-INV-006, 008, 009) |
 | Is maxTokens capped, are prompts in Prompt Management | The request body caps and whether prompts resolve from Prompt Management | `references/checks-model-invocation.md` (LLM-INV-011, 012) |
-| Am i getting throttled | `ThrottledCount` / throttle errors against backoff and profile spreading | `references/metrics-and-logs.md` (LLM-INV-007) |
+| Am i getting throttled | `InvocationThrottles` (`AWS/Bedrock`) and `ThrottlingException` errors, against backoff and profile spreading | `references/metrics-and-logs.md` (LLM-INV-007) |
 
 ## The Review Procedure
 Run the LLM-INV family against the account under review in the target region. Work the steps in order
