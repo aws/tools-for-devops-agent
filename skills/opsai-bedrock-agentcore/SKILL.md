@@ -8,7 +8,7 @@ description: Review the health of the agent layer on AWS, covering Amazon Bedroc
   name. Findings carry LLM-AC and LLM-AGT check-ids with a severity and an AWS-doc citation, from read-only
   APIs.
 metadata:
-  author: ydimawae
+  author: dimwael
   version: "1.0.0"
   tier: "aws-support-managed"
   summary: "Reviews Amazon Bedrock AgentCore and Bedrock Agents health: invocation, gateways, action groups, traces and live versions."

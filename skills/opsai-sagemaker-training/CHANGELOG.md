@@ -1,6 +1,7 @@
 # Changelog
 ## 1.0.0
 
+- PR #268 review item 2 (evals): `capacity-vs-quota` names `InsufficientCapacityError`, the failure reason SageMaker reports, instead of EC2's `InsufficientInstanceCapacity`.
 - PR #268 review item 1 (IAM reads and action names):
   - IAM: `servicequotas:` prefix (was `service-quotas:`); artifact and channel checks use `s3:ListBucket` only (no HeadObject / `s3:GetObject`); `iam:SimulatePrincipalPolicy` replaced by a static policy read.
   - Report template: input-check hint reads `ListObjectsV2` key metadata (`s3:ListBucket`), no HeadObject.

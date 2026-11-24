@@ -2,6 +2,7 @@
 
 ## 1.0.0
 
+- PR #268 review item 3 (evals): `kb-retrieval-throttling-quota` asks for one reply with no status message first (both runs had ended on "waiting for the scan"), asserts the embedding model's requests-per-minute quota and `LLM-KB-012`, and its expected output no longer names the non-existent `EstimatedQuotaConsumption` metric.
 - PR #268 review item 1 (IAM reads and action names):
   - IAM: no `bedrock:Retrieve` probe (retrieval questions use ingestion-job statistics), no `iam:SimulatePrincipalPolicy` (policies evaluated statically); `EnableOpsaiBedrockReview` also grants the AgentCore status reads.
   - Report template: the SimulatePrincipalPolicy example now reads "not called → evaluated from policy documents, not simulated".
