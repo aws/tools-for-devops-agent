@@ -138,7 +138,7 @@ How to read each API is in [collection-reference.md](references/collection-refer
 | Is my model being monitored, there's no data capture | Real-time | `DescribeEndpointConfig` `DataCaptureConfig`, `ListMonitoringSchedules` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-002) |
 | This endpoint looks idle, a variant shows zero instances | Real-time | `DescribeEndpoint` `CurrentInstanceCount`, then recent `Invocations` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-003), [api-quirks.md](references/api-quirks.md) §1 |
 | Do I have an A/B or canary variant | Real-time | `DescribeEndpoint` production-variant count and weights | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-004) |
-| Is my endpoint right-sized, did we run inference recommender | Real-time | `ListInferenceRecommenderJobs`, then both metric namespaces | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-005) |
+| Is my endpoint right-sized, did we run inference recommender | Real-time | `ListInferenceRecommendationsJobs`, then both metric namespaces | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-005) |
 | Is the endpoint in a VPC, is it encrypted | Real-time | `DescribeModel` `VpcConfig`, `DescribeEndpointConfig` `KmsKeyId` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-006, 007) |
 | Am I wasting money on an always-on endpoint | Real-time | `Invocations` volume vs provisioned capacity (idle cost), then the fit decision in Step 4 (LLM-SM-SERVE-005) | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-008) |
 | Latency is rising, I'm seeing 5xx errors | Real-time | `ModelLatency`, `Invocation5XXErrors`, then `DescribeAlarms` | [cloudwatch-alarm-reference.md](references/cloudwatch-alarm-reference.md) (LLM-SM-009) |
@@ -230,7 +230,7 @@ intentionally off" ([api-quirks.md](references/api-quirks.md) §2).
 
 ### Step 4 — Check right-sizing, fit and lineage
 
-**Real-time endpoint.** `ListInferenceRecommenderJobs` (LLM-SM-005); `ListModelPackages` / `DescribeModelPackage`
+**Real-time endpoint.** `ListInferenceRecommendationsJobs` (LLM-SM-005); `ListModelPackages` / `DescribeModelPackage`
 for registry lineage (LLM-SM-011). A right-sizing conclusion needs **both** metric namespaces — see Step 5.
 
 **Fit decision (one decision, made here).** Low or bursty traffic on an always-on real-time endpoint is the

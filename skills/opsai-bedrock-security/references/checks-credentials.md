@@ -22,7 +22,7 @@ from the policy evaluation in `policy-evaluation.md`.
 
 | Term | Exact meaning |
 |---|---|
-| Invoke actions | `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `bedrock:Converse`, `bedrock:ConverseStream`, `bedrock:CallWithBearerToken`, `bedrock-mantle:CallWithBearerToken`. Both bearer-token actions count because Amazon Bedrock API keys work through two endpoints |
+| Invoke actions | `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `bedrock:CallWithBearerToken`, `bedrock-mantle:CallWithBearerToken`. `bedrock:InvokeModel` also authorizes the Converse operation and `bedrock:InvokeModelWithResponseStream` the ConverseStream operation; `Converse` and `ConverseStream` are not IAM actions, so a policy statement that names either one under the `bedrock` prefix allows or denies nothing. Both bearer-token actions count because Amazon Bedrock API keys work through two endpoints |
 | Escalation actions | `aws-marketplace:Subscribe`, `bedrock:CreateMarketplaceModelEndpoint` (enable more models), `iam:CreateServiceSpecificCredential` (create new API keys), in this order |
 | Canary actions | `bedrock:DeleteCustomModel`, `bedrock:PutModelInvocationLoggingConfiguration`, `bedrock:DeleteGuardrail`, `bedrock:CreateProvisionedModelThroughput`, `bedrock:DeleteAgent`, `bedrock:DeleteKnowledgeBase` |
 | Admin-class policies | `arn:aws:iam::aws:policy/AdministratorAccess`, `arn:aws:iam::aws:policy/PowerUserAccess`, `arn:aws:iam::aws:policy/AmazonBedrockFullAccess`. A user holds one when its ARN is in the user's attached policies or in the attached policies of a group the user belongs to. Matched by exact ARN, not by evaluating the policy |

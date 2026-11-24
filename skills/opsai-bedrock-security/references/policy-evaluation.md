@@ -224,7 +224,7 @@ steps once.
 
 For each reading:
 
-1. Decide each of the six invoke actions, the six canary actions and the three escalation actions
+1. Decide each of the four invoke actions, the six canary actions and the three escalation actions
    (`checks-credentials.md` section 1) on the resource `*`.
 2. If `iam:CreateServiceSpecificCredential` is not allowed on `*`, decide it on the user's own ARN
    (the `Arn` of the user's entry). Allowed there counts as allowed. This
@@ -247,7 +247,7 @@ write them.
 1. **Named resources.** Go through the policies in this order: the user's inline policies;
    the managed policies attached to the user, then those attached to each group in `GroupList`
    order, each policy once; then each group's inline policies, in `GroupList` order. From every
-   Allow statement that covers an invoke action (an `Action` entry matches one of the six, or the
+   Allow statement that covers an invoke action (an `Action` entry matches one of the four, or the
    statement has a `NotAction` list, whatever it lists) and has no
    `NotResource` (absent or `null`), whatever its condition, take each `Resource` entry that is an
    Amazon Bedrock ARN. To test an entry, split it at its first five colons into six parts; an entry
@@ -275,7 +275,7 @@ write them.
 4. **Decide each probe.** Decide each invoke action on each probe as in section 6: a Deny that
    covers that action and applies to the probe denies that action only; otherwise an Allow that
    covers it and applies allows it. A probe is allowed when at least one invoke action remains
-   allowed on it, so a Deny on `bedrock:Converse` alone does not remove a probe that
+   allowed on it, so a Deny on `bedrock:InvokeModelWithResponseStream` alone does not remove a probe that
    `bedrock:InvokeModel` still reaches. Record a probe as explicitly denied when at least one
    invoke action is explicitly denied on it. Work statement by statement: for each statement that
    covers an invoke action, note which invoke actions it covers and which probes of each group its
