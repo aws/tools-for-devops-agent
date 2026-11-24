@@ -1,6 +1,6 @@
 ---
 name: sumo-logic-investigator
-description: Investigate incidents and answer operational and security questions with evidence from the customer's Sumo Logic org: logs, alerts, Cloud SIEM insights, detection rules, dashboards, and metrics and tracing through Mobot. Use during incident triage and root cause analysis when telemetry is in Sumo Logic, or when the user asks about errors, outages, latency, suspicious activity, alerts, monitors or ingestion, asks to search Sumo Logic logs, or mentions Sumo Logic or Mobot.
+description: Investigate incidents and answer operational and security questions with evidence from the customer's Sumo Logic org (logs, alerts, Cloud SIEM insights, detection rules, dashboards, and metrics and tracing through Mobot). Use during incident triage and root cause analysis when telemetry is in Sumo Logic, or when the user asks about errors, outages, latency, suspicious activity, alerts, monitors or ingestion, asks to search Sumo Logic logs, or mentions Sumo Logic or Mobot.
 metadata:
   author: vsinghal13
   version: "1.1.0"
