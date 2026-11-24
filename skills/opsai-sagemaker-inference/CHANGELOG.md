@@ -12,3 +12,4 @@
 - The capacity-versus-quota cause, duplicated in the endpoint and batch copies, is kept once (known-causes §9).
 - `api-quirks.md` renumbered to traps §1–§4 (InService, scalable targets, no datapoints, transform `Completed`); `DescribeScalableTargets` collection rows merged into one.
 - Old evals results (structure, best-practices, functional) not carried over; best-practices and functional must be re-run.
+- IAM: `sagemaker:ListInferenceRecommendationsJobs` (was a non-existent name); batch output is checked with `s3:ListBucket` only, without `s3:GetObject`.

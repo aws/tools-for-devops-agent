@@ -128,9 +128,8 @@ Non-negotiable, at every step:
    name only**, never the value or a partial value.
 4. **Never reproduce retrieved chunk content**, even when asked. Report chunk counts, source
    identifiers (S3 URIs) and relevance scores, never the chunk text, not even a snippet or excerpt,
-   and say why the text is withheld. A `Retrieve` probe is
-   allowed only as `references/knowledge-base-review.md` defines it (Step 8): at most two queries,
-   `numberOfResults` ≤ 5, content discarded.
+   and say why the text is withheld. Never call `Retrieve`: answer retrieval questions from
+   ingestion-job statistics (`references/rag-review-playbook.md` Step 8).
 5. **Evidence or silence.** Every finding cites the concrete value that triggered it. Distinguish
    "measured zero" from "no data reported" or "no job to read" (`references/api-quirks.md` §10).
 6. **A check-id on every finding.** Each finding references an LLM-INV or LLM-KB catalog check-id with

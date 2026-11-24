@@ -2,7 +2,9 @@
 
 The exact **read-only** API calls this skill uses to collect incident state, and the fields each contributes. All calls are describe/list/get/lookup — none mutate state. Use ReadOnly or least-privilege credentials (production safety).
 
-Bedrock has two control-plane clients: `bedrock` (model and logging config) and `bedrock-agent` (agents, knowledge bases). The data-plane clients `bedrock-runtime` and `bedrock-agent-runtime` are **not** used for collection — they invoke models, which costs money and proves nothing about the incident.
+Bedrock has two control-plane clients: `bedrock` (model and logging config) and `bedrock-agent` (agents, knowledge bases). Rows name **IAM actions**, and both clients authorize under the `bedrock:` prefix (`bedrock-agent` is a CLI and SDK client name, not an IAM prefix). The data-plane clients `bedrock-runtime` and `bedrock-agent-runtime` are **not** used for collection — they invoke models, which costs money and proves nothing about the incident.
+
+**Permissions.** The AWS managed policy `AIDevOpsAgentAccessPolicy` grants every read in this file except `bedrock:GetFoundationModelAvailability` and `bedrock:GetIngestionJob`. The `EnableOpsaiIncidentTriage` parameter of [devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) adds them, plus `bedrock-agentcore:ListAgentRuntimes` / `GetAgentRuntime` / `ListGateways` / `GetGateway` for the AgentCore status read in `related-skills.md`. Without it (or on AccessDenied) the call is a disclosed gap, not a finding: model access is judged from the error text, `bedrock:GetFoundationModel` lifecycle and CloudTrail; ingestion state from the `bedrock:ListIngestionJobs` summaries (status and per-job `statistics`, no `failureReasons`); and an AgentCore runtime is reported as unread, never as absent. `iam:SimulatePrincipalPolicy` is never called (fallback below).
 
 This is the triage subset. The companion catalogue `references/metrics-and-logs.md` says how to *read* each metric and log pattern; this file says *which call to make*. Load both with any router row.
 
@@ -54,16 +56,18 @@ If logging was off during the incident window, say so plainly and stop claiming 
 | `bedrock:ListFoundationModels` | `modelLifecycle.status`, modality and streaming support — is the model even valid here | LLM-INV-003, `ValidationException` triage |
 | `bedrock:ListInferenceProfiles` / `GetInferenceProfile` | profile type and member regions — cross-region routing surprises | LLM-INV-002 |
 | `bedrock:ListProvisionedModelThroughputs` | `status`, `modelUnits` — throttling with PT present reads differently | LLM-PT-001/002, `InvocationThrottles` |
-| `bedrock-agent:GetAgentAlias` / `ListAgentAliases` | alias → version pinning, the usual cause of "the agent changed by itself" | LLM-AGT-007, `api-quirks.md` §6 |
-| `bedrock-agent:ListIngestionJobs` | per-source job history; empty means never synced | LLM-KB-001, `api-quirks.md` §8 |
+| `bedrock:GetAgentAlias` / `bedrock:ListAgentAliases` | alias → version pinning, the usual cause of "the agent changed by itself" | LLM-AGT-007, `api-quirks.md` §6 |
+| `bedrock:ListIngestionJobs` | per-source job history; empty means never synced | LLM-KB-001, `api-quirks.md` §8 |
 
 ## Access and policy, for 4xx that look like outages
 
 | API (service) | Fields contributed | Feeds |
 |---|---|---|
-| `iam:SimulatePrincipalPolicy` | whether `bedrock:InvokeModel*` is actually permitted for the caller | `AccessDeniedException` triage, LLM-INV-013 |
+| `iam:ListAttachedRolePolicies` / `iam:ListRolePolicies` / `iam:GetRolePolicy` / `iam:GetPolicy` / `iam:GetPolicyVersion`, `iam:GetRole` (permissions boundary) | whether the caller's identity policies allow `bedrock:InvokeModel*` on the failing ARN, evaluated statically (fallback below) | `AccessDeniedException` triage, LLM-INV-013 |
 | `organizations:ListPoliciesForTarget` / `DescribePolicy` | SCP denies that mask as service failures | LLM-INV-015 |
-| `bedrock:GetFoundationModelAvailability` (where available) | model access / subscription state in region | LLM-INV-014 |
+| `bedrock:GetFoundationModelAvailability` (where available; needs `EnableOpsaiIncidentTriage`) | model access / subscription state in region | LLM-INV-014 |
+
+**Fallback for `iam:SimulatePrincipalPolicy`** (never called: the DevOps Agent runtime refuses it even when granted): evaluate the caller's policies read above, label the verdict "evaluated from policy documents, not simulated", and say what static reading cannot see: session policies, resource-based policies, and SCPs unless the Organizations reads succeed.
 
 An `AccessDeniedException` and a `ResourceNotFoundException` on a non-entitled model are both **customer config**, not service transient, however much the symptom looks like an outage. `ValidationException` is config too. Only the 5xx family and `ServiceUnavailableException` point at the service, and `AWS/Bedrock InvocationServerErrors` is frequently flat zero even during a real incident — see `metrics-and-logs.md`.
 

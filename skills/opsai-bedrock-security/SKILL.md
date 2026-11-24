@@ -156,8 +156,10 @@ Non-negotiable, at every step, in both areas:
 1. **Read-only.** Never create, rotate, deactivate or delete a credential, never attach or detach a
    policy, never create an SCP, and never offer to. Hand the policy or command to the customer. Never
    call a Bedrock invoking API, `bedrock:ApplyGuardrail` and `bedrock:InvokeGuardrailChecks` included:
-   they invoke the guardrail, are billable and can exercise a production path.
-2. **No role assumption and no simulator.** Never call `sts:AssumeRole`, AWS Organizations,
+   they invoke the guardrail, are billable and can exercise a production path. Read the guardrail's
+   configuration (`bedrock:GetGuardrail`) and reason from its policies instead.
+2. **No role assumption and no simulator.** Never call `sts:AssumeRole`, AWS Organizations (except
+   the guardrails review's `organizations:DescribeEffectivePolicy` read),
    `iam:SimulatePrincipalPolicy`, `iam:SimulateCustomPolicy`, any IAM `Generate*` call or IAM Access
    Analyzer. Evaluate policies with `references/policy-evaluation.md`.
 3. **Mask, always** (Output rule above), including in plans, prompts to sub-agents and replies you pass

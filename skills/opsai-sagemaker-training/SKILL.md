@@ -105,16 +105,16 @@ any row.
 | The job won't start, there's no GPU capacity | Training | `DescribeTrainingJob` `FailureReason` and `SecondaryStatus` | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-002, 003), [api-quirks.md](references/api-quirks.md) |
 | It says the quota is exceeded, do I need a quota increase | Training | `service-quotas get-service-quota` for the training instance type | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-003) |
 | The recipe or hyperparameters were rejected | Training | `DescribeTrainingJob` `HyperParameters` and the S3 recipe object | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-004), [api-quirks.md](references/api-quirks.md) |
-| The job got access denied on S3 or KMS | Training | `DescribeTrainingJob` `RoleArn`, then `iam:SimulatePrincipalPolicy` on the data and output prefixes | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-005) |
+| The job got access denied on S3 or KMS | Training | `DescribeTrainingJob` `RoleArn`, then the role's policies evaluated statically for the data and output prefixes (`iam:SimulatePrincipalPolicy` is never called) | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-005) |
 | The job ran but read no data, the channel is empty | Training | `InputDataConfig` S3 URIs, then `ListObjectsV2` on each prefix | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-006) |
 | The job has been Pending for hours, is it broken | Training | `TrainingJobStatus` and `SecondaryStatus` | [api-quirks.md](references/api-quirks.md) §1 (LLM-SM-TRAIN-007) |
-| It says Completed but I can't find the model | Training | `ModelArtifacts.S3ModelArtifacts`, then `HeadObject` | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-008), [metrics-and-logs.md](references/metrics-and-logs.md) |
+| It says Completed but I can't find the model | Training | `ModelArtifacts.S3ModelArtifacts`, then `ListObjectsV2` on that prefix | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-008), [metrics-and-logs.md](references/metrics-and-logs.md) |
 | Why was I billed for a run that gave nothing | Training | `BillableTimeInSeconds`, status and artifact check | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-TRAIN-002, 007, 008) |
 | Our fine-tuned model isn't in the registry, it was never registered | Model Registry | `ListModelPackages` for the artifact's S3 location | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-REG-001) |
 | The model in production isn't approved, it's pending or rejected | Model Registry | `DescribeEndpoint` deployed model, then `DescribeModelPackage` `ModelApprovalStatus` | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-REG-002), [api-quirks.md](references/api-quirks.md) §7 |
 | Is the registry group approved, which version is live | Model Registry | `ListModelPackages` versions vs the deployed or staged version | [api-quirks.md](references/api-quirks.md) §7 (LLM-SM-REG-002) |
 | Where did this model come from, can't trace it to training | Model Registry | `DescribeModelPackage`, then the lineage association to the training job | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-REG-003) |
-| Who can access our model package group, is the artifact encrypted | Model Registry | `GetModelPackageGroupPolicy`, then the artifact S3 encryption | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-REG-004) |
+| Who can access our model package group, is the artifact encrypted | Model Registry | The artifact S3 encryption; the group policy is reported as not evaluated (`sagemaker:GetModelPackageGroupPolicy` is not called: it is not in the managed policy) | [checks-sagemaker-training.md](references/checks-sagemaker-training.md) (LLM-SM-REG-004) |
 | No metrics for the registry, so is it healthy | Model Registry | Registry describe and list calls, not CloudWatch | [metrics-and-logs.md](references/metrics-and-logs.md), [api-quirks.md](references/api-quirks.md) §6 |
 
 ## Break-fix first
@@ -183,7 +183,7 @@ remediations: read **both** the `FailureReason` and the quota value ([api-quirks
 
 ### Step 5 — Confirm the artifact and note billed GPU cost
 
-**Training / customization.** If `Completed`, confirm an artifact exists: `s3:HeadObject`/`ListObjectsV2` on
+**Training / customization.** If `Completed`, confirm an artifact exists: `s3:ListBucket` (the ListObjectsV2 call; contents not read) on
 `ModelArtifacts.S3ModelArtifacts` / the recipe output path. A succeeded job with no checkpoint is
 LLM-SM-TRAIN-008. Note that `allow_percentage_invalid_samples` can let a job `Complete` while silently dropping
 corrupt records ([api-quirks.md](references/api-quirks.md) §3); a "success" is not proof all data was used.

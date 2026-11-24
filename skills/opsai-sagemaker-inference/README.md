@@ -41,13 +41,16 @@ actions:
 - `sagemaker:DescribeEndpointConfig` (including `ServerlessConfig` / `AsyncInferenceConfig`),
   `sagemaker:DescribeModel`
 - `sagemaker:ListMonitoringSchedules`, `sagemaker:DescribeMonitoringSchedule`
-- `sagemaker:ListInferenceRecommenderJobs`
+- `sagemaker:ListInferenceRecommendationsJobs`
 - `sagemaker:ListModelPackages`, `sagemaker:DescribeModelPackage`
 - `sagemaker:ListTransformJobs`, `sagemaker:DescribeTransformJob`
 - `application-autoscaling:DescribeScalableTargets`, `application-autoscaling:DescribeScalingPolicies`
 - `cloudwatch:ListMetrics`, `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics`,
   `cloudwatch:DescribeAlarms`
-- `s3:ListBucket`, `s3:GetObject` (HeadObject) on the transform output prefix
+- `s3:ListBucket` (the ListObjectsV2 call) on the transform output prefix: keys and sizes only. The skill
+  does not use `s3:GetObject`, which returns customer data
+
+`AIDevOpsAgentAccessPolicy` grants all of these, so no skill policies template parameter is needed.
 
 Prefer ReadOnly over Admin credentials (production safety).
 

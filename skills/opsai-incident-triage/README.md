@@ -67,13 +67,32 @@ Related skills are optional: when one is installed this skill uses it for that p
 
 Read-only IAM permissions in the account/region under investigation:
 
-- **Bedrock (read):** `bedrock:Get*`, `bedrock:List*`, `bedrock-agent:Get*`, `bedrock-agent:List*`
-  (model lifecycle, invocation-logging config, agent/alias resolution, knowledge-base ingestion jobs).
+- **Bedrock (read):** `bedrock:ListFoundationModels`, `bedrock:GetFoundationModel`,
+  `bedrock:GetModelInvocationLoggingConfiguration`, `bedrock:ListInferenceProfiles`,
+  `bedrock:GetInferenceProfile`, `bedrock:ListProvisionedModelThroughputs`, `bedrock:GetAgent`,
+  `bedrock:GetAgentAlias`, `bedrock:ListAgentAliases`, `bedrock:GetKnowledgeBase`,
+  `bedrock:ListIngestionJobs`, `bedrock:GetIngestionJob`, `bedrock:GetGuardrail`,
+  `bedrock:GetFoundationModelAvailability` (`bedrock-agent` is only the CLI client name; the IAM
+  prefix is `bedrock:`).
+- **CloudTrail, IAM and Organizations (read):** `cloudtrail:LookupEvents`; the caller's policy reads
+  (`iam:GetRole`, `iam:ListAttachedRolePolicies`, `iam:ListRolePolicies`, `iam:GetRolePolicy`,
+  `iam:GetPolicy`, `iam:GetPolicyVersion`); `organizations:ListPoliciesForTarget`,
+  `organizations:DescribePolicy`.
 - **CloudWatch:** `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics`,
   `cloudwatch:ListMetrics` (invocation errors, throttles, latency, `TimeToFirstToken`).
 - **CloudWatch Logs:** `logs:StartQuery`, `logs:GetQueryResults`, `logs:FilterLogEvents`,
   `logs:DescribeLogGroups` (invocation-log error-pattern and `stopReason` scans).
-- **AWS Health:** `health:DescribeEvents` (active service events in the affected region/window).
+- **AWS Health:** `health:DescribeEvents`, `health:DescribeAffectedEntities` (active service events
+  in the affected region/window).
+
+`AIDevOpsAgentAccessPolicy` grants all of these except `bedrock:GetFoundationModelAvailability` and
+`bedrock:GetIngestionJob`. Set the `EnableOpsaiIncidentTriage` parameter of the [skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
+(default `true`) to add them, plus the `bedrock-agentcore` runtime and gateway list/get reads used for
+the AgentCore hand-off. Without it the skill judges model access from the error text, model lifecycle
+and CloudTrail, reads ingestion state from the `ListIngestionJobs` summaries, and reports each denied
+read as a disclosed gap. It never calls `iam:SimulatePrincipalPolicy` (the agent runtime refuses it
+even when granted; it evaluates the policy documents instead) or `bedrock:ApplyGuardrail` (billable;
+it reads the guardrail configuration with `bedrock:GetGuardrail`).
 
 No write, modify, or delete permissions are needed or used.
 

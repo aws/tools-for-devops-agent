@@ -11,3 +11,4 @@
   one each; the knowledge-base quirks are §18 and §19.
 - Works on its own: sibling skills are optional, with a fallback check per area in
   `references/related-skills.md`.
+- IAM: no `bedrock:Retrieve` probe (retrieval questions use ingestion-job statistics), no `iam:SimulatePrincipalPolicy` (policies evaluated statically); `EnableOpsaiBedrockReview` also grants the AgentCore status reads.

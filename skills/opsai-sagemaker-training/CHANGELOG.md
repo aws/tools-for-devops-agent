@@ -9,3 +9,4 @@
 - `known-causes.md` merged into one file: training §1–§7, Model Registry §8–§14.
 - The registry catalog intro and report template no longer name the endpoint check-id for a deployed endpoint lacking lineage; they name the SageMaker endpoint area instead.
 - Old evals results (structure, best-practices, functional) not carried over; best-practices and functional must be re-run.
+- IAM: `servicequotas:` prefix (was `service-quotas:`); artifact and channel checks use `s3:ListBucket` only (no HeadObject / `s3:GetObject`); `iam:SimulatePrincipalPolicy` replaced by a static policy read.

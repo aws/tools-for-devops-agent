@@ -60,7 +60,7 @@ Zero invocation data over a long window is the signal for the idle-agent check (
 
 ## Knowledge Base signals
 
-Knowledge Base ingestion health is read primarily from the data-plane/control-plane APIs (`GetIngestionJob` statistics), not a dedicated CloudWatch namespace. Underlying vector store (e.g., OpenSearch Serverless) exposes its own metrics in `AWS/AOSS`. Retrieval latency surfaces through the invoking agent/application. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-sync-ingest.html
+Knowledge Base ingestion health is read primarily from the data-plane/control-plane APIs (the per-job `statistics` in `bedrock:ListIngestionJobs`), not a dedicated CloudWatch namespace. Underlying vector store (e.g., OpenSearch Serverless) exposes its own metrics in `AWS/AOSS`. Retrieval latency surfaces through the invoking agent/application. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/kb-data-source-sync-ingest.html
 
 ---
 

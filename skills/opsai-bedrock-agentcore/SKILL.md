@@ -126,7 +126,7 @@ maintenance-mode coverage.
 | Operator says | First read | Load |
 |---|---|---|
 | AgentCore runtime will not start / cannot invoke | `ListAgentRuntimes` / `GetAgentRuntime` for status, version, role ARN | `references/checks-agentcore.md` (LLM-AC-001) |
-| Runtime role permission denied | The runtime role's identity policies, action by action (`iam:SimulatePrincipalPolicy` only where the runtime allows it) | `references/checks-agentcore.md` (LLM-AC-001), `references/api-quirks.md` |
+| Runtime role permission denied | The runtime role's identity policies, action by action, evaluated from the policy documents (`iam:SimulatePrincipalPolicy` is never called) | `references/checks-agentcore.md` (LLM-AC-001), `references/api-quirks.md` |
 | It is denied even though the role looks right (for example an admin role) | How the caller got its credentials: Full method: [`references/router-details.md`](references/router-details.md) §1 | [Session policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session), `references/checks-agentcore.md` (LLM-AC-002) |
 | An SCP denies `InvokeModel` only when the call goes through an application inference profile, while direct model calls succeed | The SCP `Deny` statement itself (`DescribePolicy`): Full method: [`references/router-details.md`](references/router-details.md) §2 | [Condition operators](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html), `references/checks-agentcore.md` (LLM-AC-002) |
 | Missing VPC endpoint / no private path | `ec2:DescribeVpcEndpoints` for bedrock-runtime, bedrock-agent-runtime, S3, logs, monitoring | `references/checks-agentcore.md` (LLM-AC-003) |
@@ -158,10 +158,10 @@ Handling and `api-quirks.md`).
   version, endpoint, and the execution **role ARN** (mask the account segment when quoting it).
 - [ ] Step 2: Check the runtime role for every action it exercises (`bedrock:InvokeModel*`, `s3:GetObject`
   for sources, `logs:CreateLogStream`/`PutLogEvents`, gateway target actions); any required action
-  denied is **LLM-AC-001 (CRITICAL)**. `iam:SimulatePrincipalPolicy` is refused in the DevOps Agent
-  runtime, so read the role's inline and attached policies (`ListRolePolicies`/`GetRolePolicy`,
+  denied is **LLM-AC-001 (CRITICAL)**. Never call `iam:SimulatePrincipalPolicy` (the DevOps Agent
+  runtime refuses it even when granted): read the role's inline and attached policies (`ListRolePolicies`/`GetRolePolicy`,
   `ListAttachedRolePolicies`/`GetPolicyVersion`) and check each required action against them; report
-  the result as "read from policy documents, not simulated". Use the simulation only where it runs. Count `bedrock:InvokeModel*` as
+  the result as "evaluated from policy documents, not simulated" (fallback in `references/collection-reference.md`). Count `bedrock:InvokeModel*` as
   required only for a runtime that calls a model (a model ID in its environment or configuration).
 - [ ] Step 3: If a required action is denied, read effective SCPs
   (`organizations:ListPoliciesForTarget` / `DescribePolicy`) and correlate — an explicit SCP `Deny`

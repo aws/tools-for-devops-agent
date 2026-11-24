@@ -15,3 +15,4 @@
 - Recommended custom metric namespaces renamed to `OpsAI/Evaluation` and `OpsAI/FinishReason/MaxTokens`; dashboards or alarms built on the previous prefix need re-pointing.
 - The SageMaker report template is renamed `assets/sagemaker-evaluation-report-template.md`; the report template and delegation payload use an `Owning area` column instead of a skill name.
 - Old evals results (structure, best-practices, functional) not carried over; best-practices and functional must be re-run.
+- IAM: states the fallback when `bedrock:GetEvaluationJob` is denied and reads guardrail configuration with `bedrock:GetGuardrail` instead of `bedrock:ApplyGuardrail`.

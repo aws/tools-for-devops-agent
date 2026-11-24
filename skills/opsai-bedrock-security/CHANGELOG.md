@@ -10,4 +10,4 @@
   with that area's reference files under `references/` and `references/`.
 - Works on its own: sibling skills are optional, with a fallback check per area in
   `references/related-skills.md`.
-- One inline IAM policy (`opsai-bedrock-security-readonly`) now covers both areas.
+- IAM: the reads `AIDevOpsAgentAccessPolicy` lacks come from the `EnableOpsaiBedrockSecurity` template parameter (now also the AgentCore status reads); invoke actions name `bedrock:InvokeModel` / `InvokeModelWithResponseStream`, which authorize Converse / ConverseStream.

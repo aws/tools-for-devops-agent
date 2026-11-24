@@ -70,8 +70,8 @@ skill reports that resolution as a disclosed permission gap, not as an absent gu
 
 Set the `EnableOpsaiBedrockSecurity` parameter of the [skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
 (default `true`) when you deploy it for the Agent Space role, in every account you want reviewed. It adds
-exactly the actions above that `AIDevOpsAgentAccessPolicy` lacks, with no AWS Organizations or AWS STS
-action. The template [README](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/README.md)
+exactly the actions above that `AIDevOpsAgentAccessPolicy` lacks, plus the `bedrock-agentcore` runtime and
+gateway list/get reads for the AgentCore hand-off, with no AWS Organizations or AWS STS action. The template [README](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/README.md)
 has the deploy steps.
 
 What each check does when a permission is missing:
@@ -82,8 +82,12 @@ What each check does when a permission is missing:
 - `iam:GetAccountAuthorizationDetails`, `iam:GetPolicy`, `iam:GetPolicyVersion` or
   `iam:GetContextKeysForPrincipalPolicy` denied: that account is failed, and the answer names the API,
   the error and the template parameter that grants it.
+- `iam:GetAccountSummary`, `iam:ListAccessKeys`, `iam:GetAccessKeyLastUsed` or `iam:ListMFADevices`
+  denied: that account is failed, and the answer names the API, the error and the template parameter.
 - `bedrock:GetFlow` or `bedrock:GetAgentVersion` denied: the guardrail on that flow node or agent version
   is reported as a disclosed permission gap, not as an absent guardrail.
+- `bedrock-agentcore:GetAgentRuntime` (the AgentCore hand-off in `references/related-skills.md`, also
+  added by the parameter) denied: reported as a permission gap, not as an absent runtime.
 
 **The permission guardrail.** AWS DevOps Agent applies a session policy to every session it opens in
 your account, so the agent's effective permissions are the overlap of your role's policies and that
@@ -100,7 +104,8 @@ the skill has at most 32,000 characters**, so AWS DevOps Agent can return it who
 within that size when you extend the skill. IAM API calls have no charge.
 
 No write, modify or delete permission is needed or used. `bedrock:ApplyGuardrail` and
-`bedrock:InvokeGuardrailChecks` are never called: both invoke the guardrail and are billable.
+`bedrock:InvokeGuardrailChecks` are never called: both invoke the guardrail and are billable. The
+skill reads the guardrail's configuration (`bedrock:GetGuardrail`) and reasons from its policies instead.
 
 ### Agent Space
 

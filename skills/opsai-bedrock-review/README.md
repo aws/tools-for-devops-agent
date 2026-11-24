@@ -67,8 +67,6 @@ APIs authorize under the `bedrock:` IAM prefix (there is no `bedrock-agent:` IAM
   `bedrock:ListDataSources`, `bedrock:GetDataSource`, `bedrock:ListIngestionJobs`,
   `bedrock:GetIngestionJob`, `bedrock:ListAgents`, `bedrock:ListAgentVersions`,
   `bedrock:ListAgentKnowledgeBases`, `bedrock:ListEvaluationJobs`.
-- **Bedrock (optional, billed):** `bedrock:Retrieve` for the bounded retrieval probe (counts, URIs
-  and scores only).
 - **S3 (read):** `s3:ListBucket`, `s3:GetEncryptionConfiguration`, `s3:GetBucketPolicy`.
 - **OpenSearch Serverless (read, AOSS stores):** `aoss:BatchGetCollection`,
   `aoss:ListSecurityPolicies`, `aoss:GetSecurityPolicy`.
@@ -78,13 +76,15 @@ APIs authorize under the `bedrock:` IAM prefix (there is no `bedrock-agent:` IAM
 - **Service Quotas (read):** `servicequotas:GetServiceQuota`.
 
 The AWS managed policy `AIDevOpsAgentAccessPolicy` grants all of these except `bedrock:GetIngestionJob`,
-`bedrock:GetFoundationModelAvailability`, `s3:GetBucketPolicyStatus`, `iam:SimulatePrincipalPolicy` and
-`bedrock:Retrieve`. Set the `EnableOpsaiBedrockReview` parameter of the [skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) to add the first three.
-The template leaves out the other two: the agent runtime refuses `iam:SimulatePrincipalPolicy` even when
-granted, so the skill reads the policy documents and labels the verdict "read from policy documents, not
-simulated"; `bedrock:Retrieve` returns chunk text, so the probe stays your choice. The skill records each
-denied call, uses the documented fallback (job-summary statistics, no probe), and discloses what stays
-unconfirmed. No write, modify or delete permission is needed or used:
+`bedrock:GetFoundationModelAvailability` and `s3:GetBucketPolicyStatus`. Set the `EnableOpsaiBedrockReview`
+parameter of the [skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) to add them, plus the
+`bedrock-agentcore` runtime and gateway reads used for the AgentCore hand-off. The skill never calls
+`iam:SimulatePrincipalPolicy` (the agent runtime refuses it even when granted; it reads the policy
+documents and labels the verdict "evaluated from policy documents, not simulated"), `bedrock:Retrieve`
+(returns chunk text; retrieval questions use ingestion-job statistics) or `s3:GetObject` (returns
+customer data). The skill records each denied call, uses the documented fallback (job-summary
+statistics, error text and CloudTrail for model access, bucket policy and Block Public Access for
+exposure), and discloses what stays unconfirmed. No write, modify or delete permission is needed or used:
 `StartIngestionJob` is **recommended, never called**.
 
 ## Limitations
