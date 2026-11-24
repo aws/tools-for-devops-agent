@@ -2,6 +2,7 @@
 
 ## 1.0.0
 
+- PR #268 review item 3 (evals): `serverless-async-silent-failures` asks for one reply with no status message first (both runs had ended on "I've started the review") and asserts the `EndpointName`-only backlog dimension and `LLM-SM-SERVE-003`/`004`; `idle-endpoint-wasting-money` asserts no-datapoints reporting for an endpoint with no invocation data and `LLM-SM-003`/`008`.
 - PR #268 review item 1 (IAM reads and action names):
   - IAM: `sagemaker:ListInferenceRecommendationsJobs` (was a non-existent name); batch output is checked with `s3:ListBucket` only, without `s3:GetObject`.
 - Initial release. Merges the earlier SageMaker inference endpoints, serverless and async, and batch transform skills into one skill.

@@ -2,6 +2,7 @@
 
 ## 1.0.0
 
+- PR #268 review item 3 (evals): `grounding-score-near-threshold-invented-fact` is removed; it is reasoning over text given in the prompt and scored 7/7 with and without the skill. `guardrail-latency-streaming` asserts the trace fields `guardrailProcessingLatency` and `guardrailCoverage`; `tool-results-not-evaluated` asserts ruling out the ordinary zero-intervention causes and naming `ApplyGuardrail` for the application to call.
 - PR #268 review item 1 (IAM reads and action names):
   - IAM: the reads `AIDevOpsAgentAccessPolicy` lacks come from the `EnableOpsaiBedrockSecurity` template parameter (now also the AgentCore status reads); invoke actions name `bedrock:InvokeModel` / `InvokeModelWithResponseStream`, which authorize Converse / ConverseStream.
   - SCP assets: removed the Converse and ConverseStream entries, which are not IAM actions; `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`, already in the statements, authorize those API calls.
