@@ -1,0 +1,74 @@
+{
+  "version": "v4",
+  "iteration": 1,
+  "eval_id": "latency-impairment-fis",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identified that the root cause is not IOPS/throughput saturation but a deliberate AWS FIS latency-injection experiment (EXT1234567890abcdef_5 / EXP1234567890abcdef_7) using aws:ebs:volume-io-latency targeting vol-0123456789abcdef0. It explicitly checked and ruled out capacity/throttling limits (InstanceEBSIOPSExceededCheck, EBSIOBalance%, VolumeIOPSExceededCheck all showing no saturation), correctly correlated the alarm timing with FIS experiment windows, and explicitly recommended against adding more IOPS/throughput ('adding IOPS or throughput would not help'). This matches the expected root cause closely in substance: ruling out saturation, identifying the FIS-injected latency as the actual cause, and advising against additional provisioning. Minor gaps (not using DescribeVolumeStatus/AWS Health explicitly) don't change the conclusion's correctness.",
+      "evidence": "\"Root Cause: Deliberate AWS FIS latency injection (EXP1234567890abcdef_7) on vol-0123456789abcdef0... delays 100% of writes and 50% of reads by 500 ms... The volume has headroom (gp3 3,000 IOPS / 125 MiB/s, normally ~1,000 IOPS, ~33% of the limit), so adding IOPS or throughput would not help.\" and \"No IOPS or throughput throttling on the instance or volume: ... InstanceEBSIOPSExceededCheck and InstanceEBSThroughputExceededCheck ... were 0 the whole time.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the volume is below its provisioned limits and is not saturated.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The volume has headroom (gp3 3,000 IOPS / 125 MiB/s, normally ~1,000 IOPS, ~33% of the limit), so adding IOPS or throughput would not help.\" and \"No IOPS or throughput throttling on the instance or volume... Baseline load is ~1,000 total IOPS... and ~8 MiB/s of writes, well under the volume's 3,000 IOPS / 125 MiB/s limits.\"",
+          "reasoning": "The output explicitly states the volume's usage is well under its provisioned IOPS/throughput limits and that there is no capacity throttling, i.e., it is not saturated.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response checks volume status, AWS Health events and AWS FIS experiments before concluding.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"InstanceEBSIOPSExceededCheck and InstanceEBSThroughputExceededCheck on i-1234567890abcdef0_6 were 0 the whole time. EBSIOBalance% and EBSByteBalance% stayed at 99%\" (volume status checks); \"CloudTrail shows no other API activity against vol-0123456789abcdef0 from 17:30 to 19:36\" (CloudTrail checked); \"FIS experiments from template EXT1234567890abcdef_5 on 2026-11-23... EXP1234567890abcdef_7 has been running since 19:32:34 UTC\" (FIS checked).",
+          "reasoning": "The output clearly checks volume status metrics (IOPS/throughput exceeded checks, IO/Byte balance), CloudTrail activity, and FIS experiments extensively. However, there is no explicit mention of AWS Health events being checked anywhere in the output - this part of the assertion is not evidenced, though volume status and FIS experiments are thoroughly covered.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not recommend increasing IOPS, throughput or volume size.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The volume has headroom (gp3 3,000 IOPS / 125 MiB/s, normally ~1,000 IOPS, ~33% of the limit), so adding IOPS or throughput would not help.\" No recommendation anywhere in the output to increase IOPS, throughput, or volume size; instead the root cause is identified as FIS-injected latency.",
+          "reasoning": "The response explicitly states that adding IOPS or throughput would not help, and the entire investigation points to FIS latency injection as the cause rather than a capacity issue, with no recommendation to increase volume size or IOPS.",
+          "confidence": "high"
+        },
+        {
+          "text": "AWS FIS is checked",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'FIS'"
+        },
+        {
+          "text": "Impairment is named",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "4m14s",
+    "cost": "$2.11",
+    "context_window": {
+      "utilization": "6.9%",
+      "compaction_count": 0
+    }
+  }
+}
