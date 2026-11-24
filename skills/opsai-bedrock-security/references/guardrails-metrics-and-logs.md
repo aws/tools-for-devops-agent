@@ -147,4 +147,4 @@ Beyond the per-service metrics above, the strategy requires verifying stage-leve
 | Response generation | Post-processing latency; guardrail processing time per call (trace `invocationMetrics.guardrailProcessingLatency`, unit not given); guardrail `InvocationLatency` is request to last token, not only the guardrail's share | AWS/Bedrock/Guardrails metrics, guardrail trace |
 | End-to-end | Total session latency, trace propagation | AgentCore Observability |
 
-If any stage is invisible (no metrics, no spans, no logs), the operator cannot isolate where slowness or failure originates. See LLM-TEL-001 and LLM-AC-005.
+If any stage is invisible (no metrics, no spans, no logs), the operator cannot isolate where slowness or failure originates. See LLM-TEL-001; setting up AgentCore telemetry is the `agentcore-observability-setup` skill.

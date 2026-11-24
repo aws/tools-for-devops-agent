@@ -27,7 +27,7 @@ Reference: https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch
 | Memory saturation | `/aws/sagemaker/Endpoints` / `MemoryUtilization` | Average | `> 80%` | 60s | 3 of 3 | Derived |
 | GPU under-use (cost) | `/aws/sagemaker/Endpoints` / `GPUUtilization` | Average | `< 30%` sustained | 300s | 12 of 12 | Workload-specific |
 
-For auto-scaling (LLM-SM-001), use a **target-tracking** policy on `InvocationsPerInstance` rather than a step alarm; set the target from a load test / Inference Recommender run.
+For auto-scaling, use a **target-tracking** policy on `InvocationsPerInstance` rather than a step alarm; set the target from a load test / Inference Recommender run.
 
 ## Serverless & async alarms
 
