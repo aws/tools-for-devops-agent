@@ -174,7 +174,7 @@ The agent role needs these read-only actions in each account and Region you want
 
 The default DevOps Agent policy, `AIDevOpsAgentAccessPolicy`, grants every action above except
 `pricing:GetProducts`. The `EnableOpsaiCapacityCost` parameter of the
-[`devops-agent-skill-policies`](../../cloudformation/devops-agent-skill-policies/README.md)
+[`devops-agent-skill-policies`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/README.md)
 CloudFormation template adds it (a metadata read: the Price List API returns published prices, no
 account data). Without it the skill reads prices from the Bedrock pricing page and, if that page
 cannot be read, marks the affected figures "unpriced: pricing:GetProducts denied"; every other check
