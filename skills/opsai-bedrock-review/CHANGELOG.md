@@ -14,3 +14,5 @@
   one each; the knowledge-base quirks are §18 and §19.
 - Works on its own: sibling skills are optional, with a fallback check per area in
   `references/related-skills.md`.
+- The `description` says the skill is not for Bedrock spend or bills (`opsai-capacity-cost`) or for who
+  holds keys that can call Bedrock (`opsai-bedrock-security`), even when those skills aren't installed.
