@@ -1,16 +1,16 @@
 ---
 name: opsai-bedrock-review
-description: Review Amazon Bedrock configuration, model access and Knowledge Bases (RAG), read-only.
-  Use this skill when a Bedrock call fails with an access, validation or throttling error, when nobody
-  can see what the model is doing, when a model may be end-of-life or an inference profile is in
-  question, or when someone asks whether Bedrock is set up correctly; and when a knowledge base returns
-  nothing or stale answers, retrieval misses obvious documents, ingestion or sync failed or never ran,
-  or someone asks how a knowledge base should be configured or whether one is still in use. Use it even
-  if they do not mention invocation logging, IAM, service control policies, marketplace subscriptions,
-  chunking, embedding models, vector stores or hybrid search by name. Findings carry LLM-INV and LLM-KB
-  check-ids with a severity and an AWS-doc citation. In every sentence you write, from the first message
-  on and including plans and sub-agent prompts, never write the raw 12-digit account ID and never
-  reproduce retrieved chunk text.
+description: Review Amazon Bedrock configuration, model access and Knowledge Bases (RAG), read-only. Use it when
+  a Bedrock call fails with an access, validation or throttling error, no one can see what the model
+  does, a model may be end-of-life, an inference profile is in question, or someone asks whether
+  Bedrock is set up correctly; and when a knowledge base returns nothing or stale answers, retrieval
+  misses obvious documents, ingestion or sync failed or never ran, or someone asks how one should be
+  configured or whether it is still used. Use it even if they don't name invocation logging, SCPs,
+  marketplace subscriptions, chunking, embeddings, vector stores or hybrid search. Not for Bedrock
+  spend or bills (opsai-capacity-cost) or who holds keys that can call Bedrock
+  (opsai-bedrock-security), even if those aren't installed. Findings carry LLM-INV and LLM-KB
+  check-ids, a severity and an AWS-doc citation. In any text, plans and sub-agent prompts too, never
+  write the raw 12-digit account ID or reproduce retrieved chunk text.
 metadata:
   author: ankursinha286
   version: "1.0.0"
