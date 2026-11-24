@@ -1,0 +1,62 @@
+{
+  "version": "v3",
+  "iteration": 1,
+  "eval_id": "lambda-eventname-normalization",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'iam-access-navigator' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent correctly identified the core mapping: lambda:ListFunctions, lambda:GetFunction, s3:ListAllMyBuckets, s3:GetObject, logs:DescribeLogGroups, and correctly stripped the Lambda API-version suffixes without using raw event names. It also explicitly noted an attempt to validate via IAM Access Analyzer and flagged the policy as \"synthesized-but-unverified,\" which satisfies the 'notes that the policy should be validated before use' requirement.\n\nHowever, the expected output calls for a least-privilege policy containing ONLY those five actions (mapped appropriately). The agent added several extra, unrequested permissions not evidenced by any CloudTrail event: s3:ListBucket, s3:GetBucketLocation, logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents, and sts:GetCallerIdentity. This directly violates the least-privilege principle that is central to the task \u2014 the whole point of the exercise was to derive a minimal policy strictly from the observed CloudTrail events. Adding speculative \"headroom\" actions not observed in the 90-day CloudTrail log undermines the core requirement and could grant broader permissions than actually used, which is the opposite of least privilege. This is a significant deviation from the expected output's intent, even though the mapping table and validation note were otherwise correct.</reasoning>\n<parameter name=\"evidence\">\"I also added a small set of safe companion actions as headroom: ... Drop any of these if you know this role doesn't need them.\" \u2014 yet the policy JSON includes s3:ListBucket, s3:GetBucketLocation, logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents, sts:GetCallerIdentity, none of which correspond to any of the five CloudTrail events listed in the prompt.</parameter>\n<parameter name=\"confidence\">medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Recommends validating the generated policy before applying it",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"I tried to run this through IAM Access Analyzer's policy validator as a sanity check, but the call was denied in this account \u2014 so treat the action names as synthesized-but-unverified rather than validator-confirmed.\"",
+          "reasoning": "The agent explicitly attempted validation via IAM Access Analyzer and recommends treating the policy as unverified, implying the user should validate it before applying. This counts as recommending validation before applying.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Explains that the date suffix is stripped only for Lambda event names, not for every service",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The mapping table states 'Lambda API-version suffix stripped' for the two Lambda events, and for the other services (S3, CloudWatch Logs) it simply notes direct matches or naming mismatches (e.g., ListBuckets -> ListAllMyBuckets) without ever explicitly stating that the date-suffix-stripping rule is unique to Lambda and does not apply to other services.",
+          "reasoning": "The agent never explicitly contrasts the Lambda-specific suffix-stripping behavior with other services' naming conventions to clarify that this quirk is Lambda-specific. It only mentions the suffix stripping in the context of Lambda without a general statement that this does not apply elsewhere.",
+          "confidence": "medium"
+        },
+        {
+          "text": "No raw Lambda event name used as a policy action",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m13s",
+    "cost": "$0.61",
+    "context_window": {
+      "utilization": "5.5%",
+      "compaction_count": 0
+    }
+  }
+}
