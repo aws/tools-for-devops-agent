@@ -351,8 +351,10 @@ reaches into an area listed under *When NOT to Use*, read `references/related-sk
 2. If it isn't, cover that part yourself with the fallback check in that file and general AWS knowledge.
    Label anything that comes from general knowledge, and give it no check-id: this skill's check-ids are
    only for checks this skill runs.
-3. End the answer with one line recommending the missing skill and what it would add. Add it only when
-   that skill would have changed the answer, and only once.
+3. End the answer with one sentence for the operator: name the skill, say that adding it to the Agent
+   Space would have answered the part you covered by fallback, and stop there. You cannot install or load a
+   skill that is not already available. Add the sentence only when that skill would have changed the
+   answer, and only once.
 
 ## Appendix — Reference Links
 - [`references/router-details.md`](references/router-details.md): the full first-read method for the longer Router rows.
