@@ -31,13 +31,15 @@ actions:
 - `cloudwatch:ListMetrics`, `cloudwatch:GetMetricData`, `cloudwatch:GetMetricStatistics`
 - `sagemaker:ListTrainingJobs`, `sagemaker:DescribeTrainingJob` (SageMaker-side evals run as recipe-driven
   training jobs)
-- `s3:ListBucket` / `s3:ListObjectsV2` and `s3:GetObject` (HeadObject) on the eval dataset and output
-  prefixes
+- `s3:ListBucket` (the ListObjectsV2 call) on the eval dataset and output prefixes. The skill reads keys,
+  sizes and dates only; it does not use `s3:GetObject`, which returns customer data
 
 If your Agent Space uses the default role, the AWS managed policy
 [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security-devops-agent-iam-permissions.html)
-already grants the CloudWatch and CloudWatch Logs reads and, in most Agent Spaces, the Bedrock and
-SageMaker read actions. Prefer ReadOnly over Admin credentials (production safety).
+grants every action above except `bedrock:GetEvaluationJob`. Add it with the `EnableOpsaiMlEvalCheck`
+parameter of the [skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
+Without it the skill works from the `ListEvaluationJobs` summaries and reports the checks that need the
+job detail as not evaluated. Prefer ReadOnly over Admin credentials (production safety).
 ## Uploading
 Package the skill for upload, excluding repo-only files:
 ```bash

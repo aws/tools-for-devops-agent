@@ -12,7 +12,7 @@ description: Review Amazon Bedrock configuration, model access and Knowledge Bas
   on and including plans and sub-agent prompts, never write the raw 12-digit account ID and never
   reproduce retrieved chunk text.
 metadata:
-  author: iamankur
+  author: ankursinha286
   version: "1.0.0"
   tier: "aws-support-managed"
   summary: "Reviews Amazon Bedrock setup and Knowledge Bases: invocation logging, model access and lifecycle, denied calls, empty or stale RAG answers and failed ingestion."

@@ -202,7 +202,7 @@ Restate the goal in one line. Decide region(s) and which models/jobs are in play
 
 **Bedrock (model and RAG).** Using the EVAL section of [collection-reference.md](references/collection-reference.md), list and get evaluation jobs (`ListEvaluationJobs`, `GetEvaluationJob`): `applicationType` (`ModelEvaluation` | `RagEvaluation`), datasets, status, `failureMessages`, and scores. An **empty `ListEvaluationJobs` in a region that does not support Bedrock evaluation is NOT a CRITICAL** — report INFO/advisory. In a region that *does* support it, an empty list means no evaluation has ever been run (CRITICAL LLM-EVAL-001).
 
-**SageMaker.** Using the SM-EVAL section, read `ListTrainingJobs` / `DescribeTrainingJob` for the recipe job (`TrainingJobStatus`, `FailureReason`, eval-dataset S3 path, judge-model reference), the eval output prefix (`s3:ListObjectsV2` / `HeadObject`), and whether scores are published in `OpsAI/Evaluation` (`cloudwatch:ListMetrics`; absent datapoints are not a zero score, [api-quirks.md](references/api-quirks.md) §10).
+**SageMaker.** Using the SM-EVAL section, read `ListTrainingJobs` / `DescribeTrainingJob` for the recipe job (`TrainingJobStatus`, `FailureReason`, eval-dataset S3 path, judge-model reference), the eval output prefix (`ListObjectsV2`, authorized by `s3:ListBucket`), and whether scores are published in `OpsAI/Evaluation` (`cloudwatch:ListMetrics`; absent datapoints are not a zero score, [api-quirks.md](references/api-quirks.md) §10).
 
 ### Step 3 — Evaluate against the catalog for the path
 
@@ -323,7 +323,7 @@ Check catalog (each row: `check-id | pillar | severity | detection-rule | remedi
 Operational references:
 
 - [finish-reason-analysis.md](references/finish-reason-analysis.md) — load when truncation or a finish-reason shift is in question: `stopReason` values, metric filter, derived >10pp threshold, Logs Insights distribution query, correlated signals.
-- [collection-reference.md](references/collection-reference.md) — load with any Router row: read-only API calls (EVAL and SM-EVAL sections, plus other areas' calls as fallback knowledge) and the fields/checks they feed.
+- [collection-reference.md](references/collection-reference.md) — load with any Router row: read-only API calls (EVAL, SM-EVAL and quality-signal sections; other areas' calls are in `related-skills.md`) and the fields/checks they feed.
 - [metrics-and-logs.md](references/metrics-and-logs.md) — load before any log query or metric read: the invocation-log group probe, the record schema and `stopReason` field path, the distribution query, the `OutputTokenCount`/`Invocations` precursor pair, and SageMaker-side eval job signals (§7).
 - [api-quirks.md](references/api-quirks.md) — load before interpreting any empty response: misleading-response traps §1–§15 (esp. §2 region-gated evaluation, §10 no datapoints, §15 which service ran the eval).
 - [known-causes.md](references/known-causes.md) — load whenever the user names a SageMaker-side evaluation error or symptom: failure logs, the Engine core model-type mismatch, the `gen_qa.jsonl` schema, execution-role access, instance limits, `temperature` and judge standard errors and bootstrap bounds, the results artifact and MLflow fields, Bring-Your-Own-Metrics, each with its AWS-doc citation.

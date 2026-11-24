@@ -49,7 +49,7 @@ read-only actions: `iam:ListAccountAliases`, `iam:GetAccountSummary`, `iam:GetCr
 `iam:GetAccessKeyLastUsed`, `iam:ListMFADevices`, `iam:GetAccountAuthorizationDetails`,
 `iam:GetPolicy`, `iam:GetPolicyVersion` and `iam:GetContextKeysForPrincipalPolicy`.
 
-`AIDevOpsAgentAccessPolicy` (version v12 at the time of writing) grants five of them:
+`AIDevOpsAgentAccessPolicy` (version v16 at the time of writing) grants five of them:
 `iam:ListAccountAliases`, `iam:ListUsers`, `iam:GetUser`, `iam:GetPolicy` and `iam:GetPolicyVersion`.
 `iam:GetAccountAuthorizationDetails` lets the role read the policy documents of every IAM user and group
 in the account; the skill keeps only the users it evaluates and their groups.
@@ -66,59 +66,24 @@ Not in it: `bedrock:GetFlow` (guardrail configuration on Amazon Bedrock Flows no
 `bedrock:GetAgentVersion` (the guardrail recorded on the version an alias serves). Without them the
 skill reports that resolution as a disclosed permission gap, not as an absent guardrail.
 
-### One inline policy for both areas
+### Adding the missing permissions
 
-This policy grants every action above that `AIDevOpsAgentAccessPolicy` lacks. It has no AWS
-Organizations or AWS STS action:
+Set the `EnableOpsaiBedrockSecurity` parameter of the [skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
+(default `true`) when you deploy it for the Agent Space role, in every account you want reviewed. It adds
+exactly the actions above that `AIDevOpsAgentAccessPolicy` lacks, with no AWS Organizations or AWS STS
+action. The template [README](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/README.md)
+has the deploy steps.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "BedrockSecurityIamReadOnly",
-      "Effect": "Allow",
-      "Action": [
-        "iam:ListAccountAliases",
-        "iam:GetAccountSummary",
-        "iam:GetCredentialReport",
-        "iam:ListServiceSpecificCredentials",
-        "iam:ListUsers",
-        "iam:GetUser",
-        "iam:ListAccessKeys",
-        "iam:GetAccessKeyLastUsed",
-        "iam:ListMFADevices",
-        "iam:GetAccountAuthorizationDetails",
-        "iam:GetPolicy",
-        "iam:GetPolicyVersion",
-        "iam:GetContextKeysForPrincipalPolicy"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "BedrockGuardrailResolutionReadOnly",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:GetFlow",
-        "bedrock:GetAgentVersion"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
+What each check does when a permission is missing:
 
-Save it as a JSON file and add it as an inline policy on the Agent Space role in every account you
-want reviewed, with credentials for that account:
-
-```bash
-aws iam put-role-policy \
-  --role-name <agent-space-role-name> \
-  --policy-name opsai-bedrock-security-readonly \
-  --policy-document file://<path-to-saved-policy-file>
-```
-
-Running it again replaces the earlier version of the inline policy.
+- `iam:GetCredentialReport` unreadable: the report is marked unreadable and the account is not failed.
+- Account-wide `iam:ListServiceSpecificCredentials` denied: the account is partial, and the answer says
+  Amazon Bedrock API keys were not evaluated.
+- `iam:GetAccountAuthorizationDetails`, `iam:GetPolicy`, `iam:GetPolicyVersion` or
+  `iam:GetContextKeysForPrincipalPolicy` denied: that account is failed, and the answer names the API,
+  the error and the template parameter that grants it.
+- `bedrock:GetFlow` or `bedrock:GetAgentVersion` denied: the guardrail on that flow node or agent version
+  is reported as a disclosed permission gap, not as an absent guardrail.
 
 **The permission guardrail.** AWS DevOps Agent applies a session policy to every session it opens in
 your account, so the agent's effective permissions are the overlap of your role's policies and that

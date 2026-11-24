@@ -1,5 +1,5 @@
 # Changelog
-## [1.0.0] - 2026-11-19
+## 1.0.0
 - Initial release. Merges the earlier SageMaker training and Model Registry skills into one skill.
 - Training / customization: Nova and JumpStart fine-tuning job failures, capacity vs quota, Pending-on-capacity, missing checkpoints, billed GPU cost (LLM-SM-TRAIN-001..008).
 - Model Registry: registration, approval gating, lineage, package-group boundary and CMK encryption (LLM-SM-REG-001..004).

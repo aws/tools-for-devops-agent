@@ -194,7 +194,7 @@ inventoried.
 
 ## 5. Permissions
 
-The calls above need exactly these IAM actions, which the read-only IAM policy in the skill's README grants:
+The calls above need exactly these IAM actions, which the `EnableOpsaiBedrockSecurity` parameter of the skill policies template grants (the README lists which of them the managed policy already has):
 `iam:ListAccountAliases`, `iam:GetAccountSummary`, `iam:GetCredentialReport`,
 `iam:ListServiceSpecificCredentials`, `iam:ListUsers`, `iam:GetUser`, `iam:ListAccessKeys`,
 `iam:GetAccessKeyLastUsed`, `iam:ListMFADevices`, `iam:GetAccountAuthorizationDetails`,
@@ -225,7 +225,7 @@ any further; no preview is ever distilled.
 | Account-wide `iam:ListServiceSpecificCredentials` | Any other, or a preview at `MaxItems` 10 | Warning, then continue with the per-user listing (section 2); for a preview the warning gives `the AWS tool returned only a preview` as the reason |
 | `iam:ListUsers` | A preview at `MaxItems` 10 | The account is failed, with the reason `the AWS tool returned only a preview of iam:ListUsers` (Previews) |
 | `iam:ListUsers` | The AWS tool rejects the result filter L1 (a rejected filter, as `policy-snapshot.md` section 3 step 3 defines it) | Make the same call without the filter, read it the same way, and make the rest of that listing without the filter (Previews); a preview is then narrowed by halving `MaxItems` as before, and any other error is the last row's |
-| `iam:GetAccountAuthorizationDetails`, `iam:GetPolicy`, `iam:GetPolicyVersion`, `iam:GetContextKeysForPrincipalPolicy` | `AccessDenied`, `AccessDeniedException`, `UnauthorizedOperation`, `AuthFailure`, `ExpiredToken`, `ExpiredTokenException` | The account is failed; name the API and the error, and say that adding the read-only IAM policy in the skill's README grants the read |
+| `iam:GetAccountAuthorizationDetails`, `iam:GetPolicy`, `iam:GetPolicyVersion`, `iam:GetContextKeysForPrincipalPolicy` | `AccessDenied`, `AccessDeniedException`, `UnauthorizedOperation`, `AuthFailure`, `ExpiredToken`, `ExpiredTokenException` | The account is failed; name the API and the error, and say that the `EnableOpsaiBedrockSecurity` parameter of the skill policies template grants the read |
 | The same calls | Refused by the AWS tool (for example `Denied operation`, `blocked by policy`, `not in target accounts`) | Never retry: it is not an IAM permission error. Then, by call, as in the rows below for "any other" |
 | `iam:GetAccountAuthorizationDetails` | A preview, the filter not applied, the filter rejected, or a response cut off | `policy-snapshot.md` section 3 (a rejected request with several names is sent again with its first name only; a one-name rejection of S1 or S2 follows the next two rows, and one of S4 the S4 row below), then `policy-snapshot.md` section 4 |
 | `iam:GetAccountAuthorizationDetails` with S1 or S2 | The filter rejected for one name | The short form, S1s or S2s, for that name and every name still pending for that template in the account, one name per request (`policy-snapshot.md` section 3 step 3) |
@@ -241,8 +241,8 @@ any further; no preview is ever distilled.
 | Every other call in sections 1 and 2 | Any other, or a preview | The account is failed; for a preview, the reason `the AWS tool returned only a preview of <API>` |
 
 For a failed account, report the API and the error code in "Accounts that could not be audited", and
-when the error is a permission error, say that adding the read-only IAM policy in the skill's
-README to the account's AWS DevOps Agent role grants the missing read. A failed account because of a preview is
+when the error is a permission error, say that the `EnableOpsaiBedrockSecurity` parameter of the skill policies template,
+deployed for the account's AWS DevOps Agent role, grants the missing read. A failed account because of a preview is
 written without permission advice, for example `<alias>: the AWS tool returned only a preview of iam:ListUsers.`
 Any other call of sections 1 and 2 that has no row of its own above and comes back as a preview
 fails the account the same way, with its own API name in place of `iam:ListUsers`. Continue with the

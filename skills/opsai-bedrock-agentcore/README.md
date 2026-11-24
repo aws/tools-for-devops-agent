@@ -40,31 +40,20 @@ Related skills are optional: when one is installed this skill uses it for that p
 
 ## Prerequisites
 
-Read-only IAM permissions in the account/region under review:
+Read-only IAM permissions in the account and Region under review. The AWS managed policy
+`AIDevOpsAgentAccessPolicy` already grants the Bedrock Agents Classic reads (`bedrock:Get*` / `bedrock:List*`
+for agents, aliases and action groups; `bedrock-agent` is only the CLI client name, not an IAM prefix), the
+IAM policy reads, `organizations:ListPoliciesForTarget` / `DescribePolicy`, `ec2:DescribeVpcEndpoints`,
+`lambda:GetPolicy`, `cloudtrail:LookupEvents` and the CloudWatch and Logs reads.
 
-- **Bedrock Agents (read):** `bedrock-agent:Get*`, `bedrock-agent:List*` (agents, aliases, action
-  groups, prompts, memory config), and `bedrock:Get*` / `bedrock:List*` for model/inference-profile
-  context.
-- **Action-group Lambda scope:** `lambda:GetPolicy`, `iam:GetRole`, `iam:GetRolePolicy`,
-  `iam:ListAttachedRolePolicies`.
-- **IAM / Organizations (for AgentCore permission checks):** `iam:SimulatePrincipalPolicy`,
-  `organizations:ListPoliciesForTarget`, `organizations:DescribePolicy`.
-- **Networking:** `ec2:DescribeVpcEndpoints` (VPC-deployed runtimes).
-- **AgentCore (read, for LLM-AC-004 and LLM-AC-011..014):** `bedrock-agentcore:Get*` / `List*` for
-  runtimes, endpoints, gateways and targets, memories and browser/code-interpreter sessions, and
-  `bedrock-agentcore:GetResourcePolicy` (cross-account checks). `iam:GetRole` (permissions boundary)
-  and `cloudtrail:LookupEvents` (`AssumeRole` session policy) for the denied-caller checks. Without them
-  the skill reports the denial as a disclosed permission gap.
-- **CloudWatch / Logs:** `cloudwatch:GetMetricData`, `cloudwatch:ListMetrics`,
-  `logs:DescribeLogGroups`, `logs:DescribeMetricFilters` (activity, tracing, structured-log checks).
+> **AgentCore reads are NOT in `AIDevOpsAgentAccessPolicy`.** It has no `bedrock-agentcore` action and not
+> `bedrock:GetPrompt`. Set the `EnableOpsaiBedrockAgentCore` parameter of the [skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
+> (default `true`) to add them. Without it the skill reports each denied AgentCore read as a disclosed
+> permission gap, not as an absent runtime.
 
-> **CRITICAL — AgentCore reads are NOT in `AIDevOpsAgentAccessPolicy`.** The standard
-> `AIDevOpsAgentAccessPolicy` attached to the default Agent Space role does **not** include the
-> `bedrock-agentcore` namespace. AgentCore read actions (runtime, gateway, observability config) must be
-> granted **separately**. If they are not, the skill reports the denial as a disclosed permission gap —
-> not as an absent runtime.
-
-No write, modify, or delete permissions are needed or used.
+The skill does not use `iam:SimulatePrincipalPolicy`, which the agent runtime refuses even when granted: it
+reads the runtime role's policies and the SCPs and labels the verdict "read from policy documents, not
+simulated". No write, modify, or delete permissions are needed or used.
 
 ## Uploading to AWS DevOps Agent
 

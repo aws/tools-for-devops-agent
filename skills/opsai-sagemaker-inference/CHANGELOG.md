@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] - 2026-11-19
+## 1.0.0
 - Initial release. Merges the earlier SageMaker inference endpoints, serverless and async, and batch transform skills into one skill.
 - Real-time endpoints: failures, health check, VPC path, scaling, `ModelError`, right-sizing, lineage (LLM-SM-001..011).
 - Serverless and asynchronous endpoints: cold start, concurrency, notifications, backlog scaling, fit decision (LLM-SM-SERVE-001..005).

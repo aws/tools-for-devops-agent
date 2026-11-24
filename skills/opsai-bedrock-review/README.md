@@ -50,7 +50,7 @@ APIs authorize under the `bedrock:` IAM prefix (there is no `bedrock-agent:` IAM
 - `bedrock:GetFoundationModelAvailability` (AWS CLI 2.27.42 or later)
 - `bedrock:ListModelInvocationJobs`, `bedrock:ListPrompts`
 - `iam:ListRoles`, `iam:GetRole`, `iam:ListAttachedRolePolicies`, `iam:ListRolePolicies`,
-  `iam:GetRolePolicy`, `iam:GetPolicy`, `iam:GetPolicyVersion`, `iam:SimulatePrincipalPolicy`
+  `iam:GetRolePolicy`, `iam:GetPolicy`, `iam:GetPolicyVersion`
 - `organizations:DescribeOrganization`; `organizations:ListPoliciesForTarget` and
   `organizations:DescribePolicy` work only from the management account or a delegated administrator
 - `cloudtrail:LookupEvents` (InvokeModel and Converse are management events)
@@ -77,10 +77,14 @@ APIs authorize under the `bedrock:` IAM prefix (there is no `bedrock-agent:` IAM
   `logs:DescribeDeliverySources`.
 - **Service Quotas (read):** `servicequotas:GetServiceQuota`.
 
-Several of these are often denied to the DevOps Agent role. The standard `AIDevOpsAgentAccessPolicy`
-does not list `iam:SimulatePrincipalPolicy`, `bedrock:GetIngestionJob` or `bedrock:Retrieve`. The skill
-records each denied call, uses the documented fallback (job-summary statistics, no probe), and
-discloses what stays unconfirmed. No write, modify or delete permission is needed or used:
+The AWS managed policy `AIDevOpsAgentAccessPolicy` grants all of these except `bedrock:GetIngestionJob`,
+`bedrock:GetFoundationModelAvailability`, `s3:GetBucketPolicyStatus`, `iam:SimulatePrincipalPolicy` and
+`bedrock:Retrieve`. Set the `EnableOpsaiBedrockReview` parameter of the [skill policies template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) to add the first three.
+The template leaves out the other two: the agent runtime refuses `iam:SimulatePrincipalPolicy` even when
+granted, so the skill reads the policy documents and labels the verdict "read from policy documents, not
+simulated"; `bedrock:Retrieve` returns chunk text, so the probe stays your choice. The skill records each
+denied call, uses the documented fallback (job-summary statistics, no probe), and discloses what stays
+unconfirmed. No write, modify or delete permission is needed or used:
 `StartIngestionJob` is **recommended, never called**.
 
 ## Limitations

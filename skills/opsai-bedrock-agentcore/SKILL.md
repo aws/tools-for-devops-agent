@@ -55,7 +55,7 @@ but a reader must know that half of this skill is **not growing**.
 | What it is | A runtime you deploy and operate for your own agent code | Managed agents orchestrated by Bedrock, closed to new customers |
 | Core resources | runtimes, gateways, memories, workload identities | agents, action groups, aliases, prompts, memory |
 | How prod behaviour is set | the deployed **runtime version** | an **alias** points at a published **version** |
-| Primary collection client | `bedrock-agent` + `iam` + `ec2` + `organizations` | `bedrock-agent` control plane |
+| Primary collection client | `bedrock-agentcore-control` (IAM prefix `bedrock-agentcore:`) + `iam` + `ec2` + `organizations` | `bedrock-agent` (IAM prefix `bedrock:`) |
 | Representative checks | runtime role permissions, VPC endpoints, gateway targets, OTLP telemetry | guardrail attached, action-group Lambda scope, alias pinning, tracing |
 
 If the user says "my runtime cannot invoke," "gateway error," or "missing VPC endpoint," start in
@@ -126,11 +126,11 @@ maintenance-mode coverage.
 | Operator says | First read | Load |
 |---|---|---|
 | AgentCore runtime will not start / cannot invoke | `ListAgentRuntimes` / `GetAgentRuntime` for status, version, role ARN | `references/checks-agentcore.md` (LLM-AC-001) |
-| Runtime role permission denied | `iam:SimulatePrincipalPolicy` for every action the runtime exercises | `references/checks-agentcore.md` (LLM-AC-001), `references/api-quirks.md` |
+| Runtime role permission denied | The runtime role's identity policies, action by action (`iam:SimulatePrincipalPolicy` only where the runtime allows it) | `references/checks-agentcore.md` (LLM-AC-001), `references/api-quirks.md` |
 | It is denied even though the role looks right (for example an admin role) | How the caller got its credentials: Full method: [`references/router-details.md`](references/router-details.md) §1 | [Session policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session), `references/checks-agentcore.md` (LLM-AC-002) |
 | An SCP denies `InvokeModel` only when the call goes through an application inference profile, while direct model calls succeed | The SCP `Deny` statement itself (`DescribePolicy`): Full method: [`references/router-details.md`](references/router-details.md) §2 | [Condition operators](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html), `references/checks-agentcore.md` (LLM-AC-002) |
 | Missing VPC endpoint / no private path | `ec2:DescribeVpcEndpoints` for bedrock-runtime, bedrock-agent-runtime, S3, logs, monitoring | `references/checks-agentcore.md` (LLM-AC-003) |
-| Gateway target is failing | `GetAgentGateway` / `ListAgentGateways` and each target's endpoint/credential/schema | `references/checks-agentcore.md` (LLM-AC-004, LLM-AC-008) |
+| Gateway target is failing | `GetGateway` / `ListGateways` and each target (`ListGatewayTargets` / `GetGatewayTarget`): endpoint, credential provider, schema | `references/checks-agentcore.md` (LLM-AC-004, LLM-AC-008) |
 | A call through a gateway returns 403 / `insufficient_scope` or another token error | The gateway's `authorizerConfiguration.customJWTAuthorizer`: Full method: [`references/router-details.md`](references/router-details.md) §3 | [Inbound JWT authorizer](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/inbound-jwt-authorizer.html), `references/checks-agentcore.md` (LLM-AC-004) |
 | Deploy, create or update of a runtime fails with a credentials or AccessDenied error, while model calls with the same identity work | The deploying identity's policies for `bedrock-agentcore:*` control-plane actions and `iam:PassRole` on the execution role (`bedrock:*` does not cover the `bedrock-agentcore` prefix) | [Runtime permissions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html), `references/checks-agentcore.md` (LLM-AC-001) |
 | Access denied / 403 on an S3 bucket in another account (runtime code artifact or gateway target schema) | Which account owns the bucket vs the runtime/gateway, and the exact S3 field used | `references/api-quirks.md` §15 |
@@ -154,14 +154,14 @@ depend on reading the runtime first, so do not skip ahead. If an AgentCore read 
 default Agent Space role, that is a **disclosed permission gap**, not an absent resource (see Error
 Handling and `api-quirks.md`).
 
-- [ ] Step 1: Read the runtime with `bedrock-agent:ListAgentRuntimes` / `GetAgentRuntime` — status,
+- [ ] Step 1: Read the runtime with `bedrock-agentcore:ListAgentRuntimes` / `GetAgentRuntime` — status,
   version, endpoint, and the execution **role ARN** (mask the account segment when quoting it).
-- [ ] Step 2: Simulate the runtime role with `iam:SimulatePrincipalPolicy` for every action it exercises
-  (`bedrock:InvokeModel*`, `s3:GetObject` for sources, `logs:CreateLogStream`/`PutLogEvents`, gateway
-  target actions); any required action `denied` is **LLM-AC-001 (CRITICAL)**. If the simulation call
-  itself is denied, read the role's inline and attached policies (`ListRolePolicies`/`GetRolePolicy`,
+- [ ] Step 2: Check the runtime role for every action it exercises (`bedrock:InvokeModel*`, `s3:GetObject`
+  for sources, `logs:CreateLogStream`/`PutLogEvents`, gateway target actions); any required action
+  denied is **LLM-AC-001 (CRITICAL)**. `iam:SimulatePrincipalPolicy` is refused in the DevOps Agent
+  runtime, so read the role's inline and attached policies (`ListRolePolicies`/`GetRolePolicy`,
   `ListAttachedRolePolicies`/`GetPolicyVersion`) and check each required action against them; report
-  the result as read from the policy documents, not as unverified. Count `bedrock:InvokeModel*` as
+  the result as "read from policy documents, not simulated". Use the simulation only where it runs. Count `bedrock:InvokeModel*` as
   required only for a runtime that calls a model (a model ID in its environment or configuration).
 - [ ] Step 3: If a required action is denied, read effective SCPs
   (`organizations:ListPoliciesForTarget` / `DescribePolicy`) and correlate — an explicit SCP `Deny`
@@ -174,7 +174,7 @@ Handling and `api-quirks.md`).
 - [ ] Step 4: For a VPC-deployed runtime, check required endpoints with `ec2:DescribeVpcEndpoints`
   (`bedrock-runtime`, `bedrock-agent-runtime`, S3 gateway, `logs`, `monitoring`); any absent is
   **LLM-AC-003**.
-- [ ] Step 5: Check the gateway and its targets (`GetAgentGateway` / `ListAgentGateways`) for an
+- [ ] Step 5: Check the gateway and its targets (`GetGateway` / `ListGateways`, `ListGatewayTargets` / `GetGatewayTarget`) for an
   unconfigured gateway or an invalid/failing target (LLM-AC-004), and for unrotated/long-lived target
   credentials (LLM-AC-008).
 - [ ] Step 6: Check observability — OTLP/AgentCore Observability enabled with stage-level spans
@@ -203,7 +203,7 @@ in order against the catalog `references/checks-agents.md`. Each step collects w
 `references/collection-reference.md`) and maps the observed state to a check-id. Do not conclude what
 production runs until the alias is resolved (Step 2) — a prepared DRAFT is not what the alias serves.
 
-- [ ] Step 1: Enumerate agents with `bedrock-agent:ListAgents`; for each, `GetAgent` to read
+- [ ] Step 1: Enumerate agents with `bedrock:ListAgents`; for each, `bedrock:GetAgent` to read
   `guardrailConfiguration`, `foundationModel`, `memoryConfiguration`, and prompt-override config.
 - [ ] Step 2: Resolve each alias with `ListAgentAliases` / `GetAgentAlias` to the **version** it serves;
   treat that version — not the latest prepared DRAFT — as production behaviour (LLM-AGT-007). *(Alias /
@@ -296,7 +296,7 @@ Non-negotiable, at every step:
 
 - "`GetAgent` shows `PREPARED`, so that config is what production runs." An agent's live behaviour is its **alias → version** resolution, not the latest prepared DRAFT. Always resolve the alias to the version it serves before concluding what production runs (LLM-AGT-007).
 - "Model invocation works, so the deploy-time credentials error is a client-side credential problem." `InvokeModel` needs `bedrock:` actions; creating or updating a runtime needs `bedrock-agentcore:` control-plane actions, `iam:PassRole` for the execution role, and (for the AgentCore CLI) CloudFormation, S3, ECR and CodeBuild. A role with `bedrock:*` but no `bedrock-agentcore:` grant can call models and still fail to deploy. Read the deploying identity's policies first; re-authenticating alone does not fix a missing grant. Add the scoped `bedrock-agentcore` actions (not `*`), then retry the deploy.
-- "The AgentCore read returned AccessDenied, so no runtime exists." The standard `AIDevOpsAgentAccessPolicy` does **not** include the `bedrock-agentcore` namespace, so an AgentCore read that is denied is a **disclosed permission gap**, not an absent resource. Report "grant `bedrock-agentcore` read permissions separately."
+- "The AgentCore read returned AccessDenied, so no runtime exists." The standard `AIDevOpsAgentAccessPolicy` does **not** include the `bedrock-agentcore` namespace, so an AgentCore read that is denied is a **disclosed permission gap**, not an absent resource. Report "grant `bedrock-agentcore` read permissions separately (template parameter `EnableOpsaiBedrockAgentCore`)."
 - "The Classic agent still works, so we can skip the migration advisory." Bedrock Agents Classic is in maintenance mode — closed to new customers, no new features. A still-working agent is **not** a reason to skip LLM-AGT-011; raise it anyway as advisory.
 - "CloudWatch returned no datapoints, so the agent is idle — decommission it." No datapoints and a measured zero are different (`api-quirks.md` §10). Confirm a measured zero over the window before calling an agent abandoned (LLM-AGT-004).
 - "There is a guardrail configured somewhere, so the agent is protected." This skill only checks that a guardrail **is attached** to the agent (LLM-AGT-001); strength is out of scope. An unattached guardrail protects nothing — for strength, follow *Related skills (optional)*.
@@ -327,7 +327,8 @@ responses that cause false positives and false negatives. Two traps are decisive
 - **The standard `AIDevOpsAgentAccessPolicy` does NOT include the `bedrock-agentcore` namespace.** Under
   the default Agent Space role, AgentCore reads (`GetAgentRuntime`, gateway reads, OTLP config
   inspection) may be **denied**. Report that as a **disclosed permission gap** — "AgentCore read denied;
-  grant `bedrock-agentcore` read permissions separately" — **not** as an absent runtime. Concluding "no
+  grant `bedrock-agentcore` read permissions separately (template parameter `EnableOpsaiBedrockAgentCore`)"
+  — **not** as an absent runtime. Concluding "no
   runtime exists" from an access denial is a false negative.
 
 Other quirks that matter here: **CloudWatch "no datapoints" ≠ zero** (§10) — an idle-agent conclusion

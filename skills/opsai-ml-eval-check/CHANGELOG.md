@@ -1,5 +1,5 @@
 # Changelog
-## [1.0.0] - 2026-11-19
+## 1.0.0
 - Initial release. Merges the earlier quality evaluation and SageMaker evaluation skills into one skill.
 - Bedrock evaluation: model evaluation (`CreateEvaluationJob`, automated or human), Bedrock RAG evaluation jobs on a knowledge base, quality gates, regression detection and A/B comparison (LLM-EVAL-001..011).
 - Finish-reason drift from Bedrock invocation logs (LLM-EVAL-012..014).
