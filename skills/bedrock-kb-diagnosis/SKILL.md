@@ -2,15 +2,16 @@
 name: bedrock-kb-diagnosis
 description: >
   Use this skill when diagnosing a deployed Amazon Bedrock Knowledge Base (RAG) that stops
-  answering correctly: queries return no sources, answers miss recent documents or cite removed
-  content, a sync failed or never ran, a document never indexed, indexing fails, or ingestion
-  is throttled. It identifies the knowledge base and its data sources, walks the pipeline
-  (source, ingestion, embedding, vector store, query), and stops at the first layer with
-  evidence of a fault, naming the layer, the evidence (API, field, value), and the fix for the
-  operator to run. Read-only throughout. Do NOT use to build or configure a knowledge base, to
-  measure retrieval quality or run evaluation jobs, for a pre-deployment posture review (use
-  bedrock-operation-review), for an IAM AccessDenied on ingestion or retrieval (use
-  aiml-access-diagnostics), or for embedding-model quota headroom (use service-quota-check).
+  answering correctly: it returns no sources, suddenly stopped returning results, answers miss
+  recent documents or cite removed content, a sync failed or never ran, a document never
+  indexed, indexing fails, or ingestion is throttled. It identifies the knowledge base and its
+  data sources, walks the pipeline (source, ingestion, embedding, vector store, query), and
+  stops at the first layer with evidence of a fault, naming the layer, the evidence (API, field,
+  value), and the fix for the operator to run. Read-only throughout. Do NOT use to build or
+  configure a knowledge base, to measure retrieval quality or run evaluation jobs, for a
+  pre-deployment posture review (use bedrock-operation-review), for an IAM AccessDenied on
+  ingestion or retrieval (use aiml-access-diagnostics), or for embedding-model quota headroom
+  (use service-quota-check).
 metadata:
   author: sruved
   version: "1.0.0"
@@ -89,7 +90,8 @@ reach, it says so plainly rather than guessing.
   `references/pipeline-layers.md`
 - **Vector stores:** AOSS / Aurora checks, third-party and S3 Vectors disclosure, Inspect
   items - `references/vector-stores.md`
-- **Finding logic:** verdict vocabulary, assessment rules, severity - `references/finding-logic.md`
+- **Finding logic:** verdict vocabulary, assessment rules, severity, graceful degradation -
+  `references/finding-logic.md`
 - **Report format:** report structure, the AI-generated banner, pre-render rules -
   `references/report-format.md`
 
@@ -113,6 +115,14 @@ knowledge base (name or id) and the symptom.
 - `ListDataSources` / `GetDataSource` for each data source: type (S3 / other), inclusion
   prefixes, `dataDeletionPolicy`, `chunkingConfiguration`, parser.
 - Paginate **every** list call to the end.
+
+**Cold start (symptom given, scope not yet).** When the user reports a symptom but has not
+given the knowledge base id or region, do not reply with only a request for it. Open with the
+diagnostic plan this symptom routes to: the first layer to check (Step 4), the exact first
+reads (for an empty KB, `ListIngestionJobs` statistics per data source), and the governing rule
+that applies (`ACTIVE` is not proof of indexed data; "populated" needs a `COMPLETE` job that
+indexed documents, cited by job ID). Then ask for the knowledge base id and region to run it.
+The operator gets the structured approach immediately, not just a request for inputs.
 
 ## Step 3 - Pass 1 (always runs, cheap)
 
@@ -198,22 +208,18 @@ Every finding is exactly one token from this closed set (definitions and rules i
 Data-plane facts (AOSS index engine `faiss` vs `nmslib`, Aurora table columns, per-request
 search type) resolve to **Inspect**, never to pass or fail.
 
-### Severity (examples; full table in finding-logic.md)
+### Severity
 
-- Data source with no ingestion job, or no `COMPLETE` job that indexed docs -> **CRITICAL**
-  (NOT when the user reports a sync *rejected at start*: a `ValidationException ... storage
-  configuration provided is invalid` creates no job, so the empty list is a vector-store fault,
-  not "never synced")
-- Latest job `FAILED`/`STOPPED`; or `COMPLETE` with `numberOfDocumentsFailed` > 0 -> **HIGH**
-- Source objects changed after last `COMPLETE` sync + user reports stale -> **HIGH**
-- AOSS data-access policy missing the KB role, or private network policy w/o a Bedrock or VPC
-  endpoint source; Aurora Data API off / cluster not available / secret missing -> **HIGH**
-- Data source removed with `RETAIN` + user reports removed content still cited -> **HIGH**
-- Documents `IGNORED` (quote `statusReason`); embedding throttles in window; embedding model
-  `LEGACY`; oversized/unsupported files; `.metadata.json` without matching source -> **MEDIUM**
-- No automation starting ingestion for a corpus that changes -> **LOW**
-- KB attached to no agent -> **LOW** ("not used" is never claimed - app calls are only in
-  CloudTrail data events)
+Three anchors; the full severity table (every band, every finding type) is in
+`references/finding-logic.md`.
+
+- **CRITICAL** - a data source with no ingestion job, or no `COMPLETE` job that indexed
+  documents (NOT a sync rejected at start, which creates no job and is a vector-store fault).
+- **HIGH** - latest job `FAILED`/`STOPPED`, or `COMPLETE` with failed documents; source
+  changed since last sync while answers are stale; AOSS/Aurora wiring fault; removed content
+  cited under `RETAIN`.
+- **MEDIUM / LOW** - `IGNORED` docs, throttles, `LEGACY` model, oversized/unsupported files
+  (MEDIUM); no ingestion automation, or KB attached to no agent (LOW).
 
 ## Step 8 - Deliver the report
 
@@ -224,19 +230,12 @@ report with a summary or append one after it.
 
 ## Error handling
 
-Every step degrades gracefully. A single failed read never aborts the diagnosis - record it,
-mark the affected layer, and continue.
-
-| Condition | Action |
-| --- | --- |
-| A list call returns a pagination token | Keep paginating to the end before stating any count. A partial page is never "the data sources" or "the jobs" |
-| `AccessDenied` on a read | Mark the affected layer `Not checked`, naming the operation. Continue with the reads that remain. Never infer a configuration you could not read |
-| Ingestion-log delivery not to CloudWatch Logs (S3/Firehose) | Job-level failure reasons are not queryable from logs; say so. Detect drops from the latest `COMPLETE` job's `numberOfDocumentsScanned` minus the `ListKnowledgeBaseDocuments` count (managed policy only); name an unsupported type via `GetIngestionJob` and an oversized file via the S3 listing |
-| Cross-account source bucket, listing denied | Staleness and file checks are `Not checked`, not passed |
-| No ingestion job exists for a data source | That is itself a finding (nothing was ever indexed), not a missing read |
-| Vector store is third-party or S3 Vectors | Store-scoped checks are `Not checked`; name the store and the reason |
-| KB type is Kendra GenAI / Redshift / Neptune Analytics | Out of scope for this version; name it and stop that branch, do not attempt a partial check |
-| Active Bedrock event in AWS Health for the region | Surface it before any customer-side fix; do not prescribe a configuration change over a service event |
+Every step degrades gracefully: a single failed read never aborts the diagnosis. Record it,
+mark the affected layer `Not checked` naming the operation, and continue. Never infer a
+configuration you could not read, and never state a count before paginating to the end. The
+per-condition table (pagination token, `AccessDenied`, non-CloudWatch log delivery,
+cross-account bucket denial, missing ingestion job, unsupported store or KB type, active AWS
+Health event) is in `references/finding-logic.md` under **Graceful degradation**.
 
 ## Final delivery contract
 
@@ -294,7 +293,7 @@ mark the affected layer, and continue.
 - `references/symptom-map.md` - full symptom -> layer table with API-verifiable flags
 - `references/pipeline-layers.md` - Pass 1 / Pass 2 reads and per-layer decision trees
 - `references/vector-stores.md` - AOSS / Aurora checks, third-party + S3 Vectors disclosure, Inspect items
-- `references/finding-logic.md` - verdict vocabulary, assessment rules, severity
+- `references/finding-logic.md` - verdict vocabulary, assessment rules, severity, graceful degradation
 - `references/report-format.md` - output structure and the AI-generated banner
 - `references/opt-in-policy.md` - the opt-in CFN grant (`GetIngestionJob` + scoped S3 reads)
 

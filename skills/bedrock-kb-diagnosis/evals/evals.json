@@ -1,98 +1,102 @@
-[
-  {
-    "id": "kb-pipeline-order-and-two-passes",
-    "prompt": "According to the skill, in what order does it walk the RAG pipeline, and what are its two passes? No AWS access required.",
-    "expected_output": "Names the pipeline order source, ingestion, embedding, vector store, query, and describes Pass 1 (always-on and cheap: ListKnowledgeBases/GetKnowledgeBase, ListDataSources/GetDataSource, and ListIngestionJobs statistics per data source) and Pass 2 (targeted, running only the reads for the branch the symptom points to).",
-    "files": [],
-    "assertions": [
-      "contains 'source' and contains 'ingestion' and contains 'embedding'",
-      "contains 'vector store'",
-      "contains 'ListIngestionJobs'",
-      "contains 'Pass 1' or contains 'first pass'"
-    ]
-  },
-  {
-    "id": "kb-active-is-not-healthy",
-    "prompt": "According to the skill, is a knowledge base status of ACTIVE enough to report it as healthy or populated? No AWS access required.",
-    "expected_output": "No. ACTIVE confirms only the resource and index wiring, not that any data was indexed. Populated is claimed only when a COMPLETE ingestion job that indexed documents exists, cited by job ID.",
-    "files": [],
-    "assertions": [
-      "contains 'ACTIVE'",
-      "contains 'COMPLETE'",
-      "contains 'job ID' or contains 'job id' or contains 'jobId'",
-      "contains 'wiring' or contains 'indexed'"
-    ]
-  },
-  {
-    "id": "kb-verdict-vocabulary-and-inspect",
-    "prompt": "According to the skill, what verdicts can a layer receive, and why do data-plane facts such as the OpenSearch Serverless index engine resolve to Inspect? No AWS access required.",
-    "expected_output": "Lists Root cause, Contributing, Inspect, Ruled out, Not checked. Data-plane facts (AOSS index engine faiss vs nmslib, Aurora table columns, per-request search type) are not visible from the control plane, so they resolve to Inspect with an operator check, never to pass or fail.",
-    "files": [],
-    "assertions": [
-      "contains 'Root cause'",
-      "contains 'Inspect'",
-      "contains 'Not checked'",
-      "contains 'faiss' or contains 'index engine' or contains 'data-plane' or contains 'data plane'"
-    ]
-  },
-  {
-    "id": "kb-no-sources-routes-ingestion-critical",
-    "prompt": "According to the skill, when a knowledge base returns no sources for any query, which layer is checked first and what severity applies when no COMPLETE job ever indexed documents? No AWS access required.",
-    "expected_output": "Ingestion is checked first. If no ingestion job ever ran, or no COMPLETE job indexed new documents, that is the root cause at CRITICAL. A later no-change sync is not emptiness.",
-    "files": [],
-    "assertions": [
-      "contains 'Ingestion' or contains 'ingestion'",
-      "contains 'CRITICAL'",
-      "contains 'COMPLETE'",
-      "contains 'no-change' or contains 'no change'"
-    ]
-  },
-  {
-    "id": "kb-failure-reasons-location",
-    "prompt": "According to the skill, for which document status does ListKnowledgeBaseDocuments return statusReason, and where are the reasons for EMBEDDING_FAILED and INDEXING_FAILED documents found? No AWS access required.",
-    "expected_output": "ListKnowledgeBaseDocuments returns statusReason only for IGNORED documents. EMBEDDING_FAILED and INDEXING_FAILED reasons live in the knowledge base APPLICATION_LOGS status_reasons, queryable only when log delivery is to CloudWatch Logs, or via the optional bedrock:GetIngestionJob.",
-    "files": [],
-    "assertions": [
-      "contains 'IGNORED'",
-      "contains 'APPLICATION_LOGS' or contains 'status_reasons'",
-      "contains 'CloudWatch Logs'",
-      "contains 'GetIngestionJob'"
-    ]
-  },
-  {
-    "id": "kb-retain-still-cited",
-    "prompt": "According to the skill, why might a knowledge base keep citing a document from a data source that was deleted? No AWS access required.",
-    "expected_output": "A data source deleted or replaced with dataDeletionPolicy RETAIN leaves its vectors in the store, so removed content is still cited. Rated HIGH.",
-    "files": [],
-    "assertions": [
-      "contains 'RETAIN'",
-      "contains 'dataDeletionPolicy' or contains 'data deletion'",
-      "contains 'vector'",
-      "contains 'HIGH'"
-    ]
-  },
-  {
-    "id": "kb-read-only-and-handoffs",
-    "prompt": "According to the skill, what does it never do, and where does it hand off IAM, posture, and quota concerns? No AWS access required.",
-    "expected_output": "It is read-only: no Create/Update/Delete/Start, no Retrieve or RetrieveAndGenerate, no document or chunk content reads, and it masks account IDs. It hands an IAM AccessDenied to aiml-access-diagnostics, posture to bedrock-operation-review, and embedding-model quota to service-quota-check.",
-    "files": [],
-    "assertions": [
-      "contains 'read-only' or contains 'read only'",
-      "contains 'Retrieve'",
-      "contains 'aiml-access-diagnostics'",
-      "contains 'bedrock-operation-review'",
-      "contains 'service-quota-check'"
-    ]
-  },
-  {
-    "id": "kb-cross-account-bucket-not-checked",
-    "prompt": "According to the skill, if the source S3 bucket is cross-account and the listing is denied, how are the staleness and file checks reported? No AWS access required.",
-    "expected_output": "As Not checked, with the reason, never as passed. The skill does not infer a configuration it could not read.",
-    "files": [],
-    "assertions": [
-      "contains 'Not checked'",
-      "contains 'cross-account' or contains 'bucketOwnerAccountId' or contains 'cross account'",
-      "contains 'denied' or contains 'not passed' or contains 'never'"
-    ]
-  }
-]
+{
+  "skill_name": "bedrock-kb-diagnosis",
+  "evals": [
+    {
+      "id": "kb-returns-no-sources",
+      "task_type": "chat",
+      "prompt": "My Bedrock knowledge base returns no sources for any query. Why?",
+      "should_trigger": true,
+      "expected_output": "Opens with the diagnostic plan rather than a generic answer: names ingestion as the first layer to check, says it would read ListIngestionJobs statistics per data source to confirm whether a COMPLETE job actually indexed documents, states that a status of ACTIVE does not prove data was indexed, and asks for the knowledge base id and region. Stays read-only.",
+      "assertions": [
+        "Names ingestion as the first layer to check and reflects a source-to-query pipeline walk rather than a flat list of guesses",
+        "States that a knowledge base status of ACTIVE does not by itself prove any documents were indexed",
+        "Says it would read ingestion-job statistics to confirm whether a completed job indexed documents",
+        "Asks for the knowledge base id and region before drawing a conclusion"
+      ]
+    },
+    {
+      "id": "kb-missing-recent-docs",
+      "task_type": "chat",
+      "prompt": "Our Bedrock knowledge base answers are missing the documents we uploaded this week.",
+      "should_trigger": true,
+      "expected_output": "Attributes missing-recent-docs to the source-versus-last-sync layer: explains a data source sync must run after the upload (ingestion is not automatic), and that comparing the newest source object timestamp to the last COMPLETE ingestion job confirms whether the new files were picked up. Recommends running the sync rather than performing it.",
+      "assertions": [
+        "Explains that it would compare the newest source object timestamp against the last successful (COMPLETE) ingestion job to decide whether recent uploads were indexed",
+        "Identifies a missing or not-yet-run data source sync as the likely cause, specific to how Bedrock ingestion works rather than generic advice",
+        "Returns the re-sync as a step for the operator to run rather than performing any change"
+      ]
+    },
+    {
+      "id": "kb-sync-failed-partial",
+      "task_type": "chat",
+      "prompt": "The last sync on my Bedrock knowledge base failed partway through.",
+      "should_trigger": true,
+      "expected_output": "Says it would read the latest ingestion job status and statistics to scope the failure, use the per-document status API to find which documents FAILED or were IGNORED, and look up per-document failure reasons in the knowledge base application logs or GetIngestionJob rather than the basic document list. Rates it HIGH, stays read-only.",
+      "assertions": [
+        "Says it would read the latest ingestion job status and its document counts (scanned, indexed, failed) to scope the failure",
+        "Identifies the per-document status API as how to find which documents failed or were ignored",
+        "Explains that per-document failure reasons live in the knowledge base application logs or the job-detail call, not the basic document list"
+      ]
+    },
+    {
+      "id": "kb-aoss-indexing-fails",
+      "task_type": "chat",
+      "prompt": "Indexing keeps failing on my OpenSearch Serverless Bedrock knowledge base.",
+      "should_trigger": true,
+      "expected_output": "Scopes the checks to OpenSearch Serverless specifically: the collection is ACTIVE, the data access policy grants the knowledge base role, and the network policy allows a Bedrock source or a VPC endpoint. Treats the index engine as an operator Inspect item the control plane cannot show, never pass/fail, and distinguishes a vector-store policy gap from a generic IAM denial.",
+      "assertions": [
+        "Scopes the checks to OpenSearch Serverless: the data access policy granting the knowledge base role and the network policy allowing a Bedrock source or VPC endpoint",
+        "Treats the index engine (faiss vs nmslib) as an operator-run Inspect item the control plane cannot reveal, not a pass or fail",
+        "Distinguishes a vector-store policy gap from a generic IAM principal denial rather than blaming IAM broadly"
+      ]
+    },
+    {
+      "id": "kb-removed-content-cited",
+      "task_type": "chat",
+      "prompt": "My Bedrock knowledge base keeps citing a document we deleted.",
+      "should_trigger": true,
+      "expected_output": "Explains that a data source deleted or replaced under a deletion policy that retains vectors leaves those vectors in the store, which is why removed content is still cited, and that a successful re-sync or targeted vector removal clears it. Rates it HIGH and returns the fix as a step rather than performing it.",
+      "assertions": [
+        "Explains that a deletion policy which retains vectors leaves them in the store after the data source is removed, which is why deleted content is still cited",
+        "Recommends a successful re-sync or targeted vector removal to clear the stale content",
+        "Returns the fix as a command or step for the operator rather than modifying anything itself"
+      ]
+    },
+    {
+      "id": "kb-sudden-onset",
+      "task_type": "chat",
+      "prompt": "My Bedrock RAG suddenly started returning nothing about an hour ago.",
+      "should_trigger": true,
+      "expected_output": "Before blaming customer configuration, says it would check AWS Health for an active Bedrock service event in the region, builds a timeline around the reported onset, and looks for recent changes to the knowledge base, data source, vector store, or application. Masks account IDs and keeps identifiers out of any interim output.",
+      "assertions": [
+        "Says it would check AWS Health for an active Bedrock service event in the region before prescribing a customer-side fix",
+        "Builds a timeline around the reported onset and looks for recent changes to the knowledge base, vector store, or application",
+        "Keeps account IDs and other identifiers masked and out of interim output"
+      ]
+    },
+    {
+      "id": "no-trigger-invokemodel-accessdenied",
+      "task_type": "chat",
+      "prompt": "I get AccessDenied calling InvokeModel from my application.",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-posture-review",
+      "task_type": "chat",
+      "prompt": "Review whether my Bedrock knowledge base is configured to best practices.",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-create-kb",
+      "task_type": "chat",
+      "prompt": "Help me create and configure a new Bedrock knowledge base.",
+      "should_trigger": false
+    },
+    {
+      "id": "no-trigger-unrelated",
+      "task_type": "chat",
+      "prompt": "What is the difference between an Application Load Balancer and a Network Load Balancer?",
+      "should_trigger": false
+    }
+  ]
+}

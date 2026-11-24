@@ -65,6 +65,22 @@ Every finding is exactly one of:
 | No schedule/rule/automation that starts ingestion for a corpus that changes | LOW |
 | Knowledge base attached to no agent | LOW ("not used" is never claimed - app calls are only in CloudTrail data events) |
 
+## Graceful degradation
+
+Every step degrades gracefully. A single failed read never aborts the diagnosis - record it,
+mark the affected layer, and continue.
+
+| Condition | Action |
+| --- | --- |
+| A list call returns a pagination token | Keep paginating to the end before stating any count. A partial page is never "the data sources" or "the jobs" |
+| `AccessDenied` on a read | Mark the affected layer `Not checked`, naming the operation. Continue with the reads that remain. Never infer a configuration you could not read |
+| Ingestion-log delivery not to CloudWatch Logs (S3/Firehose) | Job-level failure reasons are not queryable from logs; say so. Detect drops from the latest `COMPLETE` job's `numberOfDocumentsScanned` minus the `ListKnowledgeBaseDocuments` count (managed policy only); name an unsupported type via `GetIngestionJob` and an oversized file via the S3 listing |
+| Cross-account source bucket, listing denied | Staleness and file checks are `Not checked`, not passed |
+| No ingestion job exists for a data source | That is itself a finding (nothing was ever indexed), not a missing read |
+| Vector store is third-party or S3 Vectors | Store-scoped checks are `Not checked`; name the store and the reason |
+| KB type is Kendra GenAI / Redshift / Neptune Analytics | Out of scope for this version; name it and stop that branch, do not attempt a partial check |
+| Active Bedrock event in AWS Health for the region | Surface it before any customer-side fix; do not prescribe a configuration change over a service event |
+
 ## Not an access denial (looks like access, but isn't)
 
 A few ingestion failures look like permission errors but are not an authorization decision on
