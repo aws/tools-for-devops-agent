@@ -8,7 +8,7 @@ description: Use for AWS Systems Manager Automation tasks. Find an AWS-owned or 
   commands for a person to run.
 metadata:
   author: hejn-amzn
-  version: "1.0.0"
+  version: "1.0.1"
   summary: "Systems Manager guidance for DevOps Agent: find, run safely, diagnose and harden Automation runbooks."
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_TRIAGE, INCIDENT_RCA, INCIDENT_MITIGATION, PREVENTION, RELEASE_READINESS_REVIEW"
   aws-devops-agent-skills.aws-services: "AWS Systems Manager"
