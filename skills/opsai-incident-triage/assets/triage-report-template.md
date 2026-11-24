@@ -4,6 +4,30 @@ Fill in every `<placeholder>`. Delete a row only when the step/section genuinely
 not apply, and when you do, say why in **Scope not covered**. Never leave a placeholder
 unresolved in a delivered report.
 
+## Short form (every answer)
+
+Every answer on this skill's path carries these three blocks, in this order, even for a one-line question. The long report below is the same shape for when a full written report is wanted.
+
+```
+TRIAGE: binding=<binding> locus=<PROVIDER | INFRASTRUCTURE | APPLICATION | UNDETERMINED> transience=<TRANSIENT | PERSISTENT | UNKNOWN> — <deciding check-id> (<SEVERITY>) — <clause naming the deciding signal>
+
+<the plain-language explanation — as short as the question deserves>
+
+Findings
+<check-id> (<SEVERITY>) — <measured <value> | no-datapoints | not-queried> — <window> — <source API> — owner:<skill> — <doc URL>
+```
+
+## UNDETERMINED gate (R3)
+
+Print this, filled in from `measured` signals, when Step 6 R3 fires:
+
+```
+UNDETERMINED requires one MEASURED signal on EACH side, named, with its window:
+  provider-side signal : ____________  = __________  over __________
+  customer-side signal : ____________  = __________  over __________
+  why they contradict  : ______________________________________________
+```
+
 ## Incident
 
 - **Symptom:** `<symptom>` (e.g. intermittent `InternalServerError` on the model call)

@@ -77,7 +77,7 @@ from Cause, Hypothesis and Gap findings, and that is what the operator reads. So
 **Establish the binding before you measure anything.** "My agent is broken" does not mean Bedrock
 AgentCore. An agent loop runs in a Lambda, a container, an EC2 process, or outside AWS. The ladder in
 this skill rules on three signals whose metric names differ per hosting, so bind first:
-`references/hosting-bindings.md`. A guessed binding rules confidently on metrics describing a
+[hosting-bindings.md](references/hosting-bindings.md). A guessed binding rules confidently on metrics describing a
 different system. The path itself — the seven stages, and which one a symptom starts at — is
 `references/request-path.md`.
 
@@ -123,29 +123,9 @@ Activate when the user:
 - Wants to match a symptom to a **known LLM incident signature**.
 - Asks whether they **can even see what their agent is doing** (telemetry readiness for triage).
 
-**Routing triggers — the literal phrasings, enumerated because each one was observed to miss.** This
-list is not illustrative. Any question of these shapes selects this skill **once the load condition
-holds**, whether or not the word incident, outage, error or triage appears. Scoped to the LLM path:
-the same phrasings about a non-LLM component are not this skill's.
-
-| The user says | Why it is triage |
-|---|---|
-| "are we being throttled", "are we hitting throttling limits", "are we hitting a quota" | a throttle question is a locus question — the `THROTTLES` slot rules at R1/R5 |
-| "any 429s", "any ThrottlingException" | same, by error code |
-| "we are seeing 400s and 404s", "two different errors", "two distinct client errors" | Step 5b error-code enumeration is this skill's procedure and nothing else owns it |
-| "4xx but no 5xx anywhere", "client errors but no server errors" | R1 is the ruling, by definition |
-| "do you see any errors", "any errors in the last N hours" | a status check is an incident question with the incident word removed — see `## ENTRANCE` |
-| "is anything wrong with our model calls", "is this on my side" | the core question this skill exists for |
-| "is this signal healthy", "absent signal versus healthy signal", "is the metric just empty" | the `measured 0` / `no-datapoints` / `not-queried` distinction is this skill's, and a healthy ledger still rules at R5 |
-
-A question on this list that reaches a different skill, or is answered with no `TRIAGE:` line, is a
-routing failure and not a style choice. Two exclusions:
-
-- Truncated or cut-off model output is **not** on this list — finish-reason work is the
-  `output-quality` track (see *Related skills (optional)*).
-- None of these rows fires before the load condition holds. "Do you see any errors" about a workload
-  with no model call identified in its failing path is a general investigation question, not this
-  skill's.
+The literal phrasings that select this skill once the load condition holds, and the two exclusions,
+are in [router.md](references/router.md) (*Routing triggers*). A question of those shapes answered with
+no `TRIAGE:` line is a routing failure.
 
 ## When NOT to Use
 
@@ -170,16 +150,16 @@ most often:
 
 ## Router
 
-**Bind, then route.** Resolve the hosting binding from `references/hosting-bindings.md` before using
-this table — every metric name below is the `bedrock` binding's, and the row is still correct for
+**Bind, then route.** Resolve the hosting binding from [hosting-bindings.md](references/hosting-bindings.md) before using
+the routing table — every metric name below is the `bedrock` binding's, and the row is still correct for
 another binding only once its triple is substituted. Which call to make is in
-`references/collection-reference.md`; how to read each API and metric is in
-`references/metrics-and-logs.md`. Load both with any row.
+[collection-reference.md](references/collection-reference.md); how to read each API and metric is in
+[metrics-and-logs.md](references/metrics-and-logs.md). Load both with any row.
 
 The `First read` column names the **stage** first, because a symptom points at a stage before it
-points at a metric. Stage numbers are `references/request-path.md`.
+points at a metric. Stage numbers are [request-path.md](references/request-path.md).
 
-The table that maps what the operator says to the first read, the check-ids and the files to load is in `references/router.md`. Read it before the first API call.
+The table that maps what the operator says to the first read, the check-ids and the files to load is in [router.md](references/router.md). Read it before the first API call.
 
 The empty-response row is the one that used to assume its answer. "Resolve alias to version" is a
 Bedrock Agents operation and means nothing for a loop running in a Lambda. Bind, then read.
@@ -199,16 +179,20 @@ gathered by the one before it, so do not skip ahead and do not render a locus un
 either produced a signal or been recorded as unavailable.
 
 - [ ] Step 0: **Bind.** Resolve the hosting binding and the three signal slots
-      (`references/hosting-bindings.md`). An unresolvable binding is `UNDETERMINED` and stops here
+      ([hosting-bindings.md](references/hosting-bindings.md)). An unresolvable binding is `UNDETERMINED`
+      and stops here
 - [ ] Step 1: Check provider health for an active event in the region — `not-applicable` for a
       self-hosted binding
-- [ ] Step 2: Measure the `SERVER_ERRORS` rate across models/endpoints in the region
+- [ ] Step 2: Measure the `SERVER_ERRORS` rate across models/endpoints in the region, against each
+      model's own baseline (AWS publishes no server-error threshold)
 - [ ] Step 3: Establish the blast radius — one model/account or many
 - [ ] Step 4: Correlate error onset against customer deploy and config-change history
 - [ ] Step 5: Scan invocation or application logs for provider-side exception signatures
-- [ ] Step 5b: Enumerate the **distinct `errorCode`s**, count per code, reconcile against the metric
-- [ ] Step 6: Rule by the **total** precedence ladder R1→R5 on client/server **counts**, then render
-      the `Findings` block and the `TRIAGE:` line
+      ([incident-signatures.md](references/incident-signatures.md))
+- [ ] Step 5b: Enumerate the **distinct `errorCode`s**, count per code and principal, reconcile against
+      `CLIENT_ERRORS` + `SERVER_ERRORS` + `THROTTLES` ([error-codes.md](references/error-codes.md))
+- [ ] Step 6: Rule by the **total** precedence ladder R1→R5 on the slot **counts**, then render the
+      three blocks ([triage-report-template.md](assets/triage-report-template.md), *Short form*)
 
 **Step 0 is not a formality.** The remaining steps name metrics; which metrics depends entirely on
 the binding. Walking Steps 1-6 against `AWS/Bedrock` for a model served from a container produces a
@@ -234,393 +218,42 @@ the other way and not a contradiction. `UNDETERMINED` has exactly two entrances:
 binding at Step 0, and present-and-conflicting evidence gated by Step 6 R3/R4. Rule what you
 measured; name what was missing in the evidence table, not in place of the locus.
 
-### Entering the classifier, and the contract every answer meets
+The detail of every step, with its branches and forbidden exits, is in
+[classifier-walkthrough.md](references/classifier-walkthrough.md); API arguments and rationale are in
+[transient-vs-config-classifier.md](references/transient-vs-config-classifier.md). The rules below are the
+part a correct locus cannot do without; if a reference fails to load (Guardrail 9), rule from them.
 
-Kept **inline on purpose** (see `## Guardrails` item 9).
+### The rules every answer keeps
 
-**ENTRANCE — not restricted to a declared incident.** Enter the classifier whenever the question
-asks whether a signal is healthy, whether it is present, whether something is failing, or whose
-fault it is — including a bare status check ("are we being throttled?", "is anything wrong with X?",
-"do you see any errors?"). A status check is an incident question with the incident word removed, and
-it takes the same Step 6 ladder with no exemption. **There is no informational-only path out of this
-skill:** "the numbers look fine" with no attribution is the answer this skill exists to replace.
-Scale the **prose** down for a small question if you like. **Do not scale the structure down** —
-see the length rule under the output contract. A short answer is a short *explanation* wrapped in the
-same three blocks, never three blocks collapsed into a paragraph.
-
-**EXIT — the output contract.** Stated once, here. Every answer on this skill's path carries these
-three things, in this order.
-
-**THE REPORT IS THE DEFAULT OUTPUT, NOT A MODE THE USER HAS TO ASK FOR.** This is the measured
-failure of this skill and the reason the rule is stated before the contract rather than after it.
-Across 91 captured answers, **no answer under 1,000 characters carried a single check-id (0 of 40)**,
-while answers over 3,000 characters carried them half the time — and when the three blocks were
-rendered in full the entire contract landed, `TRIAGE:` line included, on every attempt. A
-conversational paragraph **physically cannot hold** a triage line, an evidence ledger and a findings
-table, so choosing the paragraph is choosing to drop them. Therefore:
-
-- Produce the three blocks **every time**, including for a one-line question, a status check, a
-  casual framing, or a follow-up in an ongoing conversation.
-- You may shorten the **prose block** to a single sentence. You may not shorten, merge, or omit the
-  `TRIAGE:` line or the `Findings` block, and you may not substitute a bulleted summary for them.
-- Brevity is never a reason, and the user not having asked for a report is never a reason. If the
-  user explicitly asks for one line only, give the `TRIAGE:` line — that is the one line.
-
-```
-TRIAGE: binding=<binding> locus=<PROVIDER | INFRASTRUCTURE | APPLICATION | UNDETERMINED> transience=<TRANSIENT | PERSISTENT | UNKNOWN> — <deciding check-id> (<SEVERITY>) — <clause naming the deciding signal>
-
-<the plain-language explanation — as short as the question deserves>
-
-Findings
-<check-id> (<SEVERITY>) — <measured <value> | no-datapoints | not-queried> — <window> — <source API> — owner:<skill> — <doc URL>
-```
-
-1. **The `TRIAGE:` line, first, with the deciding check-id on it.** A line **beginning with the
-   literal string `TRIAGE:`** is the only form that satisfies this. These are the observed
-   substitutes and none of them counts: `## Triage: APPLICATION`, `**Locus:** APPLICATION`,
-   `Fault locus — APPLICATION`, or a token inside a heading or a sentence. A markdown heading is a
-   heading. Write the line, then write the heading too if you want one.
-
-   **Two closed token sets, assessed separately.** They were one token in the previous version of
-   this skill (`SERVICE_TRANSIENT` / `CUSTOMER_CONFIG`) and that conflated where the fault sits with
-   whether it will clear on its own. Separating them is what lets the line stay honest on a
-   self-hosted or third-party binding, where "service transient" has no referent.
-
-   | `locus` | Meaning |
-   |---|---|
-   | `PROVIDER` | the entity serving the model owns it — AWS for a managed binding, the vendor for `third-party`. **Unreachable on a self-hosted binding**: see `references/hosting-bindings.md` |
-   | `INFRASTRUCTURE` | the customer's own serving or network layer — endpoint sizing, container, VPC, ingress, quota posture |
-   | `APPLICATION` | the caller's request shape, prompt assembly, identity, configuration or orchestration |
-   | `UNDETERMINED` | Step 0 could not bind, or Step 6 R3/R4 fired |
-
-   | `transience` | Meaning |
-   |---|---|
-   | `TRANSIENT` | expected to clear without a customer change — retry and backoff are the action |
-   | `PERSISTENT` | will not clear on its own; a change is required somewhere |
-   | `UNKNOWN` | the window does not support the call, or the evidence sits past a visibility boundary |
-
-   Never a token outside these sets, invented at run time. `NO THROTTLING DETECTED`, `HEALTHY`,
-   `NOT APPLICABLE` are **observations**, which belong in the clause after the dash, and may not be
-   offered to a sub-agent either. **A healthy signal still gets a line**: a `THROTTLES` slot
-   `measured 0` against real traffic is R5 — `locus=APPLICATION transience=PERSISTENT`, demand within
-   quota and no provider-side fault in evidence.
-
-   **The line covers the model path, not the whole incident.** If the evidence points outside the
-   model path (a dependency, the network, a deploy), say so in the prose and conclude there. Do not
-   let a model-path locus stand in for a root cause it does not explain.
-2. **The `Findings` block, last, one line per signal**, each carrying its check-id, severity, a
-   value beginning with one of the three literal tokens (`measured ` / `no-datapoints` /
-   `not-queried` — never a bare number, never "zero"/"clean"/"healthy"), its window, its source API,
-   its `owner:<skill>` and a `https://docs.aws.amazon.com/…` URL. Where a sub-agent returned rows,
-   this block is **transcribed from its table, not summarised** — re-wording a cell is dropping it,
-   and a row you drop is named as `dropped: <row> — because <reason>`.
-3. **Negative claims are source-bound.** An unqualified "zero API errors", "no throttling", "nothing
-   service-side" may not appear in the prose. A negative lives in a `Findings` line, which forces
-   the token, the window and the source API onto the same line as the claim. Not queried → the token
-   is `not-queried` and the claim is that you did not look.
-
-**Put every check-id inside a sentence, as well as in the `Findings` block.** Write the prose so
-each finding sentence carries its id, severity and the value: "`InvocationClientErrors` measured 476
-over 24h, which is LLM-INV-011 (HIGH)". Open the prose with the locus in words and its deciding id:
-"The model-path evidence points to the application (locus APPLICATION, LLM-INV-011)". A block or
-table can be dropped when the answer is summarized; a sentence usually survives.
-
-**"Ruled out errors" requires three metric reads, named.** Read `InvocationClientErrors`,
-`InvocationServerErrors` **and** `InvocationThrottles` from `AWS/Bedrock` over the stated window, each
-with its own row; throttled requests are counted only in `InvocationThrottles`. A log scan
-alone does not support it — the invocation log does not capture pre-flight rejects, so
-`filter ispresent(errorCode) → 0 records` is true of the log and says nothing about the metric.
-
-The detail for each step:
-
-```
-START: a question has been asked about whether a signal is failing, healthy, present, or
-       whose fault it is — including a bare status check. See "ENTRANCE" above; a raised
-       incident is one entrance, not the only one. The load condition has already been
-       met: an LLM call or agent loop is confirmed in the failing path.
-
-Step 0 — Bind the signal triple
-  Resolve the hosting binding from evidence (references/hosting-bindings.md), then fill
-  the three slots CLIENT_ERRORS / SERVER_ERRORS / THROTTLES with that binding's real
-  metric names. Record which locus members the binding can even reach.
-    → Bound?            Proceed. Every metric named below is the bedrock binding's;
-                        substitute the bound names as you go.
-    → Cannot bind?      STOP the ladder. Render locus=UNDETERMINED transience=UNKNOWN and
-                        name the one fact that would resolve the binding (which service
-                        serves the failing call). Do NOT pick a binding to keep going.
-  NEVER infer the binding from the operator's vocabulary. "Agent" is not AgentCore, "model"
-  is not Bedrock, and "endpoint" is not SageMaker. Evidence or UNDETERMINED.
-
-Step 1 — Provider health
-  health:DescribeEvents + Service Health Dashboard for ACTIVE events on the BOUND service
-  in the affected region/time window.
-    → Active matching event?  Strong PROVIDER + TRANSIENT signal. Continue to confirm.
-    → No event?               Continue; absence is NOT proof of a customer-side fault.
-    → Self-hosted binding?    Record not-applicable, NOT no-datapoints. There is no
-                              provider to have an event; PROVIDER is unreachable and the
-                              serving layer resolves to INFRASTRUCTURE.
-    → third-party binding?    Record not-visible and name the provider's status page as the
-                              evidence you cannot read.
-
-Step 2 — SERVER_ERRORS rate across models/endpoints
-  cloudwatch:GetMetricData for the bound SERVER_ERRORS slot, by model/endpoint, over window.
-    → Server errors elevated above each model's own baseline in the window, across MULTIPLE
-      UNRELATED models, SAME region?  Strong PROVIDER. AWS publishes no server-error
-      threshold, so compare with the baseline; never apply a fixed percentage.
-    → Elevated for only one model?  Weak signal; model-specific capacity or config.
-
-Step 3 — Blast radius: one vs many
-    → One model / one account?         Leans APPLICATION or INFRASTRUCTURE.
-    → Many models / many accounts?     Leans PROVIDER.
-
-Step 4 — Onset timing vs customer change
-  Correlate error onset against deploy / CloudTrail config change history. The host
-  investigation usually already holds this history — use what it established rather than
-  re-deriving it, and say which you did.
-    → Abrupt, NOT correlated with a customer deploy?     Leans PROVIDER.
-    → Aligns with a deploy / IAM / model-ID change?      Leans APPLICATION.
-  WINDOW GATE, checked on ONE value: is the FIRST bucket of your window already non-zero?
-    → Yes?  The onset is OUTSIDE your window. You have not seen it. Report "non-zero
-            throughout the window examined; onset not covered" and widen the window before
-            ruling on timing. BARRED until you cover a zero/baseline bucket: "chronic",
-            "newly triggered", "steady", "pre-existing", "no correlated change". Every
-            bucket being non-zero is what a window opened after onset looks like, not
-            evidence that the fault is old.
-    → No?   The onset is in the window; correlate it against the change history.
-
-Step 5 — Provider-side exception signatures
-  Scan the bound log source for ServiceUnavailableException, ModelNotReadyException,
-  InternalServerException. The bound source is the Bedrock invocation log for bedrock,
-  the endpoint's CloudWatch log group for sagemaker, and the workload's own application
-  log for a self-hosted binding — where no structured log exists, that is LLM-TEL-004
-  firing and the step is recorded not-queried.
-    → Present and dominant?   Provider-side → PROVIDER.
-    → Absent?                 Continue.
-
-Step 5b — Resolve every error to its CODE and its PRINCIPAL, never to its 4xx/5xx class
-  Enumerate the DISTINCT errorCode values in the window and the count of each, one row per
-  code PER CALLING PRINCIPAL (CloudTrail userIdentity). Two roles failing the same way are
-  TWO rows: a one-principal answer to an N-principal fault leaves N-1 callers broken. The
-  principal goes in the Observed value cell after the token: `measured 15 AccessDenied by
-  role <role-name>`.
-  Then reconcile: the per-code counts must SUM to the metric total over the same window
-  (the bound CLIENT_ERRORS + SERVER_ERRORS + THROTTLES slots; on the bedrock binding a
-  ThrottlingException is counted in InvocationThrottles, not in InvocationClientErrors).
-    → Sum equals the metric?        Report the enumeration; each code gets its own cause
-                                    and its own remediation.
-    → Sum does NOT equal?           Say so, give both numbers, name what is unaccounted for,
-                                    then RESOLVE the remainder — do not leave it or label it:
-                                      cloudtrail:LookupEvents
-                                        AttributeKey=EventSource
-                                        AttributeValue=<bound service>.amazonaws.com
-                                    (bedrock.amazonaws.com for the bedrock binding;
-                                    sagemaker.amazonaws.com for sagemaker; for a
-                                    self-hosted binding there is no control-plane event
-                                    for a data-plane call and the remainder stays
-                                    not-queried unless the app itself logged it)
-                                    Pre-flight rejects (bad/unresolvable model id, denied
-                                    caller) never reach the invocation log and carry NO
-                                    ModelId dimension, so the metric sees them and the log
-                                    does not — that gap IS the remainder. InvokeModel and
-                                    Converse are CloudTrail management events, logged by
-                                    default; query by EventSource, because EventName=InvokeModel
-                                    misses every Converse call (measured: 0 vs 49 events).
-                                    Count only eventType AwsApiCall. Read the codes and the
-                                    principals off these events.
-  NEVER name a code for the unaccounted remainder by inference. An unresolvable model id
-  produces ValidationException and a denied caller produces AccessDenied; guessing
-  ResourceNotFoundException because "the id must not resolve" is how a 403 gets reported as
-  a 404 and the wrong fix gets shipped. If CloudTrail is unreadable, the remainder stays
-  `not-queried` and is disclosed as such.
-  FORBIDDEN unless the enumeration sums exactly: "all", "both", "only", "N of N", and any
-  sentence of the form "the errors are <single code>". Two distinct codes with one shared
-  label is the failure this step exists to prevent — one fix handed to a two-fix problem.
-
-Step 6 — Rule. A TOTAL PRECEDENCE LADDER on COUNTS, never a share calculation.
-  Walk R1→R5 against the three-state ledger. The FIRST rule satisfied is the ruling; stop
-  there. No ratio test and no minimum-volume floor exists anywhere in this ladder.
-
-  THE LADDER IS TOTAL. Exactly one of R1..R5 fires for EVERY question that got past Step 0,
-  because R5 is a terminal catch-all with no condition left to fail. There is no
-  fall-through, no "the ladder does not apply", and no exit from Step 6 without a token. A
-  ledger of all-healthy signals does not escape the ladder — it lands on R5.
-
-  The ladder rules on the BOUND SLOTS, never on a literal metric name. Substitute the
-  binding's names from Step 0; the logic below does not change with the hosting.
-
-  R1. CLIENT_ERRORS `measured N` or THROTTLES `measured N`, N >= 1, AND SERVER_ERRORS
-      `measured 0` or `no-datapoints`                         → locus=APPLICATION.
-      Client-error dominance is SATISFIED BY DEFINITION here, whatever N is relative to
-      successes. One 4xx in 21 calls with zero 5xx is an APPLICATION ruling, not noise: a
-      client error is a rejected request, and this slot pair cannot express a share.
-      transience=PERSISTENT — a rejected request shape does not clear on retry. EXCEPTION:
-      where THROTTLES is the only non-zero slot (ThrottlingException is counted there, not
-      in CLIENT_ERRORS), transience=TRANSIENT if Step 4 shows the throttle cleared within
-      the window, and the locus moves to INFRASTRUCTURE if quota posture rather than
-      request shape is the cause.
-      BINDING CAVEAT: on self-hosted-lambda the platform metric cannot split client from
-      server (references/hosting-bindings.md). An undifferentiated error count does NOT
-      satisfy R1 — go to R3 or R4 and name the un-splittable slot.
-  R2. SERVER_ERRORS `measured N`, N >= 1, across multiple unrelated models, AND
-      Step 4 found no correlated customer change               → locus=PROVIDER on a managed
-      binding, locus=INFRASTRUCTURE on a self-hosted one (PROVIDER has no referent there),
-      transience=TRANSIENT.
-  R3. BOTH sides carry a `measured` signal and the two point opposite ways
-                                                              → locus=UNDETERMINED
-      transience=UNKNOWN, with the gate template below filled in literally. Cannot fill both
-      blanks from `measured` signals? R3 does not apply — go to R4.
-  R4. EVERY ledger signal is `no-datapoints` or `not-queried`, AND no customer-side signal
-      (quota, config, request shape, invocation volume) has coverage either
-                                                              → locus=UNDETERMINED
-      transience=UNKNOWN as no-evidence: list all three bound slots with their states and
-      name the one signal that would decide it. One `measured` row anywhere and
-      R4 does not apply. If the customer-side set IS the only set with coverage — traffic is
-      confirmed real while the error slots are blank — R4 does not apply
-      either: go to R5. Blank error slots against live traffic are evidence, not an
-      absence of it.
-  R5. TERMINAL CATCH-ALL — reached whenever R1..R4 did not fire, and it can always be
-      reached. The ledger carries at least one `measured` row and no error or throttle
-      signal is >= 1                                           → locus=APPLICATION,
-      transience=PERSISTENT.
-      Clause: the signal is healthy and the customer side owns it — demand is within limits
-      and NO provider-side fault is in evidence. R5 is the HEALTHY-LEDGER rule, and it is the
-      reason "everything is fine" is an assessment rather than a non-answer.
-      Worked example, the case that has failed twice: "are we being throttled?" with
-      THROTTLES `measured 0` and SERVER_ERRORS `measured 0` against
-      22-60 real invocations/hour. R1 needs a client error >= 1 — no. R2 needs a server
-      error >= 1 — no. R3 needs a contradiction — no. R4 needs a blank ledger — no, the
-      ledger is measured. R5 fires:
-      `TRIAGE: binding=bedrock locus=APPLICATION transience=PERSISTENT — LLM-INV-007 (INFO)
-      — InvocationThrottles measured 0 over 24h against 22-60 invocations/hour; demand is
-      within quota and no provider-side throttling is in evidence`.
-
-  FORBIDDEN exits from Step 6, each one observed producing a non-answer. Every one of these
-  sentences is a ladder fall-through, and the ladder has none:
-    - "there is nothing to classify as provider-side vs. customer-side"
-    - "the classifier is not applicable / does not apply here"
-    - "no suspected incident exists, so the ladder is not triggered"
-    - "the check-ids require a non-zero <metric> before the classifier applies"
-    - "NO <signal> DETECTED" or any token outside the two closed sets
-  If you have written one of these, you are at R5 and have not noticed. Render R5.
-  The ONE legitimate exit without a ladder ruling is Step 0 failing to bind, which renders
-  locus=UNDETERMINED and says which fact is missing. That is not a fall-through: it is a
-  disclosed inability to measure the right system, and it is stated as such.
-
-END: render the `TRIAGE:` line, then the prose, then the `Findings` block — the output
-     contract above. Then conclude: what the evidence supports, and the one next step.
-```
-
-Full procedure, API arguments, and rationale: `references/transient-vs-config-classifier.md`.
-
-### The UNDETERMINED gate
-
-Kept **inline on purpose** (see `## Guardrails` item 9). `UNDETERMINED` leaves the caller with
-nothing to do, so it carries the **highest** bar, not the lowest. It has exactly two entrances and
-they are not interchangeable:
-
-**Entrance 1 — Step 0 could not bind.** The failing call's hosting was not established from
-evidence. This is a legitimate and common outcome early in an investigation. Say which service
-serves the failing call and that you need it, and stop. No gate template; there is nothing to
-measure yet.
-
-**Entrance 2 — Step 6 R3 or R4.** The binding is known, the signals were read, and they conflict.
-R3 requires this template filled in with measured values and printed in the answer:
-
-```
-UNDETERMINED requires one MEASURED signal on EACH side, named, with its window:
-  provider-side signal : ____________  = __________  over __________
-  customer-side signal : ____________  = __________  over __________
-  why they contradict  : ______________________________________________
-```
-
-Do not blur the two. "We could not determine the hosting" and "the evidence contradicts itself" lead
-to different next actions, and reporting the first as the second sends an operator hunting for a
-conflict that does not exist.
-
-A blank you cannot fill from a signal whose state is `measured` means the gate is **not** satisfied.
-These are never service-side signals and may never go in the first blank: a `no-datapoints` signal,
-a `not-queried` signal, the absence of an AWS Health event, an uncovered window, missing telemetry,
-"the failure window has no coverage". Each is **unavailable** — record it, disclose it as a gap, and
-rule on what you did measure. Two forbidden constructions, both observed producing a wrong locus:
-
-- "The failure window has no telemetry coverage, so neither side is favoured." Gaps are gaps. A 4xx
-  measured anywhere in the queried window with no 5xx was already decided by R1 — `APPLICATION`.
-- "The error count is small relative to successes, so it reads as noise rather than a true
-  4xx-dominated pattern." No such share test exists. See R1.
-
-### Step 5b — the error-code enumeration, and the check-id it maps to
-
-Kept **inline on purpose** (see `## Guardrails` item 9): Step 5b must be runnable without fetching
-anything. Produce this table before Step 6, one row per **distinct** `errorCode` actually observed —
-never one row per error class:
-
-| `errorCode` | Class | What it means — and what it does NOT mean | check-id | Remediation owner |
-|---|---|---|---|---|
-| `ValidationException` | 4xx | Malformed request, unsupported parameter, context too long, or a **model id that does not exist**. Not an entitlement problem. | LLM-INV-011 | caller's request shape / model id |
-| `ResourceNotFoundException` | 4xx | The named resource (model, agent, alias, KB) **does not resolve in this region**. Distinct from being entitled-but-denied. | LLM-INV-003 | `bedrock-configuration` (model/alias lifecycle) |
-| `AccessDeniedException` | 4xx | The model or action **exists** but the caller is **not entitled** — IAM, SCP, or model access not granted. Never a service fault. | LLM-INV-004 | `bedrock-configuration` (access) |
-| `ThrottlingException` | 4xx | Quota or capacity pressure. Check backoff before quota. | LLM-INV-007 | quota/backoff |
-| `ModelNotReadyException` | 4xx (429) | The model is not ready to serve inference requests; the AWS SDK retries it automatically, up to 5 times ([Converse errors](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)). Provider-side readiness, not the caller's request shape, despite the 4xx status. | LLM-INV-005 | retry/backoff |
-| `ServiceUnavailableException` / `InternalServerException` | 5xx | Service-side transient. | LLM-INV-007 | retry/backoff/failover |
-
-Three distinctions are load-bearing and must survive into the output, because each one changes the
-fix handed to the user:
-
-- **Does not exist** (`ValidationException` on a malformed or unknown model id) versus **exists but
-  not entitled** (`AccessDeniedException`) versus **does not resolve here** (`ResourceNotFoundException`).
-  These three are distinguished by **reading the code**, never by reasoning about the id. A bad model
-  id in a `Converse` call returns `ValidationException`, not `ResourceNotFoundException`.
-- **Each row names its calling principal.** The same code under two roles is two rows with two
-  owners; the metric cannot tell you who called, and only CloudTrail `userIdentity` can.
-- Each observed code gets **its own cause sentence and its own remediation**. Two codes sharing one
-  remediation is a reportable contradiction, not a simplification.
-- The 4xx/5xx **class** is an input to Step 6 only. It is never the answer to "what errors are you
-  seeing" — codes are.
-
-### Verdicts and what to prescribe
-
-**`locus=PROVIDER`, `transience=TRANSIENT`** — active Health event, broad 5xx across unrelated
-models, many-account blast radius, onset uncorrelated with any customer change, or
-`ServiceUnavailableException` / `ModelNotReadyException` dominant. **Do NOT prescribe customer
-configuration fixes.** Report:
-
-> The LLM-path evidence points to a transient provider-side condition in **[region]**. Retry with
-> exponential backoff, or fail over to another region via a cross-region inference profile. No
-> customer-side configuration change is indicated by the model-path signals.
-
-Optionally frame cross-region inference profiles and backoff-with-jitter as resilience hardening for
-the *next* event — not as a fix for a customer mistake.
-
-**On a self-hosted binding this outcome is reported as `locus=INFRASTRUCTURE`.** The serving layer
-failed and the customer owns the serving layer; there is no AWS Health event to point at and no
-cross-region inference profile to fail over to. Prescribe nothing about the compute — name
-`INFRASTRUCTURE` and investigate that stage with your general tools, not with Bedrock checks.
-
-**On a `third-party` binding, `PROVIDER` rests on absence.** No AWS read can confirm a vendor
-incident. Say that the locus is `PROVIDER` because no customer-side signal accounts for the failure,
-set `transience=UNKNOWN`, and name the vendor's status page as the evidence you cannot read.
-
-**`locus=APPLICATION`** — client-error dominance, single-model/single-account blast radius, onset
-aligned with a customer deploy or IAM/model-ID change, no provider event. Name the owning
-remediation track rather than performing it: access/IAM, model lifecycle, wrong model ID, inference
-profiles → `bedrock-configuration`; quota posture → `capacity-and-quota`; empty output from the loop
-→ `agent-runtime` on an `agentcore` binding, or the loop's own logs on a self-hosted one; retrieval →
-`retrieval`. Then follow *Related skills (optional)* for that track.
-
-**`locus=INFRASTRUCTURE`** — the customer's own serving or network layer: endpoint under-provisioned
-or not scaling, container failing, VPC endpoint or egress path broken, ingress returning 5xx before
-the loop runs, quota posture too low for real demand. Distinguished from `APPLICATION` by the stage
-the evidence sits at, not by severity: stage 2 and the serving half of stage 4 are
-`INFRASTRUCTURE`, stages 1, 3, 5, 6 and 7 are `APPLICATION`.
-
-**`locus=UNDETERMINED`** — either Step 0 could not bind, or **present and contradictory** signals
-with one measured on each side, reached via Step 6 R3 with its template filled in, or R4 where
-nothing at all was measured. Never reached because evidence was thin, because a window was
-uncovered, or because a signal was not queried — that is an unavailable signal, not a contradiction,
-and the other rules of the ladder still apply to what *was* measured. Where the R3 gate is genuinely
-met: present both tracks clearly labeled so the customer is never told their configuration is broken
-as if it were certain, state explicitly that the cause is not isolated, and name the single
-additional signal that would resolve it.
+- **Entrance.** Enter the classifier for any question about whether a signal is failing, healthy,
+  present, or whose fault it is, including a bare status check ("are we being throttled?"). There is
+  no informational-only path out of this skill.
+- **Exit: three blocks, every time.** The `TRIAGE:` line first, then the prose, then the `Findings`
+  block with one line per signal. The prose may be one sentence; the line and the block are never
+  dropped, merged or replaced by a summary. Put each check-id inside a sentence as well.
+- **Two closed token sets.** `locus` is `PROVIDER`, `INFRASTRUCTURE`, `APPLICATION` or `UNDETERMINED`;
+  `transience` is `TRANSIENT`, `PERSISTENT` or `UNKNOWN`. `PROVIDER` is unreachable on a self-hosted
+  binding, where the serving layer is `INFRASTRUCTURE`. Every `Findings` value starts with `measured `,
+  `no-datapoints` or `not-queried`, and a negative claim lives only in a `Findings` line.
+- **"Ruled out errors" needs three reads**, each with its own row: `CLIENT_ERRORS`, `SERVER_ERRORS` and
+  `THROTTLES` (`InvocationClientErrors`, `InvocationServerErrors`, `InvocationThrottles` on `bedrock`).
+  Throttled requests are counted only in `InvocationThrottles`.
+- **The ladder is total; the first rule that holds wins.**
+  - R1: `CLIENT_ERRORS` or `THROTTLES` `measured` ≥ 1 and `SERVER_ERRORS` `measured 0` or `no-datapoints`
+    → `APPLICATION`, `PERSISTENT`. A throttle-only ledger that cleared in the window is `TRANSIENT`, and
+    `INFRASTRUCTURE` when quota posture is the cause.
+  - R2: `SERVER_ERRORS` ≥ 1 across unrelated models, no correlated customer change → `PROVIDER`
+    (`INFRASTRUCTURE` when self-hosted), `TRANSIENT`.
+  - R3: a `measured` signal on each side, pointing opposite ways → `UNDETERMINED`, `UNKNOWN`, with the gate
+    template filled in.
+  - R4: every signal `no-datapoints` or `not-queried`, no customer-side coverage → `UNDETERMINED`, `UNKNOWN`.
+  - R5: anything else, which includes a healthy measured ledger → `APPLICATION`, `PERSISTENT`.
+- **`UNDETERMINED` has exactly two entrances:** Step 0 could not bind, or R3/R4. Missing evidence is a gap
+  to disclose, never a reason for `UNDETERMINED`.
+- **Step 5b reads codes, not classes.** One row per `errorCode` and calling principal, reconciled against
+  the metric total; a remainder is resolved from `cloudtrail:LookupEvents` `EventSource=bedrock.amazonaws.com`
+  or left `not-queried`, never named by inference.
+- **For `PROVIDER`, prescribe no configuration change**; retry with backoff and failover only.
 
 ## Before You Present — Validate Your Own Output
 
@@ -640,8 +273,8 @@ classifier output against this list. Treat it as a gate, not a suggestion.
   not have, so replace it with the R5 ruling.
 - [ ] **No unqualified negative survives in the prose.** Search for "zero API errors", "no errors",
   "no throttling", "nothing provider-side". Each either moves into a `Findings` row with its token,
-  window and source API, or becomes `not-queried`. Before any "ruled out errors", confirm **both**
-  the bound `CLIENT_ERRORS` and `SERVER_ERRORS` slots were read, each with its own row.
+  window and source API, or becomes `not-queried`. Before any "ruled out errors", confirm **all
+  three** bound slots (`CLIENT_ERRORS`, `SERVER_ERRORS`, `THROTTLES`) were read, each with its own row.
 - [ ] **`UNDETERMINED` prints its entrance** — either "Step 0 could not bind; the missing fact is X",
   or the R3 template with both blanks filled from `measured` signals, or the R4 no-evidence list.
   None of the three being true means the locus is wrong; go back to R1/R2. Delete "no coverage",
@@ -674,7 +307,7 @@ classifier output against this list. Treat it as a gate, not a suggestion.
   non-zero, "chronic", "newly triggered", "steady" and "no correlated change" are barred and the
   answer says the onset was not covered.
 - [ ] Every cited value was **actually observed, not inferred** — "measured zero" is not "no
-  datapoints" (`references/api-quirks.md` §10). A signal with no finding still gets a row with its
+  datapoints" ([api-quirks.md](references/api-quirks.md) §10). A signal with no finding still gets a row with its
   three-state token.
 - [ ] **No raw AWS account id anywhere in the answer** (Guardrail 2) — search for a bare 12-digit
   number; mask the ARN segment as `<account>`.
@@ -690,48 +323,31 @@ classifier output against this list. Treat it as a gate, not a suggestion.
 - [ ] **The three blocks are all present**, whether or not a report was asked for. If the draft is a
   conversational paragraph with no `TRIAGE:` line and no `Findings` block, it is not a short answer —
   it is an incomplete one, and 0 of 40 such answers have ever carried a check-id. Rewrite it into the
-  three blocks with short prose. `assets/triage-report-template.md` is the long form of the same
-  shape, for when a full written report is wanted.
+  three blocks with short prose. [triage-report-template.md](assets/triage-report-template.md) is the long form of
+  the same shape, for when a full written report is wanted.
 
 If any item cannot be satisfied, say so explicitly in the output rather than quietly dropping it.
 
 ## Incident Signatures
 
 Match a symptom to its first signal and likely locus, then confirm with the classifier. Full table
-with API calls and traps: `references/incident-signatures.md`.
+with API calls and traps: [incident-signatures.md](references/incident-signatures.md).
 
 Locus values below are the **managed-binding** priors. On a self-hosted binding every `PROVIDER`
 prior reads `INFRASTRUCTURE`; on `third-party` a `PROVIDER` prior is a hypothesis resting on absence.
 
-The summary priors and the full table are in `references/incident-signatures.md`; read it when a symptom matches.
-
-
-**This table is not a precondition on the classifier, and neither is any check-id row anywhere in
-this skill.** The rows select *which* evidence to gather and give a prior on the likely locus;
-they never gate whether a locus is rendered. A check-id whose detection rule needs a non-zero
-signal is a rule about **whether that finding fires**, never a rule about whether Step 6 runs. No
-symptom in this table has to match, and no signal has to be non-zero, for the ladder to be walked
-and a token rendered: a ledger of zeroes is a complete ledger and it rules at R5.
+The summary priors and the full table are in that file; read it when a symptom matches. They give a
+prior and select evidence; they never gate whether a locus is rendered.
 
 ## Telemetry Readiness
 
 Triage only works if the signals exist. **Before** running the classifier, confirm the telemetry it
-depends on is present. If these checks fail, say so plainly — their absence is frequently *why the
-incident is hard to diagnose at all*, and that is itself the most actionable finding you can return.
-
-| check-id | What it verifies | Severity | If missing |
-|---|---|---|---|
-| LLM-TEL-001 | Stage-level telemetry across retrieval → inference → tool → response generation | CRITICAL | Slowness/failure cannot be isolated to a stage — triage is blind. |
-| LLM-TEL-002 | CloudWatch metric filter on `stopReason` / `finish_reason` | HIGH | Truncation/quality drift (`max_tokens` share) is invisible. |
-| LLM-TEL-003 | Trace-context propagation (W3C `traceparent` / X-Ray) across agent→KB→model→tool | HIGH | A single request cannot be followed end-to-end. |
-| LLM-TEL-004 | Structured JSON logs with consistent keys | MEDIUM | Logs Insights queries and metric filters are unreliable. |
-| LLM-TEL-005 | A dashboard compositing Bedrock + guardrail + agent signals | MEDIUM | No single operational view during an incident. |
-| LLM-TEL-006 | Invocation-log PII masking on sensitive paths | MEDIUM | Raw prompt/response text delivered unmasked. |
-| LLM-TEL-007 | Custom metric filters beyond the default namespace | LOW | Cannot slice per-use-case / per-caller. |
-| LLM-TEL-008 | Explicit log-group retention | INFO | Logs accumulate indefinitely; cost grows unbounded. |
-
-Full detection rules and remediations: `references/checks-telemetry.md`. The "can I even see what my
-agent is doing?" question maps directly to LLM-TEL-001 and LLM-TEL-003.
+depends on is present (LLM-TEL-001..008 in [checks-telemetry.md](references/checks-telemetry.md):
+stage-level telemetry, a `stopReason` metric filter, trace-context propagation, structured logs, a
+dashboard, PII masking, custom metric filters and log retention). If these checks fail, say so plainly:
+their absence is frequently *why the incident is hard to diagnose at all*, and that is itself the most
+actionable finding you can return. The "can I even see what my agent is doing?" question maps directly to
+LLM-TEL-001 (CRITICAL) and LLM-TEL-003 (HIGH).
 
 ## Guardrails
 
@@ -756,9 +372,9 @@ Non-negotiable, at every step:
 
    `| check-id | Severity | Observed value | Window | Source API | Remediation owner | AWS doc |`
 
-   `assets/delegation-payload.json` is that prompt, finished: read it, fill the four `<…>`
+   [delegation-payload.json](assets/delegation-payload.json) is that prompt, finished: read it, fill the four `<…>`
    placeholders (`task`, `context`, `resources`, `timeframe`), send it unchanged. If it will not
-   fetch (Guardrail 10), the column list above plus these four constraints is the whole of it:
+   fetch (Guardrail 9), the column list above plus these four constraints is the whole of it:
    `Observed value` begins with `measured <value>` / `no-datapoints` / `not-queried`; `AWS doc` is a
    `https://docs.aws.amazon.com/…` URL; distinct `errorCode`s are enumerated with a count each **one
    row per code × calling principal**, reconciled against the metric total, with any remainder
@@ -785,48 +401,22 @@ Non-negotiable, at every step:
    `no-datapoints` as "showed nothing" or "clean" is a dropped row); keep caveats with their row, and
    never upgrade "I cannot confirm X" into "X does not exist"; keep the `owner:` field and hand the
    remediation over by name. Name any difference as `dropped: <row or cell> — because <reason>`.
-9. **Decision-critical content is inline on purpose — never move it out.** The six classifier steps
-   and their decision rules, the ENTRANCE rule, the output contract, Step 6's ladder R1→R5 with its
-   forbidden exits, the UNDETERMINED gate, Step 5b's error-code table, the locus and transience
-   definitions, the load condition, the signal triple,
-   the severity scale, the `LLM-TEL-001..008` table and the read-only rule are all inline **by
-   design**. Do not relocate them into `references/` to save tokens: reference fetches do fail at
-   runtime, and when they do a correct locus must still be reachable from this file alone.
-10. **Make reference loss loud.** On an `Error fetching resource`, or any failed reference read:
+9. **Make reference loss loud.** On an `Error fetching resource`, or any failed reference read:
     retry that **single** path once, on its own — never batched with another path. If it fails
-    again, continue the classifier from the inline content and **name the failed path in the output
+    again, continue the classifier from the checklist and *The rules every answer keeps* in this file and **name the failed path in the output
     along with what you could not cite because of it**. Never retry in a loop, never substitute a
     guess for the file's content, and never leave the failure unmentioned — a silent fetch failure
     turns a disclosed gap into an invisible one.
 
-## Common wrong answers
+## Common wrong answers and severity
 
-- "There is a 5xx in the logs, so prescribe a config change." A single 5xx among hundreds of successful invocations is transient noise. Measure the server-error rate across the window before ruling, and do not send a customer to fix configuration for a one-off blip.
-- "The metric shows no datapoints, so the value is zero." No datapoints usually means no traffic or the metric was not emitted, not a measured zero (`references/api-quirks.md` §10). Distinguish "nothing reported" from "zero measured" before calling a signal healthy.
-- "Throttling appeared, so the quota is too low." A `ThrottlingException` that cleared on retry is not a quota problem. Check whether backoff with jitter is present and whether the throttle climbs with your own traffic before touching quota (`references/incident-signatures.md`, LLM-INV-007).
-- "No AWS Health event is showing, so it must be the customer's config." Absence of a Health event is not proof of customer config. Keep working the classifier; let 5xx rate, blast radius and onset timing rule.
-- "The agent returns empty, so Bedrock is failing." `PREPARED` status is not what the alias serves (`references/api-quirks.md` §6), and a guardrail intervention looks like empty output but is the guardrail working (§11). Resolve alias to version and check interventions first.
-- "The knowledge base is ACTIVE, so retrieval should work." KB `ACTIVE` only means the wiring is valid (`references/api-quirks.md` §8). Verify a `StartIngestionJob` completed before blaming the service for an empty KB.
-- "5xx dominate, so it is definitely provider-side." Confirm the onset is not correlated with a customer deploy or IAM/model-ID change (classifier Step 4) before landing `PROVIDER`; a correlated onset leans `APPLICATION`.
-- "The operator said agent, so this is AgentCore." An agent loop runs in a Lambda, a container, an EC2 process, or off AWS. Bind from evidence (`references/hosting-bindings.md`); an unbindable path is `locus=UNDETERMINED`, not a Bedrock answer.
-- "The model is self-hosted and the serving layer failed, so this is PROVIDER." The customer is the provider on a self-hosted binding. `PROVIDER` has no referent and the locus is `INFRASTRUCTURE`; reporting otherwise sends the operator looking for a Health event that cannot exist.
-- "No LLM has been found yet, but the symptom sounds like one." Localize the failing component first. Loading this skill before the load condition holds produces a Bedrock-shaped answer to an unscoped question.
-
-## Severity Definitions
-
-| Severity | Meaning | Response SLA (derived) |
-|---|---|---|
-| **CRITICAL** | Active production impact or total triage blindness | 24–48 hours |
-| **HIGH** | Serious reliability/observability risk | Within 1 week |
-| **MEDIUM** | Meaningful gap vs best practice | Within 30 days |
-| **LOW** | Minor hardening | When convenient |
-| **INFO** | Observation with no AWS-published threshold | N/A — document / monitor |
-
-SLAs are operational guidance (derived), not AWS-published commitments.
+The wrong answers this skill has produced, each with the check that corrects it, are in
+[common-wrong-answers.md](references/common-wrong-answers.md); read it before presenting. Severity meanings
+and the derived response times are in [severity-definitions.md](references/severity-definitions.md).
 
 ## Error Handling
 
-Before interpreting any response, consult `references/api-quirks.md` — it enumerates the misleading
+Before interpreting any response, consult [api-quirks.md](references/api-quirks.md) — it enumerates the misleading
 responses that cause false positives and false negatives in triage:
 
 - **CloudWatch "no datapoints" ≠ zero** (§10). No datapoints usually means no traffic / metric not
@@ -864,34 +454,20 @@ reaches into an area listed under *When NOT to Use*, read `references/related-sk
 3. End the answer with one line recommending the missing skill and what it would add. Add it only when
    that skill would have changed the answer, and only once.
 
-## Appendix — Reference Links
+## References
 
-Triage references under `references/`:
-
-- `references/hosting-bindings.md` — **Step 0**: the signal triple, the binding table, which locus
-  members each binding can reach, and what to say when the path leaves AWS
-- `references/request-path.md` — the seven stages, symptom → first stage, stage → owner track
-- `references/transient-vs-config-classifier.md` — the full classifier decision procedure (primary)
-- `references/incident-signatures.md` — symptom → first signal → APIs → likely locus → traps
-- `references/checks-telemetry.md` — LLM-TEL-001..008 telemetry-readiness checks
-- `references/metrics-and-logs.md` — CloudWatch metric set + invocation-log error-pattern table
-- `references/api-quirks.md` — misleading read-only API responses
-- `references/collection-reference.md` — the exact read-only APIs used per classifier step
-
-The first two are the ones that keep this skill honest about hosting. Load
-`hosting-bindings.md` before any measurement; load `request-path.md` when the symptom does not
-already name a stage.
-
-Output template under `assets/`:
-
-- `assets/triage-report-template.md` — consolidated triage output format (triage line, classifier
-  evidence, findings with check-ids and severities, prescription, telemetry gaps, disclosed scope)
-
-AWS documentation:
-
-- [Bedrock API error codes](https://docs.aws.amazon.com/bedrock/latest/userguide/troubleshooting-api-error-codes.html)
-- [Bedrock runtime metrics](https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html)
-- [Bedrock model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html)
-- [Cross-region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html)
-- [AWS Health API — DescribeEvents](https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeEvents.html)
-- [Agentic AI Lens — observability (AGENTREL08-BP02)](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/agentrel08-bp02.html)
+- [hosting-bindings.md](references/hosting-bindings.md) — **Step 0**: the signal triple, the binding table, which locus members each binding can reach
+- [request-path.md](references/request-path.md) — the seven stages, symptom → first stage, stage → owner track
+- [router.md](references/router.md) — operator phrasing → first read, check-ids and files; routing triggers
+- [classifier-walkthrough.md](references/classifier-walkthrough.md) — entrance, output contract, Steps 0-6 with branches, ladder, UNDETERMINED gate, verdicts, AWS doc links
+- [error-codes.md](references/error-codes.md) — Step 5b error-code table and the distinctions it must keep
+- [transient-vs-config-classifier.md](references/transient-vs-config-classifier.md) — API arguments and rationale per step
+- [incident-signatures.md](references/incident-signatures.md) — symptom → first signal → APIs → likely locus → traps
+- [checks-telemetry.md](references/checks-telemetry.md) — LLM-TEL-001..008 telemetry-readiness checks
+- [metrics-and-logs.md](references/metrics-and-logs.md) — CloudWatch metric set and invocation-log patterns
+- [collection-reference.md](references/collection-reference.md) — the exact read-only APIs per classifier step
+- [api-quirks.md](references/api-quirks.md) — misleading read-only API responses
+- [common-wrong-answers.md](references/common-wrong-answers.md), [severity-definitions.md](references/severity-definitions.md)
+- [related-skills.md](references/related-skills.md) — owner tracks and fallbacks
+- [triage-report-template.md](assets/triage-report-template.md) — the short three-block form, the R3 gate template and the long report
+- [delegation-payload.json](assets/delegation-payload.json) — the finished prompt for an evidence-gathering sub-agent

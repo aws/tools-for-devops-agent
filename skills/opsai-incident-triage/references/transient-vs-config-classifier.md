@@ -72,7 +72,8 @@ Step 5 — Provider-side exception signatures
     → Absent?                       Continue.
 
 Step 6 — Rule on the TOTAL precedence ladder R1→R5.
-  `SKILL.md` carries the authoritative ladder, including Step 5b and the R3 gate template;
+  `classifier-walkthrough.md` carries the authoritative ladder and `error-codes.md` Step 5b;
+  the R3 gate template is in `assets/triage-report-template.md`;
   this is the same ladder in brief. Walk it in order, first rule satisfied wins, and note
   that it is TOTAL — exactly one rule fires for every question that got here, because R5 is
   a terminal catch-all. There is no fall-through and no "does not apply" exit.
