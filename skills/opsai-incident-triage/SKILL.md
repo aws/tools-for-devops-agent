@@ -889,8 +889,8 @@ Output template under `assets/`:
 
 AWS documentation:
 
-- [Bedrock troubleshooting](https://docs.aws.amazon.com/bedrock/latest/userguide/troubleshooting.html)
-- [Bedrock CloudWatch monitoring](https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html)
+- [Bedrock API error codes](https://docs.aws.amazon.com/bedrock/latest/userguide/troubleshooting-api-error-codes.html)
+- [Bedrock runtime metrics](https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html)
 - [Bedrock model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html)
 - [Cross-region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html)
 - [AWS Health API — DescribeEvents](https://docs.aws.amazon.com/health/latest/APIReference/API_DescribeEvents.html)
