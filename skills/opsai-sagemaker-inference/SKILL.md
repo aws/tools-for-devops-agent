@@ -406,7 +406,10 @@ endpoints or jobs in it, and say so.
 - If that skill is in your available skills, load it and use it for that part.
 - If it isn't, handle that part yourself with the read-only checks in this skill and general AWS knowledge.
   Label findings that come from general knowledge, and don't give them a check-id.
-- At the end of the answer, recommend installing the missing skill once, and name what it would add.
+- At the end of the answer, add one sentence for the operator: name the missing skill and say that adding it
+  to the Agent Space would have answered the part you covered yourself. You cannot install or load a skill
+  that is not already available. Add the sentence only when that skill would have changed the answer, and
+  only once.
 
 | Area | Skill |
 |---|---|
