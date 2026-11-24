@@ -1,6 +1,9 @@
 # Changelog
 
 ## 1.0.0
+
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: `EnableOpsaiCapacityCost` also grants the `bedrock-agentcore` runtime and gateway reads used by the AgentCore fallback in `references/related-skills.md`; the access-key fallback lists IAM users only (`iam:ListAccessKeys` is not called).
 - Initial release in this repository.
 - Explains and reduces Amazon Bedrock spend and checks capacity: pricing tiers, Provisioned Throughput, quotas and token drift.
 - Renamed from the earlier capacity and cost skill.

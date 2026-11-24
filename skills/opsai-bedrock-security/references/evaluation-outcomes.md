@@ -112,7 +112,7 @@ tier, reasons, CHECKS and action for an active, recent, in-use access key on a u
    `<user>: whether aws-marketplace:Subscribe is allowed depends on a condition the audit cannot evaluate (condition key aws:CalledViaLast in AmazonBedrockFullAccess); it was not counted.`
 4. **`AmazonBedrockLimitedAccess`.** Its list allows `bedrock:InvokeModel`,
    `bedrock:InvokeModelWithResponseStream` and `bedrock:CallWithBearerToken` on `*`, and
-   `bedrock-mantle:CallWithBearerToken` on `*`, which are all four invoke actions. GRANT `broad`. Canary: three of six, so not effectively `bedrock:*`.
+   `bedrock-mantle:CallWithBearerToken` on `*`: all four invoke actions. GRANT `broad`. Canary: three of six, so not effectively `bedrock:*`.
    No escalation action is counted, and W1 is added for `aws-marketplace:Subscribe`
    (`aws:CalledViaLast`). Access key: Medium, reason
    `Can invoke any model in any Region; the key is recent and in use.`, CHECKS `LLM-BPA-010`, action

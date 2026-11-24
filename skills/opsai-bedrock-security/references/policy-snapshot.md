@@ -231,7 +231,7 @@ There is no other source for AWS managed documents. The AWS tool rejects an `iam
 
 ## 5. Names inside a filter
 
-User and group names come from IAM: `iam:ListUsers`, `GroupList`, or, for a user the requester
+User and group names come from IAM: `iam:ListUsers`, the `GroupList` field, or, for a user the requester
 names, the `UserName` that `iam:GetUser` returns, never the requester's spelling, because the filter
 compares names case-sensitively. The name of an AWS managed policy comes from the `Name` of its
 attached-policy entry in S1 or S2 (its `PolicyName` in S1s or S2s), never from the ARN: an AWS

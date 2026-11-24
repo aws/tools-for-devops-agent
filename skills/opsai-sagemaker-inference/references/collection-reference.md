@@ -2,6 +2,8 @@
 
 The exact **read-only** API calls the agent uses to collect state for a SageMaker real-time, serverless/async or batch transform review, and the fields each contributes. All calls are describe/list/get — none mutate state. Use ReadOnly or least-privilege credentials (production safety).
 
+**Permissions.** The AWS managed policy `AIDevOpsAgentAccessPolicy` grants every read below (`sagemaker:Describe*` / `List*`, `application-autoscaling:Describe*`, the CloudWatch reads and `s3:ListBucket`), so this skill has no template parameter. `s3:GetObject` is never called (it returns customer data): the batch-output check counts keys and sizes with `s3:ListBucket` and says that object contents were not read.
+
 ---
 
 ## SageMaker real-time inference (SM)
@@ -32,7 +34,7 @@ Scaling targets/policies for the async backlog are read with the `application-au
 | API (service) | Fields contributed | Feeds checks |
 |---|---|---|
 | `sagemaker:ListTransformJobs` / `DescribeTransformJob` | `TransformJobStatus`, `FailureReason`, `TransformInput` (`ContentType`/`SplitType`), `TransformOutput.KmsKeyId`, `MaxConcurrentTransforms`, `MaxPayloadInMB`, `BatchStrategy` | LLM-SM-BATCH-001..004 |
-| `s3:ListBucket` (ListObjectsV2) on the transform input and output prefixes | `.out` object count vs input **file** count; one `<input>.out` is written per input file whose records all succeeded (partial-scoring detection) | LLM-SM-BATCH-003 |
+| `s3:ListBucket` (ListObjectsV2) on the transform input and output prefixes | `.out` object count vs input **file** count; one `<input>.out` is written per input file whose records all succeeded (partial-scoring detection; keys and sizes only, contents are not read) | LLM-SM-BATCH-003 |
 
 ## Observability (OBS)
 

@@ -64,7 +64,7 @@ because the others were ruled out ("diagnosis by elimination").
 | Candidate cause | Signal that would confirm it | Owner |
 |---|---|---|
 | The application queries a different KB id or Region | the application's configured KB id / Region | this skill (ask) |
-| Retrieval returns 0 results for the user's query | a `Retrieve` probe with that query (Step 8) | this skill |
+| Retrieval returns 0 results for the user's query | ingestion statistics and data-source configuration (Step 8); the `Retrieve` call itself is the customer's to run | this skill, then the customer |
 | A metadata filter or `numberOfResults` excludes results | the application's `retrievalConfiguration` | this skill (ask) |
 | The application uses `Retrieve` and discards locations, or does not render citations | application code | application owner |
 | A guardrail blocks or rewrites the response | guardrail intervention metrics / trace | guardrails area (`related-skills.md`) |
@@ -130,7 +130,7 @@ or SSE-S3.
   covered; do not raise or clear 006.
 - A denied policy read is recorded as unavailable, and the half it covers stays undetermined.
 
-## Step 8 — search type and the Retrieve probe (LLM-KB-007)
+## Step 8 — search type and retrieval questions (LLM-KB-007)
 
 **LLM-KB-007 (INFO, workload-specific).** The search type is not stored on the KB.
 `overrideSearchType` (`HYBRID` / `SEMANTIC`) is a per-request field of `Retrieve` /
@@ -140,16 +140,20 @@ MongoDB vector stores that contain a filterable text field. Report 007 as INFO, 
 support, and name the missing signal: the application's `retrievalConfiguration`. Never write "the
 KB is configured SEMANTIC-only".
 
-**Retrieve probe (optional, read-only, billed).** Run it only when the user asks what retrieval
-returns or when a Step 5 / 007 question needs it, and only if `bedrock:Retrieve` is allowed:
+**No Retrieve probe.** Never call `bedrock:Retrieve` (it returns chunk text, which is often
+sensitive customer data, and it is billed); the skill policies template leaves it out. When the user
+asks what retrieval returns, or a Step 5 / 007 question needs it, use this fallback and say that
+retrieval was not run:
 
-- `bedrock-agent-runtime retrieve --knowledge-base-id <kb> --retrieval-query text=<query>
-  --retrieval-configuration` with `numberOfResults` ≤ 5; at most two queries.
-- Report only: the result count, each result's `location` URI and its `score`. Discard `content`
-  before writing anything. If denied, record it and continue.
-- Even when the user explicitly asks to see the chunk text, do not show it: give counts, URIs and
-  scores and say the text is withheld because KB content is often sensitive customer data. The user
-  can open the source objects directly.
+- The latest ingestion jobs per data source (`bedrock:ListIngestionJobs`, plus `bedrock:GetIngestionJob`
+  with the `EnableOpsaiBedrockReview` parameter): `numberOfDocumentsScanned`,
+  `numberOfNewDocumentsIndexed`, `numberOfModifiedDocumentsIndexed`, `numberOfDocumentsFailed`,
+  `numberOfDocumentsDeleted` and, from `GetIngestionJob`, `failureReasons`.
+- The data-source configuration (`bedrock:GetDataSource`: S3 prefix and inclusion prefixes, chunking
+  and parsing) and the source prefix listing (`s3:ListBucket`: keys, sizes, `LastModified`; contents
+  are not read).
+- Give the customer the command to run themselves, for example `aws bedrock-agent-runtime retrieve
+  --knowledge-base-id <kb> --retrieval-query text=<query>` (a CLI command, not a call this skill makes).
 
 ## Step 9 — attachment (LLM-KB-008, LOW)
 
@@ -189,10 +193,11 @@ returns or when a Step 5 / 007 question needs it, and only if `bedrock:Retrieve`
 
 ## Runtime limits seen from the DevOps Agent
 
-The standard agent policy (`AIDevOpsAgentAccessPolicy`) does not list `bedrock:GetIngestionJob` or
-`bedrock:Retrieve`, and the agent's tool may block CloudTrail calls. Expect these denials, use the
-fallbacks above (job summaries for statistics; no probe; 010 unconfirmed), and record each one in
-Scope not covered.
+The standard agent policy (`AIDevOpsAgentAccessPolicy`) does not list `bedrock:GetIngestionJob`
+(added by the `EnableOpsaiBedrockReview` parameter) or `bedrock:Retrieve` (never called), and the
+agent's tool may block CloudTrail calls. Expect these denials, use the fallbacks above (job
+summaries for statistics; ingestion statistics instead of retrieval; 010 unconfirmed), and record
+each one in Scope not covered.
 
 ## AWS documentation
 

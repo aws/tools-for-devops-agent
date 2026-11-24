@@ -1,6 +1,9 @@
 # Changelog
 
 ## 1.0.0
+
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: `sagemaker:ListInferenceRecommendationsJobs` (was a non-existent name); batch output is checked with `s3:ListBucket` only, without `s3:GetObject`.
 - Initial release. Merges the earlier SageMaker inference endpoints, serverless and async, and batch transform skills into one skill.
 - Real-time endpoints: failures, health check, VPC path, scaling, `ModelError`, right-sizing, lineage (LLM-SM-001..011).
 - Serverless and asynchronous endpoints: cold start, concurrency, notifications, backlog scaling, fit decision (LLM-SM-SERVE-001..005).

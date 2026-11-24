@@ -2,6 +2,9 @@
 
 ## 1.0.0
 
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: no `bedrock:Retrieve` probe (retrieval questions use ingestion-job statistics), no `iam:SimulatePrincipalPolicy` (policies evaluated statically); `EnableOpsaiBedrockReview` also grants the AgentCore status reads.
+  - Report template: the SimulatePrincipalPolicy example now reads "not called → evaluated from policy documents, not simulated".
 - Initial version, merged from the earlier Bedrock configuration skill (LLM-INV, model access and
   configuration) and RAG knowledge base skill (LLM-KB). Both check families and their catalogs
   are kept unchanged.

@@ -32,10 +32,16 @@ actions:
 - `sagemaker:ListTrainingJobs`, `sagemaker:DescribeTrainingJob`
 - the Nova customization describe actions (these run as recipe-driven training jobs, read via
   `sagemaker:DescribeTrainingJob`)
-- `service-quotas:GetServiceQuota`, `service-quotas:ListServiceQuotas`
-- `s3:ListBucket`, `s3:GetObject` (HeadObject) on the training / recipe / output prefixes
-- `iam:GetRole`, `iam:SimulatePrincipalPolicy` on the execution role
+- `servicequotas:GetServiceQuota`, `servicequotas:ListServiceQuotas` (the CLI is `aws service-quotas`)
+- `s3:ListBucket` (the ListObjectsV2 call) on the training / recipe / output prefixes: keys, sizes and
+  dates only. The skill does not use `s3:GetObject`, which returns customer data
+- `iam:GetRole`, `iam:ListAttachedRolePolicies`, `iam:ListRolePolicies`, `iam:GetRolePolicy`,
+  `iam:GetPolicy`, `iam:GetPolicyVersion` on the execution role. The skill does not use
+  `iam:SimulatePrincipalPolicy` (the agent runtime refuses it even when granted); it evaluates the
+  policy documents and labels the verdict "evaluated from policy documents, not simulated"
 - `sagemaker:ListModelPackages`, `sagemaker:DescribeModelPackage`
+
+`AIDevOpsAgentAccessPolicy` grants all of these, so no skill policies template parameter is needed.
 
 Prefer ReadOnly over Admin credentials (production safety).
 

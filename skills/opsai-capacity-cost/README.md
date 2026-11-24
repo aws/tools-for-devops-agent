@@ -176,7 +176,8 @@ The default DevOps Agent policy, `AIDevOpsAgentAccessPolicy`, grants every actio
 `pricing:GetProducts`. The `EnableOpsaiCapacityCost` parameter of the
 [`devops-agent-skill-policies`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/README.md)
 CloudFormation template adds it (a metadata read: the Price List API returns published prices, no
-account data). Without it the skill reads prices from the Bedrock pricing page and, if that page
+account data), plus the `bedrock-agentcore` runtime and gateway list/get reads used only for the
+AgentCore hand-off. Without it the skill reads prices from the Bedrock pricing page and, if that page
 cannot be read, marks the affected figures "unpriced: pricing:GetProducts denied"; every other check
 runs unchanged.
 

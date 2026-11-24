@@ -17,7 +17,7 @@
 
 | Job | Type (training / customization) | Status (`TrainingJobStatus`) | `SecondaryStatus` | `FailureReason` (summarized — no secret/data content) | Checkpoint / output produced? (from S3) |
 |---|---|---|---|---|---|
-| `<name>` | `<type>` | `<InProgress / Completed / Failed / Stopped>` | `<Starting / Pending / Training / …>` | `<one-line summary, no raw data>` | `<yes/no — from ListObjectsV2>` |
+| `<name>` | `<type>` | `<InProgress / Completed / Failed / Stopped>` | `<Starting / Pending / Training / …>` | `<one-line summary, no raw data>` | `<yes/no — from ListObjectsV2 key metadata (s3:ListBucket)>` |
 
 > `InProgress` with `SecondaryStatus` `Starting`/`Pending` waiting on GPU capacity is **NOT** `Failed`
 > (api-quirks §1). A Pending-on-capacity job is reported as Pending, never as a failure, and gets no

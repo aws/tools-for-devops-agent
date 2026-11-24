@@ -91,8 +91,8 @@ Bedrock / SageMaker read-only API responses whose obvious reading is **wrong** o
 
 ## 18. `AccessDenied` on ingestion/retrieval ≠ a broken identity policy
 
-- **Trap:** An `AccessDenied` / `AccessDeniedException` on an ingestion job or a `Retrieve` call reads as "the execution role is missing a permission" and a clean `iam:SimulatePrincipalPolicy` result reads as "authorization is fine."
-- **Correct reading:** The denial may originate from a **resource policy** (cross-account S3 bucket policy) or an **Organizations SCP explicit deny** that identity-policy simulation does not evaluate. A clean SimulatePrincipalPolicy does **not** clear LLM-KB-011 — also read `s3:GetBucketPolicy` and `organizations:ListPoliciesForTarget`/`DescribePolicy`, and confirm the role trust policy allows `bedrock.amazonaws.com`. Return the specific blocking statement, account segment masked.
+- **Trap:** An `AccessDenied` / `AccessDeniedException` on an ingestion job or a `Retrieve` call reads as "the execution role is missing a permission" and a clean read of the role's identity policies reads as "authorization is fine."
+- **Correct reading:** The denial may originate from a **resource policy** (cross-account S3 bucket policy) or an **Organizations SCP explicit deny** that the identity policies do not show. A clean identity-policy read does **not** clear LLM-KB-011 — also read `s3:GetBucketPolicy` and `organizations:ListPoliciesForTarget`/`DescribePolicy`, and confirm the role trust policy allows `bedrock.amazonaws.com`. Return the specific blocking statement, account segment masked.
 
 ## 19. `ThrottlingException` ≠ quota exhausted
 

@@ -142,7 +142,9 @@ telemetry-coverage view of the same filter is outside this skill.
 filter, an alarm or a log group — those are recommendations the operator runs.
 
 `bedrock:ApplyGuardrail` is **not** a collection call. It is billable, it invokes a guardrail
-rather than describing one, and it must never be called by this skill.
+rather than describing one, and it must never be called by this skill. A guardrail's configuration
+is read with `bedrock:GetGuardrail` (in `AIDevOpsAgentAccessPolicy`), and the checks reason from
+the configured policies; its behaviour comes from the `AWS/Bedrock/Guardrails` metrics.
 
 ## 7. SageMaker-side evaluation job signals
 

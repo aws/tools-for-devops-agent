@@ -124,8 +124,11 @@ Non-negotiable, at every step:
    `bedrock:ApplyGuardrail` and `bedrock:InvokeGuardrailChecks` (`bedrock-runtime` client calls): both invoke the
    guardrail, both are billable, and pointed at the wrong identifier they exercise a production path.
    IAM classes both as access level Read and `ReadOnlyAccess` omits them, so only this rule protects
-   against them. Testing a guardrail is the customer's action, not yours. Report that no validation
-   evidence exists and give them the exact command to run.
+   against them. Testing a guardrail is the customer's action, not yours. Instead, read the
+   configuration of the version each path enforces (`bedrock:GetGuardrail`, granted by
+   `AIDevOpsAgentAccessPolicy`) and reason from the configured policies, label that verdict as read
+   from the configuration, not tested, report that no validation evidence exists and give them the
+   exact command to run.
 2. **Never echo a raw AWS account ID** or anything credential-shaped; the Output rule above covers
    every sentence, including delegation labels and status notes. Mask an ARN quoted as evidence:
    `arn:aws:bedrock:us-east-1:<account>:guardrail/...`. When you hand work to a sub-agent, put this rule

@@ -8,7 +8,7 @@ How to read each API and metric is in `references/collection-reference.md`. Load
 | Operator says | First read | Load |
 |---|---|---|
 | Is my bedrock set up correctly, is invocation logging on | `GetModelInvocationLoggingConfiguration`, treating empty as disabled | `references/checks-model-invocation.md` (LLM-INV-001, 005, 010) |
-| Why does InvokeModel return AccessDeniedException | The exact error message (none in hand: ask, and name no cause), then `GetFoundationModel` for end of life, then the message's policy-type clause. `iam:SimulatePrincipalPolicy` only once the class is IAM; Organizations only for an SCP | `references/diagnosis-playbook.md` Step 5, `references/checks-model-invocation.md` (LLM-INV-003, 013, 014, 015), `references/api-quirks.md` |
+| Why does InvokeModel return AccessDeniedException | The exact error message (none in hand: ask, and name no cause), then `GetFoundationModel` for end of life, then the message's policy-type clause. the principal's policies, evaluated statically, only once the class is IAM (`iam:SimulatePrincipalPolicy` is never called); Organizations only for an SCP | `references/diagnosis-playbook.md` Step 5, `references/checks-model-invocation.md` (LLM-INV-003, 013, 014, 015), `references/api-quirks.md` |
 | A model is enabled but still fails, was marketplace subscription granted | Model-access status and real invocation errors, not list membership | `references/checks-model-invocation.md` (LLM-INV-014), `references/api-quirks.md` |
 | Am i using an inference profile or a bare model id | `ListInferenceProfiles` and the id the invocation passes | `references/checks-model-invocation.md` (LLM-INV-002) |
 | Is this model deprecated or end-of-life | `ListFoundationModels` `modelLifecycle.status`, cross-checked against the EOL date | `references/checks-model-invocation.md` (LLM-INV-003) |
@@ -62,10 +62,10 @@ if the user asks for a policy up front, give one only after the class is an IAM 
   means an SCP (LLM-INV-015); an identity-based policy, permissions boundary, session policy, or VPC
   endpoint policy clause means an in-account control (LLM-INV-013). A message with no such clause
   classifies nothing by itself.
-- **IAM deny (LLM-INV-013)** → `iam:SimulatePrincipalPolicy` for `bedrock:InvokeModel` on the failing
-  ARN: `EvalDecision` plus `OrganizationsDecisionDetail.AllowedByOrganizations`. If the simulation is
-  denied (the DevOps Agent role is), record it as unavailable, read the principal's policies directly,
-  compare their Resource list with the failing ARN, and say what stays unconfirmed. Fix: add the
+- **IAM deny (LLM-INV-013)** → never call `iam:SimulatePrincipalPolicy` (the DevOps Agent runtime
+  refuses it even when granted). Read the principal's policies directly, compare their Resource list
+  with the failing ARN, label the verdict "evaluated from policy documents, not simulated", and say
+  what stays unconfirmed. Fix: add the
   missing Allow, scoped to that ARN.
 - **SCP deny (LLM-INV-015)** → `organizations describe-organization` first. If it returns
   `AWSOrganizationsNotInUseException`, the account is not in an Organization, no SCP can apply, and
@@ -159,7 +159,7 @@ read-only responses that cause false positives and false negatives in a configur
 - **Inference-profile prefix is routing scope, not a region pin** (§14). Geographic prefixes
   (`us.`, `eu.`, `apac.`, and others) and `global.` mark profile ids, not bare model IDs
   (LLM-INV-002).
-- **`iam:SimulatePrincipalPolicy` or Organizations reads denied, or no Organization.** These are
+- **`iam:SimulatePrincipalPolicy` unavailable (never called), Organizations reads denied, or no Organization.** These are
   common, not exceptional. Follow the fallbacks in `references/diagnosis-playbook.md` Step 5 and
   disclose what stays unconfirmed.
 

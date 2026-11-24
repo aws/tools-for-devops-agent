@@ -1,5 +1,9 @@
 # Changelog
 ## 1.0.0
+
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: `servicequotas:` prefix (was `service-quotas:`); artifact and channel checks use `s3:ListBucket` only (no HeadObject / `s3:GetObject`); `iam:SimulatePrincipalPolicy` replaced by a static policy read.
+  - Report template: input-check hint reads `ListObjectsV2` key metadata (`s3:ListBucket`), no HeadObject.
 - Initial release. Merges the earlier SageMaker training and Model Registry skills into one skill.
 - Training / customization: Nova and JumpStart fine-tuning job failures, capacity vs quota, Pending-on-capacity, missing checkpoints, billed GPU cost (LLM-SM-TRAIN-001..008).
 - Model Registry: registration, approval gating, lineage, package-group boundary and CMK encryption (LLM-SM-REG-001..004).

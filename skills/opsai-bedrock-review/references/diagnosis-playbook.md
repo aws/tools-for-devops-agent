@@ -13,10 +13,10 @@ standard `AIDevOpsAgentAccessPolicy` role:
 | Call | Result | Use instead |
 |---|---|---|
 | any `cloudtrail` operation (`LookupEvents`) | blocked by the tool ("cloudtrail service operations are not allowed") | invocation logs (`identity.arn`, `modelId`), `AWS/Bedrock` metrics, or ask the user for the CloudTrail event / full error message |
-| `iam:SimulatePrincipalPolicy` | denied by the tool | read the principal's policies (Step 4 calls) |
-| `iam:GetAccountAuthorizationDetails` | denied | per-role `list-attached-role-policies` / `list-role-policies` / `get-role-policy` |
+| `iam:SimulatePrincipalPolicy` | refused by the runtime even when granted; never call it | read the principal's policies (Step 4 calls) and label the verdict "evaluated from policy documents, not simulated" |
+| `iam:GetAccountAuthorizationDetails` | not in the managed policy or this skill's template entry; do not call | per-role `list-attached-role-policies` / `list-role-policies` / `get-role-policy` |
 | `iam:GetPolicyVersion` on an AWS-managed policy (`arn:aws:iam::aws:policy/...`) | blocked | judge AWS-managed policies by name (Step 4) |
-| `bedrock:GetFoundationModelAvailability` | AccessDenied | `GetFoundationModel` lifecycle plus successful invocations in logs/metrics |
+| `bedrock:GetFoundationModelAvailability` | AccessDenied unless the `EnableOpsaiBedrockReview` parameter is set | `GetFoundationModel` lifecycle plus successful invocations in logs/metrics |
 
 Record each one you hit as unavailable, with the fallback you used. Other runtimes may allow these
 calls; try once, never retry a denied call.
@@ -194,17 +194,14 @@ model's access agreement (014), or a LEGACY/EOL model (003, see 5a). Check those
 answering. When several policy types deny, the message names only one, so confirm with 5d–5f where
 you can.
 
-### 5d. Simulate (LLM-INV-013)
+### 5d. Evaluate the policies (LLM-INV-013)
 
-`iam simulate-principal-policy --policy-source-arn <role-arn> --action-names bedrock:InvokeModel
---resource-arns <model-or-profile-arn>`. Read `EvalDecision` (`allowed` / `implicitDeny` /
-`explicitDeny`) and `OrganizationsDecisionDetail.AllowedByOrganizations`.
-`AllowedByOrganizations: false` attributes the deny to an SCP even when you cannot read
-Organizations. The simulator does not return SCP statements.
-
-**If SimulatePrincipalPolicy is denied** (the DevOps Agent role is): record it as unavailable, then
-read the principal's policies directly (Step 4 calls) and compare their `bedrock:InvokeModel*`
-Resource list with the failing ARN. State which conclusion that leaves unconfirmed. Do not guess.
+Never call `iam:SimulatePrincipalPolicy`: the DevOps Agent runtime refuses it even when granted.
+Read the principal's policies directly (Step 4 calls, plus the permissions boundary from
+`iam:GetRole`) and compare their `bedrock:InvokeModel*` Resource list and any Deny with the failing
+ARN. Label the verdict "evaluated from policy documents, not simulated" and state what static
+reading cannot see: session policies, resource-based policies, and SCPs unless 5e reads them. Do not
+guess.
 
 ### 5e. Organizations (LLM-INV-015)
 

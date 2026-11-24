@@ -1,5 +1,8 @@
 # Changelog
 ## 1.0.0
+
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: states the fallback when `bedrock:GetEvaluationJob` is denied and reads guardrail configuration with `bedrock:GetGuardrail` instead of `bedrock:ApplyGuardrail`.
 - Initial release. Merges the earlier quality evaluation and SageMaker evaluation skills into one skill.
 - Bedrock evaluation: model evaluation (`CreateEvaluationJob`, automated or human), Bedrock RAG evaluation jobs on a knowledge base, quality gates, regression detection and A/B comparison (LLM-EVAL-001..011).
 - Finish-reason drift from Bedrock invocation logs (LLM-EVAL-012..014).

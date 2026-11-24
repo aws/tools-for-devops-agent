@@ -41,8 +41,8 @@ Related skills are optional: when one is installed this skill uses it for that p
 ## Prerequisites
 
 Read-only IAM permissions in the account and Region under review. The AWS managed policy
-`AIDevOpsAgentAccessPolicy` already grants the Bedrock Agents Classic reads (`bedrock:Get*` / `bedrock:List*`
-for agents, aliases and action groups; `bedrock-agent` is only the CLI client name, not an IAM prefix), the
+`AIDevOpsAgentAccessPolicy` already grants the Bedrock Agents Classic reads (`bedrock:GetAgent`, `bedrock:GetAgentAlias`,
+`bedrock:GetAgentActionGroup` and `bedrock:List*` for agents, aliases and action groups; `bedrock-agent` is only the CLI client name, not an IAM prefix), the
 IAM policy reads, `organizations:ListPoliciesForTarget` / `DescribePolicy`, `ec2:DescribeVpcEndpoints`,
 `lambda:GetPolicy`, `cloudtrail:LookupEvents` and the CloudWatch and Logs reads.
 
@@ -52,8 +52,8 @@ IAM policy reads, `organizations:ListPoliciesForTarget` / `DescribePolicy`, `ec2
 > permission gap, not as an absent runtime.
 
 The skill does not use `iam:SimulatePrincipalPolicy`, which the agent runtime refuses even when granted: it
-reads the runtime role's policies and the SCPs and labels the verdict "read from policy documents, not
-simulated". No write, modify, or delete permissions are needed or used.
+reads the runtime role's policies and the SCPs and labels the verdict "evaluated from policy documents, not
+simulated". It does not use `s3:GetObject` (returns customer data). No write, modify, or delete permissions are needed or used.
 
 ## Uploading to AWS DevOps Agent
 
@@ -77,7 +77,7 @@ top level, with the repo-management files excluded.
   then checks guardrail attachment and tracing (LLM-AGT-001, LLM-AGT-005, LLM-AGT-007).
 - "The action group keeps failing." → inspects the executor Lambda's role scope (LLM-AGT-002) and the
   action-group / Code Interpreter config (LLM-AGT-006).
-- "My AgentCore runtime can't invoke the model." → simulates the runtime role for `bedrock:InvokeModel*`
+- "My AgentCore runtime can't invoke the model." → evaluates the runtime role's policies for `bedrock:InvokeModel*`
   (LLM-AC-001) and, if denied, correlates against SCPs (LLM-AC-002).
 - "We're getting gateway errors / a VPC endpoint seems missing." → checks required VPC endpoints
   (LLM-AC-003) and gateway target config (LLM-AC-004).
