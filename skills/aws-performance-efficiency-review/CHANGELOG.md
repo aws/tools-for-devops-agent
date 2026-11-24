@@ -22,3 +22,4 @@
 - Delegation blocks that carry the evidence, scope and ranking rules into sub-agent tasks.
 - A step checklist under Instructions so the multi-step workflow can be tracked.
 - Reference files: diagnosis rules, report and delegation, metrics by service, bottleneck patterns, hidden limits, logs and statistics, Well-Architected mapping, telemetry sources.
+- Skill description names the AI entry points that users actually ask about ("is Bedrock the problem", "quota increase", slow or empty model calls, tokens per minute) so the chat deep-dive subagent selects the skill for model-invocation questions, not only for classic latency wording; observed on a Bedrock caller-timeout scenario where four chat runs in a row left the skill unread while the investigation path loaded it.
