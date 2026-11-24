@@ -13,7 +13,7 @@ description: Review Amazon Bedrock configuration, model access and Knowledge Bas
   reproduce retrieved chunk text.
 metadata:
   author: ankursinha286
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "aws-support-managed"
   summary: "Reviews Amazon Bedrock setup and Knowledge Bases: invocation logging, model access and lifecycle, denied calls, empty or stale RAG answers and failed ingestion."
   aws-devops-agent-skills.agent-types: "GENERIC"

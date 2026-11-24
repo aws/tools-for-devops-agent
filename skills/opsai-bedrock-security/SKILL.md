@@ -12,7 +12,7 @@ description: Audit Amazon Bedrock security, read-only - which IAM users and long
   ids unchanged. Never write a 12-digit account ID or a full key ID in any text, plans and prompts included.
 metadata:
   author: cswingchan
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "aws-support-managed"
   summary: "Audits Amazon Bedrock security: which IAM users and long-lived keys can invoke models, and whether Guardrails protect production paths."
   aws-devops-agent-skills.agent-types: "GENERIC"

@@ -9,7 +9,7 @@ description: Diagnose an Amazon SageMaker training or customization job, includi
   rejected on an instance type, lineage is missing, or managed MLflow calls fail. Not for evaluation jobs of a fine-tuned model (Nova eval recipe, LLM-as-judge), even when one fails. Findings carry LLM-SM-TRAIN and LLM-SM-REG check-ids and AWS-doc citations, read-only.
 metadata:
   author: jmadhuki
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "aws-support-managed"
   summary: "Diagnoses Amazon SageMaker training and fine-tuning jobs that fail, hang or waste GPU time, and reviews Model Registry registration, approval and lineage."
   aws-devops-agent-skills.agent-types: "GENERIC"

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: the reads `AIDevOpsAgentAccessPolicy` lacks come from the `EnableOpsaiBedrockSecurity` template parameter (now also the AgentCore status reads); invoke actions name `bedrock:InvokeModel` / `InvokeModelWithResponseStream`, which authorize Converse / ConverseStream.
+
 ## 1.0.0
 
 - Initial version, merged from the earlier Bedrock permissions audit skill (LLM-BPA, long-lived
@@ -10,4 +15,3 @@
   with that area's reference files under `references/` and `references/`.
 - Works on its own: sibling skills are optional, with a fallback check per area in
   `references/related-skills.md`.
-- IAM: the reads `AIDevOpsAgentAccessPolicy` lacks come from the `EnableOpsaiBedrockSecurity` template parameter (now also the AgentCore status reads); invoke actions name `bedrock:InvokeModel` / `InvokeModelWithResponseStream`, which authorize Converse / ConverseStream.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: no `bedrock:Retrieve` probe (retrieval questions use ingestion-job statistics), no `iam:SimulatePrincipalPolicy` (policies evaluated statically); `EnableOpsaiBedrockReview` also grants the AgentCore status reads.
+
 ## 1.0.0
 
 - Initial version, merged from the earlier Bedrock configuration skill (LLM-INV, model access and
@@ -11,4 +16,3 @@
   one each; the knowledge-base quirks are §18 and §19.
 - Works on its own: sibling skills are optional, with a fallback check per area in
   `references/related-skills.md`.
-- IAM: no `bedrock:Retrieve` probe (retrieval questions use ingestion-job statistics), no `iam:SimulatePrincipalPolicy` (policies evaluated statically); `EnableOpsaiBedrockReview` also grants the AgentCore status reads.

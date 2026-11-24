@@ -12,7 +12,7 @@ description: Diagnose and review model output quality and evaluation jobs on Ama
   carry LLM-EVAL and LLM-SM-EVAL check-ids with an AWS-doc citation, from read-only APIs.
 metadata:
   author: jmadhuki, ankitsri-aws
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "aws-support-managed"
   summary: "Reviews whether model output quality is measured, automated and gated, and diagnoses Bedrock (including RAG) and SageMaker evaluation jobs."
   aws-devops-agent-skills.agent-types: "GENERIC"

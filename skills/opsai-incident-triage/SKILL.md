@@ -12,7 +12,7 @@ description: Triage a live failure where a model call is in the failing path - A
   path. Never assume "agent" means AgentCore. Cites LLM-TEL / LLM-INV check-ids, read-only.
 metadata:
   author: ankitsri-aws
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "aws-support-managed"
   summary: "Triages live model-call failures (errors, throttling, latency) and rules whether the fault is the provider, infrastructure or app."
   aws-devops-agent-skills.agent-types: "GENERIC"

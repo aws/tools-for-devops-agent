@@ -1,4 +1,9 @@
 # Changelog
+## 1.0.1
+
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: `servicequotas:` prefix (was `service-quotas:`); artifact and channel checks use `s3:ListBucket` only (no HeadObject / `s3:GetObject`); `iam:SimulatePrincipalPolicy` replaced by a static policy read.
+
 ## 1.0.0
 - Initial release. Merges the earlier SageMaker training and Model Registry skills into one skill.
 - Training / customization: Nova and JumpStart fine-tuning job failures, capacity vs quota, Pending-on-capacity, missing checkpoints, billed GPU cost (LLM-SM-TRAIN-001..008).
@@ -9,4 +14,3 @@
 - `known-causes.md` merged into one file: training §1–§7, Model Registry §8–§14.
 - The registry catalog intro and report template no longer name the endpoint check-id for a deployed endpoint lacking lineage; they name the SageMaker endpoint area instead.
 - Old evals results (structure, best-practices, functional) not carried over; best-practices and functional must be re-run.
-- IAM: `servicequotas:` prefix (was `service-quotas:`); artifact and channel checks use `s3:ListBucket` only (no HeadObject / `s3:GetObject`); `iam:SimulatePrincipalPolicy` replaced by a static policy read.

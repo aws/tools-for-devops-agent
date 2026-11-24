@@ -1,4 +1,9 @@
 # Changelog
+## 1.0.1
+
+- PR #268 review item 1 (IAM reads and action names):
+  - IAM: states the fallback when `bedrock:GetEvaluationJob` is denied and reads guardrail configuration with `bedrock:GetGuardrail` instead of `bedrock:ApplyGuardrail`.
+
 ## 1.0.0
 - Initial release. Merges the earlier quality evaluation and SageMaker evaluation skills into one skill.
 - Bedrock evaluation: model evaluation (`CreateEvaluationJob`, automated or human), Bedrock RAG evaluation jobs on a knowledge base, quality gates, regression detection and A/B comparison (LLM-EVAL-001..011).
@@ -15,4 +20,3 @@
 - Recommended custom metric namespaces renamed to `OpsAI/Evaluation` and `OpsAI/FinishReason/MaxTokens`; dashboards or alarms built on the previous prefix need re-pointing.
 - The SageMaker report template is renamed `assets/sagemaker-evaluation-report-template.md`; the report template and delegation payload use an `Owning area` column instead of a skill name.
 - Old evals results (structure, best-practices, functional) not carried over; best-practices and functional must be re-run.
-- IAM: states the fallback when `bedrock:GetEvaluationJob` is denied and reads guardrail configuration with `bedrock:GetGuardrail` instead of `bedrock:ApplyGuardrail`.
