@@ -42,7 +42,7 @@ The kubectl discovery is the primary data source for an EKS review; the control-
 | Scalability | `pillars/scalability.md` | 2, 8, 9, 18, 24, 26, 27, 37, 41 | size vs K8s thresholds, services-per-namespace, EndpointSlices, `secrets` vs 10k, webhooks-per-resource, CoreDNS scaling, instance diversity, T-series avoidance, DaemonSet rollout safety, PriorityClass, dedicated cluster-services capacity | CloudWatch (`metrics-thresholds.md`): API request/pending-pod metrics; AWS-API: nodegroup/NodePool limits |
 | Performance Efficiency | `pillars/performance.md` | 4, 5, 11, 12, 13, 35, 36, 47 | requests/limits coverage, HPA/VPA/KEDA coverage, `qos_*`, ResourceQuota/LimitRange, Graviton, instance fit | CloudWatch (`metrics-thresholds.md`): usage-vs-requests right-sizing (PM1–PM3), EBS performance (P13); Compute Optimizer AWS-API (P12) |
 | Observability | `pillars/observability.md` | 7, 19, 29 | `features.observability.*`, warning events, `pods_oomkilled`/`pods_crashloop`/`pods_imagepull` | CloudWatch (`metrics-thresholds.md`): 7-day signals (O12–O16), conditional telemetry/alarm coverage (O17–O20); **`cloudwatch.describeAlarms` → recommended-alarm coverage (O21) + the Recommended Alarms table for IDR/CWR** |
-| Networking | `pillars/networking.md` | 8, 10, 25, 26, 41 | `features.cni.*` + `features.cni_config.*` (prefix delegation, custom networking, SG-for-pods, IPv6, SNAT), kube-proxy mode, LB controller + target-type, CoreDNS scaling, NodeLocal DNS, IP-exhaustion signals | AWS-API (`aws-api-checks.md`): per-subnet IP availability (AX7), LB-controller IAM (AX9), target-group health; CloudWatch (`metrics-thresholds.md`): ENA/DNS + NAT allowance (N21/N22) |
+| Networking | `pillars/networking.md` | 8, 10, 25, 26, 35, 41 | `features.cni.*` + `features.cni_config.*` (prefix delegation, custom networking, SG-for-pods, IPv6, SNAT), kube-proxy mode, LB controller + target-type, CoreDNS scaling, NodeLocal DNS, IP-exhaustion signals | AWS-API (`aws-api-checks.md`): per-subnet IP availability (AX7), LB-controller IAM (AX9), target-group health; CloudWatch (`metrics-thresholds.md`): ENA/DNS + NAT allowance (N21/N22) |
 | Cost / Sustainability / Architectural | `pillars/cost-architecture.md` | 4, 5, 8, 10, 11, 12, 13, 20, 23, 28, 29, 32, 36, 47 | `spot_nodes`, Graviton, gp2→gp3, unused PVCs, cost tooling, HPA/VPA right-sizing, blocking-PDB scale-down leaks, EFS/instance-store, ingress consolidation, topology-aware routing, cross-AZ, telemetry cost | CloudWatch (`metrics-thresholds.md`): utilization / right-sizing / cross-AZ transfer; Compute Optimizer (AWS-API) |
 | Control Plane Health | `pillars/control-plane.md` | — (CloudWatch, not kubectl) | etcd size/growth/write-concentration, APF 429s in `system`/`leader-election`, API 5xx + LIST latency, KCM QPS, scheduler/eviction backpressure, capacity mode. **MANDATORY for every operations review / CWR — always attempt CloudWatch logs + metrics collection; never skip or blanket-N/A.** | `control-plane-health/` (queries.md CP1–CP18 via `logs:StartQuery`; metric-sources/thresholds/procedures/remediations/alerting) + control-plane metrics (`GetMetricData`); Prometheus (AMP / in-cluster) or Datadog/New Relic/Dynatrace/Splunk connectors when present |
 | AWS-API & Cluster Insights | `aws-api-checks.md` | — (EKS/EC2/IAM + Cluster Insights, not kubectl) | failing Cluster Insights, access entries w/o policy, auth mode, nodegroup/addon health + upgrade conflicts, unregistered EC2 instances, Pod Identity associations, controller IAM, per-subnet IP availability, control-plane logging/KMS/endpoint | — (this component IS the AWS-API source; run for any operations review / CWR when AWS-API access is available) |
@@ -77,7 +77,7 @@ This table mirrors [`../runtime/check-manifest.md`](../runtime/check-manifest.md
 | Pillar / component | Check IDs (all required) | Count | Source |
 |--------------------|--------------------------|-------|--------|
 | Operations | Op1–Op32, OpM1–OpM9 | 41 | `pillars/operations.md` |
-| Resilience & HA | R1–R22, RM1–RM4 | 26 | `pillars/resilience.md` |
+| Resilience & HA | R1–R23, RM1–RM4 | 27 | `pillars/resilience.md` |
 | Security | S1–S39, SM1–SM7 | 46 | `pillars/security.md` |
 | Scalability | Sc1–Sc23, ScM1–ScM7 | 30 | `pillars/scalability.md` |
 | Performance Efficiency | P1–P16, PM1–PM3 | 19 | `pillars/performance.md` |
@@ -86,7 +86,7 @@ This table mirrors [`../runtime/check-manifest.md`](../runtime/check-manifest.md
 | Cost / Sustainability / Architectural | A1–A26, AM1–AM7 | 33 | `pillars/cost-architecture.md` |
 | Control Plane Health | CP1–CP11, CP-M1–CP-M6, CPM1–CPM3 | 20 | `pillars/control-plane.md` (CloudWatch) |
 | AWS-API & Cluster Insights | AX1–AX14 | 14 | `aws-api-checks.md` |
-| **Core total (all 9 pillars + AX)** | | **288** | |
+| **Core total (all 9 pillars + AX)** | | **289** | |
 
 **Conditional checklists — grade in full only when their gate fires; otherwise one explicit `N/A — no <x>` line:**
 

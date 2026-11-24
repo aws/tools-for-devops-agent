@@ -109,6 +109,13 @@ metadata:
 
 ### N16 — Pod readiness gates for LB
 **Why it matters:** Without LBC readiness gates, traffic can hit pods before they're registered healthy in the target group → 5xx during rollouts/scale-up.
-**Steps:** Label namespaces for LBC pod readiness gate injection so rollouts wait for target-group registration.
+**Steps:**
+1. Applies to IP-mode targets only (ALB `target-type: ip`, NLB IP targets, `TargetGroupBinding` with `targetType: ip`); with instance targets the node, not the pod, is registered.
+2. Label each namespace that runs such pods: `kubectl label namespace ${NAMESPACE} elbv2.k8s.aws/pod-readiness-gate-inject=enabled`.
+3. Recreate the pods (for example `kubectl rollout restart`): the webhook injects the gate only when a pod is created, so pods that existed before the label still have no gate.
+4. Verify that running pods carry the gate:
+   ```bash
+   kubectl get pods -n ${NAMESPACE} -o json | jq -r '.items[] | select([.spec.readinessGates[]?.conditionType | startswith("target-health.elbv2.k8s.aws")] | any | not) | .metadata.name'
+   ```
 **References:**
 - [AWS Load Balancer Controller — Pod readiness gate](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/deploy/pod_readiness_gate/)

@@ -32,13 +32,18 @@ spec:
 - [EKS Best Practices — Updating applications](https://docs.aws.amazon.com/eks/latest/best-practices/application.html)
 - [Kubernetes — Rolling update Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment)
 
-### R11 — terminationGracePeriod > 0
-**Why it matters:** A very short grace period (or 0) kills pods before in-flight requests drain → dropped connections during rollouts and scale-down.
-**Steps:** Keep the default 30s (or longer for slow-draining apps); add a `preStop` hook for connection draining where needed.
+### R11 — terminationGracePeriod covers preStop
+**Why it matters:** A very short grace period (or 0) kills pods before in-flight requests drain → dropped connections during rollouts and scale-down. The grace period is one budget for the whole shutdown: the `preStop` hook runs first, SIGTERM is sent only after it returns, and SIGKILL follows when the budget runs out (the kubelet adds a one-off 2s if the hook is still running). A `preStop: sleep 30` with the default 30s grace period uses the whole budget, so the app is killed without ever handling SIGTERM.
+**Steps:**
+1. Keep the default 30s (or longer for slow-draining apps); add a `preStop` hook for connection draining where needed.
+2. Set `terminationGracePeriodSeconds` to at least the preStop duration plus the time the app needs to finish in-flight work after SIGTERM (10s or more).
+   ```bash
+   kubectl get deploy,statefulset -A -o json | jq -r '.items[] | .metadata as $m | (.spec.template.spec.terminationGracePeriodSeconds // 30) as $g | .spec.template.spec.containers[] | select(.lifecycle.preStop != null) | (.lifecycle.preStop.sleep.seconds // ((.lifecycle.preStop.exec.command // []) | map(tostring) | join(" ") | capture("sleep (?<s>[0-9]+)").s // "0" | tonumber)) as $p | select($g <= $p + 10) | "\($m.namespace)/\($m.name)/\(.name) grace=\($g)s preStop=\($p)s"'
+   ```
 **Snippet:**
 ```yaml
 spec:
-  terminationGracePeriodSeconds: 30
+  terminationGracePeriodSeconds: 30   # > preStop (10s) + app shutdown
   containers:
     - name: ${APP}
       lifecycle: { preStop: { exec: { command: ["sleep","10"] } } }

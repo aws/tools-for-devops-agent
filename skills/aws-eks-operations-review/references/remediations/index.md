@@ -10,7 +10,7 @@ Consult this index only after verdicts are complete and FAIL IDs are known. Load
 | `Op29,Op30,Op31,Op32` | `operations-03.md` | Matching or grouped `###` heading |
 | `R1,R2,R3,R4,R5,R6,R7,R8` | `resilience-01.md` | Matching or grouped `###` heading |
 | `R9,R10,R11,R12,R13,R14,R15,R16,R17,RM1,RM2,RM3,RM4,R18` | `resilience-02.md` | Matching or grouped `###` heading |
-| `R19,R20,R21,R22` | `resilience-03.md` | Matching or grouped `###` heading |
+| `R19,R20,R21,R22,R23` | `resilience-03.md` | Matching or grouped `###` heading |
 | `S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11,S12,S13,S14,S15` | `security-pods-rbac-01.md` | Matching or grouped `###` heading |
 | `S16,S17,S18,S19,S20,S21,S22,S23` | `security-network-nodes-01.md` | Matching or grouped `###` heading |
 | `S24,S25,S26,S27,S28,S29,S30,S31,SM1,SM2,SM3,SM4,SM5,SM6,SM7,S32` | `security-network-nodes-02.md` | Matching or grouped `###` heading |
