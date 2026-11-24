@@ -10,7 +10,7 @@ A connector is the definition of an MCP server that a partner hosts, for custome
 | `releases.yaml` | Per connector, the version production serves. Changed by maintainers only |
 | `TERMS.md` | The AWS DevOps Agent Partner Connector Terms and Conditions, which a partner accepts in its connector's pull request |
 
-`maintainers` in `connector.yaml` lists the GitHub usernames, or teams as `org/team`, that maintain the connector, without a leading `@`.
+`maintainers` in `connector.yaml` lists the GitHub users who may change the connector, without a leading `@`. [`check-partner-maintainers`](../.github/workflows/check-partner-maintainers.yml) passes a pull request that changes a partner-managed connector or one of its skills when its author is in `maintainers` on `main`. A new connector, a change to `maintainers`, or an author who isn't listed needs the `partner-managed-verified` label: the partner confirms the pull request by email to devops-agent-partner-connectors@amazon.com from the domain of `contact_email`, naming the GitHub users in `maintainers`, and a code owner of `/connectors/` adds the label. The label counts only when added after the pull request's last push. The schema still accepts teams as `org/team`, but a team never passes the check, because GitHub doesn't show a company's teams to anyone outside it. A change to `maintainers` is a PATCH version bump.
 
 `contact_email` is where AWS reaches the partner about the connector, including security notices. It is a corporate work email address. Every new or changed connector sets it, which the pull request checklist enforces; the schema will require it once every connector on `main` has one.
 
