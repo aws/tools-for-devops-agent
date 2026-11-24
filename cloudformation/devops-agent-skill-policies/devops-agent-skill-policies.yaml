@@ -40,6 +40,7 @@ Metadata:
           - EnableOpsaiBedrockSecurity
           - EnableOpsaiCapacityCost
           - EnableOpsaiMlEvalCheck
+          - EnableOpsaiIncidentTriage
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -231,7 +232,8 @@ Parameters:
     Description: >
       opsai-bedrock-review skill. Bedrock model, logging, Knowledge Base, IAM policy, CloudWatch
       and Logs reads are already covered by AIDevOpsAgentAccessPolicy; this parameter adds
-      bedrock:GetIngestionJob, bedrock:GetFoundationModelAvailability and s3:GetBucketPolicyStatus.
+      bedrock:GetIngestionJob, bedrock:GetFoundationModelAvailability and s3:GetBucketPolicyStatus,
+      plus the bedrock-agentcore runtime and gateway List/Get reads for the AgentCore status hand-off.
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -241,7 +243,8 @@ Parameters:
       opsai-bedrock-security skill. Adds the IAM credential and policy reads the caller audit needs
       (account summary, credential report, access keys and last use, service-specific credentials,
       MFA devices, authorization details, context keys) and bedrock:GetFlow / bedrock:GetAgentVersion
-      for guardrail resolution. No Organizations or STS action.
+      for guardrail resolution, plus the bedrock-agentcore runtime and gateway List/Get reads for the
+      AgentCore status hand-off. No Organizations or STS action.
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -251,7 +254,8 @@ Parameters:
       opsai-capacity-cost skill. Bedrock, Cost Explorer, CloudWatch, Logs Insights,
       Service Quotas and s3:GetLifecycleConfiguration reads are already covered by
       AIDevOpsAgentAccessPolicy; this parameter adds only pricing:GetProducts (published
-      per-token prices for the estimated-cost cross-check; a metadata read, no account data).
+      per-token prices for the estimated-cost cross-check; a metadata read, no account data) and
+      the bedrock-agentcore runtime and gateway List/Get reads for the AgentCore status hand-off.
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -261,6 +265,17 @@ Parameters:
       opsai-ml-eval-check skill. Bedrock evaluation listing, invocation-log, CloudWatch, SageMaker
       and S3 listing reads are already covered by AIDevOpsAgentAccessPolicy; this parameter adds
       only bedrock:GetEvaluationJob (evaluation job configuration and failure messages).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableOpsaiIncidentTriage:
+    Type: String
+    Description: >
+      opsai-incident-triage skill. Health, CloudWatch, Logs, CloudTrail, Bedrock model, agent and
+      knowledge base, IAM policy and Organizations reads are already covered by
+      AIDevOpsAgentAccessPolicy; this parameter adds bedrock:GetFoundationModelAvailability,
+      bedrock:GetIngestionJob and the bedrock-agentcore runtime and gateway List/Get reads.
+      Metadata only.
     AllowedValues: ['true', 'false']
     Default: 'true'
 
@@ -287,6 +302,7 @@ Conditions:
   SkillOpsaiBedrockSecurity: !Equals [!Ref EnableOpsaiBedrockSecurity, 'true']
   SkillOpsaiCapacityCost: !Equals [!Ref EnableOpsaiCapacityCost, 'true']
   SkillOpsaiMlEvalCheck: !Equals [!Ref EnableOpsaiMlEvalCheck, 'true']
+  SkillOpsaiIncidentTriage: !Equals [!Ref EnableOpsaiIncidentTriage, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -702,8 +718,8 @@ Resources:
   # organizations:ListPoliciesForTarget/DescribePolicy, ec2:DescribeVpcEndpoints, lambda:GetPolicy,
   # cloudwatch:GetMetricData and logs:StartQuery. Metadata only: no Invoke*, no memory records, no
   # session content. Left out: iam:SimulatePrincipalPolicy (the agent runtime refuses it even when
-  # granted; the skill reads the policy documents instead and labels the verdict "read from policy
-  # documents, not simulated"). Without this policy an AgentCore read is reported as a disclosed
+  # granted; the skill reads the policy documents instead and labels the verdict "evaluated from
+  # policy documents, not simulated"). Left out: s3:GetObject (returns customer data). Without this policy an AgentCore read is reported as a disclosed
   # permission gap, never as an absent runtime.
   PolicyOpsaiBedrockAgentCore:
     Type: AWS::IAM::Policy
@@ -753,7 +769,9 @@ Resources:
   # iam:SimulatePrincipalPolicy (refused by the agent runtime; the skill reads the policy
   # documents). Without this policy ingestion statistics come from ListIngestionJobs, model access
   # is judged from the error text and CloudTrail, and bucket exposure from GetBucketPolicy and
-  # GetBucketPublicAccessBlock.
+  # GetBucketPublicAccessBlock. The bedrock-agentcore List/Get reads for runtimes and gateways serve
+  # the AgentCore status hand-off (each skill is installed on its own); without them that read is
+  # a disclosed permission gap, not an absent runtime.
   PolicyOpsaiBedrockReview:
     Type: AWS::IAM::Policy
     Condition: SkillOpsaiBedrockReview
@@ -771,6 +789,14 @@ Resources:
               - bedrock:GetFoundationModelAvailability
               - s3:GetBucketPolicyStatus
             Resource: '*'
+          - Sid: OpsaiBedrockReviewAgentCoreStatusRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:GetGateway
+            Resource: '*'
 
   # opsai-bedrock-security: the caller (credential) audit and guardrail resolution. Adds the IAM
   # reads AIDevOpsAgentAccessPolicy (v16) lacks; iam:ListAccountAliases/ListUsers/GetUser/GetPolicy/
@@ -782,7 +808,10 @@ Resources:
   # iam:SimulateCustomPolicy (refused by the agent runtime; verdicts are read from the policy
   # documents). Without this policy an account whose authorization details or policies cannot be
   # read is reported as failed with the missing API named, an unreadable credential report is
-  # disclosed, and a denied ListServiceSpecificCredentials makes the account partial.
+  # disclosed, and a denied ListServiceSpecificCredentials makes the account partial. Also left out:
+  # bedrock:ApplyGuardrail and bedrock:InvokeGuardrailChecks (they invoke the guardrail and are
+  # billed; the skill reads bedrock:GetGuardrail instead). The bedrock-agentcore List/Get reads serve
+  # the AgentCore status hand-off; without them that read is a disclosed permission gap.
   PolicyOpsaiBedrockSecurity:
     Type: AWS::IAM::Policy
     Condition: SkillOpsaiBedrockSecurity
@@ -811,6 +840,14 @@ Resources:
               - bedrock:GetFlow
               - bedrock:GetAgentVersion
             Resource: '*'
+          - Sid: OpsaiBedrockSecurityAgentCoreStatusRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:GetGateway
+            Resource: '*'
 
   # opsai-capacity-cost: adds ONLY pricing:GetProducts, the Price List read the skill uses to
   # price CloudWatch token counts for its (estimated) cross-check against Cost Explorer. Every
@@ -821,7 +858,9 @@ Resources:
   # AIDevOpsAgentAccessPolicy (v16). Metadata only: the Price List API returns published prices
   # and no account data. Without this policy the skill reads prices from the Bedrock pricing
   # page or reports the model as "unpriced: pricing:GetProducts denied"; billed figures, token
-  # reconciliation, Provisioned Throughput and quota checks run unchanged.
+  # reconciliation, Provisioned Throughput and quota checks run unchanged. The bedrock-agentcore
+  # List/Get reads for runtimes and gateways serve the AgentCore status hand-off; without them that
+  # read is a disclosed permission gap.
   PolicyOpsaiCapacityCost:
     Type: AWS::IAM::Policy
     Condition: SkillOpsaiCapacityCost
@@ -836,6 +875,14 @@ Resources:
             Effect: Allow
             Action:
               - pricing:GetProducts
+            Resource: '*'
+          - Sid: OpsaiCapacityCostAgentCoreStatusRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:GetGateway
             Resource: '*'
 
   # opsai-ml-eval-check: adds ONLY bedrock:GetEvaluationJob (evaluation task, metrics, dataset and
@@ -860,6 +907,42 @@ Resources:
             Effect: Allow
             Action:
               - bedrock:GetEvaluationJob
+            Resource: '*'
+
+  # opsai-incident-triage: adds the reads AIDevOpsAgentAccessPolicy (v16) lacks.
+  # bedrock:GetFoundationModelAvailability (model access agreement state for an AccessDenied or
+  # ResourceNotFound on a non-entitled model) and bedrock:GetIngestionJob (job status, statistics and
+  # failure reasons) are metadata reads; the bedrock-agentcore List/Get reads for runtimes and gateways
+  # serve the AgentCore status hand-off. Every other read (health:Describe*, cloudwatch, logs,
+  # cloudtrail:LookupEvents, bedrock:List*/GetAgent/GetAgentAlias/GetKnowledgeBase/GetGuardrail, IAM
+  # policy reads, organizations) is already granted. Left out: iam:SimulatePrincipalPolicy (refused by
+  # the agent runtime; the skill evaluates the policy documents) and bedrock:ApplyGuardrail (invokes
+  # the guardrail and is billed; the skill reads bedrock:GetGuardrail). Without this policy model
+  # access is judged from the error text, model lifecycle and CloudTrail, ingestion state from the
+  # ListIngestionJobs summaries, and an AgentCore runtime is reported as unread, never as absent.
+  PolicyOpsaiIncidentTriage:
+    Type: AWS::IAM::Policy
+    Condition: SkillOpsaiIncidentTriage
+    Properties:
+      PolicyName: DevOpsAgentSkill-OpsaiIncidentTriage
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: OpsaiIncidentTriageBedrockRead
+            Effect: Allow
+            Action:
+              - bedrock:GetFoundationModelAvailability
+              - bedrock:GetIngestionJob
+            Resource: '*'
+          - Sid: OpsaiIncidentTriageAgentCoreStatusRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:GetGateway
             Resource: '*'
 
   # Optional: restrict agent to specific regions
@@ -1007,7 +1090,7 @@ Outputs:
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
         - aurora-incident-business-context: ${EnableAuroraIncidentBusinessContext} (config:GetResourceConfigHistory)
-        - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
+        - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:GetAgentRuntime/ListAgentRuntimes, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
@@ -1015,14 +1098,15 @@ Outputs:
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
         - opsai-bedrock-agentcore: ${EnableOpsaiBedrockAgentCore} (bedrock-agentcore List/Get for runtimes, endpoints, versions, gateways and targets, memories, browser and code interpreter sessions, GetResourcePolicy; bedrock:GetPrompt — Agents Classic, IAM, Organizations, EC2 and CloudWatch reads are covered by the managed policy)
-        - opsai-bedrock-review: ${EnableOpsaiBedrockReview} (bedrock:GetIngestionJob/GetFoundationModelAvailability, s3:GetBucketPolicyStatus)
-        - opsai-bedrock-security: ${EnableOpsaiBedrockSecurity} (iam:GetAccountSummary/GetCredentialReport/ListServiceSpecificCredentials/ListAccessKeys/GetAccessKeyLastUsed/ListMFADevices/GetAccountAuthorizationDetails/GetContextKeysForPrincipalPolicy, bedrock:GetFlow/GetAgentVersion)
-        - opsai-capacity-cost: ${EnableOpsaiCapacityCost} (pricing:GetProducts — Bedrock, Cost Explorer, CloudWatch, Logs, Service Quotas and s3:GetLifecycleConfiguration reads are covered by the managed policy; without it prices fall back to the pricing page or "unpriced")
+        - opsai-bedrock-review: ${EnableOpsaiBedrockReview} (bedrock:GetIngestionJob/GetFoundationModelAvailability, s3:GetBucketPolicyStatus, bedrock-agentcore:ListAgentRuntimes/GetAgentRuntime/ListGateways/GetGateway)
+        - opsai-bedrock-security: ${EnableOpsaiBedrockSecurity} (iam:GetAccountSummary/GetCredentialReport/ListServiceSpecificCredentials/ListAccessKeys/GetAccessKeyLastUsed/ListMFADevices/GetAccountAuthorizationDetails/GetContextKeysForPrincipalPolicy, bedrock:GetFlow/GetAgentVersion, bedrock-agentcore:ListAgentRuntimes/GetAgentRuntime/ListGateways/GetGateway)
+        - opsai-capacity-cost: ${EnableOpsaiCapacityCost} (pricing:GetProducts, bedrock-agentcore:ListAgentRuntimes/GetAgentRuntime/ListGateways/GetGateway — Bedrock, Cost Explorer, CloudWatch, Logs, Service Quotas and s3:GetLifecycleConfiguration reads are covered by the managed policy; without it prices fall back to the pricing page or "unpriced")
         - opsai-ml-eval-check: ${EnableOpsaiMlEvalCheck} (bedrock:GetEvaluationJob)
+        - opsai-incident-triage: ${EnableOpsaiIncidentTriage} (bedrock:GetFoundationModelAvailability/GetIngestionJob, bedrock-agentcore:ListAgentRuntimes/GetAgentRuntime/ListGateways/GetGateway)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)
         - eos-cost-analysis resource discovery (eks/rds/lambda/elasticache/es List/Describe already granted on * by the managed policy; only the Pricing API needs the add-on above)
-        - opsai-incident-triage, opsai-sagemaker-inference, opsai-sagemaker-training (Bedrock, SageMaker, CloudWatch, Logs, CloudTrail, Health, IAM policy and S3 listing reads already granted; they use neither s3:GetObject nor iam:SimulatePrincipalPolicy)
+        - opsai-sagemaker-inference, opsai-sagemaker-training (SageMaker, Service Quotas, Application Auto Scaling, CloudWatch, IAM policy and S3 listing reads already granted; they use neither s3:GetObject nor iam:SimulatePrincipalPolicy)
       No IAM required:
         - skip-scheduled-maintenance
