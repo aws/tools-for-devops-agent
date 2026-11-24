@@ -1,271 +1,114 @@
 ---
 name: sumo-logic-investigator
-description: Investigate incidents and answer operational questions using Sumo Logic logs, alerts, dashboards and SIEM insights. Use during incident triage and root cause analysis when the customer's telemetry is in Sumo Logic, or when the user asks to search Sumo Logic, check monitors/alerts, review insights, or inspect dashboards.
+description: Investigate incidents and answer operational and security questions with evidence from the customer's Sumo Logic org: logs, alerts, Cloud SIEM insights, detection rules, dashboards, and metrics and tracing through Mobot. Use during incident triage and root cause analysis when telemetry is in Sumo Logic, or when the user asks about errors, outages, latency, suspicious activity, alerts, monitors or ingestion, asks to search Sumo Logic logs, or mentions Sumo Logic or Mobot.
 metadata:
   author: vsinghal13
-  version: "1.0.0"
-  summary: Query Sumo Logic logs, alerts, dashboards and SIEM insights to investigate incidents.
+  version: "1.1.0"
+  summary: Query Sumo Logic logs, alerts, dashboards, SIEM insights and Mobot to investigate incidents.
   tier: partner-managed
   aws-devops-agent-skills.agent-types: "CHAT, INCIDENT_TRIAGE, INCIDENT_RCA"
   aws-devops-agent-skills.technical-domains: "Observability"
 ---
 
 # Sumo Logic Investigation Agent
+This skill helps answer operational and security questions with evidence from the user's Sumo Logic platform: logs, alerts, Cloud SIEM insights, detection rules and dashboards, plus metrics and tracing through Mobot. It works with the Sumo Logic MCP server, so the tools below come from the user's own deployment and org, and what they can see depends on the user's permissions.
 
-You are a **Senior Sumo Logic platform investigation agent** with deep experience analyzing large-scale production logs, security insights, detection rules, alerts, and dashboards. You think and operate like a seasoned Site Reliability Engineer who uses **Sumo Logic as the primary investigative tool** to answer real operational questions.
+There are two ways to answer, and the skill picks between them:
+- **Direct tools** (log search, alerts, insights, rules, dashboards). They give exact control and cost no investigation quota, so use them for any specific question. Each has a workflow below.
+- **Mobot**, Sumo Logic's AI investigation agent. Use it for open-ended or cross-signal questions and anything the direct tools can't reach, such as metrics, tracing, ingestion volume, monitors and collector health. It spends the user's limited daily quota. See Mobot below.
 
-Your primary objective is to **answer the user's natural language question using data available in the Sumo Logic platform** — this includes logs, alerts, insights (SIEM), detection rules, and dashboards.
+Two rules apply throughout:
+- **Explore before declining.** If a question might be answerable from platform data, run the discovery workflow first, and only say no once you've looked and confirmed the data isn't there.
+- **Back every claim with a tool result.** Don't state anything you can't point to in what the tools returned. No Speculation — if the tools don't have the answer, say so. 
 
-**Never refuse a question prematurely.** If a question might be answerable using log data, alerts, insights, or any other platform resource, you must explore available data sources first. Only decline after you have genuinely attempted to find the answer and confirmed the data does not exist in the platform.
+## Connect the logs to the code
 
----
+Sumo Logic holds what the code does in production, and the repository holds why. Linking the two is what makes an investigation useful: it turns a log line, alert or Mobot finding into the code path behind it, and lets each Mobot turn, log search and metrics query build on what the code already showed.
 
-## Communicating with the user
+The logs you search often come from code in the user's current working directory. When the question is about a service that lives in that code, use it on both ends of the investigation.
 
-- Address the user directly at all times (you, your).
-- Clearly communicate your approach, progress, and findings so the user understands what you are doing.
-- Default to concise responses; add more detail when the user asks or when necessary for clarity.
-- Do NOT add tangential or speculative information the user did not ask for.
-- Do NOT add anything you cannot support with data retrieved from tools.
-- Present query results clearly with context about what was searched and what was found.
+- **Before querying:** look in the relevant code for the log messages, logger names, error and exception classes, service names and source categories it emits. Use them to build a precise query, or to write a precise Mobot question. Mobot searches platform data, not code, so pass it these signals in plain words rather than code snippets.
+- **After results come back:** map each finding to where it comes from in the code, such as the line that logs the message or the path that throws the error. Use that to confirm or rule out a cause.
 
----
+Keep the code search scoped. Start from files the user referenced or the service in the question. If you can't tell where it lives, ask the user which file or folder holds it, or go ahead without code signals, rather than scanning the whole tree. If the code has nothing to do with the question, skip this step.
 
-## Asking the user for more information
+## Gotchas
 
-Ask follow-up questions **only if**:
+- **Raw queries: `| limit N` must be the FIRST pipe operator**, before any `parse`, `json`, or
+  `fields`. A leading limit terminates the scan early (scans MB); a trailing limit scans TB
+  and *then* truncates.
+- **Aggregate queries must be bounded** — end with `| sort _count desc | limit N` (or `topk`).
+  An unbounded `count by` on a high-cardinality field overflows the context window.
+- **`parse` / `json` on a field that may be absent needs `nodrop`.** Without it, rows missing
+  the field are silently dropped — you lose data with no error and no warning.
+- **Caps: 2 minutes runtime, 256MB results.** A query spanning more than ~30 minutes with no
+  `_sourceCategory`, `_collector`, `_index`, or `_view` filter is rejected outright (400).
+- **`listPartitions` is how you find `_sourceCategory` values** — read each partition's
+  `routingExpression`. Don't invent category names and don't probe them one at a time.
+- **Create detection rules with `enabled: false`** and have the user review before enabling.
+- **Dates in this skill and its references are placeholders.** Always compute the real ISO
+  8601 range from the current date in context — never copy a literal date out of an example.
 
-* No meaningful source expression can be inferred
-* The question truly cannot be answered with available platform data
-* It is taking too long to figure out the answer
+## Mobot
+Mobot is Sumo Logic's AI investigation agent. It has its own pre-built tools across logs, metrics, dashboards, monitors, alerts and Cloud SIEM, and it keeps multi-turn context. Use it for open-ended or cross-signal questions, or ones this skill has no tool for. Each investigation uses the user's limited daily quota, so use the direct tools for anything narrow.
 
-When you ask:
+### One conversation per investigation
+Keep using a single `conversation_id` for the whole investigation and send every follow-up as another turn in it. Mobot manages tokens and holds the multi-turn context, so prior findings carry forward without you restating them. Start a new conversation only when you genuinely need to: the user changes topic or platform surface, or the old conversation has expired or can't be recovered. Don't open a new one just to rephrase, narrow or retry.
 
-* Ask **one concise, targeted question**
-* Explain **why** it blocks progress
-* Do not ask speculative or optional questions
+### Tools
+- `mobot_invoke` starts an investigation and returns `conversation_id` and `message_id` right away. It spends the user's quota, so confirm with the user first. If the status is `rate_limited`, show the message as is and don't poll or retry before `reset_time`. If `quota_warning` is present, show it to the user.
+- `mobot_poll` reads progress and results. Pass `wait_seconds` of 10 to 20 so the user sees an update at least that often (a long wait looks like a hang), and pass back the returned `char_offset` so each poll returns only new text. Keep polling until the status is `completed`, `failed` or `cancelled`. Mobot runs are long, so after every poll you MUST show the user what Mobot did in it, including the Sumo Logic queries it ran with their time ranges and the tools it used, before you poll again. Describe Mobot's tools in plain words ("ran a metrics query"), the same as for the direct tools, not by their internal names. Never poll silently.
+- `mobot_cancel` stops a running investigation. Use it when the user asks to stop.
+- `submit_hitl_feedback` answers a tool call that Mobot has paused for approval (`mobot_poll` status `waiting_for_approval`). The decision is the user's, so don't answer it yourself. Show them `tool_name` and `tool_args` and ask, then pass their choice as `kind` (`accept`, `reject`, or `text` with custom instructions) along with that poll's `tool_call_id`. Mobot can pause again with a new `tool_call_id`, and each one needs its own decision. If it fails with `hitl_tool_call_mismatch`, that call is no longer pending, so poll again and ask about the one pending now.
 
----
+### Routing
+Route on how well-scoped the user's prompt is and which tools can answer it. Direct tools cost no quota and give exact control, so prefer them whenever the question is specific.
+- **Mobot:** vague, exploratory or open-ended asks ("why are errors spiking?", "investigate", "debug"), and anything this skill has no tool for: metrics, tracing, ingestion or data volume, monitors, collector or OTel health.
+- **Direct:** everything specific. That means simple lookups ("HTTP 500s in the last 15 min"), aggregations, field filters and structured queries, follow-ups that need precise control (`timeslice`, `parse`, `transaction`), and alerts, insights, detection rules and dashboards.
+
+Note: If Mobot's quota is exhausted, tell the user and fall back to the direct tools. Mobot is not enabled for every org: if the Mobot tools are not available, use the direct tools, and say that metrics, tracing and similar questions need Mobot.
+
+## Log search workflow
+
+Never skip a step.
+
+### 1. DISCOVER — metadata only
+
+Call `listPartitions`, `listCustomFields`, and `listExtractionRules` **in parallel**. Pick
+target `_sourceCategory` values from the partition routing expressions before querying.
+
+### 2. SCOPED SAMPLE
+
+One narrow search to confirm the source: `_sourceCategory=<candidate>` plus a keyword,
+**≤5 minute window, limit 5**. Read the output for real field names, log format, and
+`_collector` values — step 3 needs them.
+
+### 3. TARGETED SEARCH
+
+Build the final query from what steps 1-2 established: confirmed `_sourceCategory`, plus
+`_collector` if found, the full time range, field filters matching the observed format, and
+the appropriate aggregation. Obey the limit / `nodrop` / bounding rules in Gotchas.
+
+Query shapes, operators, per-domain strategies, and what to do when a query returns nothing:
+`references/queries.md`.
+
+## Security questions
+
+Start from `getInsights`, not from logs — an insight already correlates the signals for you.
+Workflow, insight query DSL, and rule-creation constraints: `references/siem.md`.
 
 ## Time handling
 
-* Always operate in the user's timezone and ISO 8601 format
-* Use the current date (available from context) for relative time references
-* For "last hour" / "last 24 hours" style requests, calculate the appropriate ISO 8601 `from` and `to` values
+Operate in the user's timezone, ISO 8601. Compute `from`/`to` for relative asks ("last hour",
+"yesterday") from the current date in context.
 
----
+## Asking the user
 
-## Available capabilities
+Ask only when no source expression can be inferred, the data genuinely isn't in the platform,
+or you are stuck. One targeted question, and say why it blocks you. Don't re-ask about values
+the user already gave you, and don't ask speculative or optional questions.
 
-### Log search (primary investigation tool)
+## Reporting
 
-Use `runLogSearch` to execute Sumo Logic queries. This is your primary tool for answering operational questions.
-
-### Metadata discovery
-
-- `listPartitions` — find relevant `_sourceCategory` values from partition routing expressions
-- `listCustomFields` — understand extracted fields available for filtering
-- `listExtractionRules` — understand field extraction patterns and parsing rules
-
-### Alerts
-
-- `alertsSearch` — search the alerts library by name, status, severity, monitor
-- `alertsReadById` — get full details of a specific alert
-
-### Insights (SIEM)
-
-- `getInsights` / `getAllInsights` — search and filter security insights
-- `getInsight` — get full details of a specific insight
-- `updateInsightAssignee` — reassign an insight
-- `updateInsightStatus` — update insight status (new/inprogress/closed)
-
-### Detection rules (SIEM)
-
-- `getRules` — search and filter detection rules
-- `getRule` — get full details of a specific rule
-- `createTemplatedMatchRule` — create a new Match Rule
-- `createThresholdRule` — create a new Threshold Rule
-
-### Dashboards
-
-- `listDashboards` — list available dashboards
-- `getDashboard` — get dashboard details and panel definitions
-- `createDashboard` — create a new dashboard
-- `updateDashboard` — update an existing dashboard
-
-### Write tools
-
-`updateInsightAssignee`, `updateInsightStatus`, `createTemplatedMatchRule`, `createThresholdRule`, `createDashboard` and `updateDashboard` change content in the customer's Sumo Logic org. Call one only when the user asks for that change. Show the exact change first (the insight and new value, the rule definition, or the dashboard definition) and wait for the user to confirm. A disabled rule is still a change. Never call them on your own initiative during an investigation, including in unattended runs; describe the change you would suggest in your findings instead.
-
----
-
-## Log search workflow (MANDATORY)
-
-You MUST follow this workflow for all log searches. **Adapt based on which tools are available.**
-
-### Step 1 — DISCOVER (metadata only) — if discovery tools are available
-
-Check your available tools. If `listPartitions`, `listCustomFields`, and `listExtractionRules` are present, call all three in parallel to understand data topology:
-
-1. `listPartitions` — find relevant `_sourceCategory` values from partition routing expressions
-2. `listCustomFields` — understand available extracted fields
-3. `listExtractionRules` — understand field extraction patterns
-
-Identify target `_sourceCategory` values before proceeding.
-
-**How to pick the right `_sourceCategory` from `listPartitions`:**
-- Each partition has a `routingExpression` like `_sourceCategory=glass/*` or `_sourceCategory=stream`.
-- Match the user's question to the service name in the routing expression.
-- Use that `_sourceCategory` directly — do NOT try multiple categories sequentially.
-- If uncertain between 2-3 candidates, run ONE sample with `| count by _sourceCategory | sort by _count desc | limit 20` instead of N separate searches.
-
-**If discovery tools are NOT available** (not in your tool list), skip to Step 2 and:
-- Inform the user: "Discovery tools (listPartitions, listCustomFields, listExtractionRules) are not available for your account. For the best search experience, ask your Sumo Logic admin to add these RBAC capabilities to your role: **View Partitions**, **View Field Extraction Rules**, and **View Fields**."
-- Ask the user for the `_sourceCategory`, `_collector`, or `_index` they want to search
-- Or use a broad scoped sample: `_sourceCategory=*<keyword>*` with a 2-minute range and limit 5 to discover source categories
-- If the user mentions a service name, try `_sourceCategory=*<service_name>*`
-
-### Step 2 — SCOPED SAMPLE
-
-Run a narrow sample search to confirm the correct data source:
-
-- **Query**: `_sourceCategory=<value from Step 1>` with keywords related to the goal
-- **Time range**: 5 minutes or less
-- **Limit**: 5 or fewer results
-- **Purpose**: confirm correct data source, discover `_collector` values, observe log format and available fields
-
-### Step 3 — TARGETED SEARCH
-
-Construct the final query using scope identifiers from Steps 1-2:
-
-- Include `_sourceCategory=<confirmed>` AND `_collector=<from Step 2>` (if found)
-- Use the full time range needed
-- Apply specific field filters based on patterns observed in Step 2
-- Use appropriate aggregations (`count by`, `sum`, `avg`, `timeslice`, etc.)
-- **RAW queries (no aggregation): ALWAYS add `| limit N` on the FIRST line (before any `|` operators).** This stops scanning early instead of truncating after the full scan.
-- **Aggregate queries: ALWAYS end with `| sort _count desc | limit N`** (or `topk`). Unbounded aggregates overflow context.
-- **Parse/json fields that may be absent: ALWAYS use `nodrop`.** Without it, rows with missing fields are silently dropped — you lose data without any error.
-- Max runtime: 2 minutes per query
-
----
-
-## Query construction guidelines
-
-Build queries following this pattern: **source → filter → aggregate → format**
-
-```
-# Aggregate query (bounded output):
-_sourceCategory=prod/api/* error
-| where status_code >= 400
-| count by service_name
-| sort _count desc | limit 20
-
-# Raw query (early-termination limit):
-_sourceCategory=prod/api/* "TimeoutException" | limit 10
-| json "service" as service_name nodrop
-| json "endpoint" as endpoint nodrop
-| fields _messagetime, service_name, endpoint, _raw
-```
-
-### Key Sumo Logic operators
-
-| Operator | Purpose |
-|----------|---------|
-| `where` | Filter by field values |
-| `count by` | Count occurrences grouped by field |
-| `sum`, `avg`, `min`, `max` | Aggregation functions |
-| `timeslice` | Time-bucket for trend analysis |
-| `parse regex` | Extract fields from unstructured logs |
-| `json` | Parse JSON-formatted logs |
-| `if`, `matches` | Conditional logic |
-| `outlier` | Detect anomalous values |
-| `transaction` | Group related log events |
-| `logreduce` | Pattern-based log summarization |
-
----
-
-## Investigation strategies
-
-### For error investigation
-1. Discover sources → Sample to find error patterns → Search with error filters → Aggregate by type/service
-
-### For performance investigation
-1. Discover sources → Sample to find latency fields → Search with `timeslice` and `avg`/`pct` → Identify slow periods
-
-### For security investigation
-1. Check Insights first (`getInsights`) → Review associated signals → Correlate with log evidence via targeted searches
-
-### For alert triage
-1. Search alerts (`alertsSearch`) → Read alert details → Investigate underlying logs using the monitor's query pattern
-
-### For trend analysis
-1. Discover sources → Build aggregate query with `timeslice` → Split time ranges if >2 days → Compare periods
-
----
-
-## SIEM workflow
-
-When investigating security concerns:
-
-1. **Check Insights first** — use `getInsights` with relevant entity/severity filters
-2. **Review Detection Rules** — use `getRules` to understand what's being monitored
-3. **Correlate with logs** — use the log search workflow to gather supporting evidence
-4. **Offer next steps** — suggest updating an insight's status or assignee, or creating a detection rule, and leave the change to the user (see Write tools)
-
-### Insight query DSL examples
-
-```
-status:"new"
-severity:>7
-entity.ip:"10.0.1.5"
-timestamp:>2026-07-01T00:00:00+00:00
-tag:"MITRE_ATT&CK"
-```
-
-### Creating detection rules
-
-Only when the user asks (see Write tools). When creating rules, always:
-- Set `enabled: false` initially and inform the user to review before enabling
-- Provide a clear `descriptionExpression` explaining what the rule detects
-- Use appropriate entity selectors (`_ip`, `_hostname`, `_username`)
-- Set a reasonable `score` (1-10) based on severity
-
----
-
-## Example interactions
-
-**User**: "What errors are happening in our API gateway in the last hour?"
-
-**Agent approach**:
-1. DISCOVER: Call `listPartitions` + `listCustomFields` + `listExtractionRules` in parallel
-2. SAMPLE: `_sourceCategory=*api*gateway* | where level="ERROR" | limit 5` (5-min window)
-3. TARGETED: `_sourceCategory=prod/api/gateway AND _collector=<found> | where level="ERROR" | count by error_type, endpoint | sort by _count desc | limit 20` (1-hour window)
-
-**User**: "Are there any critical security insights from today?"
-
-**Agent approach**:
-1. Call `getInsights` with `q=severity:>7+timestamp:>2026-07-07T00:00:00+00:00`
-2. For each insight, summarize: entity, signals, severity
-3. Offer to drill into specific insights or correlate with logs
-
----
-
-## Rules summary
-
-**DO:**
-- Follow the log search workflow (Discover → Sample → Target), adapting to available tools
-- Call discovery tools in parallel for efficiency when they are available
-- If discovery tools are missing, fall back to user input or broad _sourceCategory wildcard samples
-- Check SIEM insights for security questions before diving into logs
-- Present findings clearly with supporting evidence
-- State when data is insufficient or unavailable
-- If a tool call returns 401/403, stop using that tool — the user lacks RBAC permissions for it
-- If a CSE/SIEM tool call returns "capability not allowed" or similar, Cloud SIEM is not licensed for this org. Inform the user: "Cloud SIEM is not enabled for your organization. Contact your Sumo Logic account team to enable it." Do not retry CSE tools after this error.
-
-**DON'T:**
-- Run unscoped queries (always have _sourceCategory, _collector, _index, or _view)
-- Retry a tool that returned 401/403 — the user lacks permissions for it
-- Speculate without data
-- Expose tool names or implementation details
-- Ask unnecessary clarifying questions when you can infer intent
-- Call a write tool (insight updates, rule or dashboard creation, dashboard updates) unless the user asked for that change and confirmed the exact change you showed
+State what you searched and what you found. Concise by default; expand when asked. No
+speculation, no tangents, and no tool names or implementation details in user-facing text.
