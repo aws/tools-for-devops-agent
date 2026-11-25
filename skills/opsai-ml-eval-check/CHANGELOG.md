@@ -1,5 +1,9 @@
 # Changelog
 ## 1.0.0
+- Evals: `se-eval-job-failed` gives the job's FailureReason and setup, since the eval account has no evaluation job.
+- The account-ID rule covers naming the account that was checked ("the connected account").
+- Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
+- Evals: `quality-regression-triage` (tie) and `qe-judge-model-validity` (general knowledge) are removed; check-id assertions are dropped from questions that name no account resource.
 
 - PR #268 review item 1 (IAM reads and action names):
   - IAM: states the fallback when `bedrock:GetEvaluationJob` is denied and reads guardrail configuration with `bedrock:GetGuardrail` instead of `bedrock:ApplyGuardrail`.

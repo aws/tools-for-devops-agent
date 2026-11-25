@@ -1,6 +1,10 @@
 # Changelog
 
 ## 1.0.0
+- Evals: `serverless-cold-start-provisioned-concurrency` and `sm-execution-role-s3-kms` give the endpoint or role setup, since the eval account has no serverless endpoint or failed deploy; `sm-container-port-contract` is removed (scored the same with and without the skill in two runs).
+- Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
+- Evals: `endpoint-slow-and-erroring` and `sm-autoscaling-not-triggering` are removed; they need a standing real-time endpoint (about $1/hour).
+- Evals: `sm-vpc-endpoint-missing` and `sm-endpoint-update-downtime` are removed (general knowledge, answered the same without the skill); check-id assertions are dropped from questions that name no account resource.
 
 - PR #268 review item 3 (evals): `serverless-async-silent-failures` asks for one reply with no status message first (both runs had ended on "I've started the review") and asserts the `EndpointName`-only backlog dimension and `LLM-SM-SERVE-003`/`004`; `idle-endpoint-wasting-money` asserts no-datapoints reporting for an endpoint with no invocation data and `LLM-SM-003`/`008`.
 - PR #268 review item 1 (IAM reads and action names):

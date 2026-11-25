@@ -1,0 +1,72 @@
+{
+  "version": "v7",
+  "iteration": 1,
+  "eval_id": "ac-oauth-claim-mismatch",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-bedrock-agentcore' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent investigated the actual AgentCore runtime configuration (found the one runtime with a JWT authorizer, including its discovery URL/Cognito pool, allowedClients, and unset allowedAudience/allowedScopes), and explained that the user's IdP token would be rejected because issuer/audience/client checks against that specific config would fail. It explicitly lists issuer mismatch, audience/client mismatch, and scope mismatch as the likely causes, distinguishing these configuration mismatches from token malformation, expiry, or signature issues (which it lists separately as distinct possible causes to check, not conflating them with config mismatch). It does not conclude the token is malformed - in fact it explicitly says a decodable token only shows it's well-formed, and the real checks are signature, issuer, expiry, audience/client, which matches the expected distinction. The agent couldn't name the single mismatched claim because it lacked access to the actual decoded claims, but it asked the user for them to narrow down further, and provided a concrete, specific path to identify the exact mismatch (compare iss, aud, client_id, scope, exp against the specific runtime's authorizer settings it already found). This substantively satisfies the expected behavior: checking inbound identity config vs token claims, specific mismatch identification approach, and clear distinction between config mismatch vs expired/malformed token.",
+      "evidence": "\"The authorizer trusts only the Cognito pool in its discovery URL, so your IdP's issuer and signing keys don't match.\" and \"A token that decodes fine only shows it's well-formed. The runtime validates the signature, issuer, expiry, and audience or client.\" and \"Call the runtime from a terminal with curl ... Then compare the decoded iss, aud, client_id, scope, and exp against the runtime's authorizer config.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names the specific claim (issuer, audience, or client id) that must match the runtime's authorizer configuration",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The token's `iss` must exactly match the issuer in the OIDC document at the runtime's discovery URL.\" and \"The runtime checks `aud` against `allowedAudience` if that's set. It checks the `client_id` claim against `allowedClients` if that's set.\"",
+          "reasoning": "The response explicitly names iss, aud, and client_id as the claims that must match the runtime's authorizer configuration (discovery URL, allowedAudience, allowedClients respectively).",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes a claim or configuration mismatch from an invalid or expired signature",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The runtime validates the signature, issuer, expiry, and audience or client.\" followed by separate numbered hypotheses: '1. Issuer or discovery URL mismatch.' '2. Audience or client check fails.' and later under 'Token handling in the app': 'an expired token (check `exp` and clock skew)'",
+          "reasoning": "The response clearly separates signature validation from issuer/audience/client claim mismatches and from expiry, treating them as distinct categories/causes rather than conflating them.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says what to compare the token against rather than only advising to check the token",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Call the runtime from a terminal with `curl` and a freshly minted token. Then compare the decoded `iss`, `aud`, `client_id`, `scope`, and `exp` against the runtime's authorizer config.\" Also: 'Discovery URL: a Cognito user pool... allowedClients: ... allowedAudience and allowedScopes: not set.'",
+          "reasoning": "The response goes beyond telling the user to just check the token; it explicitly instructs comparing the token's claims against the specific runtime's authorizer configuration values it already surfaced (discovery URL, allowedClients, allowedAudience, allowedScopes).",
+          "confidence": "high"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 1 match(es), first: '012345678901_1'"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.75
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "39s",
+    "cost": "$0.33",
+    "context_window": {
+      "utilization": "6.1%",
+      "compaction_count": 0
+    }
+  }
+}

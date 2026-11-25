@@ -1,0 +1,75 @@
+{
+  "version": "v16",
+  "iteration": 2,
+  "eval_id": "self-hosted-model-locus-not-provider",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a specific structured triage framing: explicitly identifying locus=INFRASTRUCTURE (not PROVIDER) because this is self-hosted, treating provider health as not-applicable (not no-datapoints), binding error slots specifically to HTTPCode_Target_4XX_Count and HTTPCode_Target_5XX_Count, avoiding any suggestion of checking AWS Health events for a 'model service' or recommending cross-region inference profiles, and handing the serving layer to host investigation.\n\nThe agent's response does a reasonable generic triage of ALB/EKS 503s, but it does not match the expected framing at all:\n- It never states a locus=INFRASTRUCTURE vs PROVIDER determination explicitly, though implicitly it treats it as the user's infrastructure.\n- It does NOT bind to HTTPCode_Target_4XX_Count / HTTPCode_Target_5XX_Count specifically. Instead it uses HTTPCode_ELB_503_Count and HTTPCode_Target_503_Count metrics, which are different metric names than what's expected.\n- It explicitly suggests checking the 'AWS Health Dashboard (personal health events for that account and region)' - this contradicts the expectation that it should NOT look for an AWS Health event for a model service. While this is somewhat different (it's checking general AWS Health, not specifically for a 'model service' since there is no Bedrock/SageMaker model service here - this is self-hosted vLLM), the agent's suggestion to check AWS Health conflicts with the spirit of marking provider health as 'not-applicable'.\n- No mention of inference profiles is made (which is correct per expectation - it should NOT suggest this), so that part passes implicitly since it never mentions it.\n- The response does hand off the serving layer appropriately to host/cluster investigation (kubectl, pod checks, etc.), which aligns with that part of the expectation.\n\nHowever, the core expected metrics (HTTPCode_Target_4XX_Count and HTTPCode_Target_5XX_Count) are not used \u2014 the agent uses different metric names (HTTPCode_ELB_503_Count, HTTPCode_Target_503_Count) which are technically valid CloudWatch ALB metrics but not the ones specified in the expected output. Also, the agent explicitly recommends checking AWS Health Dashboard, which seems to go against treating provider health as 'not-applicable' \u2014 though arguably checking AWS Health for EC2/ELB general outages is different from checking for a 'model service' health event, so this may be a partial mismatch rather than a full contradiction.\n\nGiven the significant mismatch in specific metric names and the explicit AWS Health Dashboard suggestion (even if reframed as ELB/EC2 rather than model service), this does not substantively satisfy the detailed structured expected output. The overall diagnostic quality is good and directionally correct (infrastructure-side triage, not blaming AWS provider), but it misses the specific technical requirements (exact metric names) called out in the expected output.</reasoning>\n<parameter name=\"confidence\">medium",
+      "evidence": "\"Compare these two CloudWatch metrics for the ALB (`AWS/ApplicationELB`): `HTTPCode_ELB_503_Count`... `HTTPCode_Target_503_Count`\" and \"Check the AWS Health Dashboard (personal health events for that account and region).\""
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The locus is INFRASTRUCTURE and not PROVIDER",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"This usually comes from your side (the targets or a change), not an AWS outage.\" and the 'Rough likelihoods' section lists 'Healthy hosts at 0: your cluster or targets (likely)' and 'An AWS-side ALB problem is rare... If your other ALBs in that region are fine, it's very likely your targets.'",
+          "reasoning": "The agent clearly attributes the likely root cause to the user's infrastructure (EKS cluster, targets, ALB target health) rather than to an AWS provider-side outage, explicitly stating the AWS explanation is rare and unlikely.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provider health is recorded as not-applicable rather than as a missing or zero signal",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Check the AWS Health Dashboard (personal health events for that account and region)... An AWS-side ALB problem is rare. It would usually show up as a Health event and across many unrelated load balancers in the region.\"",
+          "reasoning": "The agent instructs the user to actively check the AWS Health Dashboard as a verification step rather than assuming no AWS issue or treating absence of info as a zero/negative signal. It frames provider health as something to be checked/confirmed (not-applicable/unknown until checked) rather than silently assuming no provider issue. This is a reasonable interpretation, though the assertion is somewhat abstract and could be argued either way, so confidence is medium.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not propose a cross-region inference profile or any Bedrock-specific failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'cross-region inference profile', 'Bedrock', or any failover mechanism anywhere in the response. The response is entirely focused on ALB, EKS, vLLM, and CloudWatch ALB metrics.",
+          "reasoning": "The agent's response contains no reference to Bedrock-specific features, inference profiles, or failover mechanisms. It stays entirely within the EKS/ALB/vLLM self-hosted inference domain, satisfying this assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The error signals are bound to load balancer or application metrics rather than AWS/Bedrock",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Compare these two CloudWatch metrics for the ALB (`AWS/ApplicationELB`): `HTTPCode_ELB_503_Count`... `HTTPCode_Target_503_Count`\" and 'Check `HealthyHostCount` and `UnHealthyHostCount` on the target group.' No mention of Bedrock metrics or AWS/Bedrock-specific error signals.",
+          "reasoning": "All error signal analysis is tied to ALB metrics (HTTPCode_ELB_503_Count, HTTPCode_Target_503_Count, HealthyHostCount, UnHealthyHostCount), target health reason codes, ALB access logs, and application-level vLLM metrics (num_requests_waiting). None of these are AWS/Bedrock service metrics, confirming the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "No Bedrock namespace is asserted for a self-hosted model",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

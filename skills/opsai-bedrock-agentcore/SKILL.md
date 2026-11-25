@@ -1,11 +1,14 @@
 ---
 name: opsai-bedrock-agentcore
-description: Diagnose break-fix problems in the agent layer on AWS, covering Amazon Bedrock AgentCore and
-  the legacy Bedrock Agents. Use this skill when an agent will not start or cannot be invoked, when a
-  gateway or action group fails, when an agent returns nothing, when it behaves differently in
-  production than in test, or when someone asks which agent version is actually live, even if they do
-  not mention runtime roles, VPC endpoints, service control policies or aliasing by name. Findings carry LLM-AC and LLM-AGT check-ids with a severity and an AWS-doc citation, from read-only
-  APIs.
+description: Diagnose break-fix problems in the agent layer on AWS, covering Amazon Bedrock AgentCore
+  and the legacy Bedrock Agents. Use this skill when an agent will not start, cannot be invoked or
+  cannot call its model, when a gateway or action group fails, when an agent returns nothing, when it
+  behaves differently in production than in test, or when someone asks which agent version is actually
+  live, even if they do not mention runtime roles, VPC endpoints, service control policies or aliasing
+  by name. Findings carry LLM-AC and LLM-AGT check-ids with a severity and an AWS-doc citation, from
+  read-only APIs. Not for missing traces, spans or logs, or observability setup
+  (agentcore-observability-setup), even if it isn't installed. Load it yourself before delegating or
+  searching AWS documentation.
 metadata:
   author: dimwael
   version: "1.0.0"
@@ -269,14 +272,15 @@ Non-negotiable, at every step:
    the user run it.
 2. **Never echo a raw AWS account ID.** Never reproduce a raw 12-digit account ID. If an ARN must be
    quoted as evidence, mask the account segment
-   (`arn:aws:iam::<account>:role/...`, `arn:aws:bedrock:us-east-1:<account>:agent/...`).
+   (`arn:aws:iam::<account>:role/...`, `arn:aws:bedrock:us-east-1:<account>:agent/...`). This includes saying which account you checked: write `the connected account`, not its number. It also covers error messages and log lines you quote: an `AccessDenied` text names the caller's and the resource's ARNs, so mask both before quoting it.
 3. **Never disclose secret material.** Report env vars, keys, tokens, and connection strings by **key
    name only** — never the value, never a partial value. Specifically, **never reproduce agent session
    content, prompt-override text, or gateway tokens.**
 4. **Evidence or silence.** Every finding cites the concrete value that triggered it. If you did not
    observe a value, you do not report the finding.
 5. **A check-id on every finding.** Each finding references a catalog `check-id` (LLM-AGT-### or
-   LLM-AC-###) and carries that check's severity and AWS-doc citation. No freelance findings.
+   LLM-AC-###) and carries that check's severity and AWS-doc citation. No freelance findings. This holds
+   for a short chat answer too: a one-paragraph diagnosis still names its check-id, e.g. `LLM-AC-001 (HIGH)`.
 6. **Never invent a threshold.** Severities come from the catalogs. No AWS-published number → `INFO`,
    marked `workload-specific`.
 7. **Bound the work and disclose what you skipped.** State which regions, resources, or checks you did
@@ -344,7 +348,7 @@ Classic?), ask or default to the caller's current region and say so.
 ## Related skills (optional)
 
 This skill works on its own and loads nothing outside its own `references/` and `assets/`. When a question
-reaches into an area listed under *When NOT to Use*, read `references/related-skills.md` and:
+reaches into an area listed under *When NOT to Use*, read [related-skills.md](references/related-skills.md) and:
 
 1. If the skill named there is in your available skills, load it and use it for that part.
 2. If it isn't, cover that part yourself with the fallback check in that file and general AWS knowledge.
@@ -366,6 +370,7 @@ Catalogs and references under `references/`:
 - `references/collection-reference.md` — the exact read-only APIs per family and the fields they feed
 - `references/metrics-and-logs.md` — CloudWatch metric set (incl. `AWS/Bedrock/Agents`) + log patterns
 - `references/api-quirks.md` — misleading read-only API responses (alias→version §6, no-datapoints §10)
+- [related-skills.md](references/related-skills.md) — load when a question reaches an area under *When NOT to Use*
 
 Output template under `assets/`:
 

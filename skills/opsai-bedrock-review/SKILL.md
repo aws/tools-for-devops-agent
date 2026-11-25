@@ -1,16 +1,16 @@
 ---
 name: opsai-bedrock-review
-description: Review Amazon Bedrock configuration, model access and Knowledge Bases (RAG), read-only. Use it when
-  a Bedrock call fails with an access, validation or throttling error, no one can see what the model
-  does, a model may be end-of-life, an inference profile is in question, or someone asks whether
+description: Review Amazon Bedrock configuration, model access and Knowledge Bases (RAG), read-only. Use
+  it when a Bedrock call fails with an access, validation or throttling error, no one can see what the
+  model does, a model may be end-of-life, an inference profile is in question, or someone asks whether
   Bedrock is set up correctly; and when a knowledge base returns nothing or stale answers, retrieval
   misses obvious documents, ingestion or sync failed or never ran, or someone asks how one should be
   configured or whether it is still used. Use it even if they don't name invocation logging, SCPs,
-  marketplace subscriptions, chunking, embeddings, vector stores or hybrid search. Not for Bedrock
-  spend or bills (opsai-capacity-cost) or who holds keys that can call Bedrock
-  (opsai-bedrock-security), even if those aren't installed. Findings carry LLM-INV and LLM-KB
-  check-ids, a severity and an AWS-doc citation. In any text, plans and sub-agent prompts too, never
-  write the raw 12-digit account ID or reproduce retrieved chunk text.
+  marketplace subscriptions, chunking, embeddings, vector stores or hybrid search. Not for spend
+  (opsai-capacity-cost), who holds keys or AccessDenied that began with a new guardrail
+  (opsai-bedrock-security), even if not installed. Findings carry LLM-INV and LLM-KB check-ids, a
+  severity and an AWS-doc citation. In any text, plans and sub-agent prompts too, never write the raw
+  12-digit account ID or reproduce retrieved chunk text.
 metadata:
   author: ankursinha286
   version: "1.0.0"
@@ -156,7 +156,7 @@ knowledge base area are in `references/knowledge-base-review.md`.
 ## Related skills (optional)
 
 This skill works on its own and loads nothing outside its own `references/` and `assets/`. When a question
-reaches into an area listed under *When NOT to Use*, read `references/related-skills.md` and:
+reaches into an area listed under *When NOT to Use*, read [related-skills.md](references/related-skills.md) and:
 
 1. If the skill named there is in your available skills, load it and use it for that part.
 2. If it isn't, cover that part yourself with the fallback check in that file and general AWS knowledge.
@@ -169,20 +169,27 @@ reaches into an area listed under *When NOT to Use*, read `references/related-sk
 
 ## References
 
-- `references/model-access-review.md`: the model access and configuration review (router, procedure,
-  checks before presenting, LLM-INV family, wrong answers, error handling, AWS docs).
-- `references/knowledge-base-review.md`: the same for knowledge bases and RAG (LLM-KB).
-- `references/checks-model-invocation.md`: the LLM-INV-001..015 catalog.
-- `references/checks-rag-knowledgebase.md`: the LLM-KB-001..012 catalog.
-- `references/diagnosis-playbook.md`: per-step methods, field paths and fallbacks for the model
-  access review.
-- `references/rag-review-playbook.md`: per-step calls, fields and decision rules for the knowledge
-  base review.
-- `references/collection-reference.md`: read-only API calls and the fields each contributes.
-- `references/metrics-and-logs.md`: `AWS/Bedrock` metrics, vector-store and retrieval signals, and
-  the invocation-log error-pattern table.
-- `references/api-quirks.md`: misleading read-only API responses (§1–17 shared and model access,
-  §18–19 knowledge base access and throttling).
-- `references/related-skills.md`: areas this skill does not cover and the fallback for each.
-- `assets/bedrock-configuration-report-template.md` and `assets/rag-health-report-template.md`: report
-  formats for each area.
+- [model-access-review.md](references/model-access-review.md): load first for a model access or
+  configuration question (router, procedure, checks before presenting, LLM-INV family, wrong answers,
+  error handling, AWS docs).
+- [knowledge-base-review.md](references/knowledge-base-review.md): load first for a knowledge base or
+  RAG question (the same for LLM-KB).
+- [checks-model-invocation.md](references/checks-model-invocation.md): load before raising any LLM-INV
+  finding (the LLM-INV-001..015 catalog).
+- [checks-rag-knowledgebase.md](references/checks-rag-knowledgebase.md): load before raising any LLM-KB
+  finding (the LLM-KB-001..012 catalog).
+- [diagnosis-playbook.md](references/diagnosis-playbook.md): load while running the model access
+  review steps (per-step methods, field paths and fallbacks).
+- [rag-review-playbook.md](references/rag-review-playbook.md): load while running the knowledge base
+  review steps (per-step calls, fields and decision rules).
+- [collection-reference.md](references/collection-reference.md): load when choosing which read-only API
+  answers a signal.
+- [metrics-and-logs.md](references/metrics-and-logs.md): load before reading `AWS/Bedrock` metrics,
+  vector-store and retrieval signals, or the invocation-log error patterns.
+- [api-quirks.md](references/api-quirks.md): load before interpreting a response that looks wrong
+  (§1–17 shared and model access, §18–19 knowledge base access and throttling).
+- [related-skills.md](references/related-skills.md): load when a question reaches an area under
+  *When NOT to Use* (areas this skill does not cover and the fallback for each).
+- [bedrock-configuration-report-template.md](assets/bedrock-configuration-report-template.md) and
+  [rag-health-report-template.md](assets/rag-health-report-template.md): load only when the user asks for
+  a full written report, one per area.

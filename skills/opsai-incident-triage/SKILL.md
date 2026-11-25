@@ -45,7 +45,9 @@ the one investigating and the one answering the operator. This skill is the proc
   everything else you found: dependencies, network, deploys, the caller. Then **conclude**. State
   what the evidence supports, including "the evidence does not support a service incident", and give
   the single next step that would confirm or fix it. A locus with no conclusion and no next step is
-  an incomplete answer.
+  an incomplete answer. When the fault sits in a dependency (retrieval, vector store, a downstream API),
+  also say whether the feature should degrade gracefully instead of failing: a timeout and circuit
+  breaker around the dependency with a defined fallback.
 - **Depth on another stage is optional.** Name the stage and its owner track
   (`references/request-path.md`). When the evidence points there, follow *Related skills (optional)*:
   load the track's skill if it is available, one at a time, otherwise run its fallback check.
@@ -78,7 +80,9 @@ from Cause, Hypothesis and Gap findings, and that is what the operator reads. So
 AgentCore. An agent loop runs in a Lambda, a container, an EC2 process, or outside AWS. The ladder in
 this skill rules on three signals whose metric names differ per hosting, so bind first:
 [hosting-bindings.md](references/hosting-bindings.md). A guessed binding rules confidently on metrics describing a
-different system. The path itself — the seven stages, and which one a symptom starts at — is
+different system. When the model call and the loop run on different hosting (for example a loop in Lambda
+calling Bedrock), name both bindings in the TRIAGE line (`binding=bedrock+self-hosted-lambda`), and say that
+`AWS/Lambda` `Errors` cannot split client from server errors unless the function emits its own taxonomy. The path itself — the seven stages, and which one a symptom starts at — is
 `references/request-path.md`.
 
 Every finding is grounded in the catalogs under `references/`. Each carries a stable `check-id`, a

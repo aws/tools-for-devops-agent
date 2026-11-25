@@ -1,0 +1,76 @@
+{
+  "version": "v5",
+  "iteration": 2,
+  "eval_id": "serverless-cold-start-provisioned-concurrency",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent's response correctly identifies the read-only nature of the analysis, uses the given ServerlessConfig and ModelSetupTime signals, explains that serverless scales to zero causing cold starts after idle, and correctly recommends provisioned concurrency as a command (UpdateEndpoint with new endpoint config) with workload-specific sizing guidance (\"Start with 1 or 2... Size it to the concurrency you expect\"). It also confirms nothing is mutated (it only describes the command, doesn't execute it).\n\nHowever, it is missing a specific required element: reporting a finding code \"LLM-SM-SERVE-001\" when sustained cold-start latency meets no Provisioned Concurrency criteria. This specific finding/alert code is completely absent from the response. Additionally, while the agent discusses \"no datapoints in busy hours,\" it doesn't explicitly distinguish \"no datapoints\" from \"a measured zero\" as a technical/monitoring nuance - it treats the absence of datapoints as evidence of no cold starts during busy hours, but doesn't explicitly call out the CloudWatch semantic distinction between absent datapoints and a recorded zero value.\n\nThe core advice and reasoning align well with the expected output, but the specific required finding code (LLM-SM-SERVE-001) is entirely missing, which appears to be a structured/expected deliverable in this evaluation. This is a significant gap since it's explicitly named in the expected output.",
+      "evidence": "Agent's response discusses cold start reasoning and provisioned concurrency recommendation but contains no mention of 'LLM-SM-SERVE-001' or any structured finding code. It also doesn't explicitly distinguish 'no datapoints' from 'a measured zero' as a technical point, instead treating both as straightforward evidence of warm-traffic health.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response uses the ServerlessConfig given, including that no ProvisionedConcurrency is set, before recommending a change",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'Your config already allows it... Your `MaxConcurrency` is 5, so you can provision between 1 and 5' and earlier notes 'DescribeEndpointConfig shows ServerlessConfig MemorySizeInMB 4096, MaxConcurrency 5 and no ProvisionedConcurrency' is referenced implicitly via 'ModelSetupTime only shows up on cold starts' and the config discussion before recommending provisioned concurrency.",
+          "reasoning": "The agent explicitly references MaxConcurrency=5 and the absence of ProvisionedConcurrency ('no ProvisionedConcurrency') when reasoning about how much to provision, before making its final recommendation on sizing. This satisfies using the given config details including the absence of provisioned concurrency before recommending a change.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains that on-demand serverless scales to zero, so a slow first request after idle is an expected cold start",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'ModelSetupTime only shows up on cold starts... That means the cold start only happens when the endpoint has scaled to zero, and warm traffic is fine.'",
+          "reasoning": "The agent explicitly connects the idle period to scale-to-zero behavior and frames the 9-second delay as an expected cold start, matching the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes no datapoints from a measured zero when reading the cold-start signal",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says 'there are no datapoints in busy hours' and treats this as meaning 'warm traffic is fine' without explicitly discussing the distinction between 'no datapoints' (metric not emitted) versus a 'measured zero' (metric emitted with value zero).",
+          "reasoning": "The assertion requires the response to explicitly distinguish between absence of datapoints and a measured zero value for the cold-start metric. The agent merely restates 'no datapoints in busy hours' as evidence of no cold starts, but never explains the semantic difference between a missing datapoint and an actual zero-value measurement, which is the substance being asserted here.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives the Provisioned Concurrency change as a command for the operator to run and does not call any mutating API",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response says: 'You change it by creating a new endpoint config that adds `ProvisionedConcurrency` under `ServerlessConfig`, then calling `UpdateEndpoint`.'",
+          "reasoning": "The assertion requires the change to be given as a command for the operator to run (e.g., an actual CLI command or API call syntax) without the agent itself calling a mutating API. While the agent does not call any mutating API (satisfying the second half), it does not give a concrete command (such as an AWS CLI command or boto3 snippet) for the operator to run \u2014 it only describes the process in prose ('creating a new endpoint config... then calling UpdateEndpoint'), which is a description of the API action rather than an actionable command for the operator to execute themselves.",
+          "confidence": "high"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "9s",
+    "cost": "$0.08",
+    "context_window": {
+      "utilization": "4.5%",
+      "compaction_count": 0
+    }
+  }
+}
