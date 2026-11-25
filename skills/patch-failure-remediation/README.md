@@ -52,7 +52,7 @@ Safety rules the skill enforces:
 3. To let the agent run fixes (optional — without it the agent stays read-only and gives the
    Command plan for you to run):
    1. Enable **directed actions** on the Agent Space.
-   2. In each member account, deploy [`assets/devops-agent-patch-elevated-role.yaml`](assets/devops-agent-patch-elevated-role.yaml)
+   2. In each member account, deploy [`assets/devops-agent-patch-elevated-role.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/skills/patch-failure-remediation/assets/devops-agent-patch-elevated-role.yaml)
       (a service-managed StackSet works well), in the Agent Space's Region, with parameters
       `AgentSpaceAccountId`, `AgentSpaceRegion` and `AgentSpaceId`.
    3. Register the stack's `ElevatedRoleArn` output as `agentElevatedRoleArn` on that account's
