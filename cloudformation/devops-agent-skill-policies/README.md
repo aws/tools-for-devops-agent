@@ -58,6 +58,7 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableLiveStreamingEventReadinessReview` | `live-streaming-event-readiness-review` | `mediatailor:ListPlaybackConfigurations`, `mediatailor:GetPlaybackConfiguration`, `mediatailor:ListPrefetchSchedules`, `route53-recovery-cluster:ListRoutingControls` |
 | `EnableEosCostAnalysis` | `eos-cost-analysis` | `pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`. Resource discovery is already covered by the managed policy |
 | `EnableStorageEbsOperations` | `storage-ebs-operations` | `ec2:GetEbsEncryptionByDefault`, `ec2:GetEbsDefaultKmsKeyId`, `dlm:GetLifecyclePolicies`, `dlm:GetLifecyclePolicy`, `rbin:ListRules`, `rbin:GetRule`, `fis:GetExperiment`, `compute-optimizer:GetEBSVolumeRecommendations` |
+| `EnableResilienceReview` | `resilience-review` | `drs:DescribeSourceServers`, `lambda:GetFunction` |
 | `EnableEksOperationReview` | `aws-eks-operations-review` | None — already covered by the managed policy |
 | `EnableEnrichWithSecurityAgent` | `enrich-with-aws-security-agent` | None — already covered by the managed policy |
 | `EnableCrmInvestigationGuidelines` | `crm-production-investigation-guidelines` | None — already covered by the managed policy |

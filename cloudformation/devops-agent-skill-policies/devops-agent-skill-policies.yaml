@@ -33,6 +33,7 @@ Metadata:
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
+          - EnableResilienceReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
           - EnableStorageEbsOperations
@@ -179,6 +180,12 @@ Parameters:
     Default: 'true'
     AllowedValues: ['true', 'false']
 
+  EnableResilienceReview:
+    Type: String
+    Description: Resilience review skill (adds drs:DescribeSourceServers and lambda:GetFunction read-only).
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+
   EnableConfigAthenaCiAnalysis:
     Type: String
     Description: >
@@ -250,6 +257,7 @@ Conditions:
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
+  SkillResilienceReview: !Equals [!Ref EnableResilienceReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
   SkillStorageEbsOperations: !Equals [!Ref EnableStorageEbsOperations, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
@@ -836,6 +844,32 @@ Resources:
             Resource:
               - !Sub 'arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:automation-execution/*'
 
+  # resilience-review: only the read actions NOT already granted by
+  # AIDevOpsAgentAccessPolicy. Checked with iam:SimulateCustomPolicy against the
+  # managed policy: 85 of the 89 actions the skill uses are already allowed.
+  # drs:DescribeSourceServers shows whether AWS Elastic Disaster Recovery replicates
+  # the servers; lambda:GetFunction shows where function code lives. Both are
+  # optional: without them the skill says what it could not read. The other two,
+  # kafka-cluster:Connect and kafka-cluster:DescribeTopic (MSK topic replication),
+  # act on the cluster's data plane and are not granted here; without them the
+  # skill reports topic replication as not checked.
+  PolicyResilienceReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillResilienceReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-ResilienceReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ResilienceReviewRead
+            Effect: Allow
+            Action:
+              - drs:DescribeSourceServers
+              - lambda:GetFunction
+            Resource: '*'
+
 Outputs:
   DevOpsAgentRoleArn:
     Description: Role ARN to use with aws devops-agent associate-service.
@@ -868,6 +902,7 @@ Outputs:
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
+        - resilience-review: ${EnableResilienceReview} (drs:DescribeSourceServers, lambda:GetFunction)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
         - storage-ebs-operations: ${EnableStorageEbsOperations} (ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId, dlm:GetLifecyclePolicies/GetLifecyclePolicy, rbin:ListRules/GetRule, fis:GetExperiment, compute-optimizer:GetEBSVolumeRecommendations)
         - aws-systems-manager custom agent add-on: ${EnableSsmAutomationExecutionRead} (ssm:GetAutomationExecution on this account's automation executions, for the per-location settings of multi-account runs; the aws-systems-manager skill itself needs no extra policy)

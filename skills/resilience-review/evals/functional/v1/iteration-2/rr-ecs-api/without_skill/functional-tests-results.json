@@ -1,0 +1,91 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "rr-ecs-api",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output specifies a structured \"resilience report\" with six sections in a specific order, covering: (1) workload mapped by layer, (2) single task/single AZ flag, (3) container image location and cross-region pull capability (ECR replication/pull-through cache), (4) secret not replicated flag, (5) no load balancer/failover routing, (6) whether the named CloudFormation stack (dr-demo-backend) could recreate the workload in the recovery region, plus a proposal for a restore/rebuild test AND a named AWS FIS failure test, with no invented targets.\n\nThe agent's response covers several of these points well: it flags single task/single AZ, notes the secret is not replicated, notes no load balancer/public entry point, and discusses whether CloudFormation could rebuild in eu-west-1 (though it doesn't name the stack 'dr-demo-backend' explicitly). However, it is missing key required elements:\n- No explicit statement about whether the container image can be pulled in the recovery region via ECR replication or pull-through cache (it mentions the image is a pull-through-cache mirror of nginx, pullable from any region, but doesn't address ECR replication status as a DR mechanism for the recovery region).\n- No proposal for a specific restore/rebuild test.\n- No named AWS FIS (Fault Injection Simulator) failure test \u2014 this is a significant omission, as FIS is explicitly called out in the expected output and not mentioned anywhere in the response.\n- The response is not structured as six distinct sections in order; it's formatted as a narrative/table/numbered action list rather than the specified report structure.\n- It doesn't explicitly reference the CloudFormation stack by name (dr-demo-backend).\n\nWhile the response is substantive, well-organized, and demonstrates good DR reasoning, it does not match the specific structural and content requirements of the expected output, particularly the missing AWS FIS failure test proposal and explicit six-section structure with ECR replication assessment.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The Roadmap section groups the actions under Quick wins, Quick fixes and Long-term, and every action names a specific resource and change.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response has a 'Where to start, in order:' numbered list (1-5), not sections titled 'Quick wins', 'Quick fixes', and 'Long-term'. No such grouping headers exist anywhere in the output.",
+          "reasoning": "The assertion requires a specific Roadmap structure with three named categories (Quick wins, Quick fixes, Long-term), each containing actions naming specific resources and changes. The output instead provides a single flat ordered list without these category labels.",
+          "confidence": "high"
+        },
+        {
+          "text": "Quick wins and quick fixes do not depend on RPO or RTO targets the business has not agreed; Region-level work whose size depends on the targets is under Long-term.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Step 1 is 'Decide RTO/RPO targets' and step 2 'Stand up a pilot-light stack in eu-west-1' explicitly says 'that determines whether you need warm standby (pilot light) vs. cold rebuild-on-demand' \u2014 meaning step 2 is gated on step 1's RTO/RPO decision, not separated into a non-dependent 'quick wins/fixes' category vs a dependent 'long-term' category.",
+          "reasoning": "Since there is no Quick wins/Quick fixes/Long-term grouping at all (per assertion 0), this assertion about how such grouping should be organized relative to RPO/RTO dependency cannot be satisfied. Additionally, the ordering shows RTO/RPO decision as step 1, with subsequent steps (including the region-level pilot-light stack) explicitly dependent on it, but items like step 3 (replicate secret) and step 4 (fix public-facing gap/ALB) are not explicitly marked as independent of RPO/RTO in a separate structural category.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the ECS service runs a single task in a single Availability Zone.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"ECS Fargate service, 1 task, 1 AZ, no load balancer, no DNS, and the security group has **no ingress rules at all**.\"",
+          "reasoning": "The response explicitly states the service runs 1 task in 1 AZ, directly satisfying this assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response flags that the Secrets Manager secret used by the task is not replicated to another Region.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"A secret (`API_KEY` in Secrets Manager) is single-region, not replicated.\" and later \"Secrets Manager | Single-region only\" and \"Replicate the Secrets Manager secret to eu-west-1\"",
+          "reasoning": "The response clearly and repeatedly flags that the Secrets Manager secret is not replicated to another region.",
+          "confidence": "high"
+        },
+        {
+          "text": "The First tests section contains both a restore or rebuild test and a failure test that names an AWS FIS scenario.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No section titled 'First tests' or equivalent exists in the output. There is no mention of AWS FIS (Fault Injection Simulator) or any named failure-injection scenario anywhere in the response.",
+          "reasoning": "The assertion requires a specific 'First tests' section containing both a restore/rebuild test and a failure test naming an AWS FIS scenario. The output contains neither a dedicated testing section nor any reference to FIS.",
+          "confidence": "high"
+        },
+        {
+          "text": "Resources that share only a tag with the ECS service, and are not in its CloudFormation stack dr-demo-backend, get no roadmap actions. Resources in the same stack (such as dr-demo-mysql, dr-demo-valkey, dr-demo-players, dr-demo-events) are connected by configuration and may be in scope.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response explicitly includes RDS MySQL (dr-demo-mysql), DynamoDB (dr-demo-players), ElastiCache Valkey, and SQS (dr-demo-events) in its roadmap scope (e.g., 'Pick a data strategy \u2014 DynamoDB global table vs. restore-from-backup, RDS cross-region read replica vs. restore-from-copy'), but there is no mention of a CloudFormation stack named 'dr-demo-backend' or any explicit statement that these resources are confirmed to be in the same stack as the ECS service versus merely tag-related.",
+          "reasoning": "The assertion requires that only resources in the same CloudFormation stack as the ECS service get roadmap actions, and resources sharing only a tag should not. The output does not reference a stack named 'dr-demo-backend' at all, nor does it clarify the stack membership basis for including RDS, DynamoDB, Valkey, and SQS in the roadmap. Without evidence that the agent correctly scoped resources by stack membership (as opposed to just tags or general relatedness), this cannot be confirmed as passing; the lack of explicit stack-based justification is a gap, though the resources listed do match those named in the assertion as in-scope examples. Given the ambiguity and absence of stack-based reasoning or any indication of out-of-scope tag-only resources being excluded, I mark this as failed with low-medium confidence since it's unclear if the agent's scoping was correct or just coincidentally aligned.",
+          "confidence": "low"
+        },
+        {
+          "text": "No create, modify or delete API call is reported as having been made",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 4,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 7,
+        "pass_rate": 0.4286
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m38s",
+    "cost": "$0.81",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}
