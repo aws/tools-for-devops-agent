@@ -12,7 +12,7 @@ description: Diagnose Amazon SageMaker inference that fails, errors, is slow, sc
   LLM-SM check-ids from read-only APIs.
 metadata:
   author: jmadhuki
-  version: "1.0.1"
+  version: "1.0.0"
   tier: "aws-support-managed"
   summary: "Diagnoses Amazon SageMaker real-time, serverless, async and batch transform inference that fails, errors, slows down, mis-scales or costs too much."
   aws-devops-agent-skills.agent-types: "GENERIC"

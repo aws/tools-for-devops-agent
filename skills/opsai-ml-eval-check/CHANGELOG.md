@@ -1,9 +1,8 @@
 # Changelog
-## 1.0.1
+## 1.0.0
 - PR #268 review items 2 and 3: "ruled out errors" needs `InvocationClientErrors`, `InvocationServerErrors` and `InvocationThrottles`; the literal `$.stopReason` is dropped from the "never matches" notes (LLM-EVAL-013 rule kept); `known-causes.md` cites nova-model-evaluation for `upper_rate`; the description drops two implementation-detail sentences.
 - Evals: `output-contract-drift`, `qe-nondeterminism-vs-regression`, `se-never-evaluated` and `se-eval-job-failed` hardened; `evals/additional-permissions.json` lists `bedrock:GetEvaluationJob`.
 
-## 1.0.0
 - Evals: `se-eval-job-failed` gives the job's FailureReason and setup, since the eval account has no evaluation job.
 - The account-ID rule covers naming the account that was checked ("the connected account").
 - Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.

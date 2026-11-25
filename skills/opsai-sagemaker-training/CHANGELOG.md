@@ -1,9 +1,8 @@
 # Changelog
-## 1.0.1
+## 1.0.0
 - Evals: `training-job-failed-internal-error` expected output now states the billed GPU time (`BillableTimeInSeconds`), matching its billing assertion.
 - PR #268 review items 2 and 3: corrected checks, billing guidance (`BillableTimeInSeconds`) and citations in the checks reference and report template.
 
-## 1.0.0
 - Evals: `tr-spot-interruption` is removed (scored the same with and without the skill in two runs).
 - Evals: `reg-promote-without-retrain` is removed (general guidance, scored the same with and without the skill).
 - Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
