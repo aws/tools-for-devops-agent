@@ -1,20 +1,34 @@
 # AWS Performance Efficiency Review
 
-A skill for AWS DevOps Agent that finds where an application spends its time, which resource limits it, and what to change. It follows the request path across dependencies, uses the USE and RED methods to locate the bottleneck, checks right-sizing with AWS Compute Optimizer, and maps every finding to the Performance Efficiency pillar of the AWS Well-Architected Framework.
+A skill for AWS DevOps Agent that finds where an application spends its time, which resource limits it, and what to change. It follows the request path across dependencies, uses the RED and USE methods to locate the bottleneck, tests each candidate cause by timing, scope, history and magnitude before naming it, ranks the fix that removes the cause above the one that adds capacity, and maps every finding to the Performance Efficiency pillar of the AWS Well-Architected Framework.
 
 > **Disclaimer:** This skill is sample code, not intended for production use without additional review and testing. Users should validate in a non-production environment first.
 
 ## What it does
 
-- Maps the request path from the entry point (load balancer, API Gateway, function URL) to its deepest dependency, using the Agent Space topology, CloudWatch Application Signals and AWS X-Ray, with configuration inference as a fallback.
-- Measures p50, p90 and p99 latency, request rate and errors at each hop, and computes each hop's share of end-to-end latency.
-- Checks the slowest hop's resources for utilization, saturation and errors: CPU, memory, IOPS, connections, concurrency, throttles, queue age, cache hit ratio.
-- Correlates latency changes with deployments, configuration changes and traffic.
-- Runs service-specific checks: Database Insights top waits and SQL (through the `pi` API), scaling configuration, Lambda concurrency and timeouts, DynamoDB throttling, ElastiCache evictions, NAT gateway port allocation.
-- Covers AI and ML hops as part of the path: Amazon Bedrock model invocation (token and request quotas, Provisioned Throughput, output tokens per second), SageMaker AI real-time endpoints (model against overhead latency, invocations per instance, instance quotas), GPU inference on EKS through Accelerated Compute Insights, and Bedrock AgentCore runtime metrics. When the bottleneck is inside the model, the training job or the agent runtime, the report names the dedicated skill as the next step: `bedrock-operation-review`, `sagemaker-ai-ops-review`, `agentcore-ops-review` or `aiml-gpu-training-cluster-investigation`.
-- Reads AWS Trusted Advisor performance checks as a second evidence source next to Compute Optimizer; a flagged resource on the path is a hypothesis to confirm with the workload's own metrics.
-- Reads Compute Optimizer recommendations and separates hot-path findings (performance) from off-path findings (cost).
-- Produces a report: verdict, request path, bottleneck with evidence, findings mapped to Well-Architected best-practice IDs, ranked recommendations with cost direction and a verification metric, and a telemetry gaps table (capability to enable, what it would measure, cost direction with the pricing page, the enable and read-permission change).
+**Starts from the goal, not the graph.** In a chat review it first reads what it can (an existing SLO, alarms) and then asks at most three questions in one message: the performance target, the expected peak or growth, and the constraints. Every recommendation is then sized against that target with explicit arithmetic (required concurrency = rate x per-request duration) and kept inside the constraints. In an incident investigation it never asks; it states its defaults in an Assumptions line.
+
+**Follows the request path, whatever the entry point.** A load balancer, an API, a queue, a stream, a schedule or a batch job. It orders the hops from the entry point to the deepest dependency from the Agent Space topology, Application Signals and X-Ray, falling back to configuration (target groups, event source mappings, endpoint variables) and marking inferred hops as such. For asynchronous work it maps producer, queue or stream, consumer fleet and what the consumers call.
+
+**Measures before it explains.** Rate, errors and p50, p90, p99 duration at every hop (RED), each hop's share of end-to-end time and its change against a baseline window. For queues and streams RED is arrival rate, completion rate, backlog and age. Averages are never used alone; like is compared with like (same percentile, same period, matched rate), and the baseline is re-taken when rate, request shape or configuration changed inside the history.
+
+**Finds the constraining resource (USE).** Utilization, saturation and errors on CPU, memory, IOPS, network, connections, concurrency and capacity units of the suspect hop, broken down by operation, member, Availability Zone, revision and caller, with outliers picked against peers rather than a fixed threshold. A limit at its maximum behind a slow dependency is reported as a consequence, not a cause, unless it saturated first.
+
+**Hunts the limits that look like headroom.** Burst credits, baseline throughput allowances, provisioned limits that sit below the instance ceiling, the memory setting that is really the CPU setting, concurrency caps, visibility timeouts shorter than the work, token and request quotas, Provisioned Throughput. Each is checked against the real limit, not the resource's nominal size.
+
+**Tests every cause before naming it.** Competing explanations are ruled in or out by timing, scope, history and magnitude. A cause is **Confirmed** only with two independent signals whose onset and size account for the symptom in numbers, **Likely** with one signal or a failed read, otherwise **Unconfirmed** and never listed as a cause. A peer running the same code is used as a control twin; a change shared by healthy and degraded peers is ruled out as the sole cause; a configuration change is never invented.
+
+**Checks for self-inflicted load first.** Before recommending capacity it compares originating requests with the attempts a dependency actually received; retries, abandoned calls and timeouts shorter than the dependency's p99 are proven by magnitude and fixed at the caller. The fix that removes the cause always ranks above the one that masks it, cutting business load is never a ranked fix, and raising a consumer's cap triggers a downstream capacity check.
+
+**Uses the account's own advisors as hypotheses, not verdicts.** Compute Optimizer right-sizing and Trusted Advisor performance checks are read for resources on the path; a flag is confirmed or dismissed with the workload's own metrics, and off-path findings are reported separately as cost items.
+
+**Covers AI and ML hops like any other hop.** A model invocation, an inference endpoint, a GPU cluster or an agent runtime is measured from its caller with the same rules: arriving rate including throttles, latency percentiles, output tokens per second to separate a slower model from a longer answer, quotas and provisioned units as hidden limits. When the evidence puts the bottleneck inside the model, the training job or the agent runtime, the report names the dedicated repository skill as the next step.
+
+**Treats missing telemetry as a finding.** Every source on the path that could not be read, whether the capability is off, the call was denied or the namespace is empty, is a row in a Telemetry gaps table: what to enable, what the review could then measure, the cost direction with the pricing page, and the permission change needed.
+
+**Reports in one shape every time.** Assumptions, Summary with verdict and labelled cause, Request path, Bottleneck with evidence and arithmetic, Hypotheses considered, Findings each citing the metric and the call that returned it, Recommendations ranked with cost direction, verification metric and Well-Architected PERF best-practice ID, Telemetry gaps, Next review. No account IDs, ARNs, IP addresses or principal names appear anywhere in the answer.
+
+Service-specific metric names, thresholds and deep checks (databases, compute, storage, caches, queues, load balancers, API gateways, NAT, Bedrock, SageMaker AI, AgentCore, GPU on EKS) live in the `references/` files and are applied when the path reaches that service.
 
 The skill only reads. It does not change resources, run code, or connect to databases.
 
@@ -24,6 +38,17 @@ The skill only reads. It does not change resources, run code, or connect to data
 - **Incident RCA:** investigations where the symptom is latency, timeouts, throttling, backlog or saturation.
 
 If you also want a custom agent to load this skill, select **All agents** as the agent type when you import it.
+
+## Planned for the next version
+
+Rules already written and tested in lab runs, to follow in a separate pull request as version 1.1.0:
+
+- **Verdict first.** The report opens with a Targets table (one row per target from intake or defaults: target, measured value with unit and window, met yes or no). When every row is met the verdict is Healthy, the cause line says None and the Summary carries no fix row; growth-headroom and right-sizing rows may remain, each labelled "no current breach".
+- **Path membership before ratios.** Before dividing one resource's counts by another's, or attributing a dependency's throttles, rejections or latency to a caller, the agent states the configuration or trace read that puts both on the same request path; without that read the ratio is not computed and the comparison stays Unconfirmed. A twin or peer is a like-for-like control, never a path member.
+- **Cite the call for every number.** Each value in Findings names the metric or field and the API call or query that returned it; a value is never taken from memory, another run or a different window.
+- **Mandatory attempts-per-request row.** For any dependency with throttles or rejections above zero, or latency above baseline, the Hypotheses table carries `attempts per originating request = (served + rejected or throttled attempts) / originating requests` with its window; above 1, the caller's timeout and retry policy is the first hypothesis and added capacity is masking, unless demand at one attempt already exceeds capacity.
+- **Healthy-path evals.** Two functional chat cases on healthy paths that expect a Targets table, a Healthy verdict and no cause labelled Confirmed or Likely, so the skill is also tested for not inventing a problem.
+- **Storage hand-off.** When the bottleneck is inside an EBS volume, the per-volume exceeded checks and balance metrics are named as direct ceiling evidence and the `storage-ebs-operations` skill is named as the next step.
 
 ## Prerequisites
 
