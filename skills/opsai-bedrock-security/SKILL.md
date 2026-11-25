@@ -3,14 +3,14 @@ name: opsai-bedrock-security
 description: Audit Amazon Bedrock security, read-only - which IAM users and long-lived credentials can
   invoke models, and whether Bedrock Guardrails protect production. Use it when someone asks who can
   call Bedrock, wants to list or phase out long-term Bedrock API keys or dormant, old or root keys,
-  triages a GuardDuty finding such as Impact:IAMUser/AnomalousModelInvocation, or checks what an SCP
-  denying Bedrock to IAM users would break; and when a guardrail is missing, in DRAFT or detect-only,
-  content, prompt attacks, tool output or PII still get through, correct answers are blocked or blocked
-  only sometimes, a guardrail limit or ApplyGuardrail quota is hit, or adds latency, how-to questions
+  triages a GuardDuty AnomalousModelInvocation finding, or checks what an SCP denying Bedrock to IAM
+  users would break; and when a guardrail is missing, in DRAFT or detect-only, content, prompt attacks,
+  tool output or PII still get through, correct answers are blocked or blocked only sometimes, a
+  guardrail limit or ApplyGuardrail quota is hit, or adds latency, pasted configs and how-to questions
   included. Not for Bedrock cost, or AccessDenied unless it began when a guardrail was added
   (bedrock:ApplyGuardrail). Load it yourself before delegating. Name every LLM-BPA or LLM-GRD check-id
-  and severity, and relay a sub-agent's ids unchanged. Never write a 12-digit account ID or a full key
-  ID in any text, plans and prompts included.
+  and severity; relay a sub-agent's ids unchanged. Never write a 12-digit account ID or a full key ID in
+  any text, plans and prompts included.
 metadata:
   author: cswingchan
   version: "1.0.0"

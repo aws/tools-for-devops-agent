@@ -1,0 +1,81 @@
+{
+  "version": "v21",
+  "iteration": 1,
+  "eval_id": "quota-lookup-by-code",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires the agent to actually resolve the quota using a known quota code table, make a single GetServiceQuota call, and report the specific code (L-D4FBCF4E), name, and applied value (6,000,000) read live. Instead, the agent reported that it could not get the quota value at all because 'AWS tools weren't connected,' provided no quota code, no name, and no value, and explicitly said it would not guess a number. It only provided generic CLI instructions for the user to run themselves, including a list-service-quotas call with --max-items 1000 (which still pages through quotas rather than using a known code for a single GetServiceQuota call as expected). The core expectation\u2014that the agent itself resolves and reports the quota code, name, and value\u2014was not met at all. Additionally, the agent's guidance to filter list-service-quotas by name contradicts the expected explanation that ListServiceQuotas cannot filter by name and that the fast path is using a known code directly with GetServiceQuota.</reasoning>\n<parameter name=\"evidence\">\"I couldn't get the quota value... I don't have the applied TPM value, the quota code, or the exact profile ID. I'm not going to guess a number.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reads the quota live with GetServiceQuota on a code and checks the returned name",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"I couldn't get the quota value. The AWS tools the lookup needed weren't connected in this session, so every call failed before it reached your account.\" The provided get-service-quota command is suggested for the user to run later, not executed by the agent.",
+          "reasoning": "The agent explicitly states it could not get the quota value because tools weren't connected, and provides only instructions for the user to run themselves. It never actually executes GetServiceQuota or reads a live value.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response chooses the cross-Region quota form for the us. profile",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Cross-region model inference tokens per minute for \u2026 is the one that applies to the us. profile.\" and \"On-demand model inference tokens per minute for \u2026 applies to calls made directly to the base model... Ignore it... Global cross-region \u2026 rows apply to global. profiles. Ignore these too.\"",
+          "reasoning": "The agent identifies the correct quota form for the us. profile as the cross-region one and explicitly tells the user to ignore on-demand and global cross-region quotas.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not page through the whole quota list",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Filtering by name in the query avoids that.\" followed by `aws service-quotas list-service-quotas --service-code bedrock --region us-east-1 --max-items 1000 --query \"Quotas[?contains(QuotaName,'Sonnet 5') && contains(QuotaName,'tokens per minute')]...\"`",
+          "reasoning": "The agent explicitly avoids listing all quotas by filtering with a --query contains() clause on QuotaName, addressing the user's complaint about paging through everything.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response shows the quota in a table with the quota name, code, applied value and whether it is adjustable",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"I don't have the applied TPM value, the quota code, or the exact profile ID.\" No populated table with actual quota name, code, value, and adjustable status is shown in the response - only unexecuted command templates.",
+          "reasoning": "The agent never actually displays a table with the applied quota value for the user's account; it only provides CLI commands with --output table for the user to run themselves, and admits it does not have the actual value.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites the code",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "28s",
+    "cost": "$0.24",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

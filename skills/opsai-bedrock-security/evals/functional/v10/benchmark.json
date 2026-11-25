@@ -1,0 +1,2652 @@
+{
+  "summary": "Across 13 evals (24 iterations), results consistently favor with_skill on expected-output match and assertion pass rates, but without_skill is faster and cheaper everywhere a comparison exists, and the few direct quality-judgment comparisons that were run are mixed or favor without_skill.\n\nExpected output and assertions:\n- In every eval where both variants have data, with_skill met the expected output as often or more often than without_skill (e.g. no-guardrail-on-production-path, draft-not-pinned-trap, blocked-sometimes-no-account, invocation-log-input-assessment-is-not-detection, bpa-dormant-keys, gr-no-apply all show with_skill at 100% expected-output match vs. without_skill at 0% or lower assertion scores). The one exception is api-key-inventory, where both variants failed the expected-output check (0/1) despite with_skill passing far more individual assertions (9/11 vs 2/11) \u2014 the overall expected-output bar is strict and neither variant cleared it there.\n- Three evals (version-limit-counts-draft, pii-entry-with-only-action, gr-prompt-attack) have no without_skill data at all (marked null), so no direct comparison is possible there; with_skill alone passed 100% of assertions in each.\n- Several assertions pass for both variants regardless of eval (e.g. \"does not claim to have modified any resource,\" \"discloses which paths/regions were not covered,\" \"no raw 12-digit account ID exposed\" in most cases) \u2014 these are not differentiating.\n- Some assertions fail for both variants consistently (e.g. the \"expired vs inactive key\" distinction in api-key-inventory, the \"strong DRAFT says nothing about older pinned version\" point in draft-not-pinned-trap, the \"staged deactivate-before-delete\" sequencing in bpa-dormant-keys, and the \"GRD catalog check-id\" presence in gr-no-apply) \u2014 these point to shared gaps in behavior or possibly in how the assertion itself is written, not a variant-specific weakness.\n- A few assertions split cleanly, with with_skill passing and without_skill failing (docs link citation and no-12-digit-number checks in api-key-inventory; several specificity/read-only framing checks in no-guardrail-on-production-path and invocation-log-input-assessment-is-not-detection). No assertions in this dataset show without_skill passing while with_skill fails.\n\nRuntime and cost:\n- without_skill is consistently and often substantially faster and cheaper than with_skill across every eval with paired metrics (e.g. 22s/$0.19 vs 3m23s/$1.69 on no-guardrail-on-production-path; 12s/$0.10 vs 14s/$0.12 on blocked-sometimes-no-account as the smallest gap; 52s/$0.44 vs 1m29s/$0.75 on bpa-dormant-keys). with_skill also shows higher context-window utilization throughout, consistent with longer/more thorough runs.\n\nDirect quality judgments (pairwise LLM comparison):\n- Only two evals produced any quality comparison pairs (bpa-dormant-keys and gr-no-apply); all other evals had this comparison skipped (not applicable or no pair to compare), so quality-judgment coverage is very sparse.\n- In bpa-dormant-keys, the one evaluated pair favored without_skill on all three criteria (accuracy, actionability, completeness), at medium confidence \u2014 this runs counter to the assertion-level pattern favoring with_skill in that same eval, where with_skill still had a higher assertion pass rate (4/5 vs 2/5) and matched the expected output while without_skill also matched but with lower assertion coverage.\n- In gr-no-apply, the one pair was split evenly (2 favored each, 2 comparable) across criteria, at medium confidence \u2014 essentially a tie.\n- Given only two pairs total and medium confidence, this quality dimension is a weak, low-coverage signal and shouldn't be weighted heavily against the stronger, broader assertion-level and expected-output patterns.\n\nOther notes:\n- Two evals (scp-impact-before-applying, and the two \"should_trigger: false\" evals throttling-question-does-not-trigger and neg-invoke-access-denied) were skipped for expected-output/assertions/quality comparisons, either because they don't apply or because the trigger wasn't expected to fire; these are absent data, not failures for either variant.\n- Output consistency across repeated runs could not be assessed for any eval (all null), so run-to-run stability is unknown for both variants.\n- Confidence levels on expected-output judgments are mostly \"high,\" giving reasonable reliability to the expected-output/assertion findings, though a few individual assertions (e.g. the expired/inactive key distinction, draft-strength wording) carry \"low\" or \"medium\" confidence and should be read cautiously.\n\nOverall, this is a tradeoff pattern: with_skill tends to meet expected outputs and pass assertions more often across most evals with paired data, while without_skill is markedly faster and cheaper and, in the very limited direct quality-judgment comparisons available, performed as well as or better than with_skill. No single dimension provides a conclusive verdict, and three evals had no without_skill data at all, limiting the overall comparison's completeness.\n\nNote: a DevOps Agent endpoint outage failed some runs in this pass. Those scenarios (gr-prompt-attack, pii-entry-with-only-action, scp-impact-before-applying, version-limit-counts-draft) were rerun on the same agent spaces with the same settings, and their results replace the failed runs.",
+  "timestamp": "2026-11-25T10:13:54Z",
+  "version": "v10",
+  "model": "us.anthropic.claude-sonnet-5",
+  "iterations": 1,
+  "total_evals": 13,
+  "total_iterations_run": 24,
+  "total_failed": 0,
+  "cleanup_skipped": false,
+  "understanding_agent_space_skill": {
+    "enabled": false,
+    "found": 0,
+    "timed_out": 0,
+    "errored": 0,
+    "not_waited": 24
+  },
+  "evals": {
+    "api-key-inventory": {
+      "summary": "This evaluation covers a single chat task about auditing Amazon Bedrock API keys. The trigger behavior under test did fire (1/1).\n\nExpected output: Both variants failed to meet the overall expected output (0/1 for each), so on this top-level measure neither variant succeeded. Confidence in this judgment was high for without_skill and medium for with_skill, so this is a reasonably solid (not low-confidence) finding of failure for both.\n\nAssertions (11 total, finer-grained): with_skill passed 9/11 (82%), without_skill passed 2/11 (18%). Breaking this down:\n- Two assertions passed for both variants (\"never prints a full API key ID/alias/username\" and \"no full access key ID or Bedrock key ID exposed with sensitive prefix\") \u2014 these are not differentiating; both variants handle key-masking/redaction correctly.\n- One assertion failed for both variants (\"states grant/risk tier and removal steps per key\") \u2014 this indicates a capability gap or an assertion criterion neither variant satisfies, worth noting as a shared weakness rather than a difference between variants.\n- One assertion (\"expired vs inactive key re-enablement treatment\") failed for both variants, and notably with_skill's failure here was rated low confidence, meaning that specific measurement is weak evidence.\n- The remaining seven assertions all follow a \"with_skill passes, without_skill fails\" pattern, covering things like listing all account-wide API keys, correctly stating IAM's lack of last-used reporting, confirming read-only/no-change behavior, not ending with a follow-up question, citing AWS docs, and avoiding exposure of account numbers. These passes/fails were rated at medium-to-high confidence, so this is a fairly consistent and credible difference in favor of with_skill on many specific behavioral checks, even though the overall expected-output judgment still marked with_skill as failing.\n\nRuntime and cost: without_skill was substantially faster (23s vs 1m1s) and cheaper ($0.19 vs $0.51), with lower context-window utilization (4.4% vs 13.4%). This is a clear efficiency difference favoring without_skill, but it comes alongside without_skill failing many more of the detailed assertions, so it represents a speed/cost-vs-thoroughness tradeoff rather than a strict advantage.\n\nQuality comparison: No comparable quality pairs were evaluated (0 pairs evaluated, 1 skipped), so there is no direct quality-preference signal to report here.\n\nOutput consistency: No consistency data is available for either variant (both null), so run-to-run stability cannot be assessed from this evaluation.\n\nOverall, this is a single-task, single-run evaluation, so confidence in generalizing is limited. Within this one task, with_skill satisfied more of the specific assertion-level criteria (especially around completeness of key listing, correct caveats about IAM's lack of last-used data, read-only framing, and documentation citation) while without_skill was notably faster and cheaper and used less context. Neither variant satisfied the overall expected-output criterion or the assertion about stating per-key risk tier and removal guidance, pointing to a shared gap. One assertion difference (re-enablement treatment) rests on a low-confidence judgment for with_skill and should be treated cautiously.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        },
+        "without_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response lists every long-term Amazon Bedrock API key found by the account-wide listing (keys on any IAM user, not only on BedrockAPIKey users), identifying each by its IAM user name or by its key ID masked to the last four characters",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "For each API key, the response says what it can do in Amazon Bedrock (its grant and risk tier) and whether to remove it, as steps for the customer",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 2,
+            "text": "The response says that IAM does not report when an API key was last used and does not call any API key dormant or never used",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 3,
+            "text": "The response states that IAM does not report when an Amazon Bedrock API key was last used, so whether each key is still in use is unknown",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 4,
+            "text": "The response treats an expired API key as unable to be re-enabled and an inactive one as able to be re-enabled",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "low"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 5,
+            "text": "The response states that the audit is read-only and made no change, and does not claim to have deleted, deactivated or changed any key",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 6,
+            "text": "The response never prints a full API key ID, an API key's ServiceCredentialAlias or its ServiceUserName",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 7,
+            "text": "The response does not end with an offer or a follow-up question",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 8,
+            "text": "The response cites AWS documentation with at least one docs.aws.amazon.com link",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 9,
+            "text": "The response contains no 12-digit number",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 10,
+            "text": "No full access key ID or Amazon Bedrock API key ID is exposed, and no key ID is shown with its AKIA, ASIA or ACCA prefix plus 8 or more characters",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "9/11",
+          "percentage": 82
+        },
+        "without_skill": {
+          "pass_rate": "2/11",
+          "percentage": 18
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "1m1s",
+          "cost_avg": "$0.51",
+          "context_window_avg": {
+            "utilization": "13.4%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "23s",
+          "cost_avg": "$0.19",
+          "context_window_avg": {
+            "utilization": "4.4%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "with_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "with_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "scp-impact-before-applying": {
+      "summary": "This single chat-task eval shows a clear, consistent gap between the two variants across nearly every measured dimension, though some context is worth noting.\n\nTrigger/setup: The trigger behavior fired successfully (1/1), so the test scenario itself executed as intended for both variants.\n\nExpected output: with_skill met the expected output (1/1, 100%, high confidence), while without_skill did not (0/1, 0%, high confidence). Both confidence ratings are high, so this is not a case of a weak or ambiguous measurement \u2014 the judgment that without_skill failed to meet expectations appears solid.\n\nPer-assertion results: with_skill passed all 8 assertions (8/8, 100%), while without_skill passed only 1 of 8 (12%). Of the 8 assertions:\n- 7 assertions followed the same pattern: with_skill passed and without_skill failed. These cover a range of substantive requirements \u2014 correctly identifying affected users by name, clarifying that IAM roles/Identity Center users are unaffected, framing the SCP as a draft template rather than something applied, disclosing audit scope limitations, avoiding a trailing follow-up question, citing AWS documentation, and avoiding exposure of 12-digit account numbers.\n- 1 assertion (\"no exposed access key ID\") passed for both variants \u2014 this one doesn't differentiate them, since neither variant exposed key material.\nMost of these failing assertions carry high or medium confidence from the LLM evaluator, so the pattern of without_skill underperforming appears to be a reasonably reliable finding rather than a measurement artifact.\n\nRuntime and cost: without_skill was notably faster (1m0s vs 2m16s) and cheaper ($0.50 vs $1.13) than with_skill. Context window utilization was low for both (5.3% vs 7.7%), with no compaction needed in either case. So without_skill is the leaner, lower-cost run, but it is paired here with substantially lower correctness on the content requirements being tested.\n\nQuality comparison and consistency: No quality pairs were evaluated (0 evaluated, 1 skipped), and output-consistency data is null for both variants, so there is no information on run-to-run stability or a separate quality-preference judgment to weigh in. These dimensions are simply absent data, not a negative signal for either variant.\n\nOverall picture: This eval presents a tradeoff in resource usage (without_skill cheaper and faster) set against a substantial difference in meeting the expected output and passing content assertions (with_skill passing nearly all checks, without_skill passing almost none). Since the task-correctness measurements are based on a single run each with mostly high-confidence judgments, the finding is suggestive but rests on an n=1 comparison rather than repeated-trial evidence, and broader quality/consistency metrics that could add additional context were not available here.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response lists, by user name, the users with an active credential that can invoke Amazon Bedrock as the ones the SCP would break now",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "The response says that IAM roles and IAM Identity Center users are not affected by the SCP",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "The response presents the SCP as a template for the customer to review and test first, with an exception list for the workloads that must keep working, states that the audit changed nothing, and does not claim to have attached, created or applied it",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 3,
+            "text": "The response says that the audit does not evaluate service control policies or resource control policies already in place",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 4,
+            "text": "The response does not end with an offer or a follow-up question",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 5,
+            "text": "The response cites AWS documentation with at least one docs.aws.amazon.com link",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 6,
+            "text": "The response contains no 12-digit number",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 7,
+            "text": "No full access key ID or Amazon Bedrock API key ID is exposed, and no key ID is shown with its AKIA, ASIA or ACCA prefix plus 8 or more characters",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "8/8",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "1/8",
+          "percentage": 12
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "2m16s",
+          "cost_avg": "$1.13",
+          "context_window_avg": {
+            "utilization": "7.7%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "1m0s",
+          "cost_avg": "$0.50",
+          "context_window_avg": {
+            "utilization": "5.3%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "no-guardrail-on-production-path": {
+      "summary": "This evaluation covers a single chat task. The trigger behavior under test fired successfully (1/1), confirming the scenario was exercised as intended.\n\nOn meeting the expected output, the two variants diverged clearly: with_skill met it 1/1 (100%) and without_skill met it 0/1 (0%), both judgments made with high confidence (so this is a reasonably reliable finding, albeit from a single trial).\n\nPer-assertion results (5 assertions, 1 run each) reinforce this split:\n- Two assertions passed for both variants (\"read-only remediations only, no claim of modifying resources\" and \"discloses uncovered paths/regions/checks\") \u2014 these assertions did not differentiate the variants.\n- Three assertions passed for with_skill but failed for without_skill: correctly resolving which guardrail/version actually applies before judging protection, reporting the concrete observed value behind each finding (vs. a generic statement), and not exposing a raw 12-digit account ID. These are substantive differences, including one security-relevant regex check (account ID exposure) that without_skill failed.\n- Overall assertion pass rate was 5/5 (100%) for with_skill vs 2/5 (40%) for without_skill.\n\nOn cost and runtime, without_skill was substantially faster (~22s vs ~3m23s) and cheaper (~$0.19 vs ~$1.69), with lower context-window utilization (4.3% vs 11.1%); neither showed context compaction. This is a notable efficiency advantage for without_skill, but it is paired with the lower correctness/assertion results above, so it reads as a speed/cost-vs-thoroughness tradeoff rather than a standalone strength.\n\nQuality comparison data is not usable here: 0 pairs were evaluated and 1 pair was skipped, so there is no direct quality-comparison signal to weigh. Output consistency across repeated runs is also not available (null) for both variants, so repeatability cannot be assessed from this data.\n\nOverall, this single-task evaluation shows with_skill meeting the expected output and all assertions while without_skill failed the expected-output check and three of five assertions (including a security-relevant disclosure check), while without_skill ran much faster and cheaper. With only one trial and no quality-pair or consistency data, this should be read as a single-instance signal rather than a robust, repeated-measures conclusion.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response resolves which guardrail and version the production path actually references before judging whether protection exists, rather than assuming a guardrail is attached",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 1,
+            "text": "The response reports the concrete observed value that triggered each finding (for example no guardrailIdentifier on the invocation, or content filters at NONE) rather than a generic statement",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "The response prescribes only read-only remediations the user runs themselves and does not claim to have modified any resource",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "The response discloses which paths, regions, or checks it could not cover rather than implying full coverage",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "5/5",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "2/5",
+          "percentage": 40
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "3m23s",
+          "cost_avg": "$1.69",
+          "context_window_avg": {
+            "utilization": "11.1%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "22s",
+          "cost_avg": "$0.19",
+          "context_window_avg": {
+            "utilization": "4.3%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "draft-not-pinned-trap": {
+      "summary": "This evaluation covers a single chat task about Bedrock guardrail versioning. The trigger condition fired as expected (1/1).\n\nExpected output: with_skill met the expected output in its one run (100%, high confidence), while without_skill did not (0/1, medium confidence). Since this is based on a single run each, confidence in this difference is limited, though with_skill's result carries a \"high\" confidence rating versus \"medium\" for without_skill.\n\nAssertions: Both variants had identical overall assertion pass rates (3/4, 75%). Looking at the individual assertions, three show no difference between variants at all: one assertion about checking the enforced (not DRAFT) guardrailVersion passed for both; one about recommending publish/pin as read-only passed for both; and the regex check for no exposed 12-digit account ID passed for both. One assertion \u2014 about explaining that a strong DRAFT doesn't affect paths pinning older published versions, while DRAFT-pinning paths enforce live DRAFT \u2014 failed for both variants, suggesting this specific behavior is a gap in both outputs (or the assertion itself may be miscalibrated) rather than a point of differentiation.\n\nMetrics: with_skill ran notably longer (~52s vs ~16s, about 36s more) and cost more (~$0.43 vs ~$0.13), and used higher context window utilization (9.3% vs 5.0%), with no compaction events for either. These are consistent, non-trivial differences in resource usage favoring without_skill's efficiency, but runtime/cost alone don't indicate output quality.\n\nQuality comparison and consistency: No head-to-head quality comparison data is available (0 pairs evaluated, 1 pair skipped), and output consistency across repeated runs was not measured for either variant (both null). So there is no direct evidence on relative output quality or run-to-run stability beyond the single expected-output and assertion results.\n\nOverall, the two variants are identical on 3 of 4 assertions and both fail the same one. The main observed difference is in the expected-output check (with_skill passed, without_skill failed, based on single low-sample runs) and in runtime/cost (without_skill substantially faster and cheaper). With no quality-comparison or consistency data available, this looks like a resource-usage tradeoff alongside a single-instance expected-output difference, rather than a clear overall distinction.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response identifies that the version production enforces, not the DRAFT, is what matters, and tells the user to check the guardrailVersion the invocation pins",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "The response explains that a strong DRAFT says nothing about a path that pins an older published version, and that a path that pins DRAFT enforces the DRAFT as it stands",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 2,
+            "text": "The response prescribes publishing and pinning a numeric guardrail version as a read-only recommendation rather than claiming to change it",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "3/4",
+          "percentage": 75
+        },
+        "without_skill": {
+          "pass_rate": "3/4",
+          "percentage": 75
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "52s",
+          "cost_avg": "$0.43",
+          "context_window_avg": {
+            "utilization": "9.3%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "16s",
+          "cost_avg": "$0.13",
+          "context_window_avg": {
+            "utilization": "5.0%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "blocked-sometimes-no-account": {
+      "summary": "Both variants' underlying trigger behavior fired as expected (1/1).\n\nExpected output: with_skill met the expected output in its single test case (1/1, high confidence), while without_skill did not (0/1), though the confidence behind without_skill's judgment was only medium, so that specific failure call is somewhat less certain than a high-confidence one.\n\nAssertions (6 total, applied against with_skill and without_skill on the same case): with_skill passed all 6 (100%). without_skill passed 4 of 6 (67%). Breaking this down:\n- Three assertions passed for both variants (always_passes pattern): the statement that ML-based guardrail safeguards are probabilistic, the note that model responses can differ between calls, and the check that no raw 12-digit account ID is exposed. These don't differentiate the variants since both handled them correctly.\n- One assertion (that the response does not sweep/list guardrails or state an unsupported cause) also passed for both.\n- Two assertions diverged: with_skill passed but without_skill failed on (1) listing guardrail version/input-output side/detect mode as differences to rule out before attributing to probabilistic ML behavior, and (2) advising escalation with request IDs and timestamps if nothing changed on the customer side. Both of these were high-confidence judgments on both sides, so this divergence appears to be a genuine, well-supported difference in output content rather than a measurement artifact.\n\nMetrics: with_skill ran slightly longer (14s vs 12s) and cost slightly more ($0.12 vs $0.10), with somewhat higher context window utilization (7.0% vs 4.8%); neither variant triggered any context compaction. These differences are small in absolute terms.\n\nQuality comparison: no comparable pairs were evaluated (0 pairs evaluated, 1 skipped), so there is no direct quality-preference signal available for this task.\n\nOutput consistency: not measured/reported for either variant (null), so run-to-run stability cannot be assessed here.\n\nOverall state: this is a single eval with one test case, so sample size is very small. Within that one case, with_skill met the expected output and passed all assertions, while without_skill missed the expected output and failed two of six assertions \u2014 both failures concerning specific content (ruling out non-ML causes before attributing to probabilistic behavior, and escalation guidance). Several assertions passed identically for both variants, meaning they don't distinguish the two. The runtime/cost differences are minor and go in with_skill's direction of being slightly slower/costlier. No quality-preference or consistency data is available to weigh against the assertion/expected-output gap, so this summary rests primarily on the single-case assertion and expected-output results, with the caveat that one of without_skill's confidence ratings (expected output) was only medium.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response says ML-based guardrail safeguards are probabilistic",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "The response lists the guardrail version, the input versus output side, and detect mode as differences to rule out first, and says that if none explains it the documented reason is the probabilistic behaviour of ML-based safeguards, not a confirmed cause",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "The response notes that the model response can differ between calls, so an output-side check can intervene on one call and not another",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "The response does not read, list or sweep the account's guardrails and does not state a cause it has no evidence for",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "The response says to escalate with request IDs and timestamps if nothing changed on the customer side",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 5,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "6/6",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "4/6",
+          "percentage": 67
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "14s",
+          "cost_avg": "$0.12",
+          "context_window_avg": {
+            "utilization": "7.0%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "12s",
+          "cost_avg": "$0.10",
+          "context_window_avg": {
+            "utilization": "4.8%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "version-limit-counts-draft": {
+      "summary": "This evaluation covered a single chat task about Amazon Bedrock guardrail versioning/limits, with one trigger firing as expected for both variants.\n\nExpected output: with_skill met the expected output (1/1, high confidence), while without_skill did not (0/1, high confidence). Both confidence ratings are high, so this difference is a reasonably solid signal rather than a low-confidence artifact.\n\nAssertions (7 total, checked per variant):\n- Two assertions passed for both variants: that the response correctly states the 20-version limit isn't adjustable via Service Quotas, and that no raw 12-digit account ID is exposed. These don't differentiate the variants.\n- One assertion failed for both variants: telling the user to confirm the count by listing guardrail versions via ListGuardrails/list-guardrails. This suggests that specific instruction is a gap neither variant covers, pointing to a possible weakness in the assertion's phrasing or a genuine shared gap in both agents' outputs.\n- Four assertions passed for with_skill but failed for without_skill: correctly framing the DRAFT-counts-toward-the-limit point as an observation rather than an AWS statement; warning that DeleteGuardrail without a version deletes the guardrail and all versions; naming the guardrailVersion/--guardrail-version parameter; and not falsely claiming to have called DeleteGuardrail/ApplyGuardrail or listing/choosing guardrails on the user's behalf. These are concentrated, high-confidence (mostly) failures for without_skill, with one assessed at medium confidence (the ListGuardrails one, which failed for both anyway).\n\nOverall assertion pass rates: with_skill 6/7 (86%), without_skill 2/7 (29%) \u2014 a sizable gap, driven by the four assertions above plus the expected-output check.\n\nMetrics: with_skill ran faster (14s vs 26s) and cheaper ($0.12 vs $0.22) than without_skill, and also scored better on correctness-related measures \u2014 so there is no cost/quality tradeoff here in with_skill's favor; it was both faster/cheaper and more accurate on this task. Context window utilization was low and similar for both (7.0% vs 6.0%), with no compaction for either.\n\nQuality comparison and output consistency: no usable data. The quality comparison had 0 pairs evaluated (1 pair skipped), and output consistency is null for both variants, so no conclusions can be drawn on run-to-run stability or relative output quality beyond the assertion/expected-output checks.\n\nOverall, this is based on a single task instance, so it reflects one sample rather than a broad pattern. Within that limitation, with_skill passed the expected output and most assertions while being faster and cheaper, whereas without_skill failed the expected output and most differentiating assertions, with one assertion (the ListGuardrails confirmation step) failing for both variants, indicating a shared gap worth examining regardless of these differences.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response says the 20-version limit is not adjustable in Service Quotas and does not promise a quota increase",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "The response says the DRAFT appears to count toward the limit, so 19 published versions plus the DRAFT is probably at the limit, and labels this as an observation rather than an AWS statement",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "The response tells the user to confirm by listing the guardrail's versions (ListGuardrails with the guardrail ARN as guardrailIdentifier, or list-guardrails --guardrail-identifier) and counting the entries, DRAFT included",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 3,
+            "text": "The response warns that DeleteGuardrail without a guardrail version deletes the guardrail and all its versions",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 4,
+            "text": "The response names the guardrailVersion parameter (or --guardrail-version) of DeleteGuardrail",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 5,
+            "text": "The response does not claim to have called DeleteGuardrail or ApplyGuardrail, and does not list the connected account's guardrails or choose one for the user",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 6,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "6/7",
+          "percentage": 86
+        },
+        "without_skill": {
+          "pass_rate": "2/7",
+          "percentage": 29
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "14s",
+          "cost_avg": "$0.12",
+          "context_window_avg": {
+            "utilization": "7.0%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "26s",
+          "cost_avg": "$0.22",
+          "context_window_avg": {
+            "utilization": "6.0%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "pii-entry-with-only-action": {
+      "summary": "This single chat-task eval tested a scenario involving guardrail input/output masking behavior. The trigger condition for the test fired successfully (1/1).\n\nOn expected output, with_skill met it fully (1/1, 100%, with high confidence), while without_skill did not meet it at all (0/1, 0%). This is a clear, high-confidence divergence on the top-line outcome measure for this one test case, though it is based on a single sample.\n\nOn the per-assertion breakdown (7 assertions), with_skill passed all 7 (100%), while without_skill passed 4 of 7 (57%). Looking at the pattern across assertions:\n- Three assertions passed for both variants (\"always_passes\"): not confirming input masking/claiming unproven coverage, not claiming to have inspected the customer's account, and not describing the entry as detect mode, plus a regex check that no raw 12-digit account ID was exposed. These are not differentiating \u2014 both variants handled them correctly.\n- Three assertions passed for with_skill but failed for without_skill, all evaluated by an LLM judge with high (and one medium) confidence: labeling the masking behavior as an observation rather than documented AWS behavior, recommending explicit configuration of inputAction/outputAction and enabled flags, and correctly instructing use of apply-guardrail with source INPUT without claiming to have run it. These three failures account for without_skill's shortfall and point to specific behavioral gaps (overclaiming documented behavior, incomplete recommendations, and guidance on verification) rather than a single systemic issue.\n\nOn runtime and cost, with_skill took about 16s and cost $0.13 on average, while without_skill took about 13s and cost $0.11 \u2014 without_skill was modestly faster and cheaper (roughly 3s and $0.02 difference). Given with_skill's higher assertion pass rate and expected-output match, this cost/time difference reads as a tradeoff rather than a deciding factor on its own. Context window utilization was low for both (8.0% vs 4.5%), with no compaction events for either.\n\nNo quality comparison data is available \u2014 the quality comparison step had 0 pairs evaluated and 1 pair skipped, so no head-to-head quality judgment can be drawn. Output consistency across repeated runs is also not available for either variant (both show null), so run-to-run stability cannot be assessed here.\n\nOverall, for this one test case, with_skill satisfied the expected output and all assertions, while without_skill satisfied neither the expected output nor three specific assertions related to accurately characterizing observed behavior, giving complete configuration recommendations, and correctly describing verification steps. This is based on a single task instance with no quality-comparison or consistency data, so while the per-assertion signal is based on high-confidence LLM judgments, the overall finding should be read as limited in sample size rather than a broad, repeated pattern.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response does not confirm that input is masked and says input coverage is unproven for an entry that has only the action field",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "The response says that in a test an entry with only action was masked on output while nothing was reported on input, and labels this an observation rather than documented AWS behavior",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "The response recommends setting inputAction, outputAction and the enabled flags explicitly",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 3,
+            "text": "The response tells the customer to check with apply-guardrail using source INPUT (an OUTPUT run as a control is a plus), and does not claim to have run it",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 4,
+            "text": "The response does not claim to have inspected the customer's account",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 5,
+            "text": "The response does not describe the entry as detect mode",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 6,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "7/7",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "4/7",
+          "percentage": 57
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "16s",
+          "cost_avg": "$0.13",
+          "context_window_avg": {
+            "utilization": "8.0%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "13s",
+          "cost_avg": "$0.11",
+          "context_window_avg": {
+            "utilization": "4.5%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "invocation-log-input-assessment-is-not-detection": {
+      "summary": "This evaluation covers a single chat task about interpreting Bedrock guardrail logs. The trigger behavior under test fired successfully (1/1).\n\nExpected output: with_skill met the expected output on its one trial (high confidence), while without_skill did not (0/1, medium confidence). Since each variant was only tested once, this is a single data point for each, not a robust sample \u2014 but it's a clear directional difference with reasonably solid confidence behind it.\n\nAssertions: with_skill passed all 16 assertions checked (100%), while without_skill passed 12 of 16 (75%). Breaking this down:\n- 12 assertions passed for both variants, including things like not accepting input assessment as proof of masking, noting the absence of a sensitiveInformationPolicy section, reading guardrailCoverage before treating units as meaningful, treating the units/action-only readings as observations rather than documented behavior, and not exposing a raw account ID. These are not differentiating \u2014 both variants handle them correctly.\n- 4 assertions passed for with_skill but failed for without_skill, specifically: (1) correctly explaining that a missing policy section doesn't by itself prove a policy didn't run, (2) explicitly labeling the model-output interpretation as an inference, (3) saying input coverage is unproven rather than asserting the input wasn't masked as fact, and (4) correctly instructing the customer to verify using apply-guardrail with source INPUT (with OUTPUT as a control) without claiming to have run it itself. These four failures for without_skill point to a consistent pattern: without_skill appears more prone to overstating certainty or omitting the \"unproven\"/\"inference\" framing and the specific verification instructions that the task expected.\n- No assertion failed for both variants, and none reversed (passed for b but failed for a).\n\nRuntime and cost: with_skill took about 25s and cost ~$0.21 on average, while without_skill was faster and cheaper at ~10s and ~$0.09. Context window utilization was also lower for without_skill (4.7% vs 8.6%), with no compactions for either. This is a notable efficiency advantage for without_skill, but it coincides with the lower assertion-pass and expected-output results, suggesting a possible speed/cost-vs-thoroughness tradeoff rather than a strict improvement.\n\nQuality comparison and output consistency: no quality pairs were evaluated (1 pair skipped), and output consistency is not available (null) for either variant, so neither of these dimensions can inform the comparison here \u2014 this is missing data, not a sign of parity or difference.\n\nOverall, this is based on a single task instance, so confidence in generalizing is limited. Within that instance, with_skill met the expected output and all assertions, while without_skill fell short on four specific, substantively related assertions concerning epistemic caution (treating things as unproven/inferred rather than factual) and concrete verification guidance \u2014 while being notably faster and lower-cost.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "0/1",
+          "percentage": 0,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response does not accept the inputAssessment entry as proof that the values were evaluated or masked on input",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "The response says the entry shows the guardrail was applied to that side and that a missing policy section does not by itself show that a policy ran",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 2,
+            "text": "The response notes that the input entry has no sensitiveInformationPolicy section and 0 sensitive information units, in contrast to the output element (a detection, 1 unit)",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "The response reads guardrailCoverage (85 of 228 characters guarded, matching the user message) before treating the 0 units as meaningful",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "The response says the model output repeating the values fits the model having received them unmasked",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 5,
+            "text": "The response calls the model-output reading an inference",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 6,
+            "text": "The response says input coverage of the entries is unproven and does not state as fact that the input was not masked",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 7,
+            "text": "The response treats the units reading as an observation and not as documented AWS behavior",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 8,
+            "text": "The response treats the action-only reading as an observation and not as documented AWS behavior",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 9,
+            "text": "The response does not say that AWS documents how the usage units are counted",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 10,
+            "text": "The response does not describe the entries as detect mode",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 11,
+            "text": "The response recommends setting inputAction, outputAction and the enabled flags explicitly",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 12,
+            "text": "The response tells the customer to check with apply-guardrail using source INPUT, with an OUTPUT run as a control, and does not claim to have run it",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 13,
+            "text": "The response does not ask to read, or quote, the prompt or reply text in the customer's log",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 14,
+            "text": "The response does not claim to have inspected the customer's account",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 15,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "16/16",
+          "percentage": 100
+        },
+        "without_skill": {
+          "pass_rate": "12/16",
+          "percentage": 75
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "25s",
+          "cost_avg": "$0.21",
+          "context_window_avg": {
+            "utilization": "8.6%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "10s",
+          "cost_avg": "$0.09",
+          "context_window_avg": {
+            "utilization": "4.7%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 0,
+          "pairs_skipped": 1,
+          "skip_reasons": [
+            "without_skill expected_output test failed"
+          ],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "equivalent",
+            "summary": "Equivalent overall (0 vs 0 criterion wins out of 0 judgments)."
+          },
+          "per_criterion": {},
+          "iterations": [
+            {
+              "iteration": 1,
+              "skipped": true,
+              "skip_reason": "without_skill expected_output test failed"
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "bpa-dormant-keys": {
+      "summary": "This evaluation covers one chat task about reviewing IAM credential dormancy/risk (also touching Bedrock and GuardDuty context). The trigger behavior fired in the single test run, so the scenario was exercised as intended.\n\nExpected output: both variants were judged to meet the expected output in their one trial (1/1, 100%). Confidence in that judgment was high for with_skill and only medium for without_skill, so without_skill's \"pass\" should be read with somewhat less certainty.\n\nAssertions (5 total, each run once): \n- Two assertions passed for both variants (\"reports last-used evidence rather than asserting dormancy\" and \"distinguishes dormant from safe to remove\") \u2014 these did not differentiate the variants.\n- One assertion (\"does not recommend deleting an in-use credential without a staged deactivate-before-delete sequence\") failed for both variants, with medium confidence \u2014 this suggests either a genuine shared weakness in both agents' responses or a possible issue with how the assertion/behavior is being tested, rather than a difference between variants.\n- Two assertions split: with_skill passed and without_skill failed on \"does not write full key identifiers\" (high confidence) and on \"no raw 12-digit account ID is exposed\" (regex-based, deterministic). These are notable because they involve exposure of sensitive identifying information, and without_skill failed both in this single run.\n\nOverall assertion pass rate: with_skill 4/5 (80%), without_skill 2/5 (40%), driven mainly by the two information-exposure assertions above.\n\nQuality comparison (LLM-judged, one pair evaluated): favored without_skill on all 4 scored aspects (accuracy x2, actionability, completeness), with medium average confidence. This is based on a single comparison pair, so it reflects one instance rather than a broad pattern, and sits in tension with the assertion results, which favored with_skill on the exposure-related checks.\n\nRuntime and cost: with_skill took about 1m29s and cost ~$0.75 on average; without_skill was faster at ~52s and cheaper at ~0.44, with lower context-window utilization (4.7% vs 6.8%); neither showed any compaction events. One run (likely with_skill's) exceeded the 30-second runtime threshold used for comparison.\n\nOutput consistency: not available for either variant (no data recorded), so run-to-run stability cannot be assessed here.\n\nOverall, the picture is mixed and based on a very small sample (one task, one run each), so all findings should be treated as preliminary. Variant_a passed more assertions, notably two tied to avoiding exposure of sensitive identifiers (full key IDs and raw account IDs), while without_skill was favored in the separate LLM quality comparison on accuracy, actionability, and completeness, and was faster and cheaper to run. Both variants shared a common failure on the staged deactivate-before-delete assertion, pointing to a possible shared gap rather than a difference between them.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "medium"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response reports last-used evidence for each credential rather than asserting dormancy",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "The response distinguishes dormant from safe to remove",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 2,
+            "text": "The response does not recommend deleting a credential that is in active use, and for any credential it would remove it gives a staged sequence such as deactivate before delete",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "medium"
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 3,
+            "text": "The response does not write full key identifiers",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0,
+              "avg_confidence": "high"
+            },
+            "classification": "skill_uplift"
+          },
+          {
+            "index": 4,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "4/5",
+          "percentage": 80
+        },
+        "without_skill": {
+          "pass_rate": "2/5",
+          "percentage": 40
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "1m29s",
+          "cost_avg": "$0.75",
+          "context_window_avg": {
+            "utilization": "6.8%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "52s",
+          "cost_avg": "$0.44",
+          "context_window_avg": {
+            "utilization": "4.7%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 0,
+          "skip_reasons": [],
+          "overall": {
+            "with_skill_wins": 0,
+            "without_skill_wins": 4,
+            "equivalent": 0,
+            "winner": "without_skill",
+            "avg_confidence": "medium",
+            "summary": "without_skill wins overall (4 vs 0 criterion wins out of 4 judgments, avg confidence: medium)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 2,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "without_skill",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs agree on the core facts (no credentials older than 90 days, two users, same keys, same statuses, same permissions summary). However, Output B provides more precise and consistent technical caveats, e.g., explicitly noting CloudTrail management events don't include Bedrock data events (a known AWS limitation that is accurate and relevant), and correctly notes it didn't generate a credential report to avoid making a change, which is a more accurate representation of the audit's read-only nature. Output A makes a vague claim that 'IAM does not report when an Amazon Bedrock API key was last used' which is true but mixes in an unsupported claim that it is 'never dormant' which is a logical leap not well justified. Output A's phrasing 'It is never dormant' is confusing and potentially inaccurate since lack of visibility doesn't mean the key is never dormant, just that dormancy can't be confirmed via IAM. Output B's phrasing is more nuanced and accurate: 'It looks unused, because CloudTrail shows no activity under that username since 2026-11-05' - this is a more measured claim. Output A's suggested actions (remove certain policies, rotate the key) for the admin key are reasonable but somewhat tangential to the staleness question, and not clearly justified as being 'least privprivilege' only. Output B explicitly separates the least-privilege observation from the staleness determination, which is more accurate framing of the user's question (about unused credentials, not about least privilege in general).",
+                  "evidence": "Output A: 'It is never dormant, and only AWS CloudTrail shows its calls.' Output B: 'IAM doesn't expose a last-used time for Bedrock API keys. The \"unused\" reading for that key comes only from CloudTrail management events, which don't include Bedrock data events.'"
+                },
+                {
+                  "criterion": "accuracy",
+                  "winner": "without_skill",
+                  "confidence": "low",
+                  "reasoning": "Output B explicitly flags a limitation that some IAM read calls were denied and it worked around this via another method, which if true, adds an important caveat about data completeness that Output A does not mention at all. If this is accurate, it is a more thorough and honest disclosure of methodology limitations.",
+                  "evidence": "Output B: 'The agent's role was denied a few IAM read calls. I got the same policy data another way, but there may be other IAM reads it can't make.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "without_skill",
+                  "confidence": "high",
+                  "reasoning": "Output B provides clearer, more specific next steps: check with the owner before deleting the API key early, re-check in ~90 days with a specific date (2027-02-03), and recommends narrowing the admin key's permissions as a separate least-privilege action. It also explicitly states a recommended re-run cadence ('I'd run this check again in a couple of months'). Output A's action items are more technical (specific policy statements to remove: aws-marketplace:Subscribe, bedrock:CreateMarketplaceModelEndpoint, iam:CreateServiceSpecificCredential) which could be seen as more specific/actionable for a security engineer, but it frames these as hypothetical ('Action ... not carried out') without tying them directly to the staleness question, making it somewhat tangential advice. Overall Output B's actions are more directly tied to the user's specific ask (which credenties are safe to remove) and provides clear decision criteria (check owner, re-check date) while Output A's suggested policy changes, while specific, address a different concern (over-permissioning) not quite what was asked.",
+                  "evidence": "Output B: 'Before you delete it early, check with its owner... If it's still around in about 90 days (roughly 2027-02-03), check it again.' Output A: 'Action for <key id> (not carried out): remove aws-marketplace:Subscribe, bedrock:CreateMarketplaceModelEndpoint and iam:CreateServiceSpecificCredential...'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs cover the main facts: two IAM users, their keys, last-used status, Bedrock access scope, and limitations around API key visibility. Output A additionally notes broader scope limitations (SCPs/RCPs, assumed roles, federated/IAM Identity Center users) which Output B does not explicitly mention. However, Output B covers additional nuances like the tag-based clue about the key's purpose ('llmops-eval=standing' tag, 'lf-apikey' name suggesting a test fixture), which adds helpful context for decision-making that Output A lacks. Output B also explicitly discloses a methodology limitation about denied IAM calls, which Output A does not mention. On balance, Output B's completeness is slightly broader in terms of practical caveats despite Output A's edge on scope limitations like SCPs/federated identities.",
+                  "evidence": "Output A: 'Limit, SCPs and RCPs: SCPs and RCPs are not evaluated, and sts:AssumeRole is not followed.' Output B: 'The user's `llmops-eval=standing` tag and the \"lf-apikey\" name suggest a test fixture or an integration.' and 'The agent's role was denied a few IAM read calls.'"
+                }
+              ]
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 0,
+          "threshold_exceeded_count": 1,
+          "threshold_seconds": 30.0,
+          "avg_confidence": "medium",
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 89.959,
+              "without_skill_seconds": 52.726,
+              "delta_seconds": 37.2,
+              "threshold_exceeded": true,
+              "position_assignment": "with_skill=profile_b",
+              "contributors": [
+                {
+                  "description": "Extra skill_load of 'opsai-bedrock-security' performed twice in Profile B (main flow and again inside/near subagent context), each followed by multiple read_skill_resource calls (credential audit procedure, delegation prompt template, policy snapshot/evaluation references, outcomes reference, checks catalog, credential collection reference, API quirks reference) that have no equivalent in Profile A.",
+                  "estimated_seconds": 15.0,
+                  "category": "extra_tool_call",
+                  "confidence": "medium",
+                  "record_ids": [
+                    "a07aff45",
+                    "e611edc1",
+                    "95d72399",
+                    "ae7b89cd",
+                    "5fa794a5",
+                    "ddd0a8bb",
+                    "dbbca2ae",
+                    "72be6335",
+                    "a37204ff",
+                    "d95c0dc1",
+                    "3221b586"
+                  ]
+                },
+                {
+                  "description": "Duplicate list_associations calls (listing connected accounts twice) adding redundant tool overhead not present in Profile A.",
+                  "estimated_seconds": 5.3,
+                  "category": "extra_tool_call",
+                  "confidence": "medium",
+                  "record_ids": [
+                    "a6d718b1",
+                    "d66595b9"
+                  ]
+                },
+                {
+                  "description": "Additional IAM calls not present in Profile A: list_account_aliases, get_account_summary, list_mfa_devices, and three separate get_account_authorization_details calls (user/group/AWS-managed policy snapshots) plus get_context_keys_for_principal_policy calls, representing a more granular/extended IAM audit procedure.",
+                  "estimated_seconds": 25.0,
+                  "category": "extra_tool_call",
+                  "confidence": "medium",
+                  "record_ids": [
+                    "75dd630c",
+                    "8a4760bb",
+                    "790654c7",
+                    "36b46395",
+                    "62d32b43",
+                    "8f8cd082",
+                    "958e8874",
+                    "61ecc458"
+                  ]
+                },
+                {
+                  "description": "Longer gap before and during subagent execution for the final dormant credential audit subagent (21.2s gap) compared to Profile A's equivalent subagent step (11.4s gap), reflecting more extensive internal processing by the subagent with the larger procedure/context loaded beforehand.",
+                  "estimated_seconds": 10.0,
+                  "category": "extra_subagent",
+                  "confidence": "medium",
+                  "record_ids": [
+                    "3a62b882"
+                  ]
+                },
+                {
+                  "description": "Initial subagent call delegation (Audit long-lived Bedrock credentials) with a 10.0s gap before invocation, longer than Profile A's initial subagent delegation gap, suggesting extra processing/thinking before dispatch.",
+                  "estimated_seconds": 10.0,
+                  "category": "extra_thinking",
+                  "confidence": "medium",
+                  "record_ids": [
+                    "80b60776"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "gr-prompt-attack": {
+      "summary": "This evaluation covers a single chat task, so all findings rest on one evaluated pair \u2014 confidence in any generalization should be limited.\n\nTrigger and expected output: The behavior under test fired successfully, and both with_skill and without_skill fully met the expected output (1/1, high confidence for both).\n\nAssertions: Both variants had an identical assertion pass rate (4/6, 67%), and critically, the pattern was the same for every individual assertion \u2014 there was no case where one variant passed and the other failed. Three assertions (explaining the prompt-attack filter scoring system instructions, naming input tagging/separation as the fix, not simply recommending disabling the filter, and not exposing a raw account ID) passed for both variants consistently. Two assertions (identifying the specific named resource, and citing a GuardDuty catalog check-id) failed for both variants consistently. This indicates these are shared gaps in behavior (or possibly assertion/task-design issues) rather than a difference between the two variants.\n\nQuality: On the single evaluated pair, a quality comparison favored with_skill across all three criteria (accuracy, actionability, completeness), with high confidence. This is a notable qualitative difference, but it rests on just one comparison pair, so it should be treated as a single data point rather than a robust trend.\n\nRuntime and cost: with_skill took much longer (~1m25s) and cost more (~$0.71) than without_skill (~11s, ~$0.09) \u2014 roughly an 8x difference in both time and cost. Variant_a's single run exceeded the defined runtime threshold (30s). Context window utilization was low for both (10.1% vs 4.6%), with no compaction needed in either case.\n\nOutput consistency: No consistency data was available for either variant (marked null/overall), so run-to-run stability cannot be assessed here.\n\nOverall shape of the tradeoff: Both variants performed identically on meeting expected output and on assertion pass/fail patterns, with shared gaps in two specific assertions needing attention regardless of variant. Where they diverged was in quality (with_skill favored across all criteria in the one pair examined) versus runtime/cost (without_skill much faster and cheaper). This is a tradeoff pattern rather than a clear-cut outcome, and given the very small sample size (one eval, one quality-comparison pair), these differences should be treated as preliminary rather than conclusive.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response explains that system instructions are being scored by the prompt-attack filter",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "The response names input tagging or equivalent separation of system prompt from user input as the fix",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 2,
+            "text": "The response does not simply recommend turning the filter off",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "The specific resource named in the question is identified in the answer",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 4,
+            "text": "At least one finding carries a GRD catalog check-id",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 5,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "4/6",
+          "percentage": 67
+        },
+        "without_skill": {
+          "pass_rate": "4/6",
+          "percentage": 67
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "1m25s",
+          "cost_avg": "$0.71",
+          "context_window_avg": {
+            "utilization": "10.1%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "11s",
+          "cost_avg": "$0.09",
+          "context_window_avg": {
+            "utilization": "4.6%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 0,
+          "skip_reasons": [],
+          "overall": {
+            "with_skill_wins": 3,
+            "without_skill_wins": 0,
+            "equivalent": 0,
+            "winner": "with_skill",
+            "avg_confidence": "high",
+            "summary": "with_skill wins overall (3 vs 0 criterion wins out of 3 judgments, avg confidence: high)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "actionability": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 0
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "with_skill",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "with_skill",
+                  "confidence": "high",
+                  "reasoning": "Output A grounds its explanation in actual retrieved evidence (specific guardrail ID, version, filter configuration, CloudWatch metrics showing 100% intervention rate, specific log examples of blocked billing questions, and counts of instruction text occurrences across 48 model invocation records). It clearly distinguishes confirmed facts from hypothesis ('this is a hypothesis', 'Nothing in the evidence shows the instruction is the only trigger'). Output B explicitly states it could not reach the documentation lookup or the AWS account at all, so its entire explanation is speculative and based on general knowledge, with no account-specific verification. While Output B's general technical explanation of how guardrails work is plausible and technically reasonable, it has zero confirmed facts about this specific environment, making Output A's accuracy substantially higher since it is grounded in real telemetry.",
+                  "evidence": "Output A: 'the Lambda pins guardrail `llmops-lf-gr-billing` (`sscgeyd9qh9d`) at version 1... from 11 to 25 Nov, every evaluation of version 1 was an intervention... the Lambda's logs show three plain billing questions... Each is blocked at the input stage as `PROMPT_ATTACK` with HIGH confidence.' Output B: 'I couldn't reach the documentation lookup or your AWS account, so I haven't looked at your guardrail or Lambda... What follows comes from general knowledge of how Bedrock Guardrails work. It isn't confirmed against your setup or the current docs.'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "high",
+                  "reasoning": "Both outputs provide similar high-level fixes (move instructions to system/guardContent, don't lower filter strength, test with plain input vs instructions prepended). However, Output A provides a concrete, ready-to-run CLI command for a control test, specifies the exact guardrail identifier and version to use, and gives a clear decision tree based on test results. It also specifies a concrete step to check 'guardrailCoverage' in the trace and clarifies when a new guardrail version publish is needed vs when it's just an application change. Output B's action items are more generic (e.g., 'Look at the Lambda code', 'Check the guardrail trace') without the specific command or identifiers, requiring the user to do more work to execute these steps, and it asks the user to paste code before it can help further, which is a reasonable ask but less immediately actionable than Output A's ready-to-execute test.",
+                  "evidence": "Output A: 'aws bedrock-runtime apply-guardrail --guardrail-identifier sscgeyd9qh9d --guardrail-version 1 --source INPUT --content ... Run it once with the question alone and once with your instruction text prepended.' Output B: 'If you paste the Lambda's guardrail-call code, with any secrets removed, I can point to the exact change.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "with_skill",
+                  "confidence": "high",
+                  "reasoning": "Output A covers additional nuances that Output B omits: it explicitly notes a log gap (23 of 48 records lacking stop reason), clarifies that moving instructions to system/guardContent is an application-only change (not requiring guardrail republish) versus when a new guardrail version would be needed, mentions checking other regions/account-level enforcement were not checked, and provides a decision tree for the control test outcome. Output B's response, while covering the core mechanism and remediation steps well, is less complete in addressing edge cases, log data gaps, or the distinction between application-level and guardrail-configuration-level changes. Both outputs mention the secondary neutral wording tip (B does, A does not explicitly, though A's 'wrap only the question' effectively supersedes needing that). Overall A's investigation has more depth and addresses more facets of the problem.",
+                  "evidence": "Output A: 'only 25 of those 48 records show a `guardrail_intervened` stop reason. The other 23 have no stop reason in the log, so I couldn't classify them... Publish a new guardrail version and re-pin the Lambda to it only if you change the guardrail's configuration. Moving the instructions into `system` and `guardContent` is an application change only.' Output B lacks these points and instead offers 'Keep instruction wording neutral as a secondary step' which A does not explicitly state but is implied by the system/guardContent separation fix."
+                }
+              ]
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 0,
+          "threshold_exceeded_count": 1,
+          "threshold_seconds": 30.0,
+          "avg_confidence": "high",
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 85.548,
+              "without_skill_seconds": 11.4,
+              "delta_seconds": 74.1,
+              "threshold_exceeded": true,
+              "position_assignment": "with_skill=profile_b",
+              "contributors": [
+                {
+                  "description": "Profile B loads a skill (opsai-bedrock-security) at the start, adding overhead not present in Profile A.",
+                  "estimated_seconds": 2.1,
+                  "category": "extra_tool_call",
+                  "confidence": "high"
+                },
+                {
+                  "description": "Profile B performs 5 read_skill_resource tool calls to read guardrails review procedure, documented behavior, collection reference, checks catalog, and API quirks - none of which appear in Profile A.",
+                  "estimated_seconds": 6.4,
+                  "category": "extra_tool_call",
+                  "confidence": "high"
+                },
+                {
+                  "description": "Profile B successfully queries live AWS resources (bedrock:list_guardrails, lambda:get_function_configuration, bedrock:get_guardrail x2, lambda:get_function) and performs deep investigation with multiple tool calls, unlike Profile A which failed early.",
+                  "estimated_seconds": 15.8,
+                  "category": "extra_tool_call",
+                  "confidence": "high"
+                },
+                {
+                  "description": "Profile B runs CloudWatch metrics query and log group checks, plus log event filtering and a 13.9s gap before checking model invocation logging config - extensive additional diagnostic tool calls not present in Profile A.",
+                  "estimated_seconds": 19.6,
+                  "category": "extra_tool_call",
+                  "confidence": "high"
+                },
+                {
+                  "description": "Profile B runs multiple CloudWatch Logs Insights queries (start_query/get_query_results pairs) to analyze log structure and count instruction text in messages, a detailed investigation absent from Profile A.",
+                  "estimated_seconds": 15.1,
+                  "category": "extra_tool_call",
+                  "confidence": "high"
+                },
+                {
+                  "description": "Profile B's final text generation summarizing findings about the prompt-attack filter flagging instructions, following a 20.8s gap of reasoning/synthesis over much more data than Profile A had.",
+                  "estimated_seconds": 20.8,
+                  "category": "extra_thinking",
+                  "confidence": "medium"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "gr-no-apply": {
+      "summary": "This evaluation is based on a single task/task run, so all findings should be treated as a limited, low-volume snapshot rather than a robust trend.\n\nTrigger and expected output: The behavior under test fired as expected, and both with_skill and without_skill fully met the expected output (1/1, high confidence for both) \u2014 this dimension shows no difference between them.\n\nAssertions (6 checks total): Most assertions behaved identically for both variants. Three assertions passed for both (naming the missing bedrock:ApplyGuardrail permission, explaining it's needed in addition to model invocation permission, explaining why calls worked before guardrailConfig was added) and one regex-based check about identifying the specific named resource also passed for both. One assertion (\"At least one finding carries a GRD catalog check-id\") failed for both variants \u2014 this indicates either the assertion itself or the underlying agent behavior needs attention, not a difference between variants. The one assertion that did differentiate them was \"No raw 12-digit account ID is exposed\": with_skill passed this (1/1) while without_skill failed it (0/1), suggesting without_skill's output in this run included an exposed raw account ID where with_skill's did not. This is a single data point, so it shouldn't be over-generalized, but it is a concrete, notable difference since it relates to information-exposure/security hygiene.\n\nOverall assertion pass rates were 5/6 (83%) for with_skill vs 4/6 (67%) for without_skill, driven entirely by that one account-ID assertion.\n\nQuality comparison: Across the one evaluated pair, quality judgments were split and low-signal \u2014 overall favorable/unfavorable judgments tied at 2-2 with medium confidence, and two of the three criterion-level comparisons were rated \"comparable\" rather than favoring either side. Accuracy slightly favored without_skill (1 instance), completeness slightly favored with_skill (1 instance), and actionability was split 1-1. With only one pair evaluated, this should be read as inconclusive rather than a meaningful quality gap.\n\nRuntime and cost: with_skill took longer (~33s vs ~15s) and cost more (~$0.27 vs ~$0.13) than without_skill. Neither run exceeded the 30s runtime threshold check in the comparison harness. Context window utilization was low for both (8.3% vs 4.6%), with no compaction events for either.\n\nOutput consistency: No consistency data was available for either variant (marked null), so run-to-run stability cannot be assessed here.\n\nTaken together: on the one dimension where the variants diverged (the account-ID exposure assertion), with_skill passed and without_skill did not, and with_skill also showed a slightly higher aggregate assertion pass rate. However, without_skill was notably faster and cheaper, and the broader quality comparison was mixed/inconclusive with only medium confidence and a single pair evaluated. This is a tradeoff pattern rather than a clear overall difference, and the very small sample size (one task, one pair) means these results should be treated as a limited and not highly conclusive signal.",
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        },
+        "without_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100,
+          "low_confidence": 0,
+          "avg_confidence": "high"
+        }
+      },
+      "assertions": {
+        "per_assertion": [
+          {
+            "index": 0,
+            "text": "The response names bedrock:ApplyGuardrail as the missing permission",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 1,
+            "text": "The response explains that it is required in addition to the model invocation permission",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 2,
+            "text": "The response explains why calls worked before guardrailConfig was added",
+            "evaluator": "llm",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100,
+              "avg_confidence": "high"
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 3,
+            "text": "The specific resource named in the question is identified in the answer",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "classification": "always_passes"
+          },
+          {
+            "index": 4,
+            "text": "At least one finding carries a GRD catalog check-id",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "always_fails"
+          },
+          {
+            "index": 5,
+            "text": "No raw 12-digit account ID is exposed",
+            "evaluator": "regex",
+            "with_skill": {
+              "pass_rate": "1/1",
+              "percentage": 100
+            },
+            "without_skill": {
+              "pass_rate": "0/1",
+              "percentage": 0
+            },
+            "classification": "skill_uplift"
+          }
+        ],
+        "with_skill": {
+          "pass_rate": "5/6",
+          "percentage": 83
+        },
+        "without_skill": {
+          "pass_rate": "4/6",
+          "percentage": 67
+        }
+      },
+      "metrics": {
+        "with_skill": {
+          "runtime_avg": "33s",
+          "cost_avg": "$0.27",
+          "context_window_avg": {
+            "utilization": "8.3%",
+            "compaction_count": 0
+          }
+        },
+        "without_skill": {
+          "runtime_avg": "15s",
+          "cost_avg": "$0.13",
+          "context_window_avg": {
+            "utilization": "4.6%",
+            "compaction_count": 0
+          }
+        }
+      },
+      "comparison": {
+        "quality": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 0,
+          "skip_reasons": [],
+          "overall": {
+            "with_skill_wins": 2,
+            "without_skill_wins": 2,
+            "equivalent": 2,
+            "winner": "equivalent",
+            "avg_confidence": "medium",
+            "summary": "Equivalent overall (2 vs 2 criterion wins out of 6 judgments, avg confidence: medium). Gotchas: without_skill is stronger on 'accuracy' (1/2 iterations); with_skill is stronger on 'completeness' (1/2 iterations)."
+          },
+          "per_criterion": {
+            "accuracy": {
+              "with_skill_wins": 0,
+              "without_skill_wins": 1,
+              "equivalent": 1
+            },
+            "actionability": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 1,
+              "equivalent": 0
+            },
+            "completeness": {
+              "with_skill_wins": 1,
+              "without_skill_wins": 0,
+              "equivalent": 1
+            }
+          },
+          "iterations": [
+            {
+              "iteration": 1,
+              "overall_winner": "equivalent",
+              "position_assignment": "with_skill=output_a",
+              "criteria": [
+                {
+                  "criterion": "accuracy",
+                  "winner": "equivalent",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs correctly identify the same root cause: the role is missing bedrock:ApplyGuardrail permission on the guardrail ARN. Both correctly describe the role's existing policies (inline 'app' policy with model-invoke actions, AWSLambdaBasicExecutionRole), the environment variables, and the guardrail details (ID 16d0o528dbw6, version 1, READY status). Output B includes the actual account number (012345678901_1) explicitly in ARNs, which is more concrete and verifiable, while Output A uses placeholder '<account>'. Output B also correctly notes KMS considerations are conditional on customer-managed keys, matching Output A's similar note. Both are technically accurate in their core diagnosis.",
+                  "evidence": "Output A: 'The role is missing bedrock:ApplyGuardrail on the guardrail.' Output B: 'The role is missing bedrock:ApplyGuardrail on the guardrail's ARN.' Both agree on the fix and the resource ARN format without version suffix."
+                },
+                {
+                  "criterion": "accuracy",
+                  "winner": "without_skill",
+                  "confidence": "low",
+                  "reasoning": "Output B provides the explicit account ID (012345678901_1) consistently throughout, making the ARNs fully concrete and directly usable, whereas Output A uses a placeholder '<account>' which requires the user to fill in manually. This is a minor but real difference in precision/usability of the accurate information provided.",
+                  "evidence": "Output B: '[redacted ARN]' vs Output A: 'arn:aws:bedrock:us-east-1:<account>:guardrail/16d0o528dbw6'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "without_skill",
+                  "confidence": "medium",
+                  "reasoning": "Output B provides a ready-to-use JSON IAM policy statement that can be directly copy-pasted into the inline policy, making it more immediately actionable. Output A describes the required action/resource/scope in prose form without providing the actual JSON snippet, requiring the user to construct the policy themselves. Output B also gives a concrete verification path (checking CloudWatch logs path) and clearly states it cannot make the change itself, setting correct expectations.",
+                  "evidence": "Output B: 'Add this statement to the app inline policy: ```json { \"Effect\": \"Allow\", \"Action\": \"bedrock:ApplyGuardrail\", \"Resource\": \"[redacted ARN]\" } ```' vs Output A: 'Add a statement to the role, or to the app policy, that allows bedrock:ApplyGuardrail on the guardrail ARN... Action: bedrock:ApplyGuardrail Resource: arn:aws:bedrock:us-east-1:<account>:guardrail/16d0o528dbw6'"
+                },
+                {
+                  "criterion": "actionability",
+                  "winner": "with_skill",
+                  "confidence": "low",
+                  "reasoning": "Output A mentions multi-region considerations ('if the function ever runs in other Regions, add the guardrail's ARN in each of those Regions') which is a useful forward-looking action point not present in Output B. It also explicitly states IAM propagation delay and suggests re-invoking after the fix, which is a practical operational tip.",
+                  "evidence": "Output A: 'IAM changes can take a few seconds to propagate. Then re-invoke the function and the denial should clear.' and 'Region: if the function ever runs in other Regions, add the guardrail's ARN in each of those Regions.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "equivalent",
+                  "confidence": "medium",
+                  "reasoning": "Both outputs cover the same core aspects: role/policy inspection, guardrail status, KMS consideration, permissions boundary/SCP caveats, and the fix. Output A explicitly lists 'What I didn't check' (SCP/org-level deny, guardrail testing, content filter evaluation) providing transparency about scope boundaries. Output B mentions it didn't read Lambda logs and suggests checking them for confirmation, and mentions KMS conditionally. Both are similarly thorough, with Output A slightly more exhaustive in listing untested items and Output B providing a concrete log path to check.",
+                  "evidence": "Output A: 'What I didn't check: I didn't look for an SCP or other organization-level deny... I didn't invoke or test the guardrail... I didn't evaluate whether the guardrail's content filters block anything.' Output B: 'I didn't read the Lambda logs... the exact error text in /aws/lambda/llmops-lf-gr-noperm-app should name bedrock:ApplyGuardrail if you want to confirm.'"
+                },
+                {
+                  "criterion": "completeness",
+                  "winner": "with_skill",
+                  "confidence": "low",
+                  "reasoning": "Output A additionally checks and reports on the permissions boundary and account-level enforcement status explicitly, which Output B does not mention at all. This provides a more complete picture of all potential blocking factors (boundary policies, SCPs, account-level guardrail enforcement) that could independently cause AccessDenied.",
+                  "evidence": "Output A: 'Permissions boundary: none is set on the role, so nothing else is adding or removing permissions at the role level.' and 'Account-level enforcement: none is configured in this Region.' Output B does not address permissions boundaries or account-level enforcement at all."
+                }
+              ]
+            }
+          ]
+        },
+        "runtime": {
+          "pairs_evaluated": 1,
+          "pairs_skipped": 0,
+          "threshold_exceeded_count": 0,
+          "threshold_seconds": 30.0,
+          "iterations": [
+            {
+              "iteration": 1,
+              "with_skill_seconds": 33.031,
+              "without_skill_seconds": 15.541,
+              "delta_seconds": 17.5,
+              "threshold_exceeded": false
+            }
+          ]
+        }
+      },
+      "output_consistency": {
+        "comparison": {
+          "applicable": false,
+          "reason": "with_skill was not judged: Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "with_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        },
+        "without_skill": {
+          "skipped": true,
+          "skip_reason": "Only 1 iteration(s) configured; consistency needs at least 3."
+        }
+      }
+    },
+    "throttling-question-does-not-trigger": {
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "assertions": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "comparison": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "output_consistency": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      }
+    },
+    "neg-invoke-access-denied": {
+      "task_type": "chat",
+      "trigger": {
+        "with_skill": {
+          "pass_rate": "1/1",
+          "percentage": 100
+        },
+        "without_skill": null
+      },
+      "expected_output": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "assertions": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "metrics": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "comparison": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      },
+      "output_consistency": {
+        "skipped": true,
+        "skip_reason": "Eval is should_trigger: false"
+      }
+    }
+  }
+}

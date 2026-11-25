@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.0.0
+- Description: covers how-to questions (one run skipped the skill for `quota-lookup-by-code`).
 - Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
 - `related-skills.md` is a markdown link and is listed under References with its load condition (best-practices BP-05).
 - Evals: check-id assertions are dropped from the four questions that name no account resource.

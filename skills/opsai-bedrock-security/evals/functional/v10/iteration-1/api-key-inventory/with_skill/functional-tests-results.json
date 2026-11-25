@@ -1,0 +1,123 @@
+{
+  "version": "v10",
+  "iteration": 1,
+  "eval_id": "api-key-inventory",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-bedrock-security' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The response meets several criteria: it's clearly stated as read-only, notes IAM doesn't report last-used time for API keys and avoids calling the key dormant/never-used, masks the key to last four chars (<key id>), avoids printing full account ID (shows \"ending 7339\"), includes documentation link, and discusses grant/risk tier (Info) with reasoning.\n\nHowever, it fails key substantive requirements:\n1. It explicitly states age as \"20d\" and the key status is \"Active\" with an expiration date 10 days away, but it is classified as \"Info\" tier simply because it \"cannot invoke\" models \u2014 this doesn't match the required risk-tier taxonomy, which requires: console-created API key user that can invoke = High; API key user with no active credential = orphaned Medium; inactive key that would be High/Critical if re-enabled = Low; expired key (cannot be re-enabled) = Info. Here the key is Active (not expired, not inactive) and able to list but not invoke models, which doesn't fit neatly into any of these tiers as described, but critically, this is NOT a console-created BedrockAPIKey user (as the response itself notes), so the High-tier criteria doesn't apply. Still, the response never discusses an orphaned-user Medium tier consideration, or addresses whether the API key user has an active credential status check per LLM-BPA-009 the way expected.\n2. Most importantly, the expected output requires explicitly using ListServiceSpecificCredentials for bedrock.amazonaws.com across ALL users to find keys not just on BedrockAPIKey/AeaApiKey-named users. The response mentions checking two users and says \"account-wide listing and per-user listing returned the same single key\" - this suggates compliance, but doesn't explicitly confirm the API call method used, though this is likely acceptable as not fully verifiable from output alone.\n3. The response needs to give \"whether to remove it, as steps for the customer\" - it says \"none of the keys need to be removed\" but doesn't provide removal steps conditioned on if it needed removal, though since it says no key needs removing, that may be minor.\n4. The response never evaluates the API key's grant beyond ListFoundationModels correctly, but the classification logic doesn't match the four-tier system explicitly: the key is Active, not inactive, not expired, yet tier is Info only due to \"cannot invoke\" - this contradicts the expected taxonomy where Info is reserved for \"expired key that cannot be re-enabled.\" This key is NOT expired (expires in 10 days, still active), so labeling it Info tier misapplies the expected classification taxonomy, which is a substantive error under the expected output's specific rating rules.\n\nGiven this tier misclassification deviates from the expected output's explicit rules (Info should only apply to expired keys, but this key is active with 10 days until expiration), this is a meaningful failure against the expected criteria.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response lists every long-term Amazon Bedrock API key found by the account-wide listing (keys on any IAM user, not only on BedrockAPIKey users), identifying each by its IAM user name or by its key ID masked to the last four characters",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The findings table lists one key: '| 1 | Info | account ending 7339 | llmops-lf-apikey-user | Amazon Bedrock API key | <key id> | 20d | unknown | ...'. It identifies the IAM user (llmops-lf-apikey-user) and masks the key ID to last four characters (<key id>). The Summary also states 'The account-wide listing and the per-user listing returned the same single key.'",
+          "reasoning": "The output identifies the single key by IAM user name and masked key ID, and confirms this covers the account-wide listing.",
+          "confidence": "high"
+        },
+        {
+          "text": "For each API key, the response says what it can do in Amazon Bedrock (its grant and risk tier) and whether to remove it, as steps for the customer",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The action is stated as 'No action needed for Amazon Bedrock exposure' with grant 'none' and tier 'Info', but no explicit step-by-step removal instructions are given for the customer (since no removal is recommended, this may be moot, but no steps are given even hypothetically).",
+          "reasoning": "The response does state the grant (none, can only ListFoundationModels) and risk tier (Info), and says no action is needed. However it does not phrase this as 'steps for the customer' to take (even though the action is 'no action'), so it partially fails on the 'as steps' requirement. Given only one key and no removal needed, no removal steps exist, which could be seen as satisfying trivially, but strictly there's no explicit step enumeration format. Marking as a partial fail due to lack of explicit steps format, though the grant/tier/removal decision is covered.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says that IAM does not report when an API key was last used and does not call any API key dormant or never used",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states 'LAST USED | unknown' in the table and in Limitations: 'IAM does not report when a Bedrock API key was last used. Whether this key is in use is unknown, and only AWS CloudTrail shows its calls.' It never calls the key dormant or never used.",
+          "reasoning": "This matches the assertion directly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that IAM does not report when an Amazon Bedrock API key was last used, so whether each key is still in use is unknown",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Limitations section: 'IAM does not report when a Bedrock API key was last used. Whether this key is in use is unknown, and only AWS CloudTrail shows its calls.'",
+          "reasoning": "Directly matches the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response treats an expired API key as unable to be re-enabled and an inactive one as able to be re-enabled",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response notes 'ExpirationDate 2026-12-05 08:38:29 UTC, so the key expires in 10 days' and 'Status Active', but does not discuss re-enabling expired vs inactive keys at all.",
+          "reasoning": "There is no explicit statement about whether an expired key can be re-enabled vs an inactive one; the assertion cannot be verified from the output, since this distinction is never addressed.",
+          "confidence": "low"
+        },
+        {
+          "text": "The response states that the audit is read-only and made no change, and does not claim to have deleted, deactivated or changed any key",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response begins 'This was a read-only audit; nothing was changed.' and the Scope section states 'Read-only: no credential, policy or setting was changed.' The Suggested policies section states 'Nothing was applied.'",
+          "reasoning": "Clearly matches the assertion; no claim of deletion or modification is made.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response never prints a full API key ID, an API key's ServiceCredentialAlias or its ServiceUserName",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The key is shown only as '<key id>' (masked to last four characters), and no ServiceCredentialAlias or ServiceUserName field is printed anywhere in the output.",
+          "reasoning": "No full key ID or those specific fields appear in the output.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not end with an offer or a follow-up question",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response ends with the Limitations section, the last bullet being 'The result is a point-in-time snapshot of the commercial-partition IAM configuration. It shows what the key can do, not what it did.' No question or offer follows.",
+          "reasoning": "The output does not end with a follow-up question or offer; it ends with a factual limitation statement.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites AWS documentation with at least one docs.aws.amazon.com link",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'https://docs.aws.amazon.com/'"
+        },
+        {
+          "text": "The response contains no 12-digit number",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No full access key ID or Amazon Bedrock API key ID is exposed, and no key ID is shown with its AKIA, ASIA or ACCA prefix plus 8 or more characters",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 9,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 11,
+        "pass_rate": 0.8182
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m1s",
+    "cost": "$0.51",
+    "context_window": {
+      "utilization": "13.4%",
+      "compaction_count": 0
+    }
+  }
+}
