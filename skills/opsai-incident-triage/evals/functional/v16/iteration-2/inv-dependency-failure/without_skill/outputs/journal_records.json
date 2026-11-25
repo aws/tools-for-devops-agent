@@ -1,0 +1,58 @@
+[
+  {
+    "agentSpaceId": "afd17ae7-fbde-4de0-a72b-2fb9ce4710c7",
+    "executionId": "11b1b1d9-066b-492a-9a34-ffcc489ff7dc",
+    "recordId": "e0f4af12-ce0c-43da-ac37-d4f132166699",
+    "content": "{\"id\": \"e0f4af12-ce0c-43da-ac37-d4f132166699\", \"role\": \"user\", \"content\": [{\"text\": \"Our Bedrock-backed feature is failing but Bedrock metrics look normal. The failures started when our vector database had an incident. How should we think about this?\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-25T00:28:22.301000+05:30",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "afd17ae7-fbde-4de0-a72b-2fb9ce4710c7",
+    "executionId": "11b1b1d9-066b-492a-9a34-ffcc489ff7dc",
+    "recordId": "e991fb88-61f2-448a-86fb-b9f1c3b77d29",
+    "content": "{\"id\": \"653775bb-a092-4a90-95de-4d9080983d0d\", \"role\": \"assistant\", \"content\": [{\"type\": \"chat_title\", \"title\": \"Bedrock feature failing despite normal metrics\"}]}",
+    "createdAt": "2026-11-25T00:28:24.172000+05:30",
+    "recordType": "chat_title"
+  },
+  {
+    "agentSpaceId": "afd17ae7-fbde-4de0-a72b-2fb9ce4710c7",
+    "executionId": "11b1b1d9-066b-492a-9a34-ffcc489ff7dc",
+    "recordId": "abc8cceb-e8a6-4c18-8322-0748aea47330",
+    "content": "{\"id\": \"e0851880-57a0-43da-a165-bf55995959ff\", \"role\": \"assistant\", \"block_type\": \"thinking\", \"content\": [{\"type\": \"text\", \"text\": \"This is a guidance question asking for conceptual direction, not an investigation request, so I can answer directly with architectural reasoning rather than invoking tools, perhaps offering to dig deeper into their specific setup if useful.\\n\\n\"}]}",
+    "createdAt": "2026-11-25T00:28:26.663000+05:30",
+    "recordType": "thinking"
+  },
+  {
+    "agentSpaceId": "afd17ae7-fbde-4de0-a72b-2fb9ce4710c7",
+    "executionId": "11b1b1d9-066b-492a-9a34-ffcc489ff7dc",
+    "recordId": "b7440ff1-cf49-471e-87c6-23a2abc3d4d6",
+    "content": "{\"id\": \"f86f6d21-5c5e-48fe-885d-8559d936a1ee\", \"role\": \"assistant\", \"block_type\": \"thinking_duration\", \"content\": [{\"type\": \"text\", \"text\": \"3\"}]}",
+    "createdAt": "2026-11-25T00:28:26.702000+05:30",
+    "recordType": "thinking_duration"
+  },
+  {
+    "agentSpaceId": "afd17ae7-fbde-4de0-a72b-2fb9ce4710c7",
+    "executionId": "11b1b1d9-066b-492a-9a34-ffcc489ff7dc",
+    "recordId": "3c8963de-8ae2-408c-b92c-78859e922a0c",
+    "content": "{\"metadata\": {\"version\": \"0.1\"}, \"data\": {\"context_window\": {\"utilization\": 4.4, \"compaction_count\": 0}}}",
+    "createdAt": "2026-11-25T00:28:32.271000+05:30",
+    "recordType": "utilization"
+  },
+  {
+    "agentSpaceId": "afd17ae7-fbde-4de0-a72b-2fb9ce4710c7",
+    "executionId": "11b1b1d9-066b-492a-9a34-ffcc489ff7dc",
+    "recordId": "e416d10a-2e57-4a40-b4c1-9611077f3bd5",
+    "content": "{\"id\": \"e416d10a-2e57-4a40-b4c1-9611077f3bd5\", \"role\": \"assistant\", \"content\": [{\"text\": \"Treat this as a dependency failure, not a Bedrock failure. Bedrock metrics only describe the model call, so they can look healthy while the feature is broken.\\n\\n**Why Bedrock metrics look normal**\\n- In a RAG-style feature, the vector database sits upstream of the model call: embed query \\u2192 vector search \\u2192 build prompt \\u2192 invoke model.\\n- If retrieval fails, errors or timeouts happen before Bedrock is invoked, or the model gets an empty or degraded prompt. Bedrock then sees fewer requests, or normal-looking ones, and has nothing to report.\\n- Check for a drop in `Invocations`. A fall in Bedrock traffic that matches the vector DB incident points at your app failing before the model call.\\n\\n**What to check, in order**\\n1. **Timeline correlation.** Compare when the failures started, when the vector DB incident began, and when it was declared resolved. If the failures began with the incident, retrieval is the likely cause. If they continue after recovery, something else is holding the failure in place.\\n2. **Failures that outlast the incident.** Look for these:\\n   - Connection pools or clients holding dead connections and never reconnecting.\\n   - Circuit breakers or retry logic stuck open.\\n   - Cached empty or failed retrieval results.\\n   - Index or collection state changed after recovery, such as a reindex, restore from backup or schema change.\\n   - Embedding dimension or model mismatch if the index was rebuilt.\\n   - Auth or endpoint changes, such as a rotated credential or new endpoint.\\n3. **Failure mode in the app.** Check your application logs and traces for the actual exception. Common ones are vector client timeouts, empty result sets, a prompt that exceeds the context window, or a `ValidationException` from Bedrock caused by a malformed prompt. A malformed prompt would show up in Bedrock as client errors, not as healthy traffic.\\n4. **Silent degradation.** If retrieval returns nothing and the app calls the model anyway, you get a call that succeeds with poor or hallucinated output. Bedrock will look perfectly healthy in that case. Check output quality and retrieval hit counts, not just error rates.\\n\\n**Measure the pipeline stages**\\nAdd or look at per-stage metrics: embed latency and errors, vector query latency and error rate, result count per query, prompt token size, and model latency and errors. These make it clear which stage is failing, and they would have flagged this incident sooner.\\n\\n**Questions that would narrow it down**\\n- Which vector store is it (OpenSearch Serverless, Aurora pgvector, Pinecone, a Bedrock Knowledge Base, something else)?\\n- What error does the application log when the feature fails?\\n- Has the vector DB been confirmed fully recovered, and did anything change in it, such as a restore, reindex or failover?\\n\\nIf you share those, or point me at the service and log group, I can look at the logs, traces and recent changes around the incident window.\", \"type\": \"text\"}], \"created_at\": null}",
+    "createdAt": "2026-11-25T00:28:32.324000+05:30",
+    "recordType": "message"
+  },
+  {
+    "agentSpaceId": "afd17ae7-fbde-4de0-a72b-2fb9ce4710c7",
+    "executionId": "11b1b1d9-066b-492a-9a34-ffcc489ff7dc",
+    "recordId": "7f127741-3fc9-4d3c-abed-af7bfaa16cf9",
+    "content": "{\"id\": \"5bbbba94-191e-441d-8a1b-8e994ed365af\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Treat this as a dependency failure, not a Bedrock failure. Bedrock metrics only describe the model call, so they can look healthy while the feature is broken.\\n\\n**Why Bedrock metrics look normal**\\n- In a RAG-style feature, the vector database sits upstream of the model call: embed query \\u2192 vector search \\u2192 build prompt \\u2192 invoke model.\\n- If retrieval fails, errors or timeouts happen before Bedrock is invoked, or the model gets an empty or degraded prompt. Bedrock then sees fewer requests, or normal-looking ones, and has nothing to report.\\n- Check for a drop in `Invocations`. A fall in Bedrock traffic that matches the vector DB incident points at your app failing before the model call.\\n\\n**What to check, in order**\\n1. **Timeline correlation.** Compare when the failures started, when the vector DB incident began, and when it was declared resolved. If the failures began with the incident, retrieval is the likely cause. If they continue after recovery, something else is holding the failure in place.\\n2. **Failures that outlast the incident.** Look for these:\\n   - Connection pools or clients holding dead connections and never reconnecting.\\n   - Circuit breakers or retry logic stuck open.\\n   - Cached empty or failed retrieval results.\\n   - Index or collection state changed after recovery, such as a reindex, restore from backup or schema change.\\n   - Embedding dimension or model mismatch if the index was rebuilt.\\n   - Auth or endpoint changes, such as a rotated credential or new endpoint.\\n3. **Failure mode in the app.** Check your application logs and traces for the actual exception. Common ones are vector client timeouts, empty result sets, a prompt that exceeds the context window, or a `ValidationException` from Bedrock caused by a malformed prompt. A malformed prompt would show up in Bedrock as client errors, not as healthy traffic.\\n4. **Silent degradation.** If retrieval returns nothing and the app calls the model anyway, you get a call that succeeds with poor or hallucinated output. Bedrock will look perfectly healthy in that case. Check output quality and retrieval hit counts, not just error rates.\\n\\n**Measure the pipeline stages**\\nAdd or look at per-stage metrics: embed latency and errors, vector query latency and error rate, result count per query, prompt token size, and model latency and errors. These make it clear which stage is failing, and they would have flagged this incident sooner.\\n\\n**Questions that would narrow it down**\\n- Which vector store is it (OpenSearch Serverless, Aurora pgvector, Pinecone, a Bedrock Knowledge Base, something else)?\\n- What error does the application log when the feature fails?\\n- Has the vector DB been confirmed fully recovered, and did anything change in it, such as a restore, reindex or failover?\\n\\nIf you share those, or point me at the service and log group, I can look at the logs, traces and recent changes around the incident window.\"}]}",
+    "createdAt": "2026-11-25T00:28:32.369000+05:30",
+    "recordType": "final_response"
+  }
+]

@@ -1,0 +1,14 @@
+# Related skills
+
+Areas `opsai-bedrock-review` does not cover, the skill that does, and what to do when that skill isn't installed.
+Every skill here is optional. Follow the three steps in `SKILL.md` under *Related skills (optional)*.
+
+| Area | Skill | Fallback when it isn't installed |
+|---|---|---|
+| A live failure right now: model calls erroring, throttled (429), timing out or slow; "is it AWS or us" | `opsai-incident-triage` | Read the error and throttle metrics for the incident window (`AWS/Bedrock` `InvocationClientErrors`, `InvocationServerErrors`, `InvocationThrottles`, or the endpoint's `Invocation5XXErrors`) and AWS Health events for the service and Region where the account's support plan allows `health:DescribeEvents`. Say whether the evidence points at the provider or the account; don't rule on the root cause. |
+| Who can call Bedrock (IAM users, long-lived access keys, Bedrock API keys); Bedrock Guardrails coverage and strength | `opsai-bedrock-security` | Read `bedrock:GetGuardrail` for the guardrail version in use and list which policy types it configures. For callers, list the IAM users (`iam:ListUsers`) without ruling on what their policies allow, and say access keys were not checked (`iam:ListAccessKeys` is not called here: it is not in `AIDevOpsAgentAccessPolicy`). |
+| Bedrock spend, pricing tiers, quotas and headroom, Provisioned Throughput | `opsai-capacity-cost` | Read the relevant quota (`servicequotas:ListServiceQuotas`, service code `bedrock`) and `AWS/Bedrock` `InvocationThrottles` for the model. Give no cost figure you did not retrieve. |
+| Bedrock AgentCore runtimes and gateways; Bedrock Agents (action groups, aliases, which version is live) | `opsai-bedrock-agentcore` | Read the runtime or agent status (`bedrock-agentcore:GetAgentRuntime`, or `bedrock:GetAgent` and `bedrock:GetAgentAlias`) and report it. The `bedrock-agentcore` reads need the `EnableOpsaiBedrockReview` template parameter; an AccessDenied on `bedrock-agentcore` is a permission gap, not proof that no runtime exists. |
+| Output quality and regressions, evaluation jobs (Bedrock, including RAG evaluation jobs, or SageMaker), truncated answers and finish reasons | `opsai-ml-eval-check` | If invocation logs exist, report the share of responses that stopped on `max_tokens` (Converse `stopReason`). Otherwise say output quality is not measured. |
+| SageMaker real-time, serverless and async endpoints; batch transform; SageMaker endpoint cost | `opsai-sagemaker-inference` | Read `sagemaker:DescribeEndpoint` (status, `FailureReason`) or `sagemaker:DescribeTransformJob` and report it. |
+| SageMaker training and fine-tuning jobs, including GPU time wasted by a run; Model Registry | `opsai-sagemaker-training` | Read `sagemaker:DescribeTrainingJob` (status, `FailureReason`) or the model package's approval status (`sagemaker:DescribeModelPackage`) and report it. |

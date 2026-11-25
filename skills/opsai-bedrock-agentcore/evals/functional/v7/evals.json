@@ -1,0 +1,142 @@
+{
+    "skill_name": "opsai-bedrock-agentcore",
+    "evals": [
+        {
+            "id": "bedrock-agent-empty-response",
+            "task_type": "chat",
+            "prompt": "Our Bedrock agent in us-east-1 is returning empty responses in production, but when we test it in the console it works. We prepared a new version yesterday. The agent is in an account that isn't connected here. What I can tell you: the app calls alias 'prod', GetAgentAlias shows prod routing to version 3, version 3 has a guardrail attached, the DRAFT has no guardrail, and tracing is off. What should we check, and what is the likely cause?",
+            "expected_output": "A review of the Bedrock Agent (LLM-AGT family) that uses the alias-to-version mapping given (prod serves version 3, not the newly prepared DRAFT) before concluding anything about production, rather than assuming the latest prepared DRAFT is live. It checks whether a guardrail is attached (LLM-AGT-001) because an intervening guardrail can present as empty output, whether the application is pinned to a stable published-version alias rather than the test alias / DRAFT (LLM-AGT-007), and whether tracing is enabled so the orchestration can be inspected (LLM-AGT-005). Each finding carries a catalog check-id and a severity, no raw account id is exposed, and no agent session content or prompt-override text is reproduced.",
+            "should_trigger": true,
+            "assertions": [
+                "The response resolves the agent alias to its served version before concluding what production runs, rather than treating the latest prepared DRAFT as live",
+                "The response checks whether a guardrail is attached to the agent as a possible cause of empty output, and routes guardrail policy-strength questions elsewhere rather than evaluating the policy content here",
+                "The response names an ordered set of concrete checks (alias resolution, guardrail attachment, tracing) rather than generic 'check your agent' advice",
+                "Each finding carries a severity and the concrete observed signal that triggered it, not an unsupported assertion",
+                {
+                    "text": "At least one finding carries an AGT or AC catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-(?:AGT|AC)-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "agentcore-runtime-cannot-invoke",
+            "task_type": "chat",
+            "prompt": "Our Bedrock AgentCore runtime llmops_eval_billing_agent in us-east-1 can't invoke its model and every request errors. Check this account and tell me here in chat what's wrong.",
+            "expected_output": "An AgentCore (LLM-AC family) review that reads the runtime (GetAgentRuntime) for its execution role and the model it calls, evaluates the execution role's policies for bedrock:InvokeModel on that model, and finds the action is not allowed, raising LLM-AC-001 with its severity. It considers an SCP explicit deny (LLM-AC-002) or says it could not read SCPs from this account. It gives the missing policy statement as a change for the operator to make, does not apply it, does not blame a Bedrock service event, and masks the account segment of any ARN it shows.",
+            "should_trigger": true,
+            "assertions": [
+                "The response inspects the runtime's execution role for the model-invoke permission rather than guessing at the cause",
+                "The response identifies the missing bedrock:InvokeModel permission on the execution role as the cause",
+                "The response gives the policy fix as a change for the operator to make and does not claim to have applied it",
+                {
+                    "text": "Names an LLM-AC check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-AC-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "ac-oauth-claim-mismatch",
+            "task_type": "chat",
+            "prompt": "Our AgentCore runtime rejects every request from our web app with an unauthorized error. The JWT comes from our own IdP and looks valid when we decode it. What is wrong?",
+            "should_trigger": true,
+            "expected_output": "The answer checks the inbound identity configuration against the token's actual claims: the expected issuer, audience and client id on the runtime's authorizer versus what the IdP mints. It reports the specific mismatched claim rather than concluding the token is malformed, and distinguishes a configuration mismatch from an expired or wrongly signed token.",
+            "assertions": [
+                "The response names the specific claim (issuer, audience, or client id) that must match the runtime's authorizer configuration",
+                "The response distinguishes a claim or configuration mismatch from an invalid or expired signature",
+                "The response says what to compare the token against rather than only advising to check the token",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "ac-gateway-tool-schema",
+            "task_type": "chat",
+            "prompt": "Adding a new tool to our AgentCore gateway target makes the whole target fail to load, and the other tools disappear too. Why does one tool break all of them?",
+            "should_trigger": true,
+            "expected_output": "The answer explains that tool definitions are validated as a set, so one invalid schema can fail the whole target load, and identifies the kind of schema defect responsible (duplicate names or operation ids, unsupported types, missing required fields). It tells the user how to find the offending definition.",
+            "assertions": [
+                "The response explains why one bad tool definition can fail the entire target rather than being skipped",
+                "The response names a specific class of schema defect to look for",
+                "The response gives a concrete way to isolate the offending tool",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "ac-scp-explicit-deny",
+            "task_type": "chat",
+            "prompt": "Our AgentCore deployment fails with: 'User: arn:aws:sts::<account>:assumed-role/agentcore-deployer/ci is not authorized to perform: bedrock-agentcore:CreateAgentRuntime with an explicit deny'. The deployer role's identity policy allows bedrock-agentcore:*. It runs in an account that isn't connected here, so answer from what I've told you: where can the deny come from, and how do we find which one it is?",
+            "should_trigger": true,
+            "expected_output": "The answer identifies an explicit deny that overrides the role's allow, most commonly a service control policy, a permissions boundary, or a VPC endpoint policy, and explains that an explicit deny always wins over an allow. It says how to determine which one applies.",
+            "assertions": [
+                "The response identifies an explicit deny source such as an SCP, permissions boundary, or endpoint policy",
+                "The response explains that an explicit deny overrides an allow in the role policy",
+                "The response gives a concrete way to identify which policy is responsible",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "neg-ac-obs-transaction-search",
+            "task_type": "chat",
+            "prompt": "We cannot see end-to-end traces for our AgentCore agent, only isolated log lines. How do we get a connected view of a request?",
+            "should_trigger": false
+        },
+        {
+            "id": "ac-memory-not-persisting",
+            "task_type": "chat",
+            "prompt": "Our AgentCore agent forgets context between turns even though we configured memory. What should we check?",
+            "should_trigger": true,
+            "expected_output": "The answer checks that memory is both configured and actually referenced on the invocation path: the memory resource's state, the identifier the agent passes, the session or actor key used to scope retrieval, and the role's permission to read and write it. It names the most likely break rather than restating the feature.",
+            "assertions": [
+                "The response checks that the agent actually passes the memory and session or actor identifier on invocation",
+                "The response considers permissions to read and write memory",
+                "The response distinguishes memory not being written from memory not being retrieved",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "neg-kb-ingestion-zero-docs",
+            "task_type": "chat",
+            "prompt": "Our knowledge base sync completed but indexed zero documents. The files are under an S3 prefix. Why would it index nothing?",
+            "should_trigger": false
+        },
+        {
+            "id": "neg-token-quota-throttle",
+            "task_type": "chat",
+            "prompt": "We are hitting Bedrock token-per-minute throttling during peak hours. Should we request a quota increase or buy provisioned throughput?",
+            "should_trigger": false
+        }
+    ]
+}

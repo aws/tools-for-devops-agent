@@ -1,0 +1,76 @@
+{
+  "version": "v5",
+  "iteration": 3,
+  "eval_id": "access-denied-iam-vs-scp",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-bedrock-review' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response successfully distinguishes the three causes of AccessDeniedException: (1) IAM policy deny in the account - fixable by the customer adding an Allow for bedrock:InvokeModel; (2) SCP explicit deny from the Organization - explicitly stated as requiring escalation to the Organizations administrator, not an IAM fix (\"Your Organizations administrator. An SCP overrides any IAM Allow in the account\"); and (3) model access/marketplace subscription issues - requiring marketplace permissions and subscription acceptance. \n\nThe agent correctly identifies that distinguishing between these causes depends on the exact error message wording (it provides a table mapping specific error text patterns like 'no identity-based policy allows' vs 'explicit deny in a service control policy' to the correct fix owner). It does NOT prescribe an IAM fix for an SCP deny - it explicitly states this must go to the Organizations admin and that an SCP overrides any IAM Allow.\n\nThe agent also mentions checking the Organization for SCPs (though notes it can't read SCPs from a member account) and does not use iam:SimulatePrincipalPolicy - instead it asks for the actual error message, role policies, and model ID/ARN to compare against.\n\nNo raw 12-digit account ID is mentioned; the account is referred to generically throughout ('the account', 'your account').\n\nThe response covers all three distinguishing causes (IAM, SCP, model access/marketplace) matching LLM-INV-013, 014, 015 in substance, and correctly avoids prescribing IAM fixes for SCP issues, escalating to the Org admin instead.",
+      "evidence": "\"SCP from your Organization | 'explicit deny in a service control policy'... | Your Organizations administrator. An SCP overrides any IAM Allow in the account.\" and \"If the message points to an SCP, I'll write up what to send your Organizations admin.\" and \"I can't read SCPs from a member account, so I can't confirm or rule one out.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response distinguishes an IAM deny from an SCP explicit deny instead of assuming the cause is IAM",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The table distinguishes 'IAM policy in your account' with error text 'no identity-based policy allows... or explicit deny in an identity-based policy' versus 'SCP from your Organization' with error text 'explicit deny in a service control policy or no service control policy allows'. The agent explicitly states 'I can't tell yet whether this is fixable in your IAM policy' and lists both IAM and SCP as separate possible causes rather than assuming IAM.",
+          "reasoning": "The agent clearly separates IAM-level denial from SCP-level denial as distinct causes with distinct identifying error text and does not default to assuming IAM is the cause."
+        },
+        {
+          "text": "The response states that an SCP explicit deny cannot be overridden by account-level IAM and must be escalated to the Organizations administrator",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The table states for SCP cause: 'Who fixes it: Your Organizations administrator. An SCP overrides any IAM Allow in the account.'",
+          "reasoning": "This directly states that an SCP explicit deny overrides IAM allows (cannot be overridden by account-level IAM) and must be escalated to the Organizations administrator, satisfying the assertion."
+        },
+        {
+          "text": "The response names a concrete way to tell them apart, such as the wording of the AccessDenied message (an explicit deny in a service control policy versus no identity-based policy allowing the action), reading the role's policy documents, or an Organizations policy read",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response gives exact wording: 'no identity-based policy allows\" or \"explicit deny in an identity-based policy\"' for IAM vs '\"explicit deny in a service control policy\" or \"no service control policy allows\"' for SCP, and also says 'If the message points to an SCP, I'll write up what to send your Organizations admin' implying an Organizations policy read as a follow-up method.",
+          "reasoning": "The agent names concrete differentiators: the exact wording of the AccessDenied message distinguishing IAM vs SCP causes, which satisfies the assertion directly."
+        },
+        {
+          "text": "The response also considers model access not being granted or a marketplace subscription not accepted as a possible cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The table includes a row: 'Model access or marketplace subscription | \"model is not available for this account\", or an agreement or subscription message | You. The first invocation must come from a principal with aws-marketplace:Subscribe, Unsubscribe and ViewSubscriptions, and the account needs a valid payment method.'",
+          "reasoning": "The response explicitly considers model access/marketplace subscription issues as a possible cause of the AccessDeniedException, satisfying the assertion."
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "19s",
+    "cost": "$0.16",
+    "context_window": {
+      "utilization": "7.2%",
+      "compaction_count": 0
+    }
+  }
+}
