@@ -2,73 +2,20 @@
     "skill_name": "opsai-bedrock-review",
     "evals": [
         {
-            "id": "invocation-logging-disabled-critical",
-            "task_type": "chat",
-            "prompt": "Can you check whether my Amazon Bedrock setup is configured correctly? In particular I want to know if model invocation logging is on. When I call GetModelInvocationLoggingConfiguration it comes back basically empty.",
-            "expected_output": "The response reads an empty GetModelInvocationLoggingConfiguration as logging being DISABLED, not healthy, and raises it as a CRITICAL finding under check-id LLM-INV-001. It cites the concrete observation (no loggingConfig / no CloudWatch or S3 destination) rather than inferring health, prescribes enabling invocation logging via PutModelInvocationLoggingConfiguration with a CloudWatch and/or S3 destination as a change the user runs themselves (the review is read-only), and refers to the account only as the account under review without echoing any raw 12-digit account ID.",
-            "should_trigger": true,
-            "assertions": [
-                "The response interprets an empty GetModelInvocationLoggingConfiguration as logging DISABLED rather than as a healthy or passing state",
-                "The response classifies the missing invocation logging as CRITICAL severity",
-                "The response states the fix as a change the user applies themselves and does not claim to have enabled logging, consistent with a read-only review",
-                "The response reports what it actually observed as evidence rather than inferring the state",
-                {
-                    "text": "The invocation-logging finding carries its catalog check-id",
-                    "evaluator": "regex",
-                    "pattern": "LLM-INV-\\d{3}"
-                },
-                {
-                    "text": "No raw 12-digit account ID is exposed",
-                    "evaluator": "regex",
-                    "pattern": "\\b\\d{12}\\b",
-                    "match": "absent"
-                }
-            ]
-        },
-        {
             "id": "access-denied-iam-vs-scp",
             "task_type": "chat",
             "prompt": "Our application gets AccessDeniedException when it calls InvokeModel on Bedrock. Is this something we can fix in our IAM policy, or is it coming from somewhere else?",
-            "expected_output": "The response distinguishes an IAM implicitDeny (which the customer fixes by adding the missing Allow, check-id LLM-INV-013) from an SCP explicit deny (which no account-level IAM change can override and which must be escalated to the AWS Organizations administrator with the specific policy name and deny statement, check-id LLM-INV-015), and from model access not being granted or a marketplace subscription never accepted (LLM-INV-014). It describes using iam:SimulatePrincipalPolicy and an Organizations policy read to tell them apart, and does NOT prescribe an IAM fix for an SCP deny. The account is referred to only as the account under review with no raw 12-digit account ID.",
+            "expected_output": "The response distinguishes an IAM implicitDeny (which the customer fixes by adding the missing Allow, check-id LLM-INV-013) from an SCP explicit deny (which no account-level IAM change can override and which must be escalated to the AWS Organizations administrator with the specific policy name and deny statement, check-id LLM-INV-015), and from model access not being granted or a marketplace subscription never accepted (LLM-INV-014). It describes telling them apart from the AccessDenied message wording, the role's policy documents and an Organizations policy read (not iam:SimulatePrincipalPolicy, which the skill does not call), and does NOT prescribe an IAM fix for an SCP deny. The account is referred to only as the account under review with no raw 12-digit account ID.",
             "should_trigger": true,
             "assertions": [
                 "The response distinguishes an IAM deny from an SCP explicit deny instead of assuming the cause is IAM",
                 "The response states that an SCP explicit deny cannot be overridden by account-level IAM and must be escalated to the Organizations administrator",
-                "The response names a concrete way to tell them apart, such as iam:SimulatePrincipalPolicy plus an Organizations policy read",
+                "The response names a concrete way to tell them apart, such as the wording of the AccessDenied message (an explicit deny in a service control policy versus no identity-based policy allowing the action), reading the role's policy documents, or an Organizations policy read",
                 "The response also considers model access not being granted or a marketplace subscription not accepted as a possible cause",
                 {
-                    "text": "At least one access finding carries its catalog check-id",
-                    "evaluator": "regex",
-                    "pattern": "LLM-INV-\\d{3}"
-                },
-                {
                     "text": "No raw 12-digit account ID is exposed",
                     "evaluator": "regex",
-                    "pattern": "\\b\\d{12}\\b",
-                    "match": "absent"
-                }
-            ]
-        },
-        {
-            "id": "kb-active-but-empty",
-            "task_type": "chat",
-            "prompt": "Our Bedrock knowledge base shows status ACTIVE in the console but RAG queries against it come back empty with no sources. Is the knowledge base healthy?",
-            "expected_output": "The response explains that ACTIVE status does not mean the knowledge base is populated: ACTIVE only confirms the resource and vector-index wiring are valid. It checks ingestion-job history (ListIngestionJobs / GetIngestionJob) rather than KB status, and recognizes that an empty ingestion-job list means the data source was never synced, so the vector store is empty and retrieval silently returns nothing. It reports this as a CRITICAL-grade, never-synced condition (LLM-KB-001), and recommends running StartIngestionJob (giving the command) rather than calling it, confirming afterward that a COMPLETE job indexed a non-zero number of documents. It does not reproduce any retrieved chunk text and does not expose a raw account id.",
-            "should_trigger": true,
-            "assertions": [
-                "The response states that ACTIVE status does not mean the knowledge base is populated, and that it must verify ingestion-job history instead of KB status",
-                "The response identifies an empty ListIngestionJobs as 'never synced' and treats it as a CRITICAL-grade problem rather than a healthy or neutral state",
-                "The response recommends StartIngestionJob and gives the command rather than claiming to run it, consistent with being read-only",
-                "The response explains that a never-synced vector store silently returns nothing on retrieval, which is why queries come back empty",
-                {
-                    "text": "At least one finding carries an LLM-KB check-id",
-                    "evaluator": "regex",
-                    "pattern": "LLM-KB-\\d{3}"
-                },
-                {
-                    "text": "No raw 12-digit account ID is exposed",
-                    "evaluator": "regex",
-                    "pattern": "\\b\\d{12}\\b",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
                     "match": "absent"
                 }
             ]
@@ -85,84 +32,245 @@
                 "The response states it will report chunk counts, sources, and relevance scores but not reproduce the content of retrieved document chunks",
                 "The response gives ordered, concrete next steps and recommends re-running ingestion rather than claiming to start it",
                 {
-                    "text": "Findings cite LLM-KB check-ids",
-                    "evaluator": "regex",
-                    "pattern": "LLM-KB-\\d{3}"
-                },
-                {
                     "text": "No raw 12-digit account ID is exposed",
                     "evaluator": "regex",
-                    "pattern": "\\b\\d{12}\\b",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
                     "match": "absent"
                 }
             ]
         },
         {
-            "id": "kb-ingestion-access-denied",
+            "id": "kb-never-synced",
             "task_type": "chat",
-            "prompt": "Our Bedrock knowledge base ingestion job keeps failing with an access denied error, but the S3 data is definitely there and unchanged. What is actually wrong and exactly what do we need to fix?",
-            "expected_output": "The response recognizes this as a permissions problem, not a data problem, and runs the read-only authorization check (LLM-KB-011): it simulates the KB/data-source execution role with iam:SimulatePrincipalPolicy for s3:GetObject and s3:ListBucket on the data-source prefix and kms:Decrypt on the data-source/vector-store CMK, inspects the role trust policy for the bedrock.amazonaws.com principal, and checks for a cross-account S3 bucket-policy deny or an Organizations SCP explicit deny (organizations:ListPoliciesForTarget / DescribePolicy). It returns the specific missing permission or policy statement to add rather than a doc link, recommends the fix without attaching or putting any policy (read-only), and when quoting a policy as evidence it masks the account segment of every ARN and does not echo secret-shaped condition values. It applies the service-vs-customer transient verdict first, confirming there is no active Bedrock service event (health:DescribeEvents) before prescribing a customer-side fix.",
+            "prompt": "Our knowledge base llmops-lf-kb-neversync in us-east-1 is ACTIVE but every query returns no sources. Check it in this account and tell me here in chat what's wrong.",
+            "expected_output": "Reads ListIngestionJobs for the knowledge base's data source and finds no ingestion job has ever run, so the vector store is empty. Raises LLM-KB-001 (HIGH) and says the fix is to run a sync (StartIngestionJob) as a command for the operator, without starting one itself.",
             "should_trigger": true,
             "assertions": [
-                "The response classifies the failure as an authorization/permissions problem rather than a data problem and runs a read-only authorization check",
-                "The response names a specific missing permission or policy statement to add (e.g. s3:GetObject/s3:ListBucket, kms:Decrypt, a trust-policy statement allowing bedrock.amazonaws.com, or a cross-account bucket-policy/SCP amendment) rather than only linking documentation",
-                "The response uses read-only detection (iam:SimulatePrincipalPolicy, trust-policy inspection, s3:GetBucketPolicy, organizations:ListPoliciesForTarget/DescribePolicy) and recommends rather than attaches/puts any policy",
-                "The response masks the account segment of any ARN or policy statement it quotes as evidence and does not echo secret-shaped condition values",
+                "The response states that no ingestion job has ever run for the data source, based on ListIngestionJobs, rather than guessing",
+                "The response raises LLM-KB-001 with severity HIGH",
+                "The response gives the sync as a command or step for the operator and does not claim to have started an ingestion job",
                 {
-                    "text": "At least one finding carries an LLM-KB check-id",
+                    "text": "Names LLM-KB-001",
                     "evaluator": "regex",
-                    "pattern": "LLM-KB-\\d{3}"
+                    "pattern": "LLM-KB-001"
                 },
                 {
                     "text": "No raw 12-digit account ID is exposed",
                     "evaluator": "regex",
-                    "pattern": "\\b\\d{12}\\b",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
                     "match": "absent"
                 }
             ]
         },
         {
-            "id": "kb-retrieval-throttling-quota",
+            "id": "kb-role-cannot-read-bucket",
             "task_type": "chat",
-            "prompt": "Ingestion into our knowledge base is crawling and our Retrieve calls are getting ThrottlingException under load. Are we hitting a quota, and what should we do? Answer here in a single reply, with no status message first.",
-            "expected_output": "The response treats this as a quota/throttling/limit problem and runs the read-only quota check (LLM-KB-012): it reads the relevant Bedrock quotas with servicequotas:GetServiceQuota (service-code bedrock) for the embedding model's requests-per-minute quota (embedding models are throttled by requests per minute, not tokens per minute) and the knowledge-base/Retrieve request-rate quotas, and correlates CloudWatch throttling/usage signals (InvocationThrottles and Invocations on the embedding model, or retrieval-path throttling) over a window. Where AWS publishes no hard number it marks the threshold workload-specific and reports it at INFO rather than inventing a number. It recommends requesting an increase for the specific quota (giving the service-quotas request-service-quota-increase command) and/or batching/backing off, but does not request the increase itself (read-only). It applies the service-vs-customer transient verdict, ruling out an active Bedrock service event (health:DescribeEvents) before prescribing a customer-side fix, and reports chunk counts/sources/scores only.",
+            "prompt": "Ingestion for llmops-lf-kb-noread in us-east-1 fails every time, and the documents are definitely in S3. Is this our data or our permissions? Check this account and answer here in chat.",
+            "expected_output": "Reads failureReasons, which show the knowledge base's service role (llmops-lf-kbrole-noread) is not authorized to perform s3:GetObject. Classifies it as a permissions failure (LLM-KB-011, HIGH), not a data problem, reads the role's inline policy statically to confirm the missing grant, and recommends adding s3:GetObject on the data source prefix, as an operator step.",
             "should_trigger": true,
             "assertions": [
-                "The response identifies a quota/throttling/limit root cause and reads Bedrock quotas via servicequotas:GetServiceQuota correlated with CloudWatch throttle/usage signals over a window",
-                "The response says the embedding model used for ingestion is throttled by its requests-per-minute quota, not a tokens-per-minute quota, and names that quota as the one to read",
-                "The response marks any threshold with no AWS-published number as workload-specific and reports it at INFO rather than inventing a number",
-                "The response recommends requesting an increase for the specific quota (and/or backoff/batching) and gives the command rather than requesting the increase itself, consistent with being read-only",
-                "The response applies the service-vs-customer transient verdict (checks health:DescribeEvents for an active service event) before prescribing a customer-side fix",
+                "The response classifies the failure as a permissions problem rather than a data or format problem",
+                "The response names s3:GetObject as the denied action and the knowledge base's service role as the principal",
+                "The response raises LLM-KB-011 and does not modify the role or the bucket policy itself",
                 {
-                    "text": "The throttling finding carries LLM-KB-012",
+                    "text": "Names LLM-KB-011",
                     "evaluator": "regex",
-                    "pattern": "LLM-KB-012"
+                    "pattern": "LLM-KB-011"
                 },
                 {
                     "text": "No raw 12-digit account ID is exposed",
                     "evaluator": "regex",
-                    "pattern": "\\b\\d{12}\\b",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
                     "match": "absent"
                 }
             ]
         },
         {
-            "id": "neg-live-bedrock-outage",
+            "id": "kb-vector-index-deleted",
             "task_type": "chat",
-            "should_trigger": false,
-            "prompt": "Every Bedrock model call in us-east-1 started returning ServiceUnavailableException ten minutes ago and our app is down. Is this an AWS outage or something on our side?"
+            "prompt": "Retrieve calls against llmops-lf-kb-vsgone in us-east-1 started failing, but the knowledge base is still ACTIVE and its last sync shows COMPLETE. What's wrong? Check this account and tell me here in chat.",
+            "expected_output": "Reads the knowledge base's storage configuration (S3 Vectors, index llmops-lf-vsgone in bucket llmops-lf-vectors) and checks the index, which no longer exists. Notes that the latest COMPLETE sync scanned one document but indexed none. Concludes that the vector index was deleted out from under an ACTIVE knowledge base, so ACTIVE and COMPLETE don't mean retrieval works, and recommends recreating the index and re-syncing.",
+            "should_trigger": true,
+            "assertions": [
+                "The response checks the vector store itself rather than relying on the knowledge base status",
+                "The response concludes that the S3 Vectors index the knowledge base points at no longer exists",
+                "The response says that ACTIVE status and a COMPLETE sync don't prove retrieval works",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
         },
         {
-            "id": "neg-who-can-call-bedrock",
+            "id": "invocation-log-destination-unprotected",
             "task_type": "chat",
-            "should_trigger": false,
-            "prompt": "Which IAM users in this account still have long-lived access keys that could invoke Bedrock models? We want to phase them out."
+            "prompt": "Our Bedrock invocation logs in us-east-1 include full prompt text. Are they stored safely? Check this account and answer here in chat.",
+            "expected_output": "Reads the logging configuration (CloudWatch log group /llmops-demo/bedrock-invocations, text data delivery on) and the log group, which has no kmsKeyId and no retention set. Raises LLM-INV-010 (HIGH) for prompt text in a log group without a customer managed KMS key, and reports the never-expiring retention in the same evidence.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the log group's encryption and retention settings from the account",
+                "The response states that the log group has no customer managed KMS key and that retention never expires",
+                "The response raises LLM-INV-010 with severity HIGH",
+                {
+                    "text": "Names LLM-INV-010",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-010"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "legacy-model-in-use",
+            "task_type": "chat",
+            "prompt": "Are any of the Bedrock models we actually call in us-east-1 heading for end-of-life? Check the last 14 days in this account and answer here in chat.",
+            "expected_output": "Finds which models were invoked from the invocation logs or the AWS/Bedrock metrics, resolves inference profiles to their member models, and reads each model's lifecycle status. meta.llama3-8b-instruct-v1:0 is LEGACY and was invoked, so LLM-INV-003 (HIGH) fires for it. Models with ACTIVE status are not flagged.",
+            "should_trigger": true,
+            "assertions": [
+                "The response bases the list of models on actual invocations, not on every model available in the Region",
+                "The response identifies meta.llama3-8b-instruct-v1:0 as LEGACY and in use",
+                "The response raises LLM-INV-003 and does not flag ACTIVE models",
+                {
+                    "text": "Names LLM-INV-003",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-003"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "direct-model-ids-instead-of-profiles",
+            "task_type": "chat",
+            "prompt": "Are any of our Bedrock calls in us-east-1 using a bare model ID where they should use an inference profile? Check the last 14 days in this account and answer here in chat.",
+            "expected_output": "Reads modelId values from the invocation logs and separates inference-profile IDs (us.*, application profile ARNs) from bare model IDs (amazon.nova-lite-v1:0, amazon.nova-2-lite-v1:0, meta.llama3-8b-instruct-v1:0). Raises LLM-INV-002 for bare IDs of models that have a cross-Region profile, and notes that amazon.nova-2-lite-v1:0 supports only INFERENCE_PROFILE, so its bare-ID calls fail.",
+            "should_trigger": true,
+            "assertions": [
+                "The response lists the bare model IDs found in the account's invocations rather than giving generic advice",
+                "The response raises LLM-INV-002",
+                "The response notes that a model which supports only inference profiles cannot be called by bare ID",
+                {
+                    "text": "Names LLM-INV-002",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-002"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-iam-boundary",
+            "task_type": "chat",
+            "prompt": "Lambda llmops-lf-app-boundary has AmazonBedrockFullAccess on its role, yet InvokeModel in us-east-1 returns AccessDenied. Where is the deny coming from?",
+            "should_trigger": true,
+            "expected_output": "A permissions boundary (or an explicit deny in an attached/SCP-style policy) overrides the AmazonBedrockFullAccess grant. The answer locates the deny rather than concluding the managed policy is insufficient.",
+            "assertions": [
+                "The response identifies a permissions boundary or explicit deny as the source, not a missing allow",
+                "The response explains that an explicit deny or boundary overrides a managed allow policy",
+                "The response says where to look to confirm the deny",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-boundary"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-req-schema",
+            "task_type": "chat",
+            "prompt": "Our Lambda llmops-lf-app-schema calls InvokeModel on us.amazon.nova-lite-v1:0 and gets ValidationException 'Malformed input request'. The code is in the function. What is wrong?",
+            "should_trigger": true,
+            "expected_output": "The request body does not match the model's expected schema for the API being called, typically native InvokeModel body shape versus Converse. The answer names the specific malformed field or wrong body shape and gives the correct form.",
+            "assertions": [
+                "The response identifies the specific field or body shape that is malformed",
+                "The response gives the corrected request shape",
+                "The response does not attribute the failure to permissions or model availability",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-schema"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "bc-ip-required",
+            "task_type": "chat",
+            "prompt": "Lambda llmops-lf-app-ondemand gets 'Invocation of model ID amazon.nova-2-lite-v1:0 with on-demand throughput isn't supported'. What ID should it use, and is anything else in this account calling Bedrock models the same broken way? Check this account and answer here in chat.",
+            "should_trigger": true,
+            "expected_output": "The model is not offered with on-demand throughput and must be called through an inference profile. The answer supplies the correct inference-profile identifier form.",
+            "assertions": [
+                "The response explains that the model requires an inference profile rather than on-demand invocation",
+                "The response gives the correct identifier form to use",
+                "The response does not suggest requesting a quota increase as the fix",
+                {
+                    "text": "The specific resource named in the question is identified in the answer",
+                    "evaluator": "regex",
+                    "pattern": "llmops\\-lf\\-app\\-ondemand"
+                },
+                {
+                    "text": "At least one finding carries a INV catalog check-id",
+                    "evaluator": "regex",
+                    "pattern": "LLM-INV-\\d{3}"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
         },
         {
             "id": "neg-bedrock-bill-doubled",
             "task_type": "chat",
             "should_trigger": false,
             "prompt": "Our Amazon Bedrock bill doubled last month. Which model is driving the spend and how do we cut it?"
+        },
+        {
+            "id": "neg-guardrail-blocks-correct-answers",
+            "task_type": "chat",
+            "prompt": "Our Bedrock guardrail keeps blocking correct answers about refund amounts. Which guardrail setting is doing that and how do we tune it?",
+            "expected_output": "Guardrail tuning belongs to opsai-bedrock-security, not opsai-bedrock-review. The skill should not load.",
+            "should_trigger": false,
+            "assertions": [
+                "The response addresses guardrail configuration rather than model access, invocation logging or Knowledge Base health"
+            ]
         }
     ]
 }

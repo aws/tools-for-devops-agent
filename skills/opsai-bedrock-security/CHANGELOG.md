@@ -1,6 +1,11 @@
 # Changelog
 
 ## 1.0.0
+- Description: covers AccessDenied that began when a guardrail was added (missing `bedrock:ApplyGuardrail`). It had excluded every AccessDenied, so the agent skipped the skill for `gr-no-apply`.
+- The account-ID rule covers naming the account that was checked. Evals: `bpa-dormant-keys` accepts that the eval account has no dormant key and checks that no active key is recommended for deletion.
+- Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
+- Eval run 2026-11-24: LLM-BPA-006 remediation is a staged decommission (deactivate, watch, then delete) instead of immediate deletion.
+- Evals: `grounding-score-far-below-threshold` is removed (scored the same with and without the skill); `gr-no-apply` asks the agent to check the account; check-id assertions are dropped from questions that name no account resource.
 
 - PR #268 review item 3 (evals): `grounding-score-near-threshold-invented-fact` is removed; it is reasoning over text given in the prompt and scored 7/7 with and without the skill. `guardrail-latency-streaming` asserts the trace fields `guardrailProcessingLatency` and `guardrailCoverage`; `tool-results-not-evaluated` asserts ruling out the ordinary zero-intervention causes and naming `ApplyGuardrail` for the application to call.
 - PR #268 review item 1 (IAM reads and action names):

@@ -1,0 +1,75 @@
+{
+  "version": "v18",
+  "iteration": 1,
+  "eval_id": "cost-throttle-default-quota",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response reports specific account-level quotas (6,000,000 TPM for Sonnet 5 cross-region and global profiles, 3M input/300K output for Bedrock-mantle endpoint) rather than a generic figure, explicitly tied to the account (012345678901_1) and region (us-east-1). It compares observed usage (peak ~1.21M tokens/min, ~20% of limit, 150 requests/min peak with no RPM quota existing) against these quotas, concluding usage doesn't approach the limit. It distinguishes genuine under-provisioning (ruled out, since no CloudWatch throttles recorded and usage is well below quota) from other causes (burst within a minute, max_tokens reservation inflating effective usage, client-side errors unrelated to quota). It gives an ordered remediation plan: (1) get exact error details to confirm what's actually throttling, (2) confirm model ID/profile being called, (3) check for bursts and max_tokens settings, (4) add CloudWatch alarms \u2014 and explicitly advises not requesting a quota increase yet since data doesn't support that being the fix. This matches the expected output's structure: confirm quota, measure the breach, then decide between increase vs. call pattern change, with appropriate ordering and reasoning.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reports the actual applicable quota value or says precisely where to read it, rather than quoting a generic number",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response gives a table with specific quota values: 'Cross-region tokens/min...6,000,000 | 6,000,000', 'Global cross-region tokens/min...6,000,000 | 6,000,000', 'Bedrock-mantle endpoint input tokens/min...3,000,000 | 3,000,000', 'Bedrock-mantle endpoint output tokens/min...300,000 | 300,000', tied to account 012345678901_1 in us-east-1.",
+          "reasoning": "The agent reports concrete, account-specific applied and default quota values rather than a generic number, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response compares observed usage against the quota rather than assuming the quota is the problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Peak usage: The highest usage was about 1.21M tokens in one minute, around 20% of the 6M limit... No throttles recorded: CloudWatch shows no InvocationThrottles for this account and region in the past 7 days.' and 'So the numbers don't show a quota increase would fix this, and I wouldn't request one yet.'",
+          "reasoning": "The agent explicitly compares observed usage (1.21M tokens, 20% of limit) against the quota and concludes the quota is not the problem, rather than assuming it is.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes sustained under-provisioning from burstiness that retry with backoff would absorb",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response mentions 'Check for short bursts and max_tokens... a burst inside one minute could still hit a limit' but does not explicitly distinguish sustained under-provisioning from burstiness that retry-with-backoff would absorb, nor does it discuss retry/backoff strategies at all.",
+          "reasoning": "While the agent raises the possibility of bursts within a minute, it never discusses whether retries with backoff would resolve transient burst-related throttling versus a sustained capacity shortfall requiring a quota increase. This distinction, central to the assertion, is absent from the output.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response's findings (e.g., 'Three of the five models...failed on every call, which points to access or config problems rather than quota' and the 'What I'd do next' recommendations) do not carry any LLM-COST, LLM-PT, or LLM-INV check-id labels or explicit severities.",
+          "reasoning": "The agent does raise findings/observations (e.g., about client errors and model access issues) but none of these are tagged with the required check-id format (LLM-COST, LLM-PT, LLM-INV) or an associated severity level, so the assertion fails since findings were raised without the required structured tagging.",
+          "confidence": "high"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 1 match(es), first: '012345678901_1'"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.4
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "15m12s",
+    "cost": "$7.57",
+    "context_window": {
+      "utilization": "5.3%",
+      "compaction_count": 0
+    }
+  }
+}

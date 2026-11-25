@@ -1,0 +1,72 @@
+{
+  "version": "v16",
+  "iteration": 1,
+  "eval_id": "inv-cross-region-latency",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response attributes the added latency primarily to the cross-region network path (Ireland to N. Virginia round trips, TCP/TLS connection overhead), explains it compounds per request (especially for fast calls like Nova Lite, and connection reuse issues), and notes it hurts streaming/small-latency workloads most. It also discusses that inference profiles (us.*) can route across multiple US regions, adding more hops. It gives concrete options: call Bedrock in eu-west-1 directly (move workload/inference to same region) or use EU inference profiles (eu.*), and explicitly states the data-routing implication (data staying in US vs. moving to EU-west-1 after migration). While it doesn't explicitly mention 'multi-turn' flows by name, it does mention streaming-like fast calls (Nova Lite, embeddings) and the compounding connection overhead per request. The core expected elements - cross-region attribution, per-request compounding, concrete options (same-region or cross-region inference profile), and data-routing implication - are all substantively present.",
+      "evidence": "\"Cross-region calls add one round trip per request... A new TCP and TLS connection costs several more round trips. If your client opens a new connection for each call, you pay that every time. This hurts most on fast, small calls like Nova Lite or embeddings... Call Bedrock in eu-west-1 and switch to the EU inference profiles (eu.*)... It also keeps your data in the US, which may matter after a move to eu-west-1.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response attributes the latency to the cross-Region network path rather than to model performance",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Bedrock's latency metric only measures time inside the service... If the metric hasn't changed but your app sees slower calls, the extra time is being added outside Bedrock, which fits the cross-region path.\" Also: \"Cross-region calls are probably part of it... Cross-region calls add one round trip per request.\"",
+          "reasoning": "The agent explicitly distinguishes Bedrock's internal (model) latency metric, which it shows is flat/unchanged, from the added network latency due to cross-region calls, and attributes the perceived slowdown to the network path (round trips, connection setup) rather than to model performance degradation.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains why the effect compounds for streaming or multi-turn interactions",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response mentions 'A new TCP and TLS connection costs several more round trips. If your client opens a new connection for each call, you pay that every time. This hurts most on fast, small calls like Nova Lite or embeddings' but does not discuss streaming responses or multi-turn conversations/compounding effects explicitly.",
+          "reasoning": "While the agent discusses per-call overhead and connection reuse, it does not explicitly explain how the latency effect compounds for streaming (e.g., multiple round trips for token streaming) or multi-turn interactions (e.g., repeated round trips across conversation turns). The closest statement is about small/fast calls being hurt more, but this doesn't address streaming or multi-turn compounding specifically.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives concrete options including the data routing implication",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Call Bedrock in eu-west-1 and switch to the EU inference profiles (`eu.*`)...\" and \"Your models use `us.*` inference profiles. Those can route a request to other US regions... It also keeps your data in the US, which may matter after a move to eu-west-1.\"",
+          "reasoning": "The agent provides concrete actionable options (switch region/endpoint, use eu.* inference profiles, reuse clients/connections, measure app-side latency) and explicitly calls out the data routing/residency implication of using us.* inference profiles keeping data in the US despite the move to eu-west-1.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 2,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "37s",
+    "cost": "$0.31",
+    "context_window": {
+      "utilization": "5.9%",
+      "compaction_count": 0
+    }
+  }
+}

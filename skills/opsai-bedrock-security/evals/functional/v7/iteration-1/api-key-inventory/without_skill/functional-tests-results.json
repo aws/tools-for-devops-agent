@@ -1,0 +1,120 @@
+{
+  "version": "v7",
+  "iteration": 1,
+  "eval_id": "api-key-inventory",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a detailed, substantive audit report: it requires the agent to actually call ListServiceSpecificCredentials for bedrock.amazonaws.com across all IAM users, evaluate each owner's IAM policies, list each key (masked ID or user), status, grant/risk tier, and removal recommendation with documentation links, apply specific risk-tier rules (High/Medium/Low/Info), note that last-used time is unknown rather than calling keys dormant, and mask any account ID to last four digits, while confirming the audit was read-only.\n\nThe agent's actual response does none of this substantive work. It reports a tool outage, says it could not query IAM, and provides no inventory of keys, no risk tiers, no per-key removal recommendations. Instead it gives generic 'removal criteria I'll apply once I have data' which do not match the specific required risk-tier logic (e.g., console-created API key user = High, orphaned = Medium, inactive = Low, expired = Info). It does correctly state no changes were made (read-only) and does not expose a full account ID (it shows '012345678901_1', which is a full 12-digit account ID, violating the requirement that only last four digits are allowed) \u2014 this actually violates the masking requirement by printing the full account number.\n\nOverall, the response fails to meet almost all of the expected output's substantive requirements: no key inventory, no risk tiers, no policy evaluation, no documentation links, and it also violates the account ID masking rule by displaying the full account ID instead of masking it to last four digits.",
+      "evidence": "\"Your agent space has one associated AWS account, 012345678901_1.\" \u2014 this exposes the full account ID instead of masking it. Also: \"I couldn't produce the report... I never queried IAM in your account. I can't tell you which Bedrock keys exist or which to remove.\" \u2014 no inventory, no risk tiers, no per-key analysis as required.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response lists every long-term Amazon Bedrock API key found by the account-wide listing (keys on any IAM user, not only on BedrockAPIKey users), identifying each by its IAM user name or by its key ID masked to the last four characters",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"I never queried IAM in your account. I can't tell you which Bedrock keys exist or which to remove.\"",
+          "reasoning": "The agent explicitly states it could not query IAM at all due to a tool outage, so no keys are listed.",
+          "confidence": "high"
+        },
+        {
+          "text": "For each API key, the response says what it can do in Amazon Bedrock (its grant and risk tier) and whether to remove it, as steps for the customer",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Removal criteria I'll apply once I have data\" followed by generic bullet points, no actual keys listed.",
+          "reasoning": "No per-key information is given since no data was collected; only generic removal criteria are listed, not tied to any specific key or user.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says that IAM does not report when an API key was last used and does not call any API key dormant or never used",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"The CloudTrail lookup that would have given last-use data was also unavailable.\" This does not say IAM never reports last-used; it attributes lack of data to a tool outage, not to an inherent IAM limitation. Also no key is called dormant/never used, but the specific factual claim about IAM reporting is missing.",
+          "reasoning": "The response never states that IAM does not report last-used timestamps for API keys; instead it says CloudTrail lookup was unavailable, which is a different statement about an outage, not a factual claim about IAM's reporting capability.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that IAM does not report when an Amazon Bedrock API key was last used, so whether each key is still in use is unknown",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"The CloudTrail lookup that would have given last-use data was also unavailable.\" No statement that IAM itself doesn't report last-used times for API keys specifically.",
+          "reasoning": "The response does not state that IAM lacks last-used reporting for Bedrock API keys as a general fact; it instead blames the outage for not getting CloudTrail data.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response treats an expired API key as unable to be re-enabled and an inactive one as able to be re-enabled",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The removal criteria only say \"Remove keys that are inactive or expired\" without distinguishing re-enablement capability.",
+          "reasoning": "The response does not discuss the distinction between expired keys (unable to be re-enabled) and inactive keys (able to be re-enabled) at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that the audit is read-only and made no change, and does not claim to have deleted, deactivated or changed any key",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"I changed nothing in the account.\" and \"I can't delete IAM credentials myself. The final removal would have to be done by you.\"",
+          "reasoning": "The response explicitly states it made no changes and did not delete or modify anything.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response never prints a full API key ID, an API key's ServiceCredentialAlias or its ServiceUserName",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response contains no such identifiers; only generic placeholders like <user> and BedrockAPIKey-... pattern are mentioned.",
+          "reasoning": "No full API key ID, ServiceCredentialAlias, or ServiceUserName is printed anywhere in the response since no data was retrieved.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not end with an offer or a follow-up question",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Try again in a minute or two... Ask me to re-run the audit and I'll start it again.\"",
+          "reasoning": "The response ends with suggestions and an implicit offer to re-run the audit, which functions as a follow-up prompt.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites AWS documentation with at least one docs.aws.amazon.com link",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The response contains no 12-digit number",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 1 match(es), first: '012345678901_1'"
+        },
+        {
+          "text": "No full access key ID or Amazon Bedrock API key ID is exposed, and no key ID is shown with its AKIA, ASIA or ACCA prefix plus 8 or more characters",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 8,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 11,
+        "pass_rate": 0.2727
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "19s",
+    "cost": "$0.17",
+    "context_window": {
+      "utilization": "4.3%",
+      "compaction_count": 0
+    }
+  }
+}

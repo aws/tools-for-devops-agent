@@ -1,5 +1,10 @@
 # Changelog
 ## 1.0.0
+- Evals: `tr-spot-interruption` is removed (scored the same with and without the skill in two runs).
+- Evals: `reg-promote-without-retrain` is removed (general guidance, scored the same with and without the skill).
+- Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
+- Evals: `training-job-failed-malformed-data` is replaced by `training-job-failed-internal-error`, which matches the eval account's failed job (AlgorithmError, SageMaker internal 500). `tr-execution-role-s3` states the bucket's SSE-KMS customer managed key.
+- Evals: `tr-quota-resourcelimitexceeded`, `tr-passrole-denied` and `tr-job-fails-no-logs` are removed (scored the same with and without the skill); check-id assertions are dropped from questions that name no account resource.
 
 - PR #268 review item 2 (evals): `capacity-vs-quota` names `InsufficientCapacityError`, the failure reason SageMaker reports, instead of EC2's `InsufficientInstanceCapacity`.
 - PR #268 review item 1 (IAM reads and action names):

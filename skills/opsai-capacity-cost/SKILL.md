@@ -341,7 +341,7 @@ free-text quota names), §19 (`storedBytes` lags), §22 (exclusive `End`).
 ## Related skills (optional)
 
 This skill works on its own and loads nothing outside its own `references/` and `assets/`. When a question
-reaches into an area listed under *When NOT to Use*, read `references/related-skills.md` and:
+reaches into an area listed under *When NOT to Use*, read [related-skills.md](references/related-skills.md) and:
 
 1. If the skill named there is in your available skills, load it and use it for that part.
 2. If it isn't, cover that part yourself with the fallback check in that file and general AWS knowledge.
@@ -361,4 +361,5 @@ finding); [checks-model-invocation.md](references/checks-model-invocation.md) (b
 [collection-reference.md](references/collection-reference.md) (which API per signal);
 [api-quirks.md](references/api-quirks.md) (before interpreting a response; quota lookup §18, Step 6);
 [quota-codes.md](references/quota-codes.md) (quota-code shortcuts for `GetServiceQuota`, verified live; Step 6);
+[related-skills.md](references/related-skills.md) (when a question reaches an area under *When NOT to Use*);
 [capacity-cost-report-template.md](assets/capacity-cost-report-template.md) (only for a full report).

@@ -1,0 +1,80 @@
+{
+  "version": "v16",
+  "iteration": 2,
+  "eval_id": "self-hosted-model-locus-not-provider",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response aligns closely with the expected output. It explicitly states locus leans INFRASTRUCTURE ('leaning INFRASTRUCTURE (your serving layer)') rather than PROVIDER, and explains the rationale that matches the expected reasoning: 'For a self-hosted model you are the provider, so there's no model-provider incident to look for' \u2014 this correctly treats provider health as not-applicable (not no-datapoints), matching the expectation. It binds error diagnosis to the correct AWS/ApplicationELB metrics: 'HTTPCode_ELB_503_Count', 'HealthyHostCount', 'HTTPCode_Target_5XX_Count' \u2014 covering the Target_5XX_Count metric as expected (4XX is not explicitly mentioned, but 5XX is correctly used as the primary signal, which is reasonable since the issue is 503s). The agent does NOT suggest looking for an AWS Health event for a 'model service' \u2014 instead it limits AWS-side checks to 'regional ELB or EKS event' which is appropriate infrastructure-level checking, not a model-service health check. It also does not suggest a cross-region inference profile, which aligns with the expectation. Finally, it hands off the serving layer investigation to the host: 'Check kubectl get pods, pod events... Check vLLM pod logs... Run kubectl rollout history' \u2014 this matches 'serving layer is handed to the host investigation.' Overall the response substantively satisfies all components of the expected output.",
+      "evidence": "\"Where the fault sits:** UNDETERMINED, leaning INFRASTRUCTURE (your serving layer)... For a self-hosted model you are the provider, so there's no model-provider incident to look for. The only AWS-side cause would be a regional ELB or EKS event... HTTPCode_ELB_503_Count is non-zero, and HealthyHostCount is 0... HTTPCode_Target_5XX_Count is non-zero... Check kubectl get pods, pod events, and the target group health reasons.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The locus is INFRASTRUCTURE and not PROVIDER",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Where the fault sits: UNDETERMINED, leaning INFRASTRUCTURE (your serving layer)\" and \"The most likely location is your own serving path (ALB, targets or vLLM pods), not AWS.\"",
+          "reasoning": "The agent explicitly leans toward INFRASTRUCTURE and not PROVIDER, stating the self-hosted model has no provider-side incident to consider.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provider health is recorded as not-applicable rather than as a missing or zero signal",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"For a self-hosted model you are the provider, so there's no model-provider incident to look for. The only AWS-side cause would be a regional ELB or EKS event, and I can't read that from here.\"",
+          "reasoning": "The agent treats provider/model-provider health as not-applicable (since the user self-hosts, there is no model provider incident concept), rather than treating it as a missing/zero metric signal. It separately notes AWS Health Dashboard check as a distinct, not-applicable-labeled consideration.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not propose a cross-region inference profile or any Bedrock-specific failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response contains no mention of 'cross-region inference profile', Bedrock failover, or any Bedrock-specific remediation; it only discusses ALB, target groups, vLLM pods, and AWS Health Dashboard for ELB/EKS.",
+          "reasoning": "No Bedrock-specific suggestions appear anywhere in the output, satisfying the assertion that none should be proposed.",
+          "confidence": "high"
+        },
+        {
+          "text": "The error signals are bound to load balancer or application metrics rather than AWS/Bedrock",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"HTTPCode_ELB_503_Count is non-zero\", \"HealthyHostCount is 0\", \"HTTPCode_Target_5XX_Count is non-zero\", and \"If you paste the ALB metrics (HealthyHostCount, HTTPCode_ELB_5XX_Count, HTTPCode_Target_5XX_Count) or a few vLLM pod log lines and events...\"",
+          "reasoning": "All referenced error signals are ALB/application-level metrics (ELB, target group, vLLM logs), not AWS/Bedrock service metrics, confirming the binding described in the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "No Bedrock namespace is asserted for a self-hosted model",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "21s",
+    "cost": "$0.18",
+    "context_window": {
+      "utilization": "5.0%",
+      "compaction_count": 0
+    }
+  }
+}
