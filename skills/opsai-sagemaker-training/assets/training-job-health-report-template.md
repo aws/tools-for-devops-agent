@@ -49,7 +49,7 @@ publish are marked `workload-specific` at `INFO`.
 
 | Job | Outcome | Billed GPU time | check-id |
 |---|---|---|---|
-| `<name>` | `<failed / empty-output / stalled>` | `<BillableTimeInSeconds or instance-hours>` | `<LLM-SM-TRAIN-002 / 007 / 008>` |
+| `<name>` | `<failed / empty-output / stalled>` | `<BillableTimeInSeconds × InstanceCount, or instance-hours>` | `<LLM-SM-TRAIN-002 / 007 / 008>` |
 
 Every failed or empty-output GPU run that started on instances is billed, from `TrainingStartTime`
 to `TrainingEndTime`; a job that never started (for example a capacity failure) is not. Surface the
