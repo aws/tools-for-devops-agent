@@ -227,7 +227,8 @@ Step 6 — Rule. A TOTAL PRECEDENCE LADDER on COUNTS, never a share calculation.
       BINDING CAVEAT: on self-hosted-lambda the platform metric cannot split client from
       server (references/hosting-bindings.md). An undifferentiated error count does NOT
       satisfy R1 — go to R3 or R4 and name the un-splittable slot.
-  R2. SERVER_ERRORS `measured N`, N >= 1, across multiple unrelated models, AND
+  R2. SERVER_ERRORS `measured N`, N >= 1, across multiple unrelated models (on a self-hosted
+      binding: across the callers of the one serving endpoint), AND
       Step 4 found no correlated customer change               → locus=PROVIDER on a managed
       binding, locus=INFRASTRUCTURE on a self-hosted one (PROVIDER has no referent there),
       transience=TRANSIENT.
@@ -243,7 +244,12 @@ Step 6 — Rule. A TOTAL PRECEDENCE LADDER on COUNTS, never a share calculation.
       R4 does not apply. If the customer-side set IS the only set with coverage — traffic is
       confirmed real while the error slots are blank — R4 does not apply
       either: go to R5. Blank error slots against live traffic are evidence, not an
-      absence of it.
+      absence of it. An OPERATOR-REPORTED observation is coverage too: when the account is
+      not connected and the operator states the symptom ("503s across all services",
+      "Bedrock metrics look normal"), record it `not-queried (operator-reported: …)` and
+      rule on it as reported. R4 needs no read AND no report. Worked example: vLLM on EKS
+      behind an ALB, operator reports 503s across all services for an hour, nothing
+      queryable → R2 on the reported server errors → `locus=INFRASTRUCTURE`, never R4.
   R5. TERMINAL CATCH-ALL — reached whenever R1..R4 did not fire, and it can always be
       reached. The ledger carries at least one `measured` row and no error or throttle
       signal is >= 1                                           → locus=APPLICATION,

@@ -26,7 +26,7 @@ A `locus=PROVIDER` asserted without a `health:DescribeEvents` result is unsuppor
 
 | API (service) | Fields contributed | Feeds |
 |---|---|---|
-| `cloudwatch:GetMetricData` | `Invocations`, `InvocationClientErrors`, `InvocationServerErrors`, `InvocationThrottles`, `InvocationLatency`, `TimeToFirstToken` over the window, per `ModelId` | classifier Steps 1–4; LLM-TEL-001 |
+| `cloudwatch:GetMetricData` | `Invocations`, `InvocationClientErrors`, `InvocationServerErrors`, `InvocationThrottles`, `InvocationLatency`, `TimeToFirstToken` over the window, per `ModelId` **and with no dimension**: requests that fail before model resolution carry no `ModelId`, so the error and throttle totals come from the no-dimension query ([runtime metrics](https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html)) | classifier Steps 1–4; LLM-TEL-001 |
 | `cloudwatch:ListMetrics` | which of `AWS/Bedrock`, `AWS/Bedrock/Guardrails`, `AWS/Bedrock/Agents` have data at all | telemetry readiness; absence is itself a finding |
 | `cloudwatch:DescribeAlarms` | whether an alarm existed that should have caught this | gap reporting |
 
