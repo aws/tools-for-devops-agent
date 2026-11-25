@@ -35,6 +35,9 @@ Metadata:
           - EnableSageMakerAIOpsReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
+          - EnableOpsaiCapacityCost
+          - EnableOpsaiIncidentTriage
+          - EnableStorageEbsOperations
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -211,6 +214,36 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableOpsaiCapacityCost:
+    Type: String
+    Description: >
+      opsai-capacity-cost skill. Bedrock, Cost Explorer, CloudWatch, Logs Insights,
+      Service Quotas and s3:GetLifecycleConfiguration reads are already covered by
+      AIDevOpsAgentAccessPolicy; this parameter adds only pricing:GetProducts (published
+      per-token prices for the estimated-cost cross-check; a metadata read, no account data) and
+      the bedrock-agentcore runtime and gateway List/Get reads for the AgentCore status hand-off.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableOpsaiIncidentTriage:
+    Type: String
+    Description: >
+      opsai-incident-triage skill. Health, CloudWatch, Logs, CloudTrail, Bedrock model, agent and
+      knowledge base, IAM policy and Organizations reads are already covered by
+      AIDevOpsAgentAccessPolicy; this parameter adds bedrock:GetFoundationModelAvailability,
+      bedrock:GetIngestionJob and the bedrock-agentcore runtime and gateway List/Get reads.
+      Metadata only.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  EnableStorageEbsOperations:
+    Type: String
+    Description: >
+      Amazon EBS Operations skill (adds read-only ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId,
+      dlm:GetLifecyclePolicies/GetLifecyclePolicy, rbin:ListRules/GetRule, fis:GetExperiment, and
+      compute-optimizer:GetEBSVolumeRecommendations).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableSsmAutomationExecutionRead:
     Type: String
     Description: >
@@ -241,6 +274,9 @@ Conditions:
   SkillAwsFsxnOperationsReview: !Equals [!Ref EnableAwsFsxnOperationsReview, 'true']
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
+  SkillOpsaiCapacityCost: !Equals [!Ref EnableOpsaiCapacityCost, 'true']
+  SkillOpsaiIncidentTriage: !Equals [!Ref EnableOpsaiIncidentTriage, 'true']
+  SkillStorageEbsOperations: !Equals [!Ref EnableStorageEbsOperations, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
   SsmAutomationExecutionRead: !Equals [!Ref EnableSsmAutomationExecutionRead, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
@@ -651,6 +687,78 @@ Resources:
               - pricing:DescribeServices
             Resource: '*'
 
+  # opsai-capacity-cost: adds ONLY pricing:GetProducts, the Price List read the skill uses to
+  # price CloudWatch token counts for its (estimated) cross-check against Cost Explorer. Every
+  # other read the skill makes -- bedrock:List*/GetFoundationModel/GetInferenceProfile/
+  # GetProvisionedModelThroughput/GetModelInvocationLoggingConfiguration, ce:Get*/List*,
+  # cloudwatch:GetMetricData/ListMetrics/DescribeAlarms, logs:Describe*/StartQuery/
+  # GetQueryResults, servicequotas:Get*/List*, s3:GetLifecycleConfiguration -- is already in
+  # AIDevOpsAgentAccessPolicy (v16). Metadata only: the Price List API returns published prices
+  # and no account data. Without this policy the skill reads prices from the Bedrock pricing
+  # page or reports the model as "unpriced: pricing:GetProducts denied"; billed figures, token
+  # reconciliation, Provisioned Throughput and quota checks run unchanged. The bedrock-agentcore
+  # List/Get reads for runtimes and gateways serve the AgentCore status hand-off; without them that
+  # read is a disclosed permission gap.
+  PolicyOpsaiCapacityCost:
+    Type: AWS::IAM::Policy
+    Condition: SkillOpsaiCapacityCost
+    Properties:
+      PolicyName: DevOpsAgentSkill-OpsaiCapacityCost
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: OpsaiCapacityCostPricingRead
+            Effect: Allow
+            Action:
+              - pricing:GetProducts
+            Resource: '*'
+          - Sid: OpsaiCapacityCostAgentCoreStatusRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:GetGateway
+            Resource: '*'
+
+  # opsai-incident-triage: adds the reads AIDevOpsAgentAccessPolicy (v16) lacks.
+  # bedrock:GetFoundationModelAvailability (model access agreement state for an AccessDenied or
+  # ResourceNotFound on a non-entitled model) and bedrock:GetIngestionJob (job status, statistics and
+  # failure reasons) are metadata reads; the bedrock-agentcore List/Get reads for runtimes and gateways
+  # serve the AgentCore status hand-off. Every other read (health:Describe*, cloudwatch, logs,
+  # cloudtrail:LookupEvents, bedrock:List*/GetAgent/GetAgentAlias/GetKnowledgeBase/GetGuardrail, IAM
+  # policy reads, organizations) is already granted. Left out: iam:SimulatePrincipalPolicy (refused by
+  # the agent runtime; the skill evaluates the policy documents) and bedrock:ApplyGuardrail (invokes
+  # the guardrail and is billed; the skill reads bedrock:GetGuardrail). Without this policy model
+  # access is judged from the error text, model lifecycle and CloudTrail, ingestion state from the
+  # ListIngestionJobs summaries, and an AgentCore runtime is reported as unread, never as absent.
+  PolicyOpsaiIncidentTriage:
+    Type: AWS::IAM::Policy
+    Condition: SkillOpsaiIncidentTriage
+    Properties:
+      PolicyName: DevOpsAgentSkill-OpsaiIncidentTriage
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: OpsaiIncidentTriageBedrockRead
+            Effect: Allow
+            Action:
+              - bedrock:GetFoundationModelAvailability
+              - bedrock:GetIngestionJob
+            Resource: '*'
+          - Sid: OpsaiIncidentTriageAgentCoreStatusRead
+            Effect: Allow
+            Action:
+              - bedrock-agentcore:ListAgentRuntimes
+              - bedrock-agentcore:GetAgentRuntime
+              - bedrock-agentcore:ListGateways
+              - bedrock-agentcore:GetGateway
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -770,6 +878,39 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # storage-ebs-operations: adds only the read actions the skill uses that
+  # AIDevOpsAgentAccessPolicy does not grant: the account's EBS encryption-by-default
+  # settings, Amazon Data Lifecycle Manager and Recycle Bin rules (snapshot management
+  # and reversibility), AWS FIS experiment details (injected-latency check), and the
+  # optional Compute Optimizer EBS recommendations. Every other API the skill calls
+  # (ec2:Describe*, ec2:GetSnapshotBlockPublicAccessState, CloudWatch, Service Quotas,
+  # AWS Backup, AWS KMS, Cost Explorer, fis:ListExperiments, AWS Health, CloudTrail) is
+  # already covered by the managed policy. Strictly read-only; no Modify*, Create*,
+  # Delete* or Put* is granted. Without this policy the skill lists the denied calls
+  # under Gaps and reports the dependent conclusions as unconfirmed.
+  PolicyStorageEbsOperations:
+    Type: AWS::IAM::Policy
+    Condition: SkillStorageEbsOperations
+    Properties:
+      PolicyName: DevOpsAgentSkill-StorageEbsOperations
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: StorageEbsOperationsReadOnly
+            Effect: Allow
+            Action:
+              - ec2:GetEbsEncryptionByDefault
+              - ec2:GetEbsDefaultKmsKeyId
+              - dlm:GetLifecyclePolicies
+              - dlm:GetLifecyclePolicy
+              - rbin:ListRules
+              - rbin:GetRule
+              - fis:GetExperiment
+              - compute-optimizer:GetEBSVolumeRecommendations
+            Resource: '*'
+
   # aws-systems-manager custom agent add-on: read the per-location settings of
   # multi-account Automation executions. GetAutomationExecution is the only
   # Automation read the review needs that AIDevOpsAgentAccessPolicy does not
@@ -818,13 +959,16 @@ Outputs:
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
         - aurora-incident-business-context: ${EnableAuroraIncidentBusinessContext} (config:GetResourceConfigHistory)
-        - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
+        - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:GetAgentRuntime/ListAgentRuntimes, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
         - sagemaker-ai-ops-review: ${EnableSageMakerAIOpsReview} (savingsplans:DescribeSavingsPlans)
         - aws-fsxn-operations-review: ${EnableAwsFsxnOperationsReview} (fsx:Describe*/ListTagsForResource, cloudwatch:DescribeAlarms/GetMetricData/GetMetricStatistics/ListMetrics, backup:ListProtectedResources/ListRecoveryPointsByResource, ec2:DescribeSecurityGroups/NetworkInterfaces/Subnets/RouteTables)
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
+        - opsai-capacity-cost: ${EnableOpsaiCapacityCost} (pricing:GetProducts, bedrock-agentcore:ListAgentRuntimes/GetAgentRuntime/ListGateways/GetGateway — Bedrock, Cost Explorer, CloudWatch, Logs, Service Quotas and s3:GetLifecycleConfiguration reads are covered by the managed policy; without it prices fall back to the pricing page or "unpriced")
+        - opsai-incident-triage: ${EnableOpsaiIncidentTriage} (bedrock:GetFoundationModelAvailability/GetIngestionJob, bedrock-agentcore:ListAgentRuntimes/GetAgentRuntime/ListGateways/GetGateway)
+        - storage-ebs-operations: ${EnableStorageEbsOperations} (ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId, dlm:GetLifecyclePolicies/GetLifecyclePolicy, rbin:ListRules/GetRule, fis:GetExperiment, compute-optimizer:GetEBSVolumeRecommendations)
         - aws-systems-manager custom agent add-on: ${EnableSsmAutomationExecutionRead} (ssm:GetAutomationExecution on this account's automation executions, for the per-location settings of multi-account runs; the aws-systems-manager skill itself needs no extra policy)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines

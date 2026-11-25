@@ -1,0 +1,79 @@
+{
+  "version": "v4",
+  "iteration": 2,
+  "eval_id": "gp3-throughput-saturation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'storage-ebs-operations' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'storage-ebs-operations' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies the gp3 volume vol-0123456789abcdef0 as throughput-bound: it computes actual throughput at the provisioned 125 MiB/s ceiling, confirms VolumeThroughputExceededCheck=1 continuously while VolumeIOPSExceededCheck=0 and IOPS usage (~500) is far below provisioned 3000. It correctly identifies the binding dimension is throughput, not IOPS, matching the expected root cause. It also notes the instance EBS baseline (149.01 MiB/s for c6i.xlarge, close to the expected 156.25 MB/s figure - minor discrepancy in units/calculation but same concept) as the next ceiling to consider when proposing a throughput increase, and recommends the volume's throughput be increased while being aware of the instance-level ceiling as a constraint - consistent with the expected guidance about keeping within instance EBS baseline. The core causal chain (gp3 throughput cap reached, IOPS not limiting, fix is to raise provisioned throughput within instance constraints) matches the expected root cause well.",
+      "evidence": "\"VolumeThroughputExceededCheck was 1 in 87 of 88 minutes... VolumeIOPSExceededCheck, the instance throttle checks and VolumeStalledIOCheck were all 0... The instance (c6i.xlarge, 149.01 MiB/s EBS limit) is not binding today... but it is the next ceiling.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says gp3 IOPS and throughput are provisioned independently and identifies throughput as the binding dimension.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The report states: '3000 IOPS / 125 MiB/s... the batch job does pure sequential 256 KiB reads: 500 IOPS x 256 KiB = 125 MiB/s, so the volume reaches its throughput cap while using only 17% of its IOPS. VolumeThroughputExceededCheck was 1... VolumeIOPSExceededCheck... were all 0.' This explicitly identifies throughput as the binding dimension and shows IOPS and throughput are independently tracked/provisioned (3000 IOPS vs 125 MiB/s separately), with throughput exceeded while IOPS is not.",
+          "reasoning": "The output clearly distinguishes IOPS (3000, not exceeded) from throughput (125 MiB/s, exceeded), demonstrating they are independent dimensions, and explicitly names throughput as the binding constraint.",
+          "confidence": "high"
+        },
+        {
+          "text": "The instance EBS baseline is checked before the volume is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The report includes 'Instance EBS burst balances stay at 99%' finding: 'i-1234567890abcdef0_5, 19:03\u201319:34 UTC: EBSIOBalance% and EBSByteBalance% held at a minimum of 99%, and InstanceEBSThroughputExceededCheck and InstanceEBSIOPSExceededCheck stayed at 0. Instance-level EBS bandwidth is not the bottleneck.' This check appears as a supporting observation alongside the volume-level finding, and the main Root Cause description also states: 'The instance (c6i.xlarge, 149.01 MiB/s EBS limit) is not binding today, with 132.8 MiB/s used across all volumes and burst balances at 99%, but it is the next ceiling.'",
+          "reasoning": "The instance-level EBS throughput limit (149.01 MiB/s) was checked and explicitly ruled out as not binding, with the volume then identified as the binding layer. Both checks are presented together, showing the instance was examined as part of the investigation before/alongside naming the volume as binding.",
+          "confidence": "high"
+        },
+        {
+          "text": "The proposed throughput target respects the gp3 rule of at most 0.25 MiB/s per provisioned IOPS.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output never proposes a specific throughput target or new MiB/s value. It only describes the current state (125 MiB/s at 3000 IOPS) and gaps like 'Job's true throughput demand unknown' and recommends in the Gaps section that 'a redeploy could revert it to 125 MiB/s' without giving a concrete remediation value.",
+          "reasoning": "The assertion requires a proposed throughput target that respects the 0.25 MiB/s per IOPS rule (e.g., raising throughput to some value X while ensuring IOPS >= 4X). The output does not propose any specific new throughput value or IOPS/throughput pairing for remediation - it only diagnoses the root cause and notes gaps. There is no explicit recommendation with numbers to check against the 0.25 MiB/s per IOPS rule.",
+          "confidence": "high"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        },
+        {
+          "text": "The gp3 throughput per IOPS rule is cited",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "6m9s",
+    "cost": "$3.07",
+    "context_window": {
+      "utilization": "10.5%",
+      "compaction_count": 0
+    }
+  }
+}

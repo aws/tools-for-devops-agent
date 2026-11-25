@@ -1,0 +1,80 @@
+{
+  "version": "v4",
+  "iteration": 3,
+  "eval_id": "io2-iops-saturation",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies the io2 volume as the binding constraint: vol-0123456789abcdef0 is pinned at exactly its provisioned 1000 IOPS, with queue length and write latency rising as a result, while ruling out throughput, instance-level EBS limits (EBSIOBalance%/EBSByteBalance% at 99%, no exceeded checks triggered), and configuration changes as causes. This matches the expected root cause that the io2 volume's provisioned IOPS is the binding layer, with the instance-level EBS baseline not being the constraint. The minor discrepancy is that the investigation reports VolumeIOPSExceededCheck returned no datapoints rather than =1 as expected, and does not explicitly compute the instance EBS baseline from DescribeInstanceTypes (6000 IOPS/156.25 MB/s), instead inferring via balance percentages. The investigation also does not explicitly propose a ModifyVolume action sized within headroom - it stops short of giving a concrete recommended value, though it implies the volume is the constraint to change. Despite these gaps (which are more about depth/detail than fundamental disagreement), the core causal identification - io2 volume saturated at provisioned IOPS, not instance-level limits - matches the expected root cause well. The agent didn't explicitly state 'what should I change' with a specific IOPS value, but the summary's overall thrust points to the same root cause and remediation direction (increase io2 provisioned IOPS).",
+      "evidence": "\"Cause: Workload saturating io2 provisioned IOPS (1000)... io2 vol-0123456789abcdef0 (10 GiB, 1000 provisioned IOPS, never modified) has served exactly 1000 IOPS of 8 KiB writes since the workload started... Instance EBS limits not exceeded: i-1234567890abcdef0_5 (c6i.xlarge): EBSIOBalance% and EBSByteBalance% held at 99%, and InstanceEBSIOPS/ThroughputExceededCheck = 0 throughout.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The io2 volume is judged by IOPS against its provisioned Iops, not by VolumeThroughputPercentage as a throughput signal.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"io2 vol-0123456789abcdef0 (10 GiB, 1000 provisioned IOPS, never modified) has served exactly 1000 IOPS of 8 KiB writes since the workload started... It handled 300,000 ops per 5 min at 100% of its provisioned IOPS... Throughput (~7.8 MiB/s) is not the limit.\" The volume's binding constraint is explicitly judged on IOPS vs provisioned IOPS, and throughput is explicitly ruled out as the limiting signal.",
+          "reasoning": "The output clearly identifies IOPS consumption against the provisioned 1000 IOPS as the saturation signal, and explicitly states throughput is not the limit, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The summed IOPS and throughput of all attached volumes are compared with the instance EBS baseline from DescribeInstanceTypes before the volume is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Instance total is ~1500 IOPS and ~133 MiB/s; CPU is ~1%. The other attached volumes are gp3 (3000 IOPS / 125 MiB/s): root vol-1234567890abcdef0_20, vol-1234567890abcdef0_19 and vol-1234567890abcdef0_16.\" There is no mention of DescribeInstanceTypes being called or used to derive the instance baseline, nor an explicit sum of all attached volumes' IOPS/throughput being compared against that baseline before naming the io2 volume as the binding layer.",
+          "reasoning": "While the output does mention instance totals and lists attached volumes, there is no explicit evidence that DescribeInstanceTypes was used to derive the baseline, nor a clear step showing the summed IOPS/throughput of all volumes being compared to that baseline prior to naming the io2 volume as the constraint. The instance-level check (EBSIOBalance%, EBSByteBalance%) is presented as a separate 'Instance EBS limits not exceeded' finding, not explicitly as a sum-of-volumes-vs-DescribeInstanceTypes-baseline calculation.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The recommendation gives an exact target IOPS and is presented as a proposal for operator approval, not as an executed change.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output's 'Findings' and 'Other Gaps' sections do not contain any explicit recommendation with a target IOPS value (e.g., 'increase provisioned IOPS to X') or any statement framing a change as a proposal for operator approval. The closest is the EbsOptimized note suggesting to 'confirm with describe-instance-attribute --attribute ebsOptimized', which is not a recommendation with an exact target IOPS.",
+          "reasoning": "The investigation summary identifies the cause (io2 volume saturated at 1000 provisioned IOPS) but does not provide an explicit recommendation with an exact target IOPS value, nor frame any change as a proposal pending operator approval. No concrete 'change X to Y IOPS' statement is present in the provided output.",
+          "confidence": "high"
+        },
+        {
+          "text": "The binding layer is reported",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        },
+        {
+          "text": "No ModifyVolume call is reported as executed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m44s",
+    "cost": "$2.86",
+    "context_window": {
+      "utilization": "7.1%",
+      "compaction_count": 0
+    }
+  }
+}
