@@ -86,15 +86,17 @@ Step 6 — Rule on the TOTAL precedence ladder R1→R5.
         INFRASTRUCTURE if quota posture rather than request shape is the cause.
         On self-hosted-lambda the platform metric cannot split client from server, so an
         undifferentiated count does NOT satisfy R1 — go to R3 or R4 and name the slot.
-    R2. SERVER_ERRORS `measured N>=1` across multiple unrelated models AND Step 4
+    R2. SERVER_ERRORS `measured N>=1` across multiple unrelated models (self-hosted: across
+        the callers of the one serving endpoint) AND Step 4
         found no correlated customer change                 → locus=PROVIDER on a managed
         binding, locus=INFRASTRUCTURE when self-hosted, transience=TRANSIENT.
     R3. BOTH sides carry a `measured` signal and they point opposite ways
                                                             → locus=UNDETERMINED, R3 gate
         template filled in from `measured` values only.
-    R4. EVERY ledger signal is `no-datapoints`/`not-queried` and the customer-side set has
-        no coverage either                                  → locus=UNDETERMINED as
-        no-evidence.
+    R4. EVERY ledger signal is `no-datapoints`/`not-queried`, the customer-side set has
+        no coverage either, AND the operator reported no symptom → locus=UNDETERMINED as
+        no-evidence. An operator-reported observation is recorded
+        `not-queried (operator-reported: …)` and ruled on as reported.
     R5. TERMINAL CATCH-ALL — R1..R4 did not fire. At least one `measured` row and no error
         or throttle signal >= 1                             → locus=APPLICATION,
         transience=PERSISTENT: the signal is healthy, demand is within limits, and no

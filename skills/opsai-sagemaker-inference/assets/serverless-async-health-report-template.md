@@ -10,11 +10,11 @@
 - **Window:** `<metric lookback window, e.g. last 14 days>`
 - **Not covered (disclosed):** `<endpoints / regions / checks skipped, with reason — permissions, budget, region-unsupported>`
 ## Per-Endpoint Config
-| Endpoint | Mode | `ServerlessConfig` (`MaxConcurrency`, `ProvisionedConcurrency`) | `AsyncInferenceConfig.OutputConfig.NotificationConfig` (success / error topics) | Scaling on `ApproximateBacklogSizePerInstance`? | `CurrentInstanceCount` + recent `Invocations` |
+| Endpoint | Mode | `ServerlessConfig` (`MaxConcurrency`, `ProvisionedConcurrency`) | `AsyncInferenceConfig.OutputConfig.NotificationConfig` (success / error topics) | Scaling on `ApproximateBacklogSizePerInstance`? | `CurrentInstanceCount` + recent `Invocations` (serverless) or `ApproximateBacklogSize` (async) |
 |---|---|---|---|---|---|
 | `<name>` | `<serverless / async>` | `<n / n or not set / n-a>` | `<both / one / none / n-a>` | `<yes / no / n-a>` | `<n, datapoints present / none>` |
 > `InService` with `CurrentInstanceCount` = 0 is the scale-to-zero case, not proof of serving
-> (api-quirks §1). Confirm instance count, backlog and recent `Invocations` before calling it healthy.
+> (api-quirks §1). Confirm instance count, backlog (async) and recent `Invocations` (serverless; async does not publish it) before calling it healthy.
 ## Signals Read
 | Signal | Source | Window | Observed value or "no datapoints" | Linked check |
 |---|---|---|---|---|

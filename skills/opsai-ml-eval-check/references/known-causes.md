@@ -23,7 +23,7 @@ diagnosed on the Bedrock path (SKILL.md Step 3).
 ## 3. Scores swing between runs on the same model
 
 - **Set `temperature: 0`** in the recipe's `inference` block; AWS states 0 makes results deterministic and larger values add randomness ([recipe parameters](https://docs.aws.amazon.com/nova/latest/userguide/customize-fine-tune-evaluate-understand-modify.html)).
-- **Read the judge's own uncertainty before comparing runs**: `llm_judge` reports `*_stderr` for scores, ties and inference errors, plus `lower_rate` / `upper_rate` (2.5th / 97.5th percentile bootstrap bounds) on the Bradley-Terry `winrate`; treat a difference inside those bounds as noise, not a regression — this skill's reading ([recipe parameters](https://docs.aws.amazon.com/nova/latest/userguide/customize-fine-tune-evaluate-understand-modify.html)).
+- **Read the judge's own uncertainty before comparing runs**: `llm_judge` reports `*_stderr` for scores, ties and inference errors, plus `lower_rate` / `upper_rate` (2.5th / 97.5th percentile bootstrap bounds) on the Bradley-Terry `winrate`; treat a difference inside those bounds as noise, not a regression — this skill's reading ([recipe parameters](https://docs.aws.amazon.com/nova/latest/userguide/customize-fine-tune-evaluate-understand-modify.html); `upper_rate` is defined on [Nova evaluation](https://docs.aws.amazon.com/nova/latest/userguide/nova-model-evaluation.html)).
 
 ## 4. Scores from two model versions cannot be compared
 

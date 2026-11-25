@@ -40,7 +40,14 @@
             "assertions": [
                 "The response names a specific metric to examine (for example InvocationThrottles) rather than describing throttling in general terms",
                 "The response gives an ordered, concrete next step (what to check first, then what to conclude) rather than a flat list of generic tips",
-                "The response distinguishes quota-driven throttling on the customer side from service-side capacity, instead of assuming one cause"
+                "The response distinguishes quota-driven throttling on the customer side from service-side capacity, instead of assuming one cause",
+                {
+                    "text": "The response starts with a TRIAGE line that carries a locus",
+                    "evaluator": "regex",
+                    "pattern": "(?i)TRIAGE:[^\\n]*locus="
+                },
+                "When AWS/Bedrock shows no InvocationThrottles, the response reads or names as the next read the guardrail throttle metric (AWS/Bedrock/Guardrails InvocationThrottles, dimension Operation=ApplyGuardrail) before ruling quota versus service",
+                "The response queries throttles without the ModelId dimension as well as per ModelId, because requests that fail before model resolution are published only without ModelId"
             ]
         },
         {
@@ -95,7 +102,13 @@
                     "text": "The boundary is disclosed in the findings",
                     "evaluator": "regex",
                     "pattern": "(?i)(boundary|outside AWS|cannot (see|read)|not-visible)"
-                }
+                },
+                {
+                    "text": "The TRIAGE line binds the workload to third-party",
+                    "evaluator": "regex",
+                    "pattern": "(?i)TRIAGE:[^\\n]*binding=third-party"
+                },
+                "The response reports the CLIENT_ERRORS, SERVER_ERRORS and THROTTLES slots as having no AWS signal for a third-party API (not-applicable / not-queried), never as zero or healthy"
             ]
         },
         {
@@ -113,9 +126,9 @@
         {
             "id": "inv-cross-region-latency",
             "task_type": "chat",
-            "prompt": "We moved our application to eu-west-1 but kept calling Bedrock in us-east-1, and latency is much worse than we expected.",
+            "prompt": "We moved our application from us-east-1 to eu-west-1 but kept calling Bedrock in us-east-1. Our client measured p50 per Converse call at about 1.2 s before the move and about 1.6 s after; our agent makes 6 sequential model calls per user request, and nothing else changed. Why is it slower and what should we do?",
             "should_trigger": true,
-            "expected_output": "The answer attributes the added latency to the cross-Region network path and explains that it compounds per request and worsens for streaming and multi-turn flows. It gives the concrete options: move the workload or the inference to the same Region, or use a cross-Region inference profile, with the data-routing implication stated.",
+            "expected_output": "The answer attributes the added per-call latency (about 0.4 s at p50 by the client's own measurement) to the cross-Region network path between the caller in eu-west-1 and bedrock-runtime in us-east-1, and explains that it is paid on every call, so it compounds across the 6 sequential calls per user request (roughly 2.4 s added per request) and also lands in streaming time to first token and multi-turn flows. It does not rule the hop in or out from Bedrock's InvocationLatency metric alone, because AWS defines that metric from when the request is sent to when the last token is received. It gives the concrete options: call Bedrock in the caller's Region where the model is offered (or move the caller back), or use a geographic cross-Region inference profile for the caller's geography, stating that requests may then be routed to any Region in that geography.",
             "assertions": [
                 "The response attributes the latency to the cross-Region network path rather than to model performance",
                 "The response explains why the effect compounds for streaming or multi-turn interactions",
@@ -124,7 +137,8 @@
                     "text": "At least one finding carries a INV/TEL/AC catalog check-id",
                     "evaluator": "regex",
                     "pattern": "LLM-(?:INV|TEL|AC)-\\d{3}"
-                }
+                },
+                "The response does not rule the cross-Region hop in or out from Bedrock's InvocationLatency metric alone and does not claim that metric excludes network time"
             ]
         },
         {
@@ -142,7 +156,13 @@
                     "text": "At least one finding carries a INV/TEL/AC catalog check-id",
                     "evaluator": "regex",
                     "pattern": "LLM-(?:INV|TEL|AC)-\\d{3}"
-                }
+                },
+                {
+                    "text": "The response starts with a TRIAGE line that carries a locus",
+                    "evaluator": "regex",
+                    "pattern": "(?i)TRIAGE:[^\\n]*locus="
+                },
+                "Before stating errors are ruled out, the response reports InvocationClientErrors, InvocationServerErrors and InvocationThrottles each with its own value or label"
             ]
         },
         {
@@ -152,9 +172,19 @@
             "expected_output": "No. There are no errors or throttles attributable to the search agent in the window checked. The answer says which signals it read and over what window and distinguishes a measured zero from a missing signal. Where the account shows no model traffic it can tie to llmops_eval_search_agent, it says so plainly instead of inventing a fault, and it does not attribute errors from other agents or callers (billing, support, an IAM user) to the search agent.",
             "should_trigger": true,
             "assertions": [
-                "The response reports the search agent as healthy rather than inventing a fault",
+                "The response does not invent a fault: it reports no errors or throttles attributable to the search agent, and where it cannot tie any model traffic to llmops_eval_search_agent it says so instead of calling the agent failing",
                 "The response names the signals it checked and the window",
-                "The response does not attribute other agents' errors to the search agent"
+                "The response does not attribute other agents' errors to the search agent",
+                {
+                    "text": "The response starts with a TRIAGE line that carries a locus",
+                    "evaluator": "regex",
+                    "pattern": "(?i)TRIAGE:[^\\n]*locus="
+                },
+                {
+                    "text": "Each signal carries a ledger token (measured value, no-datapoints or not-queried)",
+                    "evaluator": "regex",
+                    "pattern": "no-datapoints|not-queried|measured 0"
+                }
             ]
         },
         {

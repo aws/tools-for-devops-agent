@@ -170,7 +170,8 @@ Step 5b — Resolve every error to its CODE and its PRINCIPAL, never to its 4xx/
   role <role-name>`.
   Then reconcile: the per-code counts must SUM to the metric total over the same window
   (the bound CLIENT_ERRORS + SERVER_ERRORS + THROTTLES slots; on the bedrock binding a
-  ThrottlingException is counted in InvocationThrottles, not in InvocationClientErrors).
+  throttled request is counted only in InvocationThrottles, not in InvocationClientErrors;
+  a request rejected for exceeding a service quota is counted in InvocationClientErrors).
     → Sum equals the metric?        Report the enumeration; each code gets its own cause
                                     and its own remediation.
     → Sum does NOT equal?           Say so, give both numbers, name what is unaccounted for,
@@ -219,14 +220,15 @@ Step 6 — Rule. A TOTAL PRECEDENCE LADDER on COUNTS, never a share calculation.
       successes. One 4xx in 21 calls with zero 5xx is an APPLICATION ruling, not noise: a
       client error is a rejected request, and this slot pair cannot express a share.
       transience=PERSISTENT — a rejected request shape does not clear on retry. EXCEPTION:
-      where THROTTLES is the only non-zero slot (ThrottlingException is counted there, not
-      in CLIENT_ERRORS), transience=TRANSIENT if Step 4 shows the throttle cleared within
-      the window, and the locus moves to INFRASTRUCTURE if quota posture rather than
+      where THROTTLES is the only non-zero slot (throttled requests are counted only there,
+      not in CLIENT_ERRORS; a quota-exceeded rejection lands in CLIENT_ERRORS),
+      transience=TRANSIENT if Step 4 shows the throttle cleared within the window, and the locus moves to INFRASTRUCTURE if quota posture rather than
       request shape is the cause.
       BINDING CAVEAT: on self-hosted-lambda the platform metric cannot split client from
       server (references/hosting-bindings.md). An undifferentiated error count does NOT
       satisfy R1 — go to R3 or R4 and name the un-splittable slot.
-  R2. SERVER_ERRORS `measured N`, N >= 1, across multiple unrelated models, AND
+  R2. SERVER_ERRORS `measured N`, N >= 1, across multiple unrelated models (on a self-hosted
+      binding: across the callers of the one serving endpoint), AND
       Step 4 found no correlated customer change               → locus=PROVIDER on a managed
       binding, locus=INFRASTRUCTURE on a self-hosted one (PROVIDER has no referent there),
       transience=TRANSIENT.
@@ -242,7 +244,12 @@ Step 6 — Rule. A TOTAL PRECEDENCE LADDER on COUNTS, never a share calculation.
       R4 does not apply. If the customer-side set IS the only set with coverage — traffic is
       confirmed real while the error slots are blank — R4 does not apply
       either: go to R5. Blank error slots against live traffic are evidence, not an
-      absence of it.
+      absence of it. An OPERATOR-REPORTED observation is coverage too: when the account is
+      not connected and the operator states the symptom ("503s across all services",
+      "Bedrock metrics look normal"), record it `not-queried (operator-reported: …)` and
+      rule on it as reported. R4 needs no read AND no report. Worked example: vLLM on EKS
+      behind an ALB, operator reports 503s across all services for an hour, nothing
+      queryable → R2 on the reported server errors → `locus=INFRASTRUCTURE`, never R4.
   R5. TERMINAL CATCH-ALL — reached whenever R1..R4 did not fire, and it can always be
       reached. The ledger carries at least one `measured` row and no error or throttle
       signal is >= 1                                           → locus=APPLICATION,

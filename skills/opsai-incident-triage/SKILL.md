@@ -1,15 +1,16 @@
 ---
 name: opsai-incident-triage
-description: Triage a live failure where a model call is in the failing path - Amazon Bedrock, SageMaker
-  endpoints, Bedrock AgentCore, or a model self-hosted on EC2, ECS, EKS or Lambda - and rule whether
-  the fault sits with the provider, the customer's infrastructure or the application before any fix is
-  prescribed. Use it when model invocations error or return 5xx, are throttled (429s), time out, get
-  slower or have degraded TimeToFirstToken, return empty, fail only after a deploy, fail from a model
-  that is listed but unreachable, or fail because a dependency behind a model-backed feature broke -
-  and for a bare status question such as "are we being throttled", "any errors", "is this AWS or us".
-  Naming Bedrock, SageMaker or a model API is enough to load it. Do not load it for a symptom that
-  names no model call yet ("my agent is down") - localize first - or a failure with no model in its
-  path. Never assume "agent" means AgentCore. Cites LLM-TEL / LLM-INV check-ids, read-only.
+description: Triage a live failure or slowdown where a model call is in the failing path - Amazon
+  Bedrock, SageMaker endpoints, Bedrock AgentCore, or a model self-hosted on EC2, ECS, EKS or Lambda -
+  and rule whether the fault sits with the provider, the customer's infrastructure or the application
+  before any fix is prescribed. Use it when model invocations error or return 5xx, are throttled
+  (429s), time out, return empty, fail after a deploy, fail from a listed but unreachable model,
+  or fail because a dependency behind a model-backed feature broke; when Converse or
+  InvokeModel calls got slower or TimeToFirstToken degraded, including after the caller moved to
+  another Region; and for a bare status question such as "are we being throttled", "any errors", "is
+  this AWS or us". Naming Bedrock, SageMaker or a model API is enough to load it. Do not load it for a
+  symptom that names no model call yet ("my agent is down") - localize first - or a failure with no
+  model in its path. Never assume "agent" means AgentCore.
 metadata:
   author: ankitsri-aws
   version: "1.0.0"
@@ -80,10 +81,12 @@ from Cause, Hypothesis and Gap findings, and that is what the operator reads. So
 AgentCore. An agent loop runs in a Lambda, a container, an EC2 process, or outside AWS. The ladder in
 this skill rules on three signals whose metric names differ per hosting, so bind first:
 [hosting-bindings.md](references/hosting-bindings.md). A guessed binding rules confidently on metrics describing a
-different system. When the model call and the loop run on different hosting (for example a loop in Lambda
-calling Bedrock), name both bindings in the TRIAGE line (`binding=bedrock+self-hosted-lambda`), and say that
-`AWS/Lambda` `Errors` cannot split client from server errors unless the function emits its own taxonomy. The path itself — the seven stages, and which one a symptom starts at — is
-`references/request-path.md`.
+different system. **Bind each stage, not just the call.** A `Converse` call binds the model stage to
+`bedrock`; the loop or caller around it gets its own binding by where it runs. When the two differ (for
+example a loop in Lambda calling Bedrock), name both in the TRIAGE line (`binding=bedrock+self-hosted-lambda`),
+read `AWS/Bedrock` slots only for the model stage, and say that `AWS/Lambda` `Errors` cannot split client
+from server errors unless the function emits its own taxonomy, so R1 cannot fire on that slot. The path
+itself — the seven stages, and which one a symptom starts at — is `references/request-path.md`.
 
 Every finding is grounded in the catalogs under `references/`. Each carries a stable `check-id`, a
 severity, and an AWS-doc citation. You never invent a threshold: if AWS publishes no number, the
@@ -121,7 +124,8 @@ Activate when the user:
 - Sees **5xx / server errors** — `InternalServerError`, `ServiceUnavailableException`,
   `InternalServerException` — or intermittent invocation failures.
 - Sees **`ModelNotReadyException`**, **intermittent timeouts**, a **latency spike with no config
-  change**, or **`TimeToFirstToken` degradation**.
+  change**, **`TimeToFirstToken` degradation**, or slower model calls after the caller moved to a
+  different Region from the one it calls Bedrock in.
 - Reports **throttling that "shouldn't be happening"** — throttling but the config looks right.
 - Reports an **agent loop returning empty** responses, or retrieval returning nothing.
 - Wants to match a symptom to a **known LLM incident signature**.
@@ -209,13 +213,17 @@ metric read or a sub-task, wait for it to return, or record that signal `not-que
 write anything final. An answer that says "I'm now searching the logs and will pull it together once
 both come back" is not an answer: it is what the operator receives, and it carries no locus, no
 finding and no next step. The classifier's steps invite parallel queries, which makes this easy to
-fall into.
+fall into. **In a chat answer, run the reads yourself; do not hand them to a sub-agent.** A sub-agent
+can return after your turn has ended, and then the operator's answer is your interim line ("I'm
+waiting on the log breakdown"), not the ruling. Round-1 evals measured this in both chat runs that
+delegated. Delegate (Guardrail 8) only inside a background investigation that has no chat reply.
 
 **Always land a locus in a single turn.** Do not keep gathering until every signal is conclusive.
 Each step is best-effort: if an API is denied, a metric has no datapoints, or a log group does not
 exist, record that signal as `unavailable` and move to the next step. A locus built on two available
 signals plus four recorded as unavailable is a correct and useful answer; an exhaustive hunt that
-never produces a final response is not.
+never produces a final response is not. The router row plus Step 5b is the whole read set for one
+question; once those slots have rows, stop reading and answer.
 
 **Missing evidence does not license `UNDETERMINED`.** An unavailable signal is not a signal pointing
 the other way and not a contradiction. `UNDETERMINED` has exactly two entrances: an unresolvable
@@ -235,6 +243,10 @@ part a correct locus cannot do without; if a reference fails to load (Guardrail 
 - **Exit: three blocks, every time.** The `TRIAGE:` line first, then the prose, then the `Findings`
   block with one line per signal. The prose may be one sentence; the line and the block are never
   dropped, merged or replaced by a summary. Put each check-id inside a sentence as well.
+- **What the operator told you is evidence.** When the account is not connected and the operator
+  states what they saw ("503s across all our services", "Bedrock metrics look normal", "it started
+  with the vector DB incident"), record each fact as `not-queried (operator-reported: …)` and rule on
+  it as reported. R4 needs no read **and** no report; a reported symptom is coverage.
 - **Two closed token sets.** `locus` is `PROVIDER`, `INFRASTRUCTURE`, `APPLICATION` or `UNDETERMINED`;
   `transience` is `TRANSIENT`, `PERSISTENT` or `UNKNOWN`. `PROVIDER` is unreachable on a self-hosted
   binding, where the serving layer is `INFRASTRUCTURE`. Every `Findings` value starts with `measured `,
@@ -246,8 +258,8 @@ part a correct locus cannot do without; if a reference fails to load (Guardrail 
   - R1: `CLIENT_ERRORS` or `THROTTLES` `measured` ≥ 1 and `SERVER_ERRORS` `measured 0` or `no-datapoints`
     → `APPLICATION`, `PERSISTENT`. A throttle-only ledger that cleared in the window is `TRANSIENT`, and
     `INFRASTRUCTURE` when quota posture is the cause.
-  - R2: `SERVER_ERRORS` ≥ 1 across unrelated models, no correlated customer change → `PROVIDER`
-    (`INFRASTRUCTURE` when self-hosted), `TRANSIENT`.
+  - R2: `SERVER_ERRORS` ≥ 1 across unrelated models (self-hosted: across the callers of the one serving
+    endpoint), no correlated customer change → `PROVIDER` (`INFRASTRUCTURE` when self-hosted), `TRANSIENT`.
   - R3: a `measured` signal on each side, pointing opposite ways → `UNDETERMINED`, `UNKNOWN`, with the gate
     template filled in.
   - R4: every signal `no-datapoints` or `not-queried`, no customer-side coverage → `UNDETERMINED`, `UNKNOWN`.
@@ -370,7 +382,8 @@ Non-negotiable, at every step:
    marked `workload-specific`.
 7. **Bound the work and disclose what you skipped.** State which regions, resources, or checks you did
    not cover, and why (budget, permissions, region-unsupported feature).
-8. **Any delegation asks for the seven findings columns.** When you hand evidence-gathering to a
+8. **Any delegation asks for the seven findings columns.** Delegate only in a background
+   investigation, never for a chat answer (see *Never end your turn*). When you hand evidence-gathering to a
    sub-agent, the prompt you send names the columns you expect back — otherwise you get exactly the
    columns you happened to mention, which is the measured failure mode:
 

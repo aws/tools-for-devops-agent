@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.0.0
+- Evals: `sm-execution-role-s3-kms` replaces the CreateModel-role assertion, which the prompt gave away, with one for the role's other deploy permissions (`s3:GetObject` on `ModelDataUrl`, ECR pull), from `references/known-causes.md` §3.
 - Evals: `serverless-cold-start-provisioned-concurrency` and `sm-execution-role-s3-kms` give the endpoint or role setup, since the eval account has no serverless endpoint or failed deploy; `sm-container-port-contract` is removed (scored the same with and without the skill in two runs).
 - Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
 - Evals: `endpoint-slow-and-erroring` and `sm-autoscaling-not-triggering` are removed; they need a standing real-time endpoint (about $1/hour).

@@ -29,7 +29,7 @@ invented id. Where AWS says nothing (for example on input "mount" errors), say s
 ## 5. Real-time: Invocation errors
 
 - **`ModelError` (HTTP 424) is the customer's model container returning a 4xx or 5xx**; the error carries the original status, message and log stream ARN, so the real error is in the container log, not in SageMaker. A retry that succeeds points at the container's handling of some inputs or load (LLM-SM-009 when there is no alarm) ([InvokeEndpoint errors](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_runtime_InvokeEndpoint.html)).
-- **`ModelNotReadyException` (HTTP 429)** means a multi-model endpoint is still downloading or loading the target model; wait and retry ([InvokeEndpoint errors](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_runtime_InvokeEndpoint.html)).
+- **`ModelNotReadyException` (HTTP 429)** means a serverless endpoint variant's resources are still being provisioned, or a multi-model endpoint is still downloading or loading the target model; wait and retry ([InvokeEndpoint errors](https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_runtime_InvokeEndpoint.html)).
 
 ## 6. Real-time: Multi-model endpoint slow on the first call for some models
 

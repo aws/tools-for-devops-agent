@@ -191,6 +191,7 @@ corrupt records ([api-quirks.md](references/api-quirks.md) §3); a "success" is 
 **Cost.** Note billed GPU cost (`BillableTimeInSeconds`) for any failed, empty, or stalled run that
 started on instances (LLM-SM-TRAIN-007/008). Billing runs from `TrainingStartTime` to `TrainingEndTime`,
 so a job that never started, such as a capacity failure (LLM-SM-TRAIN-002), was not billed.
+For a multi-instance job, billed compute time is `BillableTimeInSeconds` × `InstanceCount`.
 
 ### Step 6 — Review Model Registry governance
 

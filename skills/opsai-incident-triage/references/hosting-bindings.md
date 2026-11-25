@@ -51,7 +51,7 @@ token, and names what the signal is folded into.
 | `sagemaker` | `AWS/SageMaker` `Invocation4XXErrors` | `AWS/SageMaker` `Invocation5XXErrors` | `not-separable` — 429 folds into `Invocation4XXErrors` | `health:DescribeEvents`, service `sagemaker` | [SageMaker CloudWatch metrics](https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html) |
 | `agentcore` | the model stage binds to `bedrock`; the runtime stage is workload-emitted | same | same | `health:DescribeEvents`, service `bedrock` | [Agentic AI Lens — observability](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/agentrel08-bp02.html) |
 | `self-hosted-alb` | `AWS/ApplicationELB` `HTTPCode_Target_4XX_Count` | `AWS/ApplicationELB` `HTTPCode_Target_5XX_Count` | `RejectedConnectionCount`, plus app-emitted queue depth | `not-applicable` — the customer is the provider | [ALB CloudWatch metrics](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-cloudwatch-metrics.html) |
-| `self-hosted-lambda` | `AWS/Lambda` `Errors` split by the function's own error taxonomy | same metric, same caveat | `AWS/Lambda` `Throttles` | `not-applicable` | [Lambda metrics](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics.html) |
+| `self-hosted-lambda` | `AWS/Lambda` `Errors` split by the function's own error taxonomy | same metric, same caveat | `AWS/Lambda` `Throttles` | `not-applicable` | [Lambda metrics](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html) |
 | `third-party` | no AWS signal | no AWS signal | no AWS signal | `not-visible` | — |
 
 **`agentcore` is a composite, not a third namespace.** An AgentCore runtime still calls a model, and
@@ -82,7 +82,11 @@ binding can reach.
 | `third-party` | yes, but **never confirmable** from AWS signal | yes | yes |
 
 **For a self-hosted model the customer is the provider.** `PROVIDER` has no referent, so a fault in
-the serving layer is `INFRASTRUCTURE`. Reporting `PROVIDER` on a self-hosted binding is a category
+the serving layer is `INFRASTRUCTURE`. Server errors from the one serving endpoint across all of its
+callers rule at R2, which lands `INFRASTRUCTURE` on this binding. That holds when the operator reported
+the 5xx and no account is connected: a reported symptom is evidence, so R4 (no evidence) does not fire.
+Which component inside the serving layer failed (the load balancer, the pods, the nodes) is the host
+investigation's question and does not change the locus. Reporting `PROVIDER` on a self-hosted binding is a category
 error and sends the operator looking for an AWS Health event that cannot exist.
 
 **For `third-party`, `PROVIDER` is a hypothesis, never a measurement.** No AWS read can confirm an
@@ -92,13 +96,23 @@ signal rather than on a provider-side one, plus the provider's own status page a
 
 ## Choosing the binding
 
-Work this in order. Stop at the first row that matches the **failing** path, not the first row that
-matches anything in the account.
+Work this **once per stage** of the failing path: once for the model call, and once for the loop or
+caller that makes it when that runs somewhere else. For each stage, stop at the first row that matches
+the **failing** path, not the first row that matches anything in the account. Stopping after row 1 for
+the whole request is the measured failure: a loop in Lambda that calls `Converse` was bound `bedrock`
+alone, and the Lambda stage went unbound.
 
-1. Does the failing call go to `bedrock-runtime` (`InvokeModel`, `Converse`, `InvokeModelWithResponseStream`)? → `bedrock`.
+1. Does the failing call go to `bedrock-runtime` (`InvokeModel`, `Converse`, `InvokeModelWithResponseStream`)? → `bedrock` for the model stage.
 2. Is there an AgentCore runtime or a Bedrock Agent in the failing path **above** that call? → `agentcore`, with the model stage still bound per row 1.
 3. Does the failing call go to a SageMaker endpoint (`InvokeEndpoint`, `InvokeEndpointAsync`)? → `sagemaker`.
 4. Is the model served by the customer's own process on AWS compute? → `self-hosted-alb` or `self-hosted-lambda` by what fronts it.
+4b. Does the loop or caller around a managed model call run on the customer's own compute (a Lambda
+   function, an ECS or EKS container, an EC2 process)? → bind that stage too: `self-hosted-lambda` for a
+   Lambda, `self-hosted-alb` when a load balancer fronts it. The TRIAGE line carries both, joined by `+`
+   (`binding=bedrock+self-hosted-lambda`). The `AWS/Bedrock` slots describe only the model stage; the
+   loop stage's slots come from its own row in the table above, with its caveats (R1 cannot fire on an
+   undifferentiated `AWS/Lambda` `Errors` count). The loop and any ingress in front of it (an ALB, API
+   Gateway) are handed to the host investigation.
 5. Is the model served outside AWS? → `third-party`.
 6. None of the above established from evidence → **do not pick one**. Record the binding as
    `UNDETERMINED`, report the locus as `UNDETERMINED`, and name the one fact that would resolve it.
