@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  AWS DevOps Agent - elevated role for patch failure remediation directed actions. Deploy in every member
+  account that holds instances to remediate (a service-managed StackSet works well), in the same
+  Region as the Agent Space, then register the ElevatedRoleArn output as agentElevatedRoleArn on
+  that account's Agent Space association. The role is a ceiling only: every action still needs
+  operator approval in chat, and the agent scopes each session to the approved operation.
+
+Parameters:
+  AgentSpaceAccountId:
+    Type: String
+    AllowedPattern: '^\d{12}$'
+    Description: Account ID that owns the Agent Space (the customer's central DevOps Agent account).
+  AgentSpaceRegion:
+    Type: String
+    Default: us-east-1
+    AllowedPattern: '^[a-z]{2}(-[a-z]+)+-[0-9]$'
+    ConstraintDescription: A single AWS Region code, for example us-east-1. Wildcards aren't allowed.
+    Description: Region of the Agent Space.
+  AgentSpaceId:
+    Type: String
+    AllowedPattern: '^[A-Za-z0-9][A-Za-z0-9-]{0,127}$'
+    ConstraintDescription: The Agent Space ID, without wildcards.
+    Description: >-
+      ID of the one Agent Space allowed to use this role. Only that Agent Space can assume it;
+      other Agent Spaces in the same account can't.
+  RequireInstanceTag:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >-
+      true (default): the agent can only send commands to instances tagged
+      DevOpsAgentPatchRemediation=true. false: any instance in this account. Keep true unless
+      every instance in the account is meant to be remediated.
+
+Conditions:
+  UseInstanceTag: !Equals [!Ref RequireInstanceTag, 'true']
+
+Resources:
+  DevOpsAgentPatchElevatedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DevOpsAgent-ElevatedAction-PatchRemediation
+      Description: AWS DevOps Agent directed actions for patch failure remediation (SSM Run Command only)
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: aidevops.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              - sts:SetSourceIdentity
+              - sts:TagSession
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AgentSpaceAccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:aidevops:${AgentSpaceRegion}:${AgentSpaceAccountId}:agentspace/${AgentSpaceId}
+      Policies:
+        - PolicyName: PatchRemediationDirectedActions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Only these three AWS-owned documents can be run: no custom documents and no
+              # automations.
+              - Sid: RunApprovedDocuments
+                Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:*::document/AWS-RunShellScript
+                  - !Sub arn:${AWS::Partition}:ssm:*::document/AWS-RunPowerShellScript
+                  - !Sub arn:${AWS::Partition}:ssm:*::document/AWS-RunPatchBaseline
+              - Sid: OnInstancesInThisAccount
+                Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:*:${AWS::AccountId}:instance/*
+                  - !Sub arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:managed-instance/*
+                Condition: !If
+                  - UseInstanceTag
+                  - StringEquals:
+                      ssm:resourceTag/DevOpsAgentPatchRemediation: 'true'
+                  - !Ref AWS::NoValue
+              - Sid: TrackAndCancelOwnCommands
+                Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommandInvocations
+                  - ssm:ListCommands
+                  - ssm:CancelCommand
+                Resource: '*'
+
+Outputs:
+  ElevatedRoleArn:
+    Description: Register this ARN as agentElevatedRoleArn on the Agent Space association for this account.
+    Value: !GetAtt DevOpsAgentPatchElevatedRole.Arn

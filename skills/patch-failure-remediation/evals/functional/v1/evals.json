@@ -1,0 +1,248 @@
+{
+    "skill_name": "patch-failure-remediation",
+    "evals": [
+        {
+            "id": "linux-disk-full-plan",
+            "task_type": "chat",
+            "prompt": "An AWS-RunPatchBaseline Install failed overnight on my Amazon Linux 2023 instance i-0123456789abcdef0 in us-east-1. The PatchLinux output says: 'Error: Cannot write to temporary file' and '[Errno 28] No space left on device: /var/cache/dnf'. What is wrong and how do I fix it?",
+            "expected_output": "Identifies a full filesystem (/var) as the root cause and selects the disk-full SOP (SOP-002). Gives a command plan for the named instance that runs that SOP's steps with AWS-RunShellScript, followed by validation and an AWS-RunPatchBaseline Scan before Install. If the instance can't be found, the plan is still given but marked unverified, telling the user to check the maintenance window and retry count before running it.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The answer uses the skill's Remediation plan format",
+                    "evaluator": "regex",
+                    "pattern": "Steps to run:"
+                },
+                "The response names a specific SOP rather than giving generic advice",
+                "The plan lists the maintenance-window and Install-retry gates, either as checked or as not checked with the reason",
+                "The plan runs a Scan before the Install",
+                {
+                    "text": "The disk-full SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-002"
+                },
+                {
+                    "text": "Linux steps use AWS-RunShellScript",
+                    "evaluator": "regex",
+                    "pattern": "AWS-RunShellScript"
+                },
+                {
+                    "text": "The plan ends with a status line",
+                    "evaluator": "regex",
+                    "pattern": "Status:"
+                },
+                {
+                    "text": "The plan states which OS it applies to",
+                    "evaluator": "regex",
+                    "pattern": "Applies to:"
+                }
+            ]
+        },
+        {
+            "id": "windows-disk-full-plan",
+            "task_type": "chat",
+            "prompt": "Windows patching failed on i-1234567890abcdef0 (Windows Server 2019, eu-west-1). The PatchWindows output shows 0x80070070 while downloading updates. How do I fix it?",
+            "expected_output": "Maps error 0x80070070 (disk full) to the Windows disk space SOP (SOP-053) and gives a plan whose steps run with AWS-RunPowerShellScript on the instance, followed by validation and a patch Scan and Install.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The answer uses the skill's Remediation plan format",
+                    "evaluator": "regex",
+                    "pattern": "Steps to run:"
+                },
+                {
+                    "text": "The plan states which OS it applies to",
+                    "evaluator": "regex",
+                    "pattern": "Applies to:"
+                },
+                {
+                    "text": "The Windows disk space SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-053"
+                },
+                {
+                    "text": "Windows steps use AWS-RunPowerShellScript",
+                    "evaluator": "regex",
+                    "pattern": "AWS-RunPowerShellScript"
+                }
+            ]
+        },
+        {
+            "id": "rpmdb-corruption-plan",
+            "task_type": "chat",
+            "prompt": "Patch Install failed on Amazon Linux 2023 instance i-0fedcba9876543210 in us-west-2 with 'error: rpmdb: BDB0113 Thread/process failed: Thread died in Berkeley DB library' and 'Error: rpmdb open failed'. Give me the fix.",
+            "expected_output": "Identifies a corrupt RPM database, selects an rpmdb recovery SOP appropriate for Amazon Linux 2023, includes only the steps that apply to Amazon Linux 2023, and lists any skipped steps with the reason.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The SOP file is named",
+                    "evaluator": "regex",
+                    "pattern": "sop-0(04|85)-"
+                },
+                {
+                    "text": "The plan states which OS it applies to",
+                    "evaluator": "regex",
+                    "pattern": "Applies to:"
+                },
+                "Steps that don't apply to Amazon Linux 2023 are listed as skipped with a reason, rather than included",
+                {
+                    "text": "An rpmdb SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-0(04|85)"
+                }
+            ]
+        },
+        {
+            "id": "no-matching-sop",
+            "task_type": "chat",
+            "prompt": "AWS-RunPatchBaseline failed on Ubuntu 22.04 instance i-0aaaaaaaaaaaaaaaa. Before patching, our own wrapper ran and the output ends with: 'pre-patch-check: application ledgerd is in a change freeze until 2026-12-01, refusing to patch (exit 3)'. What should I run to fix it?",
+            "expected_output": "Explains that the run was stopped by the customer's own change-freeze check, that no reviewed SOP covers it, takes no action, does not invent commands, and reports the error and the SOPs it ruled out so a person can decide.",
+            "should_trigger": true,
+            "assertions": [
+                "The response says no SOP matches and that no action was taken",
+                "The response does not offer a command plan or shell commands to run on the instance",
+                {
+                    "text": "No Run Command document is sent",
+                    "evaluator": "regex",
+                    "pattern": "send-command|send_command",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "rhel-dependency-conflict",
+            "task_type": "chat",
+            "prompt": "AWS-RunPatchBaseline Install failed on RHEL 8 instance i-0a1b2c3d4e5f60011 in us-east-1. The PatchLinux output shows 'Error: Problem: conflicting requests' and 'package conflicts with' followed by a dependency chain. How do I fix it?",
+            "expected_output": "Maps the conflicting-requests error to the YUM/DNF dependency conflict SOP (SOP-001), and gives that SOP's steps for RHEL 8 rather than generic dnf advice.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The answer uses the skill's Remediation plan format",
+                    "evaluator": "regex",
+                    "pattern": "Steps to run:"
+                },
+                "The response quotes the dependency-conflict error as the evidence for its SOP choice",
+                "The remediation steps come from the named SOP rather than generic package-manager advice",
+                {
+                    "text": "The matching SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-001"
+                }
+            ]
+        },
+        {
+            "id": "ubuntu-inode-exhaustion",
+            "task_type": "chat",
+            "prompt": "Patching failed on Ubuntu 22.04 instance i-0a1b2c3d4e5f60022 in us-west-2 with 'dpkg: error: unable to create new file' and 'No space left on device', but df -h shows / is only 40% used. What's wrong?",
+            "expected_output": "Recognises inode exhaustion (no free inodes although disk blocks are free) and selects the inode exhaustion SOP (SOP-050), not the disk-full SOP.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The answer uses the skill's Remediation plan format",
+                    "evaluator": "regex",
+                    "pattern": "Steps to run:"
+                },
+                {
+                    "text": "The disk-full SOP is named as ruled out",
+                    "evaluator": "regex",
+                    "pattern": "Ruled out:[^\\n]*SOP-002"
+                },
+                {
+                    "text": "The matching SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-050"
+                }
+            ]
+        },
+        {
+            "id": "ubuntu-dpkg-lock",
+            "task_type": "chat",
+            "prompt": "AWS-RunPatchBaseline Install on Ubuntu 22.04 instance i-0a1b2c3d4e5f67890 in us-east-2 failed with 'E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1234 (unattended-upgr)' and 'E: Unable to acquire the dpkg frontend lock'. How do I fix it?",
+            "expected_output": "Identifies that unattended-upgrades was holding the dpkg frontend lock, selects the Ubuntu dpkg lock SOP (SOP-014), and gives that SOP's steps rather than killing processes ad hoc.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The answer uses the skill's Remediation plan format",
+                    "evaluator": "regex",
+                    "pattern": "Steps to run:"
+                },
+                {
+                    "text": "The plan lists similar SOPs it ruled out",
+                    "evaluator": "regex",
+                    "pattern": "Ruled out:"
+                },
+                {
+                    "text": "The matching SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-014"
+                }
+            ]
+        },
+        {
+            "id": "windows-cbs-corruption",
+            "task_type": "chat",
+            "prompt": "Windows patching failed on i-0fedcba9876543210 (Windows Server 2022, us-east-1). The PatchWindows output shows HRESULT 0x80073712. How do I fix it?",
+            "expected_output": "Explains 0x80073712 as a corrupted component store and selects the corrupt CBS store SOP (SOP-051), with that SOP's Windows steps.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The plan states which OS it applies to",
+                    "evaluator": "regex",
+                    "pattern": "Applies to:"
+                },
+                "The remediation steps come from the named SOP rather than generic Windows Update advice",
+                {
+                    "text": "The matching SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-051"
+                }
+            ]
+        },
+        {
+            "id": "windows-wuauserv-disabled",
+            "task_type": "chat",
+            "prompt": "AWS-RunPatchBaseline on Windows Server 2019 instance i-1234567890abcdef0 in eu-west-1 scanned no patches and failed with 0x80070422. What do I do?",
+            "expected_output": "Explains 0x80070422 as the Windows Update service being disabled, and selects the Windows Update service disabled SOP (SOP-083) with its steps.",
+            "should_trigger": true,
+            "assertions": [
+                {
+                    "text": "The answer uses the skill's Remediation plan format",
+                    "evaluator": "regex",
+                    "pattern": "Steps to run:"
+                },
+                "The remediation steps come from the named SOP rather than generic Windows Update advice",
+                {
+                    "text": "The matching SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-083"
+                }
+            ]
+        },
+        {
+            "id": "windows-2012r2-sha2",
+            "task_type": "chat",
+            "prompt": "Patching has failed on our Windows Server 2012 R2 instance i-0aaaaaaaaaaaaaaaa in us-east-1 since it was restored from an old image. Updates fail with 0x800B0101. How do I fix it?",
+            "expected_output": "Recognises the SHA-2 code signing requirement on Windows Server 2012 R2 (0x800B0101) and selects the 2012 R2 SHA-2 SOP (SOP-077), noting that it applies to that version.",
+            "should_trigger": true,
+            "assertions": [
+                "The response ties 0x800B0101 to missing SHA-2 code signing support on Windows Server 2012 R2",
+                {
+                    "text": "The plan says it applies to Windows Server 2012 R2",
+                    "evaluator": "regex",
+                    "pattern": "Applies to:[^\\n]*2012 R2"
+                },
+                {
+                    "text": "The matching SOP is named",
+                    "evaluator": "regex",
+                    "pattern": "SOP-077"
+                }
+            ]
+        },
+        {
+            "id": "unrelated-question",
+            "task_type": "chat",
+            "prompt": "What is the difference between an Application Load Balancer and a Network Load Balancer?",
+            "should_trigger": false
+        }
+    ]
+}
