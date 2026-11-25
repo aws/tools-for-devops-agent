@@ -236,62 +236,14 @@ aws-performance-efficiency-review/
 
 ## Further reading
 
-Public methodology and documentation behind the analysis rules.
+The methods behind the analysis rules, and the two AWS facts the rules lean on most:
 
-Methodology:
-
-- Google SRE book, service level objectives and error budgets: https://sre.google/sre-book/service-level-objectives/
-- Google SRE workbook, alerting on SLOs (burn-rate alerting): https://sre.google/workbook/alerting-on-slos/
 - Brendan Gregg, the USE method: https://www.brendangregg.com/usemethod.html
-- Tom Wilkie, the RED method (monitoring microservices): https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/
-- Performance efficiency pillar, AWS Well-Architected Framework: https://docs.aws.amazon.com/wellarchitected/latest/performance-efficiency-pillar/welcome.html
+- Tom Wilkie, the RED method: https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/
+- Google SRE book, service level objectives and error budgets: https://sre.google/sre-book/service-level-objectives/
+- Amazon Builders' Library, timeouts, retries and backoff with jitter: https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/
+- Amazon Builders' Library, avoiding insurmountable queue backlogs: https://aws.amazon.com/builders-library/avoiding-insurmountable-queue-backlogs/
+- Lambda memory sets the CPU share (1,769 MB is one vCPU): https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html
+- Lambda `Duration` excludes initialization time: https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html
 
-Amazon Builders' Library (overload, retries, health checks, queues, caching):
-
-- Timeouts, retries, and backoff with jitter: https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/
-- Using load shedding to avoid overload: https://aws.amazon.com/builders-library/using-load-shedding-to-avoid-overload/
-- Avoiding fallback in distributed systems: https://aws.amazon.com/builders-library/avoiding-fallback-in-distributed-systems/
-- Implementing health checks: https://aws.amazon.com/builders-library/implementing-health-checks/
-- Avoiding insurmountable queue backlogs: https://aws.amazon.com/builders-library/avoiding-insurmountable-queue-backlogs/
-- Caching challenges and strategies: https://aws.amazon.com/builders-library/caching-challenges-and-strategies/
-
-AWS documentation for the metrics and limits the references cite (confirm figures and names here, not from memory):
-
-- CloudWatch statistics definitions (percentiles and trimmed-mean statistics): https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Statistics-definitions.html
-- CloudWatch Contributor Insights: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContributorInsights.html
-- CloudWatch Metrics Insights: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/query_with_cloudwatch-metrics-insights.html
-- CloudWatch Synthetics: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries.html
-- CloudWatch RUM: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-RUM.html
-- AWS usage metrics: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Usage-Metrics.html
-- Service Quotas user guide: https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html
-- Amazon EC2 Auto Scaling group metrics: https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-cloudwatch-monitoring.html
-- Lambda function memory configuration (memory sets CPU share; 1,769 MB is one vCPU): https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html
-- Lambda function metrics (`Duration` does not include cold start time): https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html
-- Lambda Insights: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Lambda-Insights.html
-- Container Insights: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContainerInsights.html
-- CloudWatch Database Insights (modes, Performance Insights end of life): https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Database-Insights.html
-- ElastiCache OpenTelemetry metrics and ElastiCache Insights: https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/otel-metrics.html and https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ElastiCache-Insights.html
-- CloudWatch Network Monitoring performance monitors: https://aws.amazon.com/about-aws/whats-new/2026/11/cloudwatch-network-path-monitoring/
-- CloudWatch investigations and Amazon CloudWatch Omni (investigation experiences, not telemetry): https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Investigations.html, https://aws.amazon.com/cloudwatch/omni/, https://aws.amazon.com/cloudwatch/omni/pricing/, https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/omni-ai-inference-insights.html
-
-Trusted Advisor:
-
-- ListRecommendations (pillar, status and awsService filters): https://docs.aws.amazon.com/trustedadvisor/latest/APIReference/API_ListRecommendations.html
-- Getting started with the Trusted Advisor API (support plan requirement): https://docs.aws.amazon.com/awssupport/latest/user/get-started-with-aws-trusted-advisor-api.html
-- IAM actions for Trusted Advisor: https://docs.aws.amazon.com/service-authorization/latest/reference/list_trustedadvisor.html
-- AWS Support plans: https://aws.amazon.com/premiumsupport/plans/
-
-AI and ML:
-
-- Amazon Bedrock runtime metrics (`AWS/Bedrock`): https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-cw.html
-- Amazon Bedrock quotas for the bedrock-runtime endpoint (tokens per minute, requests per minute): https://docs.aws.amazon.com/bedrock/latest/userguide/quotas-runtime.html
-- Amazon Bedrock Provisioned Throughput: https://docs.aws.amazon.com/bedrock/latest/userguide/prov-throughput.html
-- Amazon Bedrock cross-Region inference: https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html
-- Amazon Bedrock model invocation logging: https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html
-- SageMaker AI endpoint metrics (`AWS/SageMaker`, inference components): https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html
-- SageMaker AI Insights: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/SageMaker-Insights.html and https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/SageMaker-AI-Insights-Metrics.html
-- SageMaker endpoint instance quotas ("for endpoint usage"): https://docs.aws.amazon.com/general/latest/gr/sagemaker.html
-- Accelerated Compute Insights (GPU telemetry on EKS, PromQL): https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Accelerated-Compute-Insights.html
-- Amazon Bedrock AgentCore runtime observability data: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-runtime-metrics.html
-
-Pricing pages linked from telemetry gaps (direction only, never a price): https://aws.amazon.com/cloudwatch/pricing/, https://aws.amazon.com/xray/pricing/, https://aws.amazon.com/lambda/pricing/, https://aws.amazon.com/bedrock/pricing/, https://aws.amazon.com/compute-optimizer/pricing/
+Per-service metric names and limits are taken from the AWS documentation for that service; the pricing pages cited in telemetry gaps are listed in `references/telemetry-sources.md`.
