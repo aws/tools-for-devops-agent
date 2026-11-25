@@ -1,0 +1,81 @@
+{
+  "version": "v1",
+  "iteration": 3,
+  "eval_id": "ssm-false-success-last-exit-code",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-ssm-execution-failure-investigation' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected output explicitly allows for the scenario where the IDs are examples and cannot be found in the account: in that case, the response should say so, not guess a definitive cause, and explain what it would read and what the operator should send. The agent's response does exactly this: it clearly states it could not find the command, nodes, or alarm in the account it has access to, lists what it checked, and offers several hypotheses (explicitly labeled as unconfirmed/not guessed as the actual cause) including the exact 'earlier failure hidden by later command' mechanism matching the expected root cause pattern (package install failure masked by later success, Run Command Success meaning last command exited 0). It then asks for specific additional information (command history via aws ssm list-commands, stdout/stderr via get-command-invocation, alarm details) - exactly matching 'explains what it would read and what the operator should send.' The response does not fabricate a definitive 'No match for argument' error since it genuinely could not access the data, which aligns with the expected handling of example/non-existent IDs. This matches the expected output's explicit fallback branch.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "If the command output can be read, the response quotes the earlier install error; if not, it says the output is not observable and asks for it instead of guessing a cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"I can't tell you why yet, because I couldn't find the command, the nodes or the alarm... Send me the stdout and stderr for each node, with secrets redacted\"",
+          "reasoning": "The agent could not read the command output (all lookups returned empty), and explicitly said so, asking the user to send stdout/stderr rather than guessing a specific cause. It did list hypotheses but clearly labeled them as 'none confirmed' and framed them as possibilities, not a stated cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains that a shell script's status comes from its last command's exit code, so an earlier failure can show as Success",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Run Command's Success only means the last command in the script exited 0.\" and \"An earlier failure hidden by a later command. For example, a package install or download fails, then a later systemctl restart or echo exits 0.\"",
+          "reasoning": "The agent explicitly explains that Success reflects only the last command's exit code, allowing earlier failures to be hidden.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any script fix it proposes makes the script fail on error (for example set -e or an exit-code check)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'set -e', exit-code checking, or any script modification anywhere in the response; the 'What to do' section only lists diagnostic steps (confirm account/region, send command details, send stdout/stderr, send alarm details, check running version).",
+          "reasoning": "The agent never proposed a specific script fix such as set -e or an exit-code check; it only diagnosed possible causes and asked for more data, without giving a corrective script change.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response's last section gives the operator's next steps (the fix, or the output or IDs to send), not an offer to investigate further",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The final sentence of the response is: \"Once I can see the command's output or the real IDs, I can name the cause and the fix.\" This is an offer to investigate further, not a concrete next step itself.",
+          "reasoning": "The response's last section ('What to do') does give next steps (send details, confirm account, etc.), but the very last sentence after that list is an offer to investigate further once more data is provided, which contradicts the assertion that the last section should not end with an offer to investigate further.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response sends no command and requests no directed action",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent lists commands like 'aws ssm list-commands --command-id ...' as suggestions for the user to run, but does not execute any command itself or issue a directive action; it frames these as 'What to do' for the operator.",
+          "reasoning": "The agent's response contains no AWS CLI commands executed by itself and no directed action taken; it only suggests commands the user could run to gather more information, which is a request for data, not a directive action by the agent.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "27s",
+    "cost": "$0.22",
+    "context_window": {
+      "utilization": "5.9%",
+      "compaction_count": 0
+    }
+  }
+}
