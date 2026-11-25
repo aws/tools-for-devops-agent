@@ -222,10 +222,11 @@ down in RPO and RTO costs more and adds complexity.
 | Backup and restore | hours | hours | backups only; rebuild with IaC |
 | Pilot light | minutes | tens of minutes | data replicated, databases on; app servers off |
 | Warm standby | seconds | minutes | everything on, scaled down |
-| Multi-site active/active | near zero | potentially zero | everything, serving traffic; data stores that take writes in every Region (DynamoDB global tables, MemoryDB Multi-Region) |
+| Multi-site active/active | near zero | potentially zero | everything, serving traffic |
 
-Source: AWS Well-Architected Framework, REL13-BP02. "Data replicated, nothing
-else running" is pilot light. Some teams add a fifth label, hot standby
+Source: AWS Well-Architected Framework, REL13-BP02. For active/active, data
+stores that take writes in every Region include DynamoDB global tables and
+MemoryDB Multi-Region. "Data replicated, nothing else running" is pilot light. Some teams add a fifth label, hot standby
 (active/passive): a fully scaled warm standby that takes no traffic until
 failover. If the user has not chosen a recovery Region,
 propose one with the criteria in the reference. Name a cost level for each option
