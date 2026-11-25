@@ -34,7 +34,7 @@ one or two scenarios:
 
 | Scenario | In scope? | Covered today? | Why |
 |---|---|---|---|
-| One service fails | yes / no | yes / partly / no | ... |
+| Single node failure | yes / no | yes / partly / no | ... |
 | One Availability Zone fails | yes / no | yes / partly / no | ... |
 | A whole Region fails | yes / no | yes / partly / no | ... |
 | Bad data | yes / no | yes / partly / no | ... |

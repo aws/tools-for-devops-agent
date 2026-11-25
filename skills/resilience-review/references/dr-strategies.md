@@ -9,7 +9,7 @@ listed in increasing order of cost and complexity, and decreasing RPO and RTO.
 
 | Strategy | RPO | RTO | Recovery Region holds |
 |---|---|---|---|
-| Backup and restore | hours | 24 hours or less | backups of data and applications; infrastructure is redeployed with IaC at recovery time |
+| Backup and restore | hours | hours | backups of data and applications; infrastructure is redeployed with IaC at recovery time |
 | Pilot light | minutes | tens of minutes | a copy of core infrastructure; data replicated and backed up there; databases and object storage on; app servers and serverless compute not deployed |
 | Warm standby | seconds | minutes | a scaled-down but fully working copy, always on; scaled up at recovery |
 | Multi-site active/active | near zero | potentially zero | the full workload, serving traffic in several Regions |
@@ -18,6 +18,8 @@ Notes from the same source:
 
 - Point-in-time recovery (continuous backups) can lower backup-and-restore RPO to
   as little as about 5 minutes in some cases.
+- REL13-BP02 gives backup and restore an RTO of up to a day, but a large restore
+  or rebuild can take longer (hours to days): measure it with a restore test.
 - Pilot light cannot process requests until you take action (start servers,
   deploy non-core infrastructure, scale up). Warm standby can handle traffic at
   reduced capacity right away. When warm standby is fully scaled it is called hot
@@ -45,12 +47,16 @@ not the answer unless there is another reason.
 
 ## Building the tiers
 
-Make a small table per workload: tier, data stores, RPO, RTO. For each workload,
-ask (REL13-BP01):
+Make a small table per workload: tier, data stores, RPO, RTO. Few businesses can
+name an RPO or RTO directly, but they can say what an outage costs. For each
+workload, ask (REL13-BP01):
 
-1. What is the longest it can be down before the business impact is unacceptable?
-2. What kind of impact: financial, reputational, operational, regulatory?
-3. How much data can be lost before the impact is unacceptable?
+1. What does downtime cost: financial, reputational, operational, regulatory? Does
+   the cost jump after some point (for example a missed shift or a contract
+   penalty)?
+2. What does lost data cost, for example orders or work to redo?
+3. Where does that cost become higher than the cost of the strategy that would
+   prevent it? That point is the case for the RPO and RTO.
 4. Can lost data be recreated from other sources (derived data)?
 5. What are the recovery targets of the things this workload depends on? It cannot
    recover faster than they do.
@@ -72,8 +78,15 @@ counters and rankings kept only in a cache are sometimes the only copy.
 
 Replication does not help against bad data (SKILL.md Step 1). Point-in-time
 recovery helps against Region loss only if copies exist outside the Region. Copies
-in a separate account are what protect against a compromised account or
-ransomware.
+in a separate account protect against a compromised account or ransomware only if
+the attack or corruption is detected in time: retention must still reach back to
+the last clean copy, and the team must be able to tell which copy is clean. With
+AWS Backup:
+
+- A logically air-gapped vault keeps copies locked in compliance mode, so no one
+  can delete them early, and it can be shared with a recovery account.
+- Malware Protection for AWS Backup scans EC2, EBS and S3 recovery points and
+  helps find the last clean one before a restore.
 
 ## Choosing the recovery Region
 
@@ -109,3 +122,9 @@ verified in this session.
   https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html
 - AWS Prescriptive Guidance, Resilience analysis framework:
   https://docs.aws.amazon.com/prescriptive-guidance/latest/resilience-analysis-framework/overview.html
+- Backup and restore RTO of up to a day (current REL13-BP02), and of hours to days:
+  https://docs.aws.amazon.com/wellarchitected/latest/framework/rel13-bp02.html
+  https://aws.amazon.com/what-is/recovery-time-objective/
+- AWS Backup logically air-gapped vaults and Malware Protection for AWS Backup:
+  https://docs.aws.amazon.com/aws-backup/latest/devguide/logicallyairgappedvault.html
+  https://docs.aws.amazon.com/aws-backup/latest/devguide/malware-protection.html

@@ -9,8 +9,11 @@ that is denied or skipped and show it next to the finding.
 
 ## Find the workload (when the user names none)
 
-Look in the Regions the user named. If they named none, say which Regions you
-checked.
+Look in the Regions the user named. If they named none, do not scan every Region:
+read where the account spends with `ce:GetCostAndUsage` (the last full month,
+grouped by the `REGION` dimension) and check the Regions with the most spend. If
+that call is denied, ask the user which Regions to check, as the last line of the
+answer. Always say which Regions you checked and why.
 
 - `ListServices` in the next generation of AWS Resilience Hub: a workload that is
   already a Resilience Hub service. Follow "If the workload is already in
@@ -20,6 +23,13 @@ checked.
 - `cloudformation:ListStacks` and `cloudformation:ListStackResources`: each
   application stack is a candidate. Stacks that only hold tooling (for example CDK
   bootstrap or SAM-managed buckets) are not workloads.
+- `cloudformation:ListStackSets` (with `CallAs` set to `DELEGATED_ADMIN` in a
+  delegated administrator account), then `cloudformation:ListStackInstances` for
+  each StackSet: the `Account` and `Region` of every stack instance. A StackSet
+  deploys the same stack to several Regions: add every Region where it deploys
+  part of the workload to the Regions you check. A StackSet is Regional and lives
+  in the administrator account that created it, so run the call in each Region
+  you check; if the account is only a target, say StackSets were not checked.
 - `servicecatalog:ListApplications` (myApplications, AWS Service Catalog
   AppRegistry): the resources of an application carry the `awsApplication` tag.
 - `resource-groups:ListGroups`.
@@ -27,7 +37,13 @@ checked.
   `application`, `service`, `project`, `workload`).
 
 Shared infrastructure, such as a network stack whose exports several stacks
-import, is a dependency of each workload, not a workload of its own.
+import, is a dependency of each workload, not a workload of its own. Always review
+the parts of it that the workload uses, in the Shared dependencies layer: the VPC,
+subnets, route tables, NAT gateways, endpoints and Transit Gateway attachments
+that its resources use (read from their own configuration), and the exports its
+stacks import (`cloudformation:ListExports`, then `cloudformation:ListImports` for
+each export). Put its gaps in the workload's roadmap, marked shared, without
+naming the other workloads that use it.
 
 Then follow "Choose the path first" in SKILL.md: assess the only workload, or list
 the candidates and ask which one to assess first.
@@ -42,7 +58,7 @@ Group them into layers:
 |---|---|
 | Entry and routing | Route 53, CloudFront, API Gateway, Application/Network Load Balancers |
 | Compute | EC2 instances, Auto Scaling groups, Amazon ECS services, Amazon EKS clusters, AWS Lambda functions, AWS Step Functions state machines |
-| Data | RDS, Aurora, DynamoDB, ElastiCache, DocumentDB, Neptune, Redshift, OpenSearch |
+| Data | RDS, Aurora, DynamoDB, ElastiCache, MemoryDB, DocumentDB, Neptune, Redshift, OpenSearch |
 | Storage | EBS, EFS, FSx, S3 |
 | Messaging and events | SQS, SNS, Kinesis, MSK, EventBridge |
 | Identity | Amazon Cognito user pools |
@@ -57,21 +73,22 @@ member instead of sweeping the account.
 
 | Finding | Breaks which scenario |
 |---|---|
-| A single EC2 instance not in an Auto Scaling group, a single node, a single task | service failure, AZ failure |
+| A single EC2 instance not in an Auto Scaling group, a single node, a single task | single node failure, AZ failure |
 | An Auto Scaling group, ECS service, EKS node group or load balancer in one AZ only | AZ failure |
-| No Multi-AZ, no replica, no automatic failover on a data store | service failure, AZ failure |
+| No Multi-AZ, no replica, no automatic failover on a data store | single node failure, AZ failure |
 | Backup frequency longer than the RPO | every scenario that needs a restore |
 | Backup retention too short to reach a clean copy | bad data |
 | No copy or replica of data outside the Region | Region failure |
 | No AMIs, container images, IaC or pipeline able to deploy compute in the recovery Region | Region failure |
 | Secrets, KMS keys or certificates missing in the recovery Region | Region failure (restores and apps fail to start) |
-| Service quotas or capacity in the recovery Region below what the workload needs | Region failure |
+| Service quotas or capacity in the recovery Region below what the workload needs (see Shared dependencies) | Region failure |
+| The network or other shared infrastructure the workload needs (VPC and subnets, Transit Gateway, VPN or Direct Connect, endpoints) missing in the recovery Region and not in IaC | Region failure (nothing can start or be reached there) |
 | Point-in-time recovery off, no versioning on a bucket, no backups of a file system | bad data |
 | Deletion protection off | bad data (an accidental delete) |
 | Backups only in the same account | compromised account, ransomware |
 | No failover routing (DNS or other) | Region failure (the copy exists but traffic cannot reach it) |
 | One zonal NAT gateway serving several AZs, or an interface endpoint in one AZ | AZ failure (outbound or service access lost in the other AZs) |
-| A VPN tunnel down, or one Direct Connect connection or location | service failure of the on-premises link, location failure |
+| A VPN tunnel down, or one Direct Connect connection or location | single node failure (the on-premises link), location failure |
 
 ## Entry and routing
 
@@ -125,7 +142,17 @@ Traps:
 - `ec2:DescribeInstances`: instances that are not in any Auto Scaling group are
   single points of failure.
 - `ec2:DescribeImages` (owner self) and `ec2:DescribeSnapshots`, in the source and
-  in the recovery Region: do AMIs and EBS snapshots exist there?
+  in the recovery Region: do AMIs and EBS snapshots exist there? Map each copy to
+  its source before you credit it:
+  - AMI: `SourceImageId` and `SourceImageRegion` on the copy name the source AMI
+    (set by `CopyImage`; missing on some older AMIs).
+  - Copy made by AWS Backup: `backup:ListRecoveryPointsByBackupVault` on the vault
+    in the recovery Region gives each recovery point's `ResourceArn` (the source
+    resource) and `SourceBackupVaultArn`; `backup:ListCopyJobs` links each
+    `SourceRecoveryPointArn` to its `DestinationRecoveryPointArn`.
+  - EBS snapshot copied by hand: the `VolumeId` of a copy is arbitrary and does
+    not name the source. Match by description or tags; if neither names the
+    source, say the copy could not be mapped and do not count it.
 - `drs:DescribeSourceServers`: is AWS Elastic Disaster Recovery replicating the
   servers?
 
@@ -134,7 +161,9 @@ Traps:
 - An AMI or launch template that exists only in the source Region cannot start
   instances in the recovery Region.
 - AWS Elastic Disaster Recovery is a pilot-light style option that can give RPO and
-  RTO close to warm standby at lower cost (Well-Architected REL13-BP02).
+  RTO close to warm standby at lower cost (Well-Architected REL13-BP02). It covers
+  applications and databases hosted on EC2, not RDS: RDS and Aurora need their own
+  cross-Region copies or replicas (see Data).
 
 ### Amazon ECS
 
@@ -262,6 +291,26 @@ Traps:
   bucket in the same Region, copy the `.rdb` file to the other Region, then seed a
   new cluster from it.
 
+### Amazon MemoryDB
+
+- `memorydb:DescribeClusters`: `AvailabilityMode` (`multiaz` or `singleaz`), the
+  nodes in each shard, `SnapshotRetentionLimit`, `MultiRegionClusterName`.
+- `memorydb:DescribeMultiRegionClusters`: the Regions of a Multi-Region cluster.
+
+Traps:
+
+- MemoryDB keeps every write in a Multi-AZ transaction log, so it can be the only
+  copy of the data. Ask before treating it as a rebuildable cache.
+- Multi-AZ needs more than one node per shard. A shard with one node stops
+  accepting writes until its node is replaced.
+- MemoryDB Multi-Region is active-active: every regional cluster takes reads and
+  writes, replication between Regions is asynchronous, and conflicting writes are
+  resolved by last writer wins. It copies bad writes too: keep snapshots. It is
+  available in some Regions only: check before recommending it.
+- AWS Backup does not support MemoryDB. To restore in another Region, export a
+  snapshot to an S3 bucket in the same Region, copy the `.rdb` file to the other
+  Region, then seed a new cluster from it.
+
 ### Amazon DocumentDB and Amazon Neptune
 
 - `docdb:DescribeDBClusters` / `neptune:DescribeDBClusters` (served by the RDS API,
@@ -312,6 +361,11 @@ Traps:
   rule, and `backup:ListCopyJobs`: did copies actually land?
 - `backup:DescribeRegionSettings`: which resource types are opted in, and whether
   DynamoDB advanced features are on.
+- `backup:ListBackupVaults`: `VaultType` (`LOGICALLY_AIR_GAPPED_BACKUP_VAULT`) and
+  `Locked` of each vault that holds the workload's copies.
+- `backup:GetBackupPlan` (`ScanSettings`, and `ScanActions` in each rule) and
+  `backup:ListScanJobs`: does Malware Protection for AWS Backup scan the recovery
+  points, and with what result?
 - For a full account-wide coverage audit, recommend the `aws-backup-coverage-review`
   skill instead of repeating it here.
 
@@ -325,16 +379,39 @@ Traps:
 - A cross-Region or cross-account copy of a continuous backup becomes a snapshot.
   Point-in-time restore is not available from the copy, so the copy's RPO is the
   copy frequency.
+- Against ransomware or a compromised account, a logically air-gapped vault is
+  AWS Backup's own answer: it is always locked in Vault Lock compliance mode, so
+  no one can delete its recovery points early, and it can be shared with a
+  recovery account (AWS RAM) or opened through multi-party approval if the owning
+  account is lost. Check which resource types it supports in the feature
+  availability table.
+- Malware Protection for AWS Backup (Amazon GuardDuty) scans EC2, EBS and S3
+  recovery points, after each backup or on demand, with the result
+  `THREATS_FOUND` or `NO_THREATS_FOUND`. Use it to find the last clean recovery
+  point before a restore. Other resource types are not scanned.
 
 ## Storage
 
 - EBS: snapshots and their copies outside the Region (`ec2:DescribeSnapshots`).
 - EFS: `elasticfilesystem:DescribeReplicationConfigurations`. EFS replication is
   continuous and designed for an RPO and RTO of minutes.
-- FSx: backups through AWS Backup.
+- FSx: `fsx:DescribeFileSystems`: `DeploymentType` in `OntapConfiguration`,
+  `OpenZFSConfiguration` or `WindowsConfiguration`, and
+  `AutomaticBackupRetentionDays`. A `MULTI_AZ_*` file system has a standby file
+  server in a second AZ and fails over to it automatically; a `SINGLE_AZ_*` one
+  keeps its file servers in one AZ. Backups also go through AWS Backup, which can
+  copy them to another Region or account. Across Regions, FSx for ONTAP
+  replicates with NetApp SnapMirror (RPO as low as 5 minutes), which is set up in
+  ONTAP itself (CLI or REST API), so ask the team whether it exists. FSx for
+  OpenZFS has on-demand replication to a file system in another Region or account
+  (RPO as low as 15 minutes and RTO as low as 5 minutes, for up to 2 GB/s of
+  changes).
 - S3: `s3:GetBucketVersioning` and `s3:GetReplicationConfiguration`. Without versioning,
   an overwrite or delete cannot be undone; replication to another Region needs
-  versioning on both buckets. For a full bucket posture review, point to the
+  versioning on both buckets. In the same `GetBucketVersioning` response,
+  `MFADelete` set to `Enabled` means that deleting an object version or changing
+  versioning needs the root user with MFA; if the field is missing, MFA delete was
+  never set up. For a full bucket posture review, point to the
   `storage-s3-resiliency-expertise` skill.
 
 ## Messaging and events
@@ -342,8 +419,26 @@ Traps:
 - SQS, SNS, Kinesis and MSK are Regional. Check whether queues, topics and streams
   exist in the recovery Region, and how messages in flight would be handled.
 - `sqs:GetQueueAttributes` (`RedrivePolicy`): a queue without a dead-letter queue
-  keeps retrying failing messages until they expire. For
-  MSK operations, point to the `msk-operations` skill.
+  keeps retrying failing messages until they expire.
+- Amazon MSK:
+  - `kafka:ListClustersV2` and `kafka:DescribeClusterV2`: provisioned or
+    serverless, the broker subnets (`ClientSubnets`, so the AZs) and the number of
+    brokers.
+  - The MSK `DescribeTopic` API for each topic the workload uses:
+    `replicationFactor` (provisioned clusters on Kafka 3.6 or later). It needs
+    `kafka-cluster:Connect` and `kafka-cluster:DescribeTopic` on the cluster; if
+    it is denied, list topic replication as not checked.
+  - `kafka:ListReplicators`: does MSK Replicator copy the topics to a cluster in
+    another Region?
+  - Traps: use three AZs, a replication factor of at least 3, and
+    `min.insync.replicas` of at most the replication factor minus 1. A
+    replication factor of 1 can take partitions offline during a rolling update
+    or a broker failure; `min.insync.replicas` equal to the replication factor can
+    stop producers during a rolling update. AWS Backup does not support MSK. For a
+    Region failure, MSK Replicator copies the data, topic configuration and
+    consumer group offsets asynchronously to a cluster in the recovery Region; it
+    copies bad messages too.
+  - For MSK operations, point to the `msk-operations` skill.
 - Kinesis Data Streams: `kinesis:DescribeStreamSummary` (mode, retention). A stream
   is replicated across three AZs in its Region; retention is 24 hours by default
   and up to 365 days. The recovery Region needs its own stream, and producers and
@@ -363,9 +458,12 @@ Traps:
 
 ## Shared dependencies
 
-- Network: VPCs, subnets, security groups, VPC endpoints and on-premises links are
-  Regional. Say whether the network the workload uses exists in the recovery
-  Region or can be created from IaC, including a shared network stack.
+- Network: VPCs, subnets, security groups, VPC endpoints, transit gateways and
+  on-premises links are Regional. In the recovery Region, read
+  `ec2:DescribeVpcs`, `ec2:DescribeSubnets` and `ec2:DescribeTransitGateways`, and
+  say whether the network the workload needs exists there (subnets in several
+  AZs, the same routes to on-premises and other VPCs) or can be created from IaC,
+  including a shared network stack.
 - Network single points in the Region (they break the AZ scenario even when every
   data store is Multi-AZ). Check only what the workload's subnets use:
   - **NAT gateways:** `ec2:DescribeNatGateways` and `ec2:DescribeRouteTables`. A
@@ -376,6 +474,14 @@ Traps:
     workload uses).
   - **Interface VPC endpoints:** `ec2:DescribeVpcEndpoints`. An endpoint with
     subnets in one AZ only is a single point; production needs at least two AZs.
+  - **Transit Gateway:** `ec2:DescribeTransitGatewayVpcAttachments`
+    (`SubnetIds`). A VPC attachment takes one subnet per AZ, and resources in an
+    AZ with no attachment subnet cannot reach the transit gateway: check that
+    every AZ the workload uses has one. A transit gateway is Regional, so the
+    recovery Region needs its own, with its own attachments and on-premises
+    connections; inter-Region peering
+    (`ec2:DescribeTransitGatewayPeeringAttachments`) connects the two while both
+    Regions run.
   - **Site-to-Site VPN:** `ec2:DescribeVpnConnections`. Each connection has two
     tunnels; both must be configured and up (`VgwTelemetry` status). One tunnel
     down means no redundancy during maintenance.
@@ -397,8 +503,14 @@ Traps:
   Multi-Region keys keep the same key material in several Regions.
 - ECR: see Amazon ECS above.
 - Certificates (ACM) and Parameter Store values are Regional.
-- Service quotas and capacity in the recovery Region: point to the
-  `service-quota-check` skill.
+- Service quotas in the recovery Region: point to the `service-quota-check` skill.
+- Capacity in the recovery Region, for EC2 and for ECS or EKS on EC2:
+  `ec2:DescribeInstanceTypeOfferings` there (location type `availability-zone`)
+  shows whether each instance type the workload uses is offered in its AZs, and
+  `ec2:DescribeCapacityReservations` there shows reserved capacity. Only a
+  Capacity Reservation makes capacity sure at failover time: without one, say the
+  capacity is not reserved, never that it will be there. Capacity Reservations do
+  not apply to Fargate or Lambda.
 - IaC and pipelines: can they deploy the workload to the recovery Region today?
 
 ## Any other service
@@ -481,3 +593,46 @@ the roadmap like any other:
   https://aws.amazon.com/blogs/compute/introducing-global-endpoints-for-amazon-eventbridge/
 - Amazon Cognito multi-Region replication:
   https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-multi-region.html
+- Cost Explorer `GetCostAndUsage` (group by `REGION`):
+  https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_GetCostAndUsage.html
+- StackSets concepts (administrator account, Regional StackSets) and
+  `ListStackInstances`:
+  https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-concepts.html
+  https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_StackInstanceSummary.html
+- AMI ancestry (`SourceImageId`, `SourceImageRegion`):
+  https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Image.html
+- EBS snapshot copies have an arbitrary volume ID:
+  https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Snapshot.html
+- AWS Backup recovery points and copy jobs (`ResourceArn`, `SourceBackupVaultArn`,
+  `SourceRecoveryPointArn`):
+  https://docs.aws.amazon.com/aws-backup/latest/APIReference/API_RecoveryPointByBackupVault.html
+  https://docs.aws.amazon.com/aws-backup/latest/APIReference/API_CopyJob.html
+- AWS Backup logically air-gapped vaults:
+  https://docs.aws.amazon.com/aws-backup/latest/devguide/logicallyairgappedvault.html
+- Malware Protection for AWS Backup:
+  https://docs.aws.amazon.com/aws-backup/latest/devguide/malware-protection.html
+- Elastic Disaster Recovery covers EC2-hosted databases, not RDS:
+  https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html
+- MemoryDB Multi-AZ, Multi-Region and snapshot export:
+  https://docs.aws.amazon.com/memorydb/latest/devguide/autofailover.html
+  https://docs.aws.amazon.com/memorydb/latest/devguide/multi-region.html
+  https://docs.aws.amazon.com/memorydb/latest/devguide/snapshots-exporting.html
+- MSK best practices, topic operations and MSK Replicator:
+  https://docs.aws.amazon.com/msk/latest/developerguide/bestpractices.html
+  https://docs.aws.amazon.com/msk/latest/developerguide/msk-topic-operations-information.html
+  https://docs.aws.amazon.com/msk/latest/developerguide/msk-replicator.html
+- FSx deployment types, SnapMirror and OpenZFS on-demand replication:
+  https://docs.aws.amazon.com/fsx/latest/APIReference/API_OntapFileSystemConfiguration.html
+  https://docs.aws.amazon.com/fsx/latest/APIReference/API_OpenZFSFileSystemConfiguration.html
+  https://aws.amazon.com/fsx/netapp-ontap/features/
+  https://aws.amazon.com/fsx/openzfs/features/
+- S3 MFA delete (`MFADelete` in `GetBucketVersioning`):
+  https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketVersioning.html
+  https://repost.aws/knowledge-center/s3-bucket-mfa-delete
+- Transit Gateway VPC attachments and Availability Zones, and transit gateways as
+  a Regional construct with inter-Region peering:
+  https://docs.aws.amazon.com/vpc/latest/tgw/tgw-vpc-attachments.html
+  https://aws.amazon.com/blogs/networking-and-content-delivery/building-a-global-network-using-aws-transit-gateway-inter-region-peering/
+- Capacity Reservations for recovery:
+  https://docs.aws.amazon.com/drs/latest/userguide/Target-Related-FAQ.html
+  https://aws.amazon.com/blogs/architecture/pilot-light-with-reserved-capacity-how-to-optimize-dr-cost-using-on-demand-capacity-reservations/

@@ -16,7 +16,7 @@ become Resilience Hub tests once it is onboarded.
 | Bad data | Restore test (section 1); Resilience Hub has no test for this | Restore test (section 1) | Restore time and data-loss window |
 | One AZ fails | **Availability Zone: recovery** (section 2) | FIS **AZ: Power Interruption** (section 3) | Whether the workload keeps serving, and time to recover |
 | A whole Region fails | **Multi-Region: isolation**, then **Multi-Region: recovery** once copies or replicas exist (section 2) | FIS **Cross-Region: Connectivity** (section 3), then a failover drill (section 4) once copies or replicas exist | Behaviour when Regions cannot talk; the full RTO and data loss |
-| One service fails | **Dependency validation** for a dependency in the same Region (section 2); otherwise a forced failover of that service | A forced failover of that service, or the AZ scenario when it covers the same components | Failover time of the service |
+| Single node failure | **Dependency validation** for a dependency in the same Region (section 2); otherwise a forced failover of that service | A forced failover of that service, or the AZ scenario when it covers the same components | Failover time of the service |
 | On-premises link (Direct Connect) | Direct Connect failover test in the Resiliency Toolkit | the same | Whether traffic moves to the second path |
 
 ## Record every test the same way

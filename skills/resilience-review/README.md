@@ -32,10 +32,10 @@ This skill adds the planning and the proving.
   instead of a separate assessment, and recommends its tests; otherwise it ends
   by recommending onboarding to Resilience Hub, with the scoping sheet as the
   handoff.
-- Separates four scenarios (service failure, AZ failure, Region failure, bad data)
-  and states which protection covers which.
+- Separates four scenarios (single node failure, AZ failure, Region failure, bad
+  data) and states which protection covers which.
 - Treats disaster recovery as part of resilience: high availability covers the
-  service and AZ scenarios, disaster recovery the Region and bad-data scenarios.
+  single node and AZ scenarios, disaster recovery the Region and bad-data scenarios.
 - Pre-fills a resilience scoping or criticality sheet when the user gives one (or
   its column headers): one CSV row with the user's headers, RTO, RPO and recovery
   approach as the setup delivers them today, labelled "today, to confirm", and the
@@ -50,8 +50,9 @@ This skill adds the planning and the proving.
 - Maps and checks every layer of the workload read-only: entry and routing
   (Route 53, CloudFront, API Gateway, load balancers), compute (EC2, Auto Scaling,
   Amazon ECS, Amazon EKS, AWS Lambda, Step Functions), data (RDS, Aurora, DynamoDB,
-  ElastiCache, DocumentDB, Neptune, Redshift, OpenSearch), storage (EBS, EFS, FSx,
-  S3), messaging and events (SQS, SNS, Kinesis, EventBridge), identity (Cognito)
+  ElastiCache, MemoryDB, DocumentDB, Neptune, Redshift, OpenSearch), storage (EBS,
+  EFS, FSx, S3), messaging and events (SQS, SNS, Kinesis, MSK, EventBridge),
+  identity (Cognito)
   and shared dependencies (network, secrets, KMS keys, container images,
   certificates, IaC, service quotas). Any other service gets six generic questions.
 - Starts the answer with where the workload stands today, marking each scenario
@@ -66,11 +67,15 @@ This skill adds the planning and the proving.
 
 ## Prerequisites
 
-The skill uses up to 62 read-only IAM actions. The DevOps Agent managed policy
-`AIDevOpsAgentAccessPolicy` already allows 60 of them; this was checked with
-`iam:SimulateCustomPolicy`. The two it does not allow, `drs:DescribeSourceServers`
-and `lambda:GetFunction`, are optional: without them the skill says what it could
-not read and uses `lambda:GetFunctionConfiguration` instead. To grant them, deploy
+The skill uses up to 89 read-only IAM actions. The DevOps Agent managed policy
+`AIDevOpsAgentAccessPolicy` already allows 85 of them; this was checked with
+`iam:SimulateCustomPolicy`. The four it does not allow are optional: without them
+the skill says what it could not read. Without `lambda:GetFunction` it uses
+`lambda:GetFunctionConfiguration` instead, and without `drs:DescribeSourceServers`
+it reports Elastic Disaster Recovery as not checked. `kafka-cluster:Connect` and
+`kafka-cluster:DescribeTopic` let it read the replication factor of Amazon MSK
+topics; the template below does not grant them, so topic replication is reported
+as not checked unless you allow them yourself. To grant the first two, deploy
 the `EnableResilienceReview` parameter in
 [cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml)
 on the role of each Agent Space where the skill is installed.

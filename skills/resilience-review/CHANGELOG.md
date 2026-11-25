@@ -4,6 +4,19 @@
 
 - Initial version.
 
+- Second round of review feedback: the first scenario is now "Single node
+  failure"; targets start from what downtime and lost data cost the business;
+  the backup-and-restore RTO is "hours", as a restore can take longer than a day;
+  the opening section is shorter. New checks: Amazon MSK, Amazon MemoryDB
+  (Multi-Region is active-active), FSx Multi-AZ file systems and their
+  cross-Region replication (SnapMirror, OpenZFS on-demand replication), S3 MFA
+  delete, Transit Gateway attachments, AWS Backup logically air-gapped vaults and
+  Malware Protection for AWS Backup, and the limit of AWS Elastic Disaster
+  Recovery (databases on EC2, not RDS). Clearer steps for the agent: pick the
+  Regions from cost data or ask the user, include StackSets, review shared
+  infrastructure as a dependency, check capacity and the network in the recovery
+  Region, and map AMIs, snapshots and backup copies to their source.
+
 - Works with AWS Resilience Hub (next generation), which stays the source of truth
   for resilience assessments, findings and tests (review feedback): when the
   workload is already a Resilience Hub service, it uses its policy, findings and

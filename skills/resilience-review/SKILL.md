@@ -25,25 +25,11 @@ metadata:
 
 # Resilience Review
 
-Most teams that ask about resilience or disaster recovery have no RPO, no RTO and
-no strategy yet. AWS Resilience Hub is the AWS service for resilience
-assessments, findings and tests, and it needs those targets as a resilience
-policy. This skill starts the conversation before it: it checks every layer of
-the workload, whatever its architecture, says where it stands today, turns a
-business conversation into targets, picks the cheapest strategy that meets them,
-names the first tests, and gets the team ready to onboard the workload to
-Resilience Hub. It never competes with Resilience Hub: when the workload is
-already a Resilience Hub service, its policy, findings and test results come
-first.
-
-Disaster recovery is one part of resilience. High availability keeps the workload
-running when a service or an Availability Zone fails; disaster recovery brings it
-back after a Region loss or bad data; together they keep the business's critical
-functions running (business continuity). The four scenarios below cover both.
-
-Finding configuration gaps is the easy part. Your value is in **planning** (which
-strategy, at what cost) and **proving** (which test shows recovery works). Never
-skip those two.
+Review one workload's resilience, read-only: where it stands for each failure
+scenario, the targets or the questions to agree them, the cheapest strategy, a
+roadmap, and the tests that prove recovery. Never skip the strategy and the
+tests. When the workload is already an AWS Resilience Hub service, Resilience
+Hub is the source of truth (see below).
 
 ## Choose the path first
 
@@ -159,11 +145,12 @@ the workload is already in Resilience Hub"). Read [references/checks-by-layer.md
 to find the workload, the calls per layer, their traps, and the questions for a
 service with no section of its own. Keep it for Step 5.
 
-If no workload was named, find the candidates: CloudFormation stacks,
-myApplications (AppRegistry) applications, resource groups, and tag values shared
-by several resources. A network stack or other infrastructure shared by several
-workloads is a dependency of each, not a workload of its own. Say it is shared,
-without naming the other workloads.
+If no workload was named, find the candidates: CloudFormation stacks and
+StackSets, myApplications (AppRegistry) applications, resource groups, and tag
+values shared by several resources. A network stack or other infrastructure shared
+by several workloads is a dependency of each, not a workload of its own. Review
+the parts the workload uses in its shared dependencies layer, and say they are
+shared, without naming the other workloads.
 
 List every component by layer: entry and routing (DNS, CloudFront, API Gateway,
 load balancers), compute (EC2, Auto Scaling, ECS, EKS, Lambda, Step Functions),
@@ -174,21 +161,22 @@ replicated data is no use if nothing can run or route in the recovery Region.
 
 ### Step 1: Mark all four scenarios in scope or not
 
-Each scenario needs different protection. Always list **all four** and mark each
-one in scope or not, even if the user mentions only one:
+Each scenario needs different protection: the first two are high availability,
+the last two disaster recovery. Always list **all four** and mark each one in
+scope or not, even if the user mentions only one:
 
 | Scenario | Example | What protects you |
 |---|---|---|
-| One service fails | database instance or cache node lost | in-Region redundancy (Multi-AZ, replicas, automatic failover) |
+| Single node failure | database instance or cache node lost | in-Region redundancy (Multi-AZ, replicas, automatic failover) |
 | One Availability Zone fails | AZ power loss | Multi-AZ deployments |
 | A whole Region fails | Region-wide impairment | copies or replicas in another Region |
 | Bad data | bad deploy, deleted table, ransomware | point-in-time recovery and backups, ideally in another account |
 
 Replication protects against losing a Region, **not** against bad data: it copies
 the bad writes too. Whenever you recommend replication (DynamoDB global tables, a
-cross-Region read replica, Aurora Global Database, ElastiCache Global Datastore),
-say in the same place that it copies bad writes too and that point-in-time
-recovery must stay on.
+cross-Region read replica, Aurora Global Database, ElastiCache Global Datastore,
+MemoryDB Multi-Region), say in the same place that it copies bad writes too and
+that point-in-time recovery must stay on.
 
 ### Step 2: Classify each data store
 
@@ -214,9 +202,11 @@ AMIs, container images and IaC that exist there.
   Resilience Hub service with a policy, the policy's RTO and RPO are the targets,
   labelled "from the Resilience Hub policy".
 - If not, **do not invent them**, and do not offer "typical" or "likely" targets.
-  Give the questions the business must answer (maximum data loss and downtime per
-  tier, and the targets of what the workload depends on) and show what each
-  strategy would mean for them.
+  Ask what the business can answer: per tier, what downtime and lost data cost
+  (revenue, penalties, extra work, reputation) and how that cost grows with time,
+  and the targets of what the workload depends on. Then show how the answers
+  build the case for targets: each strategy's RPO, RTO and cost level next to the
+  cost of the downtime and data loss it avoids.
 - **Today is not a target.** You may say what the current setup delivers today
   (for example "automatic Multi-AZ failover"), read from the configuration. Label it as today's capability, never as the target.
   A scoping sheet is filled this way (Step 7).
@@ -229,10 +219,10 @@ down in RPO and RTO costs more and adds complexity.
 
 | Strategy | RPO | RTO | What runs in the recovery Region |
 |---|---|---|---|
-| Backup and restore | hours | 24 hours or less | backups only; rebuild with IaC |
+| Backup and restore | hours | hours | backups only; rebuild with IaC |
 | Pilot light | minutes | tens of minutes | data replicated, databases on; app servers off |
 | Warm standby | seconds | minutes | everything on, scaled down |
-| Multi-site active/active | near zero | potentially zero | everything, serving traffic |
+| Multi-site active/active | near zero | potentially zero | everything, serving traffic; data stores that take writes in every Region (DynamoDB global tables, MemoryDB Multi-Region) |
 
 Source: AWS Well-Architected Framework, REL13-BP02. "Data replicated, nothing
 else running" is pilot light. Some teams add a fifth label, hot standby
@@ -250,19 +240,21 @@ All calls are read-only. Check each layer against its tier's targets:
   recovery is on, even where replication exists.
 - **Compute:** spread over more than one AZ; no single instance or single task;
   AMIs, images and IaC can start it in the recovery Region. Name the AMI each
-  launch template uses and say whether it exists in the recovery Region
-  (`ec2:DescribeImages` there), and whether the workload's stack could deploy
-  there as it is (its AMI IDs, parameters and imports).
+  launch template uses and say whether a copy of it exists in the recovery Region
+  (`ec2:DescribeImages` there, matched to its source as the checks reference
+  says), and whether the workload's stack could deploy there as it is (its AMI
+  IDs, parameters and imports).
 - **Entry and routing:** load balancers span several AZs, and something (DNS
   failover, ARC) can send traffic to the recovery Region. Load balancers and
   certificates are Regional: say explicitly that the recovery Region needs its own,
   and whether they exist there or can be created from IaC.
-- **Shared dependencies:** network, secrets, KMS keys, container images and quotas
-  exist in the recovery Region. For every image, say where it lives (private ECR
-  with or without replication, a pull-through cache, a public registry) and
-  whether the recovery Region can pull it.
+- **Shared dependencies:** network, secrets, KMS keys, container images, quotas
+  and capacity exist in the recovery Region. For every image, say where it lives
+  (private ECR with or without replication, a pull-through cache, a public
+  registry) and whether the recovery Region can pull it.
 - **Network in the Region:** no single point that breaks the AZ scenario: one
-  zonal NAT gateway for several AZs, interface endpoints in one AZ, a VPN with one
+  zonal NAT gateway for several AZs, interface endpoints in one AZ, a Transit
+  Gateway attachment with no subnet in an AZ the workload uses, a VPN with one
   tunnel down, one Direct Connect connection or location (see the checks
   reference).
 - **Backups:** a copy rule protects only resource types AWS Backup can copy (not
@@ -296,7 +288,7 @@ line that they become Resilience Hub tests once it is onboarded.
   **Multi-Region: recovery** once copies or replicas exist in the recovery
   Region; otherwise the FIS scenario **Cross-Region: Connectivity**, in
   non-production, plus a timed **failover drill** once copies or replicas exist.
-- **One service fails:** the failover of that service, for example a forced
+- **Single node failure:** the failover of that node, for example a forced
   database failover (on Resilience Hub, **Dependency validation** for a
   dependency in the same Region), or the AZ test when it covers the same
   components.
