@@ -54,6 +54,10 @@ live-failure triage area (see Related skills). For a bare "our calls are failing
 no endpoint detail, say that this skill does not decide the fault locus, gather endpoint evidence only if an
 endpoint or job is named, and do not rule on the locus.
 
+An **endpoint posture review** (auto scaling, data capture, VPC configuration and the rest of a
+best-practice pass over an endpoint) belongs to `sagemaker-ai-ops-review` (see Related skills); this skill
+diagnoses a stated failure, slowness, scaling or cost problem.
+
 ## When to Use
 
 Activate this skill when the user:
@@ -66,9 +70,8 @@ Activate this skill when the user:
 - Reports the **endpoint is not scaling** or has **no auto-scaling** on its production variant.
 - Says the **endpoint looks idle or is wasting money** — a variant with zero current instances, a leftover endpoint
   still billed by config.
-- Wants to know whether **model monitoring / data capture** is in place, whether a **second variant for A/B or
-  canary** exists, whether **Inference Recommender** was run, whether the endpoint is **inside a VPC** or
-  **encrypted**, or whether the model has **registry lineage**.
+- Wants to know whether a **second variant for A/B or canary** exists, whether **Inference Recommender** was
+  run, whether the endpoint is **encrypted**, or whether the model has **registry lineage**.
 - Reports a **break-fix error** — endpoint creation or update `Failed`, a custom container that never passes the
   health check, an access error on the model artifact, a private-subnet app that cannot reach the endpoint,
   `ModelError` on some calls, multi-model first-call latency, or a capacity or quota error creating the endpoint.
@@ -104,12 +107,9 @@ severity from the catalog. The table below is a what-it-catches index.
 
 | check-id | area | severity | what it catches |
 |---|---|---|---|
-| LLM-SM-001 | Real-time | HIGH | No Application Auto Scaling target on the production variant — fixed capacity. |
-| LLM-SM-002 | Real-time | HIGH | No `DataCaptureConfig` and no Model Monitor schedule — drift/quality unmonitored. |
 | LLM-SM-003 | Real-time | HIGH | Variant `InService` but `CurrentInstanceCount` = 0 — abandoned or scaled-out leftover. |
 | LLM-SM-004 | Real-time | MEDIUM | Single variant where safe rollout matters — no multi-variant A/B or canary. |
 | LLM-SM-005 | Real-time | MEDIUM | Instance type/count chosen without an Inference Recommender run. |
-| LLM-SM-006 | Real-time | HIGH | No `VpcConfig` where private networking is required. |
 | LLM-SM-007 | Real-time | HIGH | Endpoint config `KmsKeyId` absent — storage volume not CMK-encrypted. |
 | LLM-SM-008 | Real-time | MEDIUM | Low/bursty traffic on an always-on endpoint — idle-cost signal; the fit decision is LLM-SM-SERVE-005 (Step 4). |
 | LLM-SM-009 | Real-time | MEDIUM | Latency growth or 5xx with no CloudWatch alarm — degradation undetected. |
@@ -134,12 +134,12 @@ How to read each API is in [collection-reference.md](references/collection-refer
 
 | Operator says | Area | First read | Load |
 |---|---|---|---|
-| The endpoint isn't scaling, there's no auto-scaling | Real-time | `application-autoscaling:DescribeScalableTargets` for the variant | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-001), [api-quirks.md](references/api-quirks.md) §2 |
-| Is my model being monitored, there's no data capture | Real-time | `DescribeEndpointConfig` `DataCaptureConfig`, `ListMonitoringSchedules` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-002) |
+| The endpoint isn't scaling out under load | Real-time | `application-autoscaling:DescribeScalableTargets` / `DescribeScalingPolicies` for the variant | [known-causes.md](references/known-causes.md), [api-quirks.md](references/api-quirks.md) §2 |
+| Posture review: is auto scaling, data capture or a VPC configured | Real-time | Hand off to `sagemaker-ai-ops-review` (Related skills) | none in this skill |
 | This endpoint looks idle, a variant shows zero instances | Real-time | `DescribeEndpoint` `CurrentInstanceCount`, then recent `Invocations` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-003), [api-quirks.md](references/api-quirks.md) §1 |
 | Do I have an A/B or canary variant | Real-time | `DescribeEndpoint` production-variant count and weights | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-004) |
 | Is my endpoint right-sized, did we run inference recommender | Real-time | `ListInferenceRecommendationsJobs`, then both metric namespaces | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-005) |
-| Is the endpoint in a VPC, is it encrypted | Real-time | `DescribeModel` `VpcConfig`, `DescribeEndpointConfig` `KmsKeyId` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-006, 007) |
+| Is the endpoint's storage volume encrypted | Real-time | `DescribeEndpointConfig` `KmsKeyId` | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-007) |
 | Am I wasting money on an always-on endpoint | Real-time | `Invocations` volume vs provisioned capacity (idle cost), then the fit decision in Step 4 (LLM-SM-SERVE-005) | [checks-sagemaker-inference.md](references/checks-sagemaker-inference.md) (LLM-SM-008) |
 | Latency is rising, I'm seeing 5xx errors | Real-time | `ModelLatency`, `Invocation5XXErrors`, then `DescribeAlarms` | [cloudwatch-alarm-reference.md](references/cloudwatch-alarm-reference.md) (LLM-SM-009) |
 | This GPU instance looks oversized | Real-time | `GPUUtilization` from `/aws/sagemaker/Endpoints` | [metrics-and-logs.md](references/metrics-and-logs.md) §1 (LLM-SM-010) |
@@ -203,8 +203,9 @@ the variant is **real-time**. For every production variant read `CurrentInstance
 
 ### Step 2 — Read the configuration
 
-**Real-time endpoint.** `DescribeEndpointConfig` for instance type/count, `KmsKeyId` (LLM-SM-007) and
-`DataCaptureConfig` (LLM-SM-002); `DescribeModel` for `VpcConfig` (LLM-SM-006). Report container environment
+**Real-time endpoint.** `DescribeEndpointConfig` for instance type/count and `KmsKeyId` (LLM-SM-007);
+`DescribeModel` for `VpcConfig` only when the stated problem is reachability from a VPC
+([known-causes.md](references/known-causes.md)). Report container environment
 variables by **key name only** — never a value (Guardrail 3).
 
 **Serverless / async.** `ServerlessConfig` (`MemorySizeInMB`, `MaxConcurrency`, `ProvisionedConcurrency`);
@@ -217,8 +218,7 @@ variables by **key name only** — never a value (Guardrail 3).
 ### Step 3 — Check reliability and scaling
 
 **Real-time endpoint.** `application-autoscaling:DescribeScalableTargets` / `DescribeScalingPolicies` for the
-variant (LLM-SM-001); `ListMonitoringSchedules` for Model Monitor (LLM-SM-002); count variants for A/B / canary
-(LLM-SM-004). An empty scalable-targets response on a production variant is **fixed capacity**, not "scaling
+variant when the stated problem is scaling; count variants for A/B / canary (LLM-SM-004). An empty scalable-targets response on a production variant is **fixed capacity**, not "scaling
 intentionally off" ([api-quirks.md](references/api-quirks.md) §2).
 
 **Serverless.** Check whether `MaxConcurrency` is exhausted while throttling (LLM-SM-SERVE-002).
@@ -351,7 +351,7 @@ Non-negotiable, at every step:
 - "The endpoint is `InService`, so it's serving traffic and the queue is fine." `InService` is control-plane state; a real-time, async or serverless variant can be `InService` with `CurrentInstanceCount` = 0 (scaled in, scale-to-zero, or a leftover). Confirm a non-zero instance count, recent `Invocations` and, for async, the backlog before calling it healthy (api-quirks §1, LLM-SM-003, LLM-SM-SERVE-004).
 - "No datapoints came back, so there are zero errors, no cold start, an empty backlog and a clean run." Absent CloudWatch datapoints mean no traffic or nothing emitted in the window, not a measured zero. A healthy endpoint has datapoints present; an abandoned one has none. Distinguish "zero measured" from "nothing reported" before clearing LLM-SM-SERVE-001 or LLM-SM-SERVE-004, and for a transform job read the logs and the output count too (api-quirks §3).
 - "GPU utilization looks low, so this endpoint is over-provisioned." Invocation metrics live in `AWS/SageMaker` and instance resource metrics in `/aws/sagemaker/Endpoints` — a right-sizing conclusion needs both namespaces. Low GPU use alone cannot separate over-provisioned from simply idle (LLM-SM-010, LLM-SM-005).
-- "`DescribeScalableTargets` returned empty, so auto-scaling is intentionally off — low severity." On a production variant empty means fixed capacity that cannot absorb spikes or scale in, which is LLM-SM-001 (HIGH). Also confirm the lookup used resource id `endpoint/<name>/variant/<variant>`; a wrong id also returns empty (api-quirks §2).
+- "`DescribeScalableTargets` returned empty, so auto-scaling is intentionally off — low severity." On a production variant empty means fixed capacity that cannot absorb spikes or scale in, so report the missing scalable target as the cause (guidance from known-causes.md, no check-id). Also confirm the lookup used resource id `endpoint/<name>/variant/<variant>`; a wrong id also returns empty (api-quirks §2).
 - "Inference Recommender returned nothing, so the instance type is wrong." In a region that does not support the feature, empty or an error is not evidence of a finding. Record region-unsupported as a disclosed assumption, not an LLM-SM-005 finding.
 - "Async failures would show up as errors, so no notification config is fine." Without `OutputConfig.NotificationConfig` SNS success and error topics, callers get no completion signal and failures are silent. That is LLM-SM-SERVE-003 (HIGH), not a cosmetic gap.
 - "Throttling means raise `MaxConcurrency` to the maximum." Raising it is only the fix when it is the binding limit. Read the configured value against the observed throttling first, and treat the tuning number as `workload-specific` (LLM-SM-SERVE-002).
@@ -383,7 +383,7 @@ cause false positives and false negatives in this review (traps §1–§4):
   async/serverless, or a misconfigured leftover) — exactly the scale-to-zero case the serverless/async checks
   reason about. Always confirm instance count and recent `Invocations` (LLM-SM-003).
 - **`DescribeScalableTargets` empty ≠ scaling intentionally off** (§2). On a production variant, empty means **fixed
-  capacity** (LLM-SM-001, HIGH). Also confirm the lookup used the right resource id
+  capacity**. Also confirm the lookup used the right resource id
   (`endpoint/<name>/variant/<variant>`); a wrong id also returns empty.
 - **CloudWatch "no datapoints" ≠ a measured zero** (§3). Absent datapoints mean **no traffic or no emission** in the
   window, not a value of zero. This is how you tell a *healthy* endpoint (datapoints present, low errors) from an
@@ -420,6 +420,7 @@ endpoints or jobs in it, and say so.
 | Bedrock AgentCore and Bedrock Agents | opsai-bedrock-agentcore |
 | Output quality, regressions, evaluation jobs (Bedrock or SageMaker), truncation, finish reasons | opsai-ml-eval-check |
 | SageMaker training, fine-tuning, Model Registry | opsai-sagemaker-training |
+| Endpoint posture review: auto scaling, data capture, VPC configuration | sagemaker-ai-ops-review |
 
 Future price quotes: use the [AWS Pricing Calculator](https://calculator.aws/).
 

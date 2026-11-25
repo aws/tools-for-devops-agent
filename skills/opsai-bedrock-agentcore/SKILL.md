@@ -1,17 +1,16 @@
 ---
 name: opsai-bedrock-agentcore
-description: Review the health of the agent layer on AWS, covering Amazon Bedrock AgentCore and the legacy
-  Bedrock Agents. Use this skill when an agent will not start or cannot be invoked, when a gateway or
-  action group fails, when an agent returns nothing or produces no traces, when it behaves differently
-  in production than in test, or when someone asks which agent version is actually live, even if they
-  do not mention runtime roles, VPC endpoints, service control policies, OTLP telemetry or aliasing by
-  name. Findings carry LLM-AC and LLM-AGT check-ids with a severity and an AWS-doc citation, from read-only
+description: Diagnose break-fix problems in the agent layer on AWS, covering Amazon Bedrock AgentCore and
+  the legacy Bedrock Agents. Use this skill when an agent will not start or cannot be invoked, when a
+  gateway or action group fails, when an agent returns nothing, when it behaves differently in
+  production than in test, or when someone asks which agent version is actually live, even if they do
+  not mention runtime roles, VPC endpoints, service control policies or aliasing by name. Findings carry LLM-AC and LLM-AGT check-ids with a severity and an AWS-doc citation, from read-only
   APIs.
 metadata:
   author: dimwael
   version: "1.0.0"
   tier: "aws-support-managed"
-  summary: "Reviews Amazon Bedrock AgentCore and Bedrock Agents health: invocation, gateways, action groups, traces and live versions."
+  summary: "Diagnoses Amazon Bedrock AgentCore and Bedrock Agents failures: invocation, gateways, action groups and live versions."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock AgentCore, Amazon Bedrock, Amazon CloudWatch, AWS X-Ray"
   aws-devops-agent-skills.technical-domains: "AI/ML, Observability"
@@ -22,9 +21,8 @@ metadata:
 You review the health of the **agent layer** on AWS. The **primary surface is Amazon Bedrock AgentCore**
 — the runtimes, gateways, memories, and workload identities you deploy and operate for your own agent
 code. **Amazon Bedrock Agents Classic** — the older managed agents with action groups and aliases — is
-covered as **legacy, maintenance-mode** surface. Your job is to find the configuration and observability
-gaps that make an agent fail to invoke, fail a tool call, run unguarded, or become impossible to debug —
-and to report each gap with evidence, a stable check-id, and a severity, before anyone prescribes a fix.
+covered as **legacy, maintenance-mode** surface. Your job is to find the configuration gaps that make an
+agent fail to invoke, fail a tool call or run unguarded, and to report each gap with evidence, a stable check-id, and a severity, before anyone prescribes a fix.
 
 This skill works on its own. Other skills are optional; see *Related skills (optional)*.
 
@@ -56,7 +54,7 @@ but a reader must know that half of this skill is **not growing**.
 | Core resources | runtimes, gateways, memories, workload identities | agents, action groups, aliases, prompts, memory |
 | How prod behaviour is set | the deployed **runtime version** | an **alias** points at a published **version** |
 | Primary collection client | `bedrock-agentcore-control` (IAM prefix `bedrock-agentcore:`) + `iam` + `ec2` + `organizations` | `bedrock-agent` (IAM prefix `bedrock:`) |
-| Representative checks | runtime role permissions, VPC endpoints, gateway targets, OTLP telemetry | guardrail attached, action-group Lambda scope, alias pinning, tracing |
+| Representative checks | runtime role permissions, VPC endpoints, gateway targets, quotas, cross-account access | guardrail attached, action-group Lambda scope, alias pinning, tracing |
 
 If the user says "my runtime cannot invoke," "gateway error," or "missing VPC endpoint," start in
 **LLM-AC**. If they say "my agent returns empty," "which agent version is live," or "my action group
@@ -75,13 +73,15 @@ through AgentCore gateway policies.
 
 **AgentCore coverage scope (known, not silently omitted).** AgentCore consists of Runtime, Memory,
 Gateway, Browser, Code Interpreter, Identity, Policy, Observability, and Evaluations. This skill today
-covers **Runtime, Gateway, and Observability** (the LLM-AC family), plus the documented **quotas and
+covers **Runtime and Gateway** break-fix (the LLM-AC family), plus the documented **quotas and
 session limits** of Runtime, Gateway and Memory (LLM-AC-011), and **AgentCore Memory**: short-term
 events, branches, asynchronous long-term extraction and Memory latency (LLM-AC-012), and **Browser and Code
 Interpreter** session limits and failures (LLM-AC-013), and **cross-account access** to Runtime,
 Gateway and Memory through resource-based policies (LLM-AC-014). It does **not yet cover** **Identity, Policy, or
-Evaluations** behaviour — that is stated here as
-known scope; do not invent checks for them.
+Evaluations** behaviour; that is stated here as known scope, so do not invent checks for them.
+**Observability setup** (tracing, spans, Transaction Search, log delivery) belongs to
+`agentcore-observability-setup`, and a **posture or Well-Architected review** of AgentCore resources
+belongs to `agentcore-ops-review`; see *When NOT to Use*.
 
 **API namespace note.** AWS Agent Registry has moved to its own `agent-registry` namespace, and support
 for the public-preview `bedrock-agentcore` namespace for registry operations ends on October 30, 2026
@@ -96,17 +96,18 @@ Activate this skill when the user:
   **missing VPC endpoint** (primary surface, LLM-AC).
 - Reports a **runtime role permission denied**, or asks whether the runtime execution role can reach the
   models and dependencies it needs (LLM-AC-001/002).
-- Says there are **no traces from my agent**, or asks whether they can see what the runtime is doing
-  across stages (LLM-AC-005/006/007).
 - Reports a **Bedrock Agents Classic agent returning empty** or erroring, or an **action group / tool
   call failing** (legacy surface, LLM-AGT).
 - Asks **which agent version is live**, or says their **Classic agent has no guardrail** (LLM-AGT).
-- Wants a **posture review of a runtime or an agent** against best practice (the AC/AGT catalogs), or is
-  **running Bedrock Agents Classic and should hear the migration advisory** (LLM-AGT-011).
+- Is **running Bedrock Agents Classic and should hear the migration advisory** (LLM-AGT-011).
 
 ## When NOT to Use
 
-These areas are outside the agent/runtime layer. For each, follow *Related skills (optional)*:
+These areas are outside this skill. For each, follow *Related skills (optional)*:
+- **AgentCore observability setup**: no traces or spans, Transaction Search, OTLP export, log
+  delivery, "why can't I see traces for my agent" (`agentcore-observability-setup`).
+- **AgentCore posture or Well-Architected review** of runtimes, gateways and memory against best
+  practice (`agentcore-ops-review`).
 - **Bedrock model configuration & invocation logging** (model lifecycle, invocation-logging config,
   inference profiles), and **knowledge bases / RAG** ingestion and retrieval quality.
 - **Guardrail policy content** (what the guardrail blocks/masks, strength of filters). This skill only
@@ -139,7 +140,6 @@ maintenance-mode coverage.
 | Cold start, or lost in-memory state between calls | Which session ID the client sends, and in which header for the runtime's protocol | [`references/runtime-sessions.md`](references/runtime-sessions.md) |
 | The agent (or an orchestrator and its sub-agents) forgets earlier turns although the session ID is stable; memory branches, long-term records or Memory latency behave unexpectedly | Whether the code writes (`CreateEvent`) and reads (`ListEvents`) memory events per turn, on which memory resource and actor/session scope; for latency, the Memory metrics over the window | `references/checks-agentcore.md` (LLM-AC-012), `references/api-quirks.md` §17 |
 | A Browser tool (or Code Interpreter) session crashes, slows or changes size after running for a while; or a console page or dashboard stays loading in the operator's own web browser | Which browser it is: the managed Browser tool (session age, task count, recording on or off, `viewPort`) or the operator's own browser (does it load in a private window, another browser, for a colleague) | `references/checks-agentcore.md` (LLM-AC-013), `references/api-quirks.md` §18 |
-| No traces from my agent | OTLP / AgentCore Observability config and trace propagation | `references/checks-agentcore.md` (LLM-AC-005, 006, 007), `references/metrics-and-logs.md` |
 | My bedrock agent returns nothing (legacy, Classic) | `GetAgent` for guardrail, model, prompt-override config | `references/checks-agents.md` (LLM-AGT-001) |
 | Agent output changes between turns with the same prompt and config, for example citation or formatting style flips (legacy, Classic) | Treat it as orchestration nondeterminism until a trace shows otherwise: Full method: [`references/router-details.md`](references/router-details.md) §5 | [Advanced prompts](https://docs.aws.amazon.com/bedrock/latest/userguide/advanced-prompts.html), `references/checks-agents.md` (LLM-AGT-005) |
 | Which agent version is live (legacy, Classic) | `ListAgentAliases` / `GetAgentAlias` resolved to the served version | `references/checks-agents.md` (LLM-AGT-007), `references/api-quirks.md` |
@@ -179,9 +179,8 @@ Handling and `api-quirks.md`).
   `GetGatewayTarget`) for an
   unconfigured gateway or an invalid/failing target (LLM-AC-004), and for unrotated/long-lived target
   credentials (LLM-AC-008).
-- [ ] Step 6: Check observability — OTLP/AgentCore Observability enabled with stage-level spans
-  (LLM-AC-005, CRITICAL), trace-context propagation across hops (LLM-AC-006), and structured JSON logs
-  (LLM-AC-007).
+- [ ] Step 6: If the question is about missing traces, spans or logs, hand that part to
+  `agentcore-observability-setup` (*Related skills (optional)*); this skill has no observability checks.
 - [ ] Step 7: Check which version each runtime endpoint serves (LLM-AC-009) and whether sessions can be
   reviewed in AgentCore Observability (LLM-AC-010); both are `workload-specific`.
 - [ ] Step 8: For throttling (429) or slowdown under load, name the throttling layer and the documented

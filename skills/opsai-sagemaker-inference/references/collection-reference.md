@@ -10,11 +10,11 @@ The exact **read-only** API calls the agent uses to collect state for a SageMake
 
 | API (service) | Fields contributed | Feeds checks |
 |---|---|---|
-| `sagemaker:ListEndpoints` / `DescribeEndpoint` | endpoint status, `ProductionVariants[].CurrentInstanceCount`, variant weights, DataCaptureConfig status | LLM-SM-002, 003, 004 |
-| `sagemaker:DescribeEndpointConfig` | variant instance type/count, `KmsKeyId`, `DataCaptureConfig`, serverless config | LLM-SM-002, 007, 008 |
-| `sagemaker:DescribeModel` | `VpcConfig`, container/image, model data URL | LLM-SM-006 |
-| `application-autoscaling:DescribeScalableTargets` / `DescribeScalingPolicies` | registered scaling targets/policies for the variant or async backlog | LLM-SM-001, LLM-SM-SERVE-004 |
-| `sagemaker:ListMonitoringSchedules` / `DescribeMonitoringSchedule` | Model Monitor schedules attached | LLM-SM-002 |
+| `sagemaker:ListEndpoints` / `DescribeEndpoint` | endpoint status, `ProductionVariants[].CurrentInstanceCount`, variant weights, DataCaptureConfig status | LLM-SM-003, 004 |
+| `sagemaker:DescribeEndpointConfig` | variant instance type/count, `KmsKeyId`, `DataCaptureConfig`, serverless config | LLM-SM-007, 008 |
+| `sagemaker:DescribeModel` | `VpcConfig`, container/image, model data URL | known-causes.md (VPC reachability) |
+| `application-autoscaling:DescribeScalableTargets` / `DescribeScalingPolicies` | registered scaling targets/policies for the variant or async backlog | known-causes.md (scaling), LLM-SM-SERVE-004 |
+| `sagemaker:ListMonitoringSchedules` / `DescribeMonitoringSchedule` | Model Monitor schedules attached | none (posture: `sagemaker-ai-ops-review`) |
 | `sagemaker:ListInferenceRecommendationsJobs` | whether right-sizing was run | LLM-SM-005 |
 | `sagemaker:ListModelPackages` / `DescribeModelPackage` | registry lineage for the deployed endpoint's model artifact | LLM-SM-011 |
 
