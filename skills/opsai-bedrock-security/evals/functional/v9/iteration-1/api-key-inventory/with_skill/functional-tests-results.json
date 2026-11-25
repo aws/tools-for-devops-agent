@@ -1,0 +1,125 @@
+{
+  "version": "v9",
+  "iteration": 1,
+  "eval_id": "api-key-inventory",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-bedrock-security' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'opsai-bedrock-security' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers nearly all the required elements:\n\n1. It identifies the long-term Amazon Bedrock API key (<key id>) on IAM user llmops-lf-apikey-user, giving status (Active), what it can do (ListFoundationModels only, GRANT none), tier (Info), and recommendation (no action needed).\n2. It also found a separate IAM user access key (<key id>) with broad grant/Critical tier that can invoke Bedrock and create new API keys - showing it evaluated owners' IAM policies broadly, not just dedicated API-key users.\n3. For each finding, it gives masked key IDs (last four chars only, e.g. <key id>, <key id>), never full key IDs, no alias/service user name exposure beyond the IAM username (which is allowed per the user-name rule... actually the expected output says \"never prints... an API key's alias or service user name\" - the response prints IAM user names like llmops-lf-apikey-user and llmops-demo-admin, which seems allowed since the restriction is about API key's alias/service user name, distinct from the owning IAM user name requirement). This matches the expected output which explicitly asks to give \"the owning IAM user or the key ID masked to its last four characters.\"\n4. It explicitly states IAM does not report last used time for API keys, so usage status is unknown, and never calls it dormant/never used - matches \"unknown\" marking, not \"dormant\".\n5. It gives actionable removal steps with an AWS documentation link (IAM best practices).\n6. It states the audit is read-only and made no changes, both at the top and in the detailed limitations section.\n7. Account ID is masked to last four digits (7339) - compliant.\n8. The response doesn't explicitly test the ListServiceSpecificCredentials denied/partial status, nor does it explicitly rate scenarios like orphaned Medium/expired Info in different context, but the key found is actually active not expired, so those tier classifications naturally don't apply here. The \"Info\" tier was assigned to the <key id> key, though expected output says expired keys should be Info \"that cannot be re-enabled\" - here the key is active with grant none, and tier Info matches the catalog's LLM-BPA-014 rule (which seems to be for a different reason - minimal permissions). This is a minor mismatch but the catalog code is referenced, suggesting it follows skill-defined tiering rather than the exact rule described in the expected output for expired keys specifically. Since the actual key here is not expired, this scenario doesn't apply, so no contradiction.\n\nOverall, the response substantively addresses the core user question (full report of long-term Bedrock API keys and removal recommendations) and satisfies the key criteria about transparency, masking, read-only audit statement, unknown usage status, and includes extra critical finding about a broader IAM user with Bedrock access. This covers the expected output well.",
+      "evidence": "\"Account ending 7339 has one long-term Amazon Bedrock API key: key <key id> on IAM user llmops-lf-apikey-user... Its GRANT is none and its tier is Info (LLM-BPA-014)... IAM does not report when an Amazon Bedrock API key was last used, so whether <key id> is in use is unknown.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response lists every long-term Amazon Bedrock API key found by the account-wide listing (keys on any IAM user, not only on BedrockAPIKey users), identifying each by its IAM user name or by its key ID masked to the last four characters",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Row 2 in Findings table: 'account ending 7339 | llmops-lf-apikey-user | Amazon Bedrock API key | <key id> | 19d | unknown | no | none | LLM-BPA-014'",
+          "reasoning": "The report lists the Bedrock API key found (<key id> on llmops-lf-apikey-user) identified by masked key ID and IAM user name, and the findings table covers both keys found in the account-wide listing.",
+          "confidence": "medium"
+        },
+        {
+          "text": "For each API key, the response says what it can do in Amazon Bedrock (its grant and risk tier) and whether to remove it, as steps for the customer",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Its GRANT is none and its tier is Info (LLM-BPA-014). Its attached policy allows only bedrock:ListFoundationModels... Action for <key id>: no action needed' and 'Action for llmops-demo-admin: remove aws-marketplace:Subscribe, bedrock:CreateMarketplaceModelEndpoint and iam:CreateServiceSpecificCredential... rotate access key <key id> and move the workload to an IAM role.'",
+          "reasoning": "For key <key id>, the response states grant (none), tier (Info), what it can do (only bedrock:ListFoundationModels), and action (no action needed). For access key <key id> it states grant broad, tier Critical, and gives explicit removal/remediation steps.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says that IAM does not report when an API key was last used and does not call any API key dormant or never used",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'IAM does not report when an Amazon Bedrock API key was last used, so whether <key id> is in use is unknown.' and table shows 'unknown' for LAST USED, and limitations state 'API key last use is unknown... API keys show unknown and are never counted as dormant.'",
+          "reasoning": "The response explicitly states IAM does not report last-used for API keys and marks LAST USED as 'unknown' rather than calling it dormant.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that IAM does not report when an Amazon Bedrock API key was last used, so whether each key is still in use is unknown",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'IAM does not report when an Amazon Bedrock API key was last used, so whether <key id> is in use is unknown.' and 'IAM does not report when an Amazon Bedrock API key was last used, so whether a key is in use is unknown'",
+          "reasoning": "This is explicitly stated almost verbatim in both the final response and the limitations section.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response treats an expired API key as unable to be re-enabled and an inactive one as able to be re-enabled",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "Limitations state: 'Who can re-enable an inactive key is not evaluated. Inactive keys that would be Critical or High are reported as Low so they stay visible; delete them.' No mention of expired keys being unable to be re-enabled.",
+          "reasoning": "The response does not discuss expired vs inactive keys' re-enable ability at all for the found key (<key id> is Active, not expired or inactive). The limitations section mentions inactive keys being reported as Low for visibility, but makes no distinction about expired keys being unable to be re-enabled vs inactive ones being re-enabled.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response states that the audit is read-only and made no change, and does not claim to have deleted, deactivated or changed any key",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'This was a read-only audit; nothing was changed.' and 'Read-only: no credential, policy or setting was changed.' and 'Nothing was applied.'",
+          "reasoning": "The response explicitly and repeatedly states this is read-only and no changes were made.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response never prints a full API key ID, an API key's ServiceCredentialAlias or its ServiceUserName",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Throughout the response, only masked identifiers like '<key id>' and '<key id>' appear; no full key strings or alias/username fields are printed.",
+          "reasoning": "The response only shows masked key suffixes (<key id>, <key id>) and never prints a full key ID, ServiceCredentialAlias, or ServiceUserName.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not end with an offer or a follow-up question",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response ends with: 'The rules were applied by AWS DevOps Agent from the skill's written catalog. The result can vary between runs, so check the evidence shown for each row.' - no question or offer follows.",
+          "reasoning": "The response ends with limitations and does not include a follow-up question or offer of further action.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites AWS documentation with at least one docs.aws.amazon.com link",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'https://docs.aws.amazon.com/'"
+        },
+        {
+          "text": "The response contains no 12-digit number",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "No full access key ID or Amazon Bedrock API key ID is exposed, and no key ID is shown with its AKIA, ASIA or ACCA prefix plus 8 or more characters",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 10,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 11,
+        "pass_rate": 0.9091
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m56s",
+    "cost": "$0.97",
+    "context_window": {
+      "utilization": "7.1%",
+      "compaction_count": 0
+    }
+  }
+}

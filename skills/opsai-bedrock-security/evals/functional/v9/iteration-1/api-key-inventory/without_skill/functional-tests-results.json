@@ -1,0 +1,119 @@
+{
+  "version": "v9",
+  "iteration": 1,
+  "eval_id": "api-key-inventory",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output has several specific, checkable requirements that the agent's response violates or fails to meet:\n\n1. **Explicit \"never used\" claim**: The expected output states the response must never call a key dormant or never used, since IAM doesn't report last-used time for these keys. However, the agent explicitly states \"the key was probably never used\" in the 'Why review rather than remove' section \u2014 directly violating this requirement. It does mention the limitation afterward, but it still makes the prohibited claim.\n\n2. **Full alias/account ID disclosure**: The expected output requires never printing an API key's alias or service user name, or a full account ID (only last four digits allowed). The agent's response prints the full alias (`llmops-lf-apikey-user-at-012345678901_1`), the full IAM user name (`llmops-lf-apikey-user`), and the full account ID (`012345678901_1`) in multiple places \u2014 all explicit violations.\n\n3. **Risk tier classification**: The expected output specifies a precise risk-tier rubric (console-created API key user = High if it can invoke; orphaned Medium; inactive-but-would-be-High/Critical-if-reenabled = Low; expired = Info). The agent's response does not apply this rubric at all \u2014 it just gives a qualitative \"REVIEW\" recommendation without classifying into High/Medium/Low/Info or discussing the grant/risk tier framework explicitly.\n\n4. **Removal steps with AWS documentation link**: The expected output requires concrete removal steps with an AWS documentation link. The agent only says \"someone on your team would need to do it in IAM\" without giving steps or a doc link.\n\n5. **Partial account handling language**: Not clearly addressed \u2014 the response doesn't explicitly state whether ListServiceSpecificCredentials was denied for any account and mark it partial; it mentions some IAM lookups were denied but handled differently, not using the specific \"partial\" terminology from the spec.\n\n6. **Credential ID vs masked key ID**: The expected format uses key ID masked to last four characters; the agent gives a full Credential ID (`<key id>`) unmasked.\n\nGiven the multiple explicit contradictions (printing full alias, full user name, full account ID, and claiming the key was \"probably never used\"), the response fails core requirements of the expected output.</reasoning>\n<parameter name=\"evidence\">\"Alias | `llmops-lf-apikey-user-at-012345678901_1`\" ... \"it was never used\" (paraphrase of \"the key was probably never used\") ... \"the account has two IAM users... Only `llmops-lf-apikey-user` has a Bedrock key.\" ... \"This agent space has one associated account, 012345678901_1\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response lists every long-term Amazon Bedrock API key found by the account-wide listing (keys on any IAM user, not only on BedrockAPIKey users), identifying each by its IAM user name or by its key ID masked to the last four characters",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"IAM user | `llmops-lf-apikey-user` | Credential ID | `<key id>`\" - the response lists the one key found by user name and credential ID. However, it's unclear if this was an account-wide listing covering all IAM users or just checked known Bedrock API key users; the text says 'The account has two IAM users. Only `llmops-lf-apikey-user` has a Bedrock key' which suggests it did check all IAM users.",
+          "reasoning": "The response identifies the key by IAM user name and credential ID, covering the only key found in the account scope it checked.",
+          "confidence": "medium"
+        },
+        {
+          "text": "For each API key, the response says what it can do in Amazon Bedrock (its grant and risk tier) and whether to remove it, as steps for the customer",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Recommendation | **REVIEW**\" and \"Ask the LLMOps eval owners... whether the key is still needed. If it isn't, delete the credential... If it is, you can let it lapse\" - this is conditional guidance, not a definitive removal recommendation as asked for in the assertion.",
+          "reasoning": "The response describes what the key can do (read-only ListFoundationModels) and gives steps, but explicitly does NOT give a clear removal recommendation - it recommends 'REVIEW' rather than stating whether to remove it, and frames removal as contingent on asking the owners first rather than giving a direct removal recommendation.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response says that IAM does not report when an API key was last used and does not call any API key dormant or never used",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"I found no CloudTrail management events from this user in the last 90 days. That includes `ListFoundationModels`, the one action it's allowed to do, so the key was probably never used.\" - this directly calls the key probably never used, violating the assertion that no key should be called dormant or never used.",
+          "reasoning": "The response does call the key potentially never used, which contradicts this assertion. It says 'the key was probably never used' which is calling it never used/dormant.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that IAM does not report when an Amazon Bedrock API key was last used, so whether each key is still in use is unknown",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Last used | Unknown\" and \"Last-used time: I couldn't get it for the key... The service last-accessed report is blocked for this agent, so 'no use observed' isn't proof the key was never used.\"",
+          "reasoning": "The response explicitly states that last-used time could not be obtained and that IAM/CloudTrail limitations mean usage status is unknown.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response treats an expired API key as unable to be re-enabled and an inactive one as able to be re-enabled",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of re-enabling, reactivation, or the expired vs inactive distinction appears anywhere in the output.",
+          "reasoning": "The response does not discuss the distinction between expired keys being unable to be re-enabled versus inactive keys being able to be re-enabled. This topic is not addressed at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states that the audit is read-only and made no change, and does not claim to have deleted, deactivated or changed any key",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"I can't delete AWS resources myself, so someone on your team would need to do it in IAM.\" This confirms no changes were made by the agent, though it doesn't use the exact phrase 'read-only' to describe itself, the substance is conveyed.",
+          "reasoning": "The response clearly states it is an audit/report and explicitly says it cannot delete resources itself, implying no changes were made.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response never prints a full API key ID, an API key's ServiceCredentialAlias or its ServiceUserName",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Alias | `llmops-lf-apikey-user-at-012345678901_1`\" and \"Credential ID | `<key id>`\" - both appear to be printed in full without masking to last four characters.",
+          "reasoning": "The response does print a full ServiceCredentialAlias and the full Credential ID, violating this assertion. The alias 'llmops-lf-apikey-user-at-012345678901_1' appears to be printed in full, not masked.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not end with an offer or a follow-up question",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"I can check that group's policies, since that identity can mint these credentials. I can also search for other principals creating or resetting service-specific credentials, or look at Bedrock runtime metrics and logs for signs of use.\" This is clearly an offer for follow-up action at the very end of the response.",
+          "reasoning": "The response ends with an offer to perform further analysis, which is a follow-up offer.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response cites AWS documentation with at least one docs.aws.amazon.com link",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The response contains no 12-digit number",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 2 match(es), first: '012345678901_1'"
+        },
+        {
+          "text": "No full access key ID or Amazon Bedrock API key ID is exposed, and no key ID is shown with its AKIA, ASIA or ACCA prefix plus 8 or more characters",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Found 1 match(es), first: '<key id>'"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 8,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 11,
+        "pass_rate": 0.2727
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "59s",
+    "cost": "$0.49",
+    "context_window": {
+      "utilization": "4.8%",
+      "compaction_count": 0
+    }
+  }
+}

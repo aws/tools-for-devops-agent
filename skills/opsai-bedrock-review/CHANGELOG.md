@@ -1,6 +1,11 @@
 # Changelog
 
 ## 1.0.0
+- LLM-INV-002: the profile-only rule (`inferenceTypesSupported` = `INFERENCE_PROFILE` means every bare-ID call fails) is in `SKILL.md` guardrail 6 and the pre-answer checklist, not only the catalog (a 2026-11-25 run raised LLM-INV-002 but missed it).
+- Evals: `stale-rag-ingestion-and-chunking` names the knowledge base (the account has 18, and both variants ended by asking which one).
+- Description: load the skill before delegating (a 2026-11-25 run handed the bare-ID account scan for `bc-ip-required` to a sub-agent without loading it).
+- The vector-store check uses CloudTrail `DeleteIndex` / `DeleteVectorBucket` events: DevOps Agent's tool policy blocks the `s3vectors` `GetIndex` and `ListIndexes` reads (38 blocked calls in the 2026-11-25 run). `s3vectors:GetIndex` is no longer added to `EnableOpsaiBedrockReview`.
+- Description: guardrail questions go to opsai-bedrock-security; how-to questions included (one run skipped the skill for `access-denied-iam-vs-scp`, one loaded it for `neg-guardrail-blocks-correct-answers`).
 - Evals: `access-denied-iam-vs-scp` no longer requires `iam:SimulatePrincipalPolicy`, which the skill does not call; `kb-active-but-empty` is removed (duplicate of `kb-never-synced`).
 - Description: hands AccessDenied that began with a new guardrail to opsai-bedrock-security. Evals: `bc-ip-required` also asks whether other callers make the same bare-ID mistake.
 - LLM-INV-002 reads `inferenceTypesSupported` first: bare-ID calls to a model that supports only inference profiles are reported as failing requests, not as a missed optimisation.

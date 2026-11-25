@@ -1,6 +1,16 @@
 ---
 name: opsai-capacity-cost
-description: Use this skill when the user wants to understand or cut Amazon Bedrock spend, or check Bedrock capacity, even if they don't call it a cost review, for example why the bill is high or suspiciously low, which model costs the most; tokens billed at $0, or CloudWatch tokens that don't match Cost Explorer; token-spend drift, runaway output or missing prompt caching; pricing tier (Standard, Flex, Priority, Batch); cost per team, app or IAM caller, or missing cost allocation tags; budgets and cost alerts; idle, oversized or end-of-life Provisioned Throughput, or a request to delete or resize it; moving to PT or a cheaper model (Haiku, Nova); what a us., eu. or global. profile costs and whether it stays in one region; quota headroom (per-minute, per-day or bedrock-mantle quotas), throttling capacity, token and quota alarms; latency from how many tokens are generated; invocation-log retention cost; pasted CloudWatch or Cost Explorer output about Bedrock. Not for outages happening now.
+description: Use this skill when the user wants to understand or cut Amazon Bedrock spend, or check
+  Bedrock capacity, even if they don't call it a cost review, for example why the bill is high or
+  suspiciously low, which model costs the most; tokens billed at $0, or CloudWatch tokens that don't
+  match Cost Explorer; token-spend drift, runaway output or missing prompt caching; pricing tier
+  (Standard, Flex, Priority, Batch); cost per team, app or IAM caller, or missing cost allocation tags;
+  budgets and cost alerts; idle, oversized or end-of-life Provisioned Throughput, or a request to delete
+  or resize it; moving to PT or a cheaper model (Haiku, Nova); what a us., eu. or global. profile costs
+  and whether it stays in one region; quota headroom (per-minute, per-day or bedrock-mantle quotas),
+  throttling capacity, token and quota alarms; latency from how many tokens are generated;
+  invocation-log retention cost; pasted CloudWatch or Cost Explorer output about Bedrock, how-to
+  questions included. Not for outages happening now.
 metadata:
   author: inesttia
   version: "1.0.0"

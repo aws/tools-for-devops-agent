@@ -1,0 +1,80 @@
+{
+  "version": "v20",
+  "iteration": 1,
+  "eval_id": "cost-throttle-default-quota",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-capacity-cost' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The response reports the actual account-specific quota (L-D4FBCF4E, 6,000,000 TPM for Sonnet 5 cross-region inference in us-east-1), not a generic figure, and explicitly confirms it's the AWS default (matching the user's claim of no increase requested). It compares observed metrics (peak 2,160,974 TPM = 36% of quota, peak 150 req/min, zero recorded throttle datapoints) against this quota. It distinguishes a genuine under-provisioning scenario from a burst/reservation pattern that backoff could absorb - specifically hypothesis #1 about max_tokens reservation causing transient burst-driven throttling that wouldn't show in steady-state usage metrics, which aligns well with distinguishing true under-provisioning vs. burst patterns. The remediation is ordered: (1) capture a real throttled error to confirm which quota, (2) explicitly says don't request an increase yet since usage is only at 36%, (3) suggests reducing max_tokens, (4) add exponential backoff with jitter, (5) consider separate global profile, (6) set alarms. This matches the expected ordered approach: confirm quota \u2192 measure breach \u2192 then decide between increase request or changing call pattern (lower max_tokens, backoff). The response is thorough, nuanced, and hits all the specified criteria substantively.",
+      "evidence": "\"Your Sonnet 5 limit in us-east-1 is 6,000,000 tokens per minute (TPM)... CloudWatch records no throttles... Peak usage: Sonnet 5's highest minute was 2,160,974 TPM, about 36% of the quota... A large max_tokens setting... a burst of around 150 requests per minute could reserve more than 6M for a moment... Don't request an increase yet. You're at 36% of the token quota... Lower max_tokens... Add exponential backoff with jitter...\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response reports the actual applicable quota value or says precisely where to read it, rather than quoting a generic number",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Table: 'Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5 | L-D4FBCF4E | 6,000,000 | Yes' plus 'It's the AWS default: the default and applied values are both 6,000,000, and the increase request history is empty.'",
+          "reasoning": "The agent reports the actual applicable quota value (6,000,000 TPM) with the specific quota code and confirms it's the AWS default, not a generic placeholder number. It also notes other related quotas not yet checked and gives exact CLI commands to read them.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response compares observed usage against the quota rather than assuming the quota is the problem",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Peak usage: Sonnet 5's highest minute was 2,160,974 TPM, about 36% of the quota.' and 'You're at 36% of the token quota, so a bigger limit wouldn't change anything on current data.'",
+          "reasoning": "The agent explicitly pulls CloudWatch usage metrics and compares them against the quota value, concluding usage is well below the limit rather than assuming the quota itself is insufficient.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes sustained under-provisioning from burstiness that retry with backoff would absorb",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'If max_tokens is set to tens of thousands, a burst of around 150 requests per minute could reserve more than 6M for a moment... Add exponential backoff with jitter on throttling errors in the client.' Also: 'Your requests average about 3.4k input and about 0.7k output tokens.'",
+          "reasoning": "The agent considers burst-driven token reservation (burstiness) as a hypothesis distinct from sustained usage being near the limit (it explicitly shows sustained usage is only 36%), and separately recommends backoff with jitter as a mitigation for bursty throttling, distinguishing it from the max_tokens reservation issue which would need a different fix (lowering max_tokens) rather than just retries.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response contains hypotheses labeled '1. A large max_tokens setting', '2. A different quota', '3. Throttling outside this account or Region' with no check-ids such as LLM-COST, LLM-PT, or LLM-INV, and no severity levels assigned to any of them.",
+          "reasoning": "The assertion requires that any findings raised carry a specific check-id format (LLM-COST, LLM-PT, LLM-INV) with a severity. The response raises multiple hypotheses/findings but does not use this check-id/severity schema at all, so it fails this structural requirement. Since the response does raise findings, it cannot pass via the 'no findings' escape clause.",
+          "confidence": "high"
+        },
+        {
+          "text": "No raw 12-digit account ID is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m51s",
+    "cost": "$0.93",
+    "context_window": {
+      "utilization": "11.8%",
+      "compaction_count": 0
+    }
+  }
+}

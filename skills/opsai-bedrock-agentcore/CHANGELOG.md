@@ -1,6 +1,8 @@
 # Changelog
 
 ## 1.0.0
+- Evals: `ac-oauth-claim-mismatch` names the eval account's JWT-authorizer runtime and gives the token claims, so the client ID mismatch can be found; `ac-obs-transaction-search` gives the trace segment destination and instrumentation state (both variants had only described the feature).
+- Evals: `ac-obs-transaction-search` is a positive scenario again, matching the revert of fork PR #5 (observability stays in this skill).
 - Description: missing traces, spans or logs and observability setup go to `agentcore-observability-setup` (the 3-iteration run loaded this skill for `neg-ac-obs-transaction-search` 3 of 3 times).
 - Output rules: mask both ARNs in a quoted `AccessDenied` message or log line, and name the check-id in short chat answers too (3-iteration run: one answer quoted the account, one gave no check-id).
 - Evals: `ac-obs-transaction-search` is the negative `neg-ac-obs-transaction-search`, following the move of observability setup to `agentcore-observability-setup` (fork PR #5).

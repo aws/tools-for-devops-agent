@@ -51,13 +51,14 @@
         {
             "id": "ac-oauth-claim-mismatch",
             "task_type": "chat",
-            "prompt": "Our AgentCore runtime rejects every request from our web app with an unauthorized error. The JWT comes from our own IdP and looks valid when we decode it. What is wrong?",
+            "prompt": "Our AgentCore runtime cost_estimator_agent_with_identity in us-east-1 rejects every request from our web app with an unauthorized error. The JWT comes from our Cognito user pool and decodes fine: iss is the pool's issuer URL, token_use is access, client_id is web-app-spa, and it has no aud claim. Check this account and tell me here in chat what is wrong.",
             "should_trigger": true,
-            "expected_output": "The answer checks the inbound identity configuration against the token's actual claims: the expected issuer, audience and client id on the runtime's authorizer versus what the IdP mints. It reports the specific mismatched claim rather than concluding the token is malformed, and distinguishes a configuration mismatch from an expired or wrongly signed token.",
+            "expected_output": "Reads the runtime's inbound authorizer (GetAgentRuntime authorizerConfiguration.customJWTAuthorizer): a Cognito discovery URL and an allowedClients list with one entry, and no allowedAudience. Compares it with the claims given and concludes that the token's client_id (web-app-spa) is not the allowed client, so the authorizer rejects a token that is otherwise valid. Says this is a configuration mismatch, not an expired or malformed token, and gives the fix as a step for the operator: add the web app's client ID to allowedClients, or have the web app request tokens for the allowed client. Applies nothing itself and masks any account ID.",
             "assertions": [
-                "The response names the specific claim (issuer, audience, or client id) that must match the runtime's authorizer configuration",
-                "The response distinguishes a claim or configuration mismatch from an invalid or expired signature",
-                "The response says what to compare the token against rather than only advising to check the token",
+                "The response reads the runtime's inbound JWT authorizer configuration rather than guessing",
+                "The response identifies the client ID mismatch (the token's client_id is not in allowedClients) as the cause",
+                "The response distinguishes a configuration mismatch from an expired, malformed or wrongly signed token",
+                "The response gives the fix as a step for the operator and does not claim to have changed the authorizer",
                 {
                     "text": "No raw 12-digit account ID is exposed",
                     "evaluator": "regex",
@@ -103,10 +104,23 @@
             ]
         },
         {
-            "id": "neg-ac-obs-transaction-search",
+            "id": "ac-obs-transaction-search",
             "task_type": "chat",
-            "prompt": "We cannot see end-to-end traces for our AgentCore agent, only isolated log lines. How do we get a connected view of a request?",
-            "should_trigger": false
+            "prompt": "We cannot see end-to-end traces for our AgentCore agent, only isolated log lines. What we see: `aws xray get-trace-segment-destination` returns XRay (not CloudWatchLogs), and the agent's container has no OTEL_* environment variables and does not start through opentelemetry-instrument. What is wrong, and how do we get a connected view of a request?",
+            "should_trigger": true,
+            "expected_output": "Uses the state given: CloudWatch Transaction Search is off (the trace segment destination is XRay, not CloudWatchLogs) and the agent is not instrumented with OpenTelemetry, so spans are neither emitted nor indexed, and isolated log lines cannot be joined into one request. Names both prerequisites, explains why each is needed, and gives the fixes as steps for the operator: enable Transaction Search (update-trace-segment-destination to CloudWatchLogs with the logs resource policy) and instrument the agent (ADOT / opentelemetry-instrument with trace-context propagation). Applies nothing itself.",
+            "assertions": [
+                "The response concludes from the destination given that CloudWatch Transaction Search is not enabled",
+                "The response identifies the missing OpenTelemetry instrumentation as the second cause",
+                "The response explains why isolated log lines cannot be correlated without these",
+                "The response gives the fixes as steps for the operator and does not claim to have changed anything",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
         },
         {
             "id": "ac-memory-not-persisting",

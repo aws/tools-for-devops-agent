@@ -5,12 +5,12 @@ description: Review Amazon Bedrock configuration, model access and Knowledge Bas
   model does, a model may be end-of-life, an inference profile is in question, or someone asks whether
   Bedrock is set up correctly; and when a knowledge base returns nothing or stale answers, retrieval
   misses obvious documents, ingestion or sync failed or never ran, or someone asks how one should be
-  configured or whether it is still used. Use it even if they don't name invocation logging, SCPs,
-  marketplace subscriptions, chunking, embeddings, vector stores or hybrid search. Not for spend
-  (opsai-capacity-cost), who holds keys or AccessDenied that began with a new guardrail
-  (opsai-bedrock-security), even if not installed. Findings carry LLM-INV and LLM-KB check-ids, a
-  severity and an AWS-doc citation. In any text, plans and sub-agent prompts too, never write the raw
-  12-digit account ID or reproduce retrieved chunk text.
+  configured or whether it is still used, how-to questions included. Use it even if they don't name
+  invocation logging, SCPs, chunking, embeddings or vector stores. Not for spend (opsai-capacity-cost),
+  or guardrails and who holds keys (opsai-bedrock-security), even if not installed. Load it yourself
+  before delegating. Findings carry LLM-INV and LLM-KB check-ids, a severity and an AWS-doc citation. In
+  any text, plans and sub-agent prompts too, never write the raw 12-digit account ID or reproduce
+  retrieved chunk text.
 metadata:
   author: ankursinha286
   version: "1.0.0"
@@ -133,7 +133,9 @@ Non-negotiable, at every step:
 5. **Evidence or silence.** Every finding cites the concrete value that triggered it. Distinguish
    "measured zero" from "no data reported" or "no job to read" (`references/api-quirks.md` §10).
 6. **A check-id on every finding.** Each finding references an LLM-INV or LLM-KB catalog check-id with
-   that check's severity and AWS-doc citation. No freelance findings.
+   that check's severity and AWS-doc citation. No freelance findings. For each bare model ID you report
+   (LLM-INV-002), read `GetFoundationModel` `inferenceTypesSupported`: when it is `INFERENCE_PROFILE`
+   only, say that every bare-ID call to it fails, not that it is merely suboptimal.
 7. **Never invent a threshold.** Severities come from the catalogs. No AWS-published number → `INFO`,
    marked `workload-specific`.
 8. **Bound the work and disclose what you skipped.** State which Regions, resources, knowledge bases,

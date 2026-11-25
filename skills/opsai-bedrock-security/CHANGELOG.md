@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.0.0
+- Description: covers pasted guardrail configs and how-to questions (two runs skipped the skill, one delegating the SCP report to sub-agents).
 - Description: covers AccessDenied that began when a guardrail was added (missing `bedrock:ApplyGuardrail`). It had excluded every AccessDenied, so the agent skipped the skill for `gr-no-apply`.
 - The account-ID rule covers naming the account that was checked. Evals: `bpa-dormant-keys` accepts that the eval account has no dormant key and checks that no active key is recommended for deletion.
 - Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.

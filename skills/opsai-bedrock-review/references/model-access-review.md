@@ -92,6 +92,7 @@ you present a report, re-check your own output against this list. Treat it as a 
 - [ ] An empty `GetModelInvocationLoggingConfiguration` was reported as **logging DISABLED → LLM-INV-001 (CRITICAL)**, never as healthy — and a populated one was **not** reported as disabled.
 - [ ] No modality was called "unlogged" because its delivery flag is false; the flags gate payload parts, not the call record.
 - [ ] LLM-INV-002 was raised only where a `SYSTEM_DEFINED` profile containing that model was found, and its profile id is cited.
+- [ ] For every bare model ID reported, `inferenceTypesSupported` was read, and a model that supports only `INFERENCE_PROFILE` is reported as failing on every bare-ID call.
 - [ ] For any access finding, the response **distinguishes an IAM deny (LLM-INV-013, customer-fixable) from an SCP deny (LLM-INV-015, escalate to org admin) and from model access (LLM-INV-014)** — no IAM fix is prescribed for an SCP deny, and no SCP is asserted or ruled out without evidence.
 - [ ] No end-of-life date appears that the Bedrock model card or Model lifecycle page does not state.
 - [ ] Every Step 6 verdict rests on a named signal; a claim no signal confirms is INFO (unconfirmed).
