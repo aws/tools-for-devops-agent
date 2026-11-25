@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.0.0
+- LLM-SM-002 (data capture) and LLM-SM-006 (VPC) skip serverless endpoints, which support neither, so they no longer raise a false HIGH finding.
 - Evals: `sm-execution-role-s3-kms` dropped (it scored the same with and without the skill).
 - Evals: `sm-execution-role-s3-kms` replaces the CreateModel-role assertion, which the prompt gave away, with one for the role's other deploy permissions (`s3:GetObject` on `ModelDataUrl`, ECR pull), from `references/known-causes.md` §3.
 - PR #268 review items 2 and 3: corrected API names, alarm and metric references, and citations in the references and report template.
