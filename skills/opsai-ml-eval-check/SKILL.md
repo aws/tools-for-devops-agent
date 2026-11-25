@@ -12,7 +12,6 @@ description: Diagnose and review model output quality and evaluation jobs on Ama
 metadata:
   author: jmadhuki, ankitsri-aws
   version: "1.0.0"
-  tier: "aws-support-managed"
   summary: "Reviews whether model output quality is measured, automated and gated, and diagnoses Bedrock (including RAG) and SageMaker evaluation jobs."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker AI, Amazon S3, Amazon CloudWatch"

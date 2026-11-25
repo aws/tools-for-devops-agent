@@ -10,7 +10,6 @@ description: Review the health of the agent layer on AWS, covering Amazon Bedroc
 metadata:
   author: dimwael
   version: "1.0.0"
-  tier: "aws-support-managed"
   summary: "Reviews Amazon Bedrock AgentCore and Bedrock Agents health: invocation, gateways, action groups, traces and live versions."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock AgentCore, Amazon Bedrock, Amazon CloudWatch, AWS X-Ray"

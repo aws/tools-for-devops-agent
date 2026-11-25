@@ -14,7 +14,6 @@ description: Audit Amazon Bedrock security, read-only - which IAM users and long
 metadata:
   author: cswingchan
   version: "1.0.0"
-  tier: "aws-support-managed"
   summary: "Audits Amazon Bedrock security: which IAM users and long-lived keys can invoke models, and whether Guardrails protect production paths."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, AWS IAM, Amazon GuardDuty"

@@ -10,7 +10,6 @@ description: Diagnose an Amazon SageMaker training or customization job, includi
 metadata:
   author: jmadhuki
   version: "1.0.0"
-  tier: "aws-support-managed"
   summary: "Diagnoses Amazon SageMaker training and fine-tuning jobs that fail, hang or waste GPU time, and reviews Model Registry registration, approval and lineage."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon SageMaker AI, Amazon S3, Amazon CloudWatch"
