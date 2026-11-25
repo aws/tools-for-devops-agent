@@ -1,0 +1,80 @@
+{
+  "version": "v18",
+  "iteration": 1,
+  "eval_id": "self-hosted-model-locus-not-provider",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identifies locus=INFRASTRUCTURE (not PROVIDER), explicitly reasoning that no managed model service (Bedrock/SageMaker) is in the path, consistent with the self-hosted binding where PROVIDER has no referent. It does not look for an AWS Health event for a model service \u2014 instead it suggests checking AWS Health for ELB/EC2/EKS generically, and does not suggest a cross-region inference profile at all (appropriately, since that's irrelevant to self-hosted vLLM). It binds the error investigation to ALB-relevant metrics, specifically naming HTTPCode_ELB_503_Count and HTTPCode_Target_503_Count and HealthyHostCount \u2014 these are the AWS/ApplicationELB namespace metrics analogous to what's expected (the expected output mentions 4XX/5XX Target counts specifically, but the agent's chosen 503-specific metrics are a reasonable sub-case/specialization within the same metric family, showing correct binding to ALB target error metrics rather than model-provider metrics). The serving layer investigation (vLLM pod health, readiness, GPU/model load issues) is handed off to host investigation as expected. The provider health field is treated as not-applicable in spirit \u2014 the agent states no managed model service is in the path and therefore doesn't treat provider health as a 'no datapoints' gap, though it doesn't use the literal phrase 'not-applicable' for a provider health field. Overall the response substantively matches the expected criteria: correct locus classification reasoning, correct avoidance of PROVIDER-specific checks (no Bedrock Health event search, no cross-region inference profile suggestion), and proper handoff to serving-layer/host investigation. Minor deviation: it uses 503-specific ELB/Target metrics rather than the exact 4XX/5XX metric names, but this is a reasonable and closely related substitution given the 503 symptom, not a substantive miss of the underlying expectation.",
+      "evidence": "\"TRIAGE: locus=INFRASTRUCTURE... No managed model service like Bedrock or SageMaker is in this path... Compare HTTPCode_ELB_503_Count and HTTPCode_Target_503_Count, and check HealthyHostCount for the target group... This skill has no checks for the compute under a self-hosted model, so the next step comes from general ALB behavior, not from the skill.\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The locus is INFRASTRUCTURE and not PROVIDER",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "TRIAGE: locus=INFRASTRUCTURE, transience=UNKNOWN, binding=self-hosted (vLLM on EKS behind ALB)",
+          "reasoning": "The output explicitly states locus=INFRASTRUCTURE and explains it is not a managed AWS model provider issue.",
+          "confidence": "high"
+        },
+        {
+          "text": "Provider health is recorded as not-applicable rather than as a missing or zero signal",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'No managed model service like Bedrock or SageMaker is in this path.' and does not list any Bedrock/SageMaker provider health signal as missing or zero; instead it frames the AWS provider angle as 'A service event affecting the ALB, EC2 or EKS in your Region is still possible' and recommends checking 'AWS Health for your Region' as a general check, not treating provider (Bedrock) health as a tracked but empty signal.",
+          "reasoning": "The agent correctly omits Bedrock/SageMaker provider health as a relevant signal since it's not in the serving path, rather than listing it as missing/zero. This is consistent with treating provider health as not-applicable. However, the findings list doesn't explicitly label a 'Provider health' field as not-applicable; it simply never includes it, which could be seen as implicit rather than explicit. Given the explanation that no managed model service is in the path, this satisfies the spirit of the assertion.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response does not propose a cross-region inference profile or any Bedrock-specific failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "There is no mention of 'cross-region inference profile' or any Bedrock-specific failover anywhere in the response; the only remediation suggestions are checking ALB metrics, target health, vLLM logs, and AWS Health.",
+          "reasoning": "The response contains no Bedrock-specific failover or cross-region inference profile recommendation, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The error signals are bound to load balancer or application metrics rather than AWS/Bedrock",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The findings reference 'HTTPCode_ELB_503_Count', 'HTTPCode_Target_503_Count', 'HealthyHostCount', ALB access logs 'elb_status_code' and 'target_status_code', and vLLM pod/application logs \u2014 all load balancer or application-level signals, with no Bedrock-specific metrics mentioned.",
+          "reasoning": "All error signals and diagnostic metrics mentioned are bound to ALB (ELB) and application (vLLM/EKS) layers, not AWS/Bedrock metrics, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "No Bedrock namespace is asserted for a self-hosted model",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "27s",
+    "cost": "$0.23",
+    "context_window": {
+      "utilization": "4.9%",
+      "compaction_count": 0
+    }
+  }
+}

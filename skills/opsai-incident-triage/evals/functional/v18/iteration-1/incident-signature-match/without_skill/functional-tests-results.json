@@ -1,0 +1,84 @@
+{
+  "version": "v18",
+  "iteration": 1,
+  "eval_id": "incident-signature-match",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response checks the InvocationThrottles metric first (noting it has no datapoints, meaning no quota-based throttling recorded), compares actual usage against provisioned quotas (1% of comparable quota), and explicitly distinguishes between customer-side quota throttling vs. service-side capacity/burst limits as the likely cause given the data. It also provides an ordered set of next steps (check error text/request IDs, correlate with usage spikes, open AWS Support case with specifics) rather than generic advice. This substantively matches the expected output's criteria: identifying the InvocationThrottles metric as the first concrete signal, distinguishing quota-driven vs service-side throttling, and giving ordered actionable next steps.",
+      "evidence": "\"CloudWatch has no Bedrock `InvocationThrottles` data for this account... You're at roughly 1% of the comparable request quota. If throttling happens, it more likely comes from service-side capacity or burst limits... Next steps: 1. Check the exact error text and request IDs... 2. Check whether the errors line up with the minutes where Sonnet 5 usage spikes. 3. If they don't line up... open an AWS Support case...\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names a specific metric to examine (for example InvocationThrottles) rather than describing throttling in general terms",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"CloudWatch has no Bedrock `InvocationThrottles` data for this account.\"",
+          "reasoning": "The response explicitly names the InvocationThrottles metric as the one it examined, satisfying the assertion directly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives an ordered, concrete next step (what to check first, then what to conclude) rather than a flat list of generic tips",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Next steps: 1. Check the exact error text and request IDs... 2. Check whether the errors line up with the minutes where Sonnet 5 usage spikes. 3. If they don't line up with your own spikes, open an AWS Support case...\"",
+          "reasoning": "The response provides a numbered, sequential set of next steps where each step builds on the prior one's outcome (check error text -> check timing correlation -> if no correlation, escalate to AWS Support), which is a concrete ordered procedure rather than a flat list of generic tips.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes quota-driven throttling on the customer side from service-side capacity, instead of assuming one cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"If throttling happens, it more likely comes from service-side capacity or burst limits on the shared cross-region inference profile, or from a different account or region than the one I checked.\" vs \"it doesn't look like your own quota\"",
+          "reasoning": "The response explicitly contrasts customer-side quota exhaustion (checked and ruled unlikely given ~1% utilization) against service-side capacity/burst limits, rather than assuming a single cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response starts with a TRIAGE line that carries a locus",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "When AWS/Bedrock shows no InvocationThrottles, the response reads or names as the next read the guardrail throttle metric (AWS/Bedrock/Guardrails InvocationThrottles, dimension Operation=ApplyGuardrail) before ruling quota versus service",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'Guardrails', 'ApplyGuardrail', or the AWS/Bedrock/Guardrails namespace anywhere in the response.",
+          "reasoning": "The response never names or reads the guardrail throttle metric (AWS/Bedrock/Guardrails InvocationThrottles with Operation=ApplyGuardrail) as a next read after finding no InvocationThrottles data. It instead suggests checking error text/request IDs, timing correlation with spikes, and opening a support case -- none of which reference the guardrail-specific metric.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response queries throttles without the ModelId dimension as well as per ModelId, because requests that fail before model resolution are published only without ModelId",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response discusses throttles 'per model' (e.g., 'Sonnet 5 had none. The only 4xx errors were small: Nova Lite 12, Nova 2 Lite 6...') but never mentions querying or checking throttle metrics without the ModelId dimension, nor explains that pre-model-resolution failures are published only without ModelId.",
+          "reasoning": "There is no evidence in the output that the agent considered or queried the InvocationThrottles metric without the ModelId dimension. All reported figures are tied to specific models (Sonnet 5, Nova Lite, etc.), and the caveat about requests failing before model resolution is absent.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 3,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.5
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "37s",
+    "cost": "$0.31",
+    "context_window": {
+      "utilization": "5.4%",
+      "compaction_count": 0
+    }
+  }
+}

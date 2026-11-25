@@ -1,0 +1,87 @@
+{
+  "version": "v18",
+  "iteration": 1,
+  "eval_id": "incident-signature-match",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response checks the InvocationThrottles metric (the first concrete signal) and relates it to quota usage (EstimatedTPMQuotaUsage) versus the 3M/min cross-region quota, explicitly distinguishing customer-side quota throttling from service-side capacity issues (InvocationServerErrors, Health events). It finds no throttling evidence on either side in this account and gives an ordered, specific next step (pull a failing request ID, timestamp, caller account, check API name to determine if it's model-invocation vs control-plane, and which account/region it came from) rather than generic advice like 'add retries' or 'request a quota increase'. This matches the expected output's requirement of identifying the first concrete signal (InvocationThrottles vs quota), distinguishing quota-driven vs service-side throttling, and providing an ordered, specific next step rather than generic throttling advice.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names a specific metric to examine (for example InvocationThrottles) rather than describing throttling in general terms",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Agent explicitly names 'InvocationThrottles' and 'InvocationServerErrors' and 'InvocationClientErrors' as specific metrics examined, e.g. 'InvocationThrottles has no datapoints and no metric stream in us-east-1 over the last 14 days.'",
+          "reasoning": "The response names specific CloudWatch metrics rather than describing throttling generically.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response gives an ordered, concrete next step (what to check first, then what to conclude) rather than a flat list of generic tips",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The 'Next step' section says: 'take one failing request's request ID, timestamp and caller account from your application logs. The error message and the API name (bedrock-runtime or bedrock) show whether it's a model-invocation throttle or a control-plane throttle. They also show which account and Region it came from. If it came from another account, I can run the same checks there.'",
+          "reasoning": "This is a concrete, ordered next step: first gather request ID/timestamp/account, then check error message/API name to determine throttle type, then determine account/region and escalate. It is not a flat list of generic tips.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response distinguishes quota-driven throttling on the customer side from service-side capacity, instead of assuming one cause",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response has a dedicated bullet 'Your quota is not under visible pressure' comparing EstimatedTPMQuotaUsage against the quota limit, and separately a bullet 'No sign of a service-side problem' checking InvocationServerErrors and AWS Health events, concluding 'the ThrottlingException errors your callers see are not coming from this account's us-east-1 Bedrock traffic.'",
+          "reasoning": "The agent separately investigates and distinguishes customer-side quota pressure from service-side capacity/health issues, rather than assuming one cause.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response starts with a TRIAGE line that carries a locus",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'TRIAGE: binding=bedrock locus='"
+        },
+        {
+          "text": "When AWS/Bedrock shows no InvocationThrottles, the response reads or names as the next read the guardrail throttle metric (AWS/Bedrock/Guardrails InvocationThrottles, dimension Operation=ApplyGuardrail) before ruling quota versus service",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'AWS/Bedrock/Guardrails', 'ApplyGuardrail', or any guardrail-specific throttle metric anywhere in the response. The response only discusses 'InvocationThrottles' under AWS/Bedrock and does not mention guardrails at all.",
+          "reasoning": "The assertion requires the agent to read or name the guardrail throttle metric as a next read before ruling quota vs service-side. The response makes no mention of guardrails, so this specific check was not performed or referenced.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response queries throttles without the ModelId dimension as well as per ModelId, because requests that fail before model resolution are published only without ModelId",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response states 'Per-model throttle dimensions don't exist because the metric has no data' but does not explicitly state that it queried or considered the metric both without the ModelId dimension and per ModelId, nor does it explain the rationale that requests failing before model resolution are published only without ModelId.",
+          "reasoning": "There's no explicit evidence in the output that the agent queried throttles both with and without the ModelId dimension, or discussed this distinction. The mention of per-model dimensions not existing suggests awareness of dimensions but doesn't demonstrate the specific querying behavior asserted.",
+          "confidence": "medium"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.6667
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m6s",
+    "cost": "$0.55",
+    "context_window": {
+      "utilization": "7.3%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "version": "v18",
+  "iteration": 1,
+  "eval_id": "transient-vs-config-verdict",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent produced an explicit TRIAGE line: \"TRIAGE: binding=bedrock locus=PROVIDER transience=TRANSIENT\" which includes binding, locus, and transience as required. It explicitly states this rendering was based on checking the four signals: regional AWS Health event, cross-model 5xx (InvocationServerErrors) rate across three unrelated models, blast radius across models and two other accounts, and correlation with no customer deploy/config change (each cited in the Findings section referencing classifier steps 1-4). The locus is correctly identified as PROVIDER given the evidence (active Health event, broad 5xx across unrelated models, multi-account blast radius, uncorrelated onset with no customer change). The prescribed remediation matches expectations: \"Retry with exponential backoff and jitter\" and \"fail over to another Region with a cross-Region inference profile\" \u2014 exactly retry-with-backoff and cross-region failover, with explicit instruction not to change any Bedrock configuration (IAM, model IDs, quotas), avoiding any customer configuration fix.",
+      "evidence": "\"TRIAGE: binding=bedrock locus=PROVIDER transience=TRANSIENT \u2014 classifier Step 2 / rule R2 (INFO, workload-specific)... What to do: don't change any Bedrock configuration... Retry with exponential backoff and jitter. If you can't tolerate the errors, fail over to another Region with a cross-Region inference profile.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response names an explicit locus (PROVIDER, INFRASTRUCTURE, APPLICATION, or UNDETERMINED) rather than leaving the classification implicit",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response begins with 'TRIAGE: binding=bedrock locus=PROVIDER transience=TRANSIENT' and later states 'This looks like an AWS service issue, not something misconfigured on your side.'",
+          "reasoning": "An explicit locus value (PROVIDER) is named in the very first line of the output, satisfying the assertion directly.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response presents the classification as a structured ruling with the evidence that decided it, rather than hedging between both causes without committing",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output opens with a structured TRIAGE line (binding/locus/transience/classifier step/rule) and then lists bulleted evidence: 'Provider event...', 'Server-side errors across unrelated models...', 'Wide blast radius...', 'No correlated change...' before committing to 'This looks like an AWS service issue, not something misconfigured on your side.'",
+          "reasoning": "The response commits to a single ruling (PROVIDER/TRANSIENT) and backs it with a bulleted list of evidence rather than hedging equally between provider and customer causes.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reports the server-error rate across multiple models, not just the one the user mentioned, as the basis for judging blast radius",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: '`InvocationServerErrors` rose at 14:06 on Claude Sonnet 5, Nova Lite and Llama 3. These models are from different providers, so a shared model-specific or prompt-specific cause is unlikely.'",
+          "reasoning": "It explicitly discusses the error rate across three different models (not just the one model type the user might have focused on) and uses the cross-model spread as the basis for ruling out a model-specific or workload-specific cause, which supports the blast-radius judgment.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states what it actually observed for each signal it checked, including explicitly saying when a signal returned no data rather than omitting it",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The Findings section marks each row as 'not-queried (operator-reported: ...)' and explicitly states 'I didn't read `InvocationClientErrors` or `InvocationThrottles`, and I didn't check CloudTrail for config changes.' Also: 'No catalog check-id covers the server-error signal, so each row cites its classifier step instead.'",
+          "reasoning": "The response is explicit and granular about what was and was not observed/verified for each signal, including explicitly calling out metrics that were not checked (InvocationClientErrors, InvocationThrottles) rather than silently omitting them.",
+          "confidence": "high"
+        },
+        {
+          "text": "If the locus is service-side (PROVIDER), the response prescribes no customer configuration change and recommends only retry, backoff, or regional failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states: 'What to do: don't change any Bedrock configuration. That includes IAM, model IDs and quotas, because nothing points to those. Retry with exponential backoff and jitter. If you can't tolerate the errors, fail over to another Region with a cross-Region inference profile... Follow the Health event for updates and for the resolution time.'",
+          "reasoning": "Given the PROVIDER locus, the recommendations are limited to retry/backoff, regional failover, and monitoring the Health event \u2014 no customer-side configuration changes (IAM, model IDs, quotas) are prescribed; in fact the response explicitly advises against making such changes.",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.8333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "44s",
+    "cost": "$0.37",
+    "context_window": {
+      "utilization": "6.9%",
+      "compaction_count": 0
+    }
+  }
+}
