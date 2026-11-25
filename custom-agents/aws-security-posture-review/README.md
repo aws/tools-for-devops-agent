@@ -74,7 +74,7 @@
    list_resource_history, get_topology_map, get_resource_edges
    ```
 
-7. 回到 agent 页面核对 **Tools** 正好是这 11 个，**没有** `use_kubectl`。工具白名单是只读的硬边界，少一个会有检查项变「未核实」，多一个写类工具就破坏了只读承诺
+7. 回到 agent 页面核对 **Tools** 正好是这 11 个（`use_aws` 加 10 个平台读工具），**没有 use_kubectl**。工具白名单是只读的硬边界，少一个会有检查项变「未核实」，多一个写类工具就破坏了只读承诺
 
 ## Executing the Agent
 
