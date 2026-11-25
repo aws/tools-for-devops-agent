@@ -11,7 +11,7 @@ description: Diagnose and review model output quality and evaluation jobs on Ama
   answer says the locus was not determined.
 metadata:
   author: jmadhuki, ankitsri-aws
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "aws-support-managed"
   summary: "Reviews whether model output quality is measured, automated and gated, and diagnoses Bedrock (including RAG) and SageMaker evaluation jobs."
   aws-devops-agent-skills.agent-types: "GENERIC"
