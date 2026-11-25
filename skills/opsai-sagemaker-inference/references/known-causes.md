@@ -22,7 +22,7 @@ invented id. Where AWS says nothing (for example on input "mount" errors), say s
 
 ## 4. Real-time: App in a private subnet cannot reach the endpoint
 
-- **With no NAT or internet path, invoke through an interface VPC endpoint for the SageMaker Runtime service**; with private DNS enabled the default `runtime.sagemaker.<region>.amazonaws.com` hostname resolves to it (the endpoint's own `VpcConfig` is a posture check for `sagemaker-ai-ops-review`, not the caller's path) ([SageMaker interface endpoints](https://docs.aws.amazon.com/sagemaker/latest/dg/interface-vpc-endpoint.html)).
+- **With no NAT or internet path, invoke through an interface VPC endpoint for the SageMaker Runtime service**; with private DNS enabled the default `runtime.sagemaker.<region>.amazonaws.com` hostname resolves to it (LLM-SM-006 covers the endpoint's own `VpcConfig`, not the caller's path) ([SageMaker interface endpoints](https://docs.aws.amazon.com/sagemaker/latest/dg/interface-vpc-endpoint.html)).
 - **DNS resolves but calls still fail** — the security group on the endpoint network interfaces must allow inbound HTTPS from the callers, and any network ACL must allow the traffic ([create an interface endpoint](https://docs.aws.amazon.com/vpc/latest/privatelink/create-interface-endpoint.html)).
 - **Fails from only some tasks or subnets** — an interface endpoint gets a network interface only in the subnets you select (one per Availability Zone), and AWS notes the Runtime endpoint must be enabled in the client's Availability Zone for private DNS to work. Add the missing subnets ([create an interface endpoint](https://docs.aws.amazon.com/vpc/latest/privatelink/create-interface-endpoint.html), [SageMaker interface endpoints](https://docs.aws.amazon.com/sagemaker/latest/dg/interface-vpc-endpoint.html)).
 
@@ -37,7 +37,7 @@ invented id. Where AWS says nothing (for example on input "mount" errors), say s
 
 ## 7. Real-time: Autoscaling never scales out
 
-- **Scaling needs a registered scalable target for the endpoint and variant plus a scaling policy** ([auto scaling prerequisites](https://docs.aws.amazon.com/sagemaker/latest/dg/endpoint-auto-scaling-prerequisites.html)).
+- **Scaling needs a registered scalable target for the endpoint and variant plus a scaling policy** (LLM-SM-001 if no target exists) ([auto scaling prerequisites](https://docs.aws.amazon.com/sagemaker/latest/dg/endpoint-auto-scaling-prerequisites.html)).
 - **Check the policy's metric, target value and cooldowns** — e.g. `SageMakerVariantInvocationsPerInstance` with a `TargetValue`, `ScaleOutCooldown` and `ScaleInCooldown`; a target set above the real per-instance load never fires ([define a scaling policy](https://docs.aws.amazon.com/sagemaker/latest/dg/endpoint-auto-scaling-add-code-define.html)).
 
 ## 8. Real-time: Shipping a new model version without dropping traffic

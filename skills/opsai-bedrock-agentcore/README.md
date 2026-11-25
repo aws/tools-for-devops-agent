@@ -17,10 +17,9 @@ conflate:
   resilience via inference profile, idle/abandoned agents, and memory/session TTL.
 - **Amazon Bedrock AgentCore** (family **LLM-AC**) — runtimes, gateways, memories, and workload
   identities. Checks cover a runtime execution role missing required permissions (CRITICAL), an
-  explicit SCP deny, absent VPC endpoints, misconfigured gateway targets, credential rotation, runtime
-  version currency, session review, quotas and session limits, Memory, Browser and Code Interpreter,
-  and cross-account access. Observability setup is left to `agentcore-observability-setup` and
-  posture reviews to `agentcore-ops-review`.
+  explicit SCP deny, absent VPC endpoints, misconfigured gateway targets, stage-level OTLP telemetry,
+  trace-context propagation, structured logs, credential rotation, runtime version currency, and
+  session recording.
 
 It resolves which service is actually in play first (the diagnosis diverges), then runs the matching
 ordered procedure. Every finding carries an AWS-documented `check-id` (LLM-AGT-### / LLM-AC-###), a
@@ -82,6 +81,8 @@ top level, with the repo-management files excluded.
   (LLM-AC-001) and, if denied, correlates against SCPs (LLM-AC-002).
 - "We're getting gateway errors / a VPC endpoint seems missing." → checks required VPC endpoints
   (LLM-AC-003) and gateway target config (LLM-AC-004).
+- "No traces are coming from my agent." → checks stage-level OTLP telemetry and trace propagation
+  (LLM-AC-005, LLM-AC-006) and structured logs (LLM-AC-007).
 - "Does my agent even have a guardrail attached?" → LLM-AGT-001 (attachment only; policy content is
   `opsai-bedrock-security`).
 

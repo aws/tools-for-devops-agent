@@ -13,8 +13,9 @@ Runs the **LLM-SM** checks against SageMaker inference and returns findings grou
 with a stable `check-id`, a severity, the concrete observed evidence, an AWS-doc citation, and a
 recommended (never executed) remediation. Areas and check families:
 
-- **Real-time endpoints (LLM-SM-001..011)** — reliability (scaling failures, idle/abandoned variants),
-  operational excellence (A/B variants, registry lineage), security (CMK), cost (idle capacity, instance-hours), and performance/right-sizing judged against **both** metric
+- **Real-time endpoints (LLM-SM-001..011)** — reliability (auto-scaling, idle/abandoned variants),
+  operational excellence (data capture, Model Monitor, A/B variants, registry lineage), security (VPC,
+  CMK), cost (idle capacity, instance-hours), and performance/right-sizing judged against **both** metric
   namespaces (`AWS/SageMaker` and `/aws/sagemaker/Endpoints`).
 - **Serverless & asynchronous endpoints (LLM-SM-SERVE-*)** — serverless cold start (`ModelSetupTime`)
   with no Provisioned Concurrency, `MaxConcurrency` exhausted while throttling, async endpoints with no

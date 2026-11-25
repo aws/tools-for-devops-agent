@@ -28,10 +28,13 @@ do, say why in **Scope not covered**. Never leave a placeholder unresolved in a 
 > No freelance findings — every row cites a catalog `check-id` and that check's severity. Never invent a
 > threshold: no AWS-published number → `INFO`, marked `workload-specific`.
 
-## Agent tracing (Bedrock Agents Classic)
+## Observability posture
 
 | check-id | signal | present? | impact if missing |
 |---|---|---|---|
+| LLM-AC-005 | Stage-level OTLP telemetry | `<yes / no / not checked>` | Slowness cannot be isolated to a stage |
+| LLM-AC-006 | Trace-context propagation across hops | `<yes / no / not checked>` | A request cannot be followed end-to-end |
+| LLM-AC-007 | Structured JSON logs | `<yes / no / not checked>` | Logs Insights queries are unreliable |
 | LLM-AGT-005 | Agent tracing enabled & persisted | `<yes / no / not checked>` | No record of orchestration/tool/KB reasoning |
 
 ## Prescription

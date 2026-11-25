@@ -39,7 +39,7 @@ Read-only API responses whose obvious reading is **wrong** or misleading for cos
 
 ## 9. `DescribeScalableTargets` empty ≠ no scaling intended
 
-- Belongs to `opsai-sagemaker-inference` (scaling diagnosis) or `sagemaker-ai-ops-review` (posture). Not used here.
+- Belongs to `opsai-sagemaker-inference` (LLM-SM-001). Not used here.
 
 ## 10. CloudWatch "no datapoints" ≠ metric is zero
 
