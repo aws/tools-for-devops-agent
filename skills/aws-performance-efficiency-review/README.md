@@ -37,52 +37,23 @@ The skill only reads. It does not change resources, run code, or connect to data
 - **Chat tasks:** performance reviews, right-sizing questions, "will this scale for the peak".
 - **Incident RCA:** investigations where the symptom is latency, timeouts, throttling, backlog or saturation.
 
-If you also want a custom agent to load this skill, select **All agents** as the agent type when you import it.
-
-## Planned for the next version
-
-Rules already written and tested in lab runs, to follow in a separate pull request as version 1.1.0:
-
-- **Verdict first.** The report opens with a Targets table (one row per target from intake or defaults: target, measured value with unit and window, met yes or no). When every row is met the verdict is Healthy, the cause line says None and the Summary carries no fix row; growth-headroom and right-sizing rows may remain, each labelled "no current breach".
-- **Path membership before ratios.** Before dividing one resource's counts by another's, or attributing a dependency's throttles, rejections or latency to a caller, the agent states the configuration or trace read that puts both on the same request path; without that read the ratio is not computed and the comparison stays Unconfirmed. A twin or peer is a like-for-like control, never a path member.
-- **Cite the call for every number.** Each value in Findings names the metric or field and the API call or query that returned it; a value is never taken from memory, another run or a different window.
-- **Mandatory attempts-per-request row.** For any dependency with throttles or rejections above zero, or latency above baseline, the Hypotheses table carries `attempts per originating request = (served + rejected or throttled attempts) / originating requests` with its window; above 1, the caller's timeout and retry policy is the first hypothesis and added capacity is masking, unless demand at one attempt already exceeds capacity.
-- **Healthy-path evals.** Two functional chat cases on healthy paths that expect a Targets table, a Healthy verdict and no cause labelled Confirmed or Likely, so the skill is also tested for not inventing a problem.
-- **Storage hand-off.** When the bottleneck is inside an EBS volume, the per-volume exceeded checks and balance metrics are named as direct ceiling evidence and the `storage-ebs-operations` skill is named as the next step.
+Select **All agents** at upload if a custom agent should also load this skill.
 
 ## Prerequisites
 
-- An AWS DevOps Agent Space with the application's accounts associated.
-- For the best results: CloudWatch Application Signals or AWS X-Ray on the services in the request path, Database Insights on RDS and Aurora, the CloudWatch agent publishing memory on EC2, Container Insights on ECS and EKS, Lambda Insights on CPU-bound functions, Compute Optimizer opted in, a Business or higher support plan for Trusted Advisor, and for AI hops Bedrock model invocation logging, SageMaker AI detailed observability, Accelerated Compute Insights on GPU clusters and AgentCore observability. The skill works without them and reports each missing source as a telemetry gap with the cost direction and the change needed.
+### 1. An Agent Space with the application's accounts
 
-### IAM permissions
+An existing [Agent Space](https://docs.aws.amazon.com/devopsagent/latest/userguide/getting-started-with-aws-devops-agent-creating-an-agent-space.html) with the accounts that run the application configured as cloud sources.
 
-The DevOps Agent role needs **read-only** permissions for the review to produce complete results.
+### 2. IAM permissions for the Agent Space role
 
-#### Required: twelve actions to add
+The skill is **read-only**: it never calls `Create*`, `Update*`, `Delete*`, `Put*` or any data-plane API. The managed policy `AIDevOpsAgentAccessPolicy` already covers CloudWatch metrics and logs, X-Ray, Application Signals, Database Insights (`pi`), CloudTrail lookup, Service Quotas and the describe APIs of the services on the path. Twelve read actions must be added:
 
-`AIDevOpsAgentAccessPolicy` (default version v16) covers every action this skill uses except these twelve, which must be added:
+- `compute-optimizer:GetEnrollmentStatus`, `GetEC2InstanceRecommendations`, `GetAutoScalingGroupRecommendations`, `GetEBSVolumeRecommendations`, `GetLambdaFunctionRecommendations`, `GetECSServiceRecommendations`, `GetRDSDatabaseRecommendations` (right-sizing input)
+- `lambda:GetFunctionConcurrency` (reserved concurrency for the Lambda deep check)
+- `trustedadvisor:ListChecks`, `ListRecommendations`, `GetRecommendation`, `ListRecommendationResources` (performance-pillar checks; data is returned only on a Business Support+, Enterprise Support or Unified Operations plan, otherwise the skill reports Trusted Advisor as unavailable)
 
-```
-compute-optimizer:GetEnrollmentStatus
-compute-optimizer:GetEC2InstanceRecommendations
-compute-optimizer:GetAutoScalingGroupRecommendations
-compute-optimizer:GetEBSVolumeRecommendations
-compute-optimizer:GetLambdaFunctionRecommendations
-compute-optimizer:GetECSServiceRecommendations
-compute-optimizer:GetRDSDatabaseRecommendations
-lambda:GetFunctionConcurrency
-trustedadvisor:ListChecks
-trustedadvisor:ListRecommendations
-trustedadvisor:GetRecommendation
-trustedadvisor:ListRecommendationResources
-```
-
-The four `trustedadvisor` actions return data only on a Business Support+, Enterprise Support or Unified Operations plan (existing Business Support and Enterprise On-Ramp plans keep access until they end on 2027-01-01); on other plans the API returns AccessDenied and the skill reports Trusted Advisor as unavailable.
-
-Deploy them with the `EnableAwsPerformanceEfficiencyReview` parameter in
-[cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
-**Each Agent Space has its own IAM role, so apply this to the role of every space where the skill is installed.** Use one stack per role:
+Deploy them with the `EnableAwsPerformanceEfficiencyReview` parameter of the shared template [cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml), one stack per Agent Space role:
 
 ```bash
 aws cloudformation deploy \
@@ -93,98 +64,31 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_NAMED_IAM --region <region>
 ```
 
-Most of the template's other `Enable*` parameters default to `true`. Set the ones you do not want to `false`, or you will also attach the other skills' policies, some of which grant write actions such as `servicequotas:RequestServiceQuotaIncrease`.
+Set the template's other `Enable*` parameters to `false` unless you also want those skills' policies. The skill still runs without the twelve actions: a denied call is reported as a telemetry gap with the missing permission named, and the Compute Optimizer, reserved-concurrency and Trusted Advisor inputs are skipped.
 
-**The skill still runs without these twelve.** For a denied call it names the missing permission, uses a fallback, and reports the gap. What you lose is the Compute Optimizer right-sizing input, the Lambda reserved-concurrency value and the Trusted Advisor performance checks.
+### 3. Telemetry on the request path (recommended)
 
-#### Full action list (reference)
+The review is most complete with CloudWatch Application Signals or AWS X-Ray on the services in the path, Database Insights on RDS and Aurora, the CloudWatch agent publishing memory on EC2, Container Insights on ECS and EKS, Lambda Insights on CPU-bound functions, Compute Optimizer opted in, and for AI hops Bedrock model invocation logging, SageMaker AI detailed observability, Accelerated Compute Insights on GPU clusters and AgentCore observability. Without them the skill still runs and lists each missing source in the report's Telemetry gaps table with the cost direction and the change needed.
 
-```
-cloudwatch:GetMetricData
-cloudwatch:ListMetrics
-cloudwatch:DescribeAlarms
-cloudwatch:GetInsightRuleReport
-logs:StartQuery
-logs:GetQueryResults
-logs:FilterLogEvents
-xray:GetServiceGraph
-xray:GetTraceSummaries
-xray:BatchGetTraces
-application-signals:ListServices
-application-signals:GetService
-application-signals:ListServiceDependencies
-application-signals:ListServiceLevelObjectives
-application-signals:GetServiceLevelObjective
-compute-optimizer:GetEnrollmentStatus
-compute-optimizer:GetEC2InstanceRecommendations
-compute-optimizer:GetAutoScalingGroupRecommendations
-compute-optimizer:GetEBSVolumeRecommendations
-compute-optimizer:GetLambdaFunctionRecommendations
-compute-optimizer:GetECSServiceRecommendations
-compute-optimizer:GetRDSDatabaseRecommendations
-trustedadvisor:ListChecks
-trustedadvisor:ListRecommendations
-trustedadvisor:GetRecommendation
-trustedadvisor:ListRecommendationResources
-pi:GetResourceMetrics
-pi:DescribeDimensionKeys
-elasticloadbalancing:Describe*
-ec2:DescribeInstances
-ec2:DescribeInstanceCreditSpecifications
-ec2:DescribeVolumes
-autoscaling:DescribeAutoScalingGroups
-autoscaling:DescribeScalingActivities
-autoscaling:DescribePolicies
-ecs:DescribeServices
-ecs:DescribeTaskDefinition
-eks:DescribeCluster
-lambda:GetFunctionConfiguration
-lambda:GetFunctionConcurrency
-lambda:ListEventSourceMappings
-lambda:GetEventSourceMapping
-lambda:ListProvisionedConcurrencyConfigs
-cloudtrail:LookupEvents
-rds:DescribeDBInstances
-rds:DescribeDBClusters
-rds:DescribeDBParameters
-rds:DescribeEvents
-dynamodb:DescribeTable
-elasticache:DescribeReplicationGroups
-elasticache:DescribeCacheClusters
-sqs:GetQueueAttributes
-sqs:ListQueues
-servicequotas:GetServiceQuota
-servicequotas:ListServiceQuotas
-bedrock:GetProvisionedModelThroughput
-bedrock:GetInferenceProfile
-bedrock:GetModelInvocationLoggingConfiguration
-bedrock:ListProvisionedModelThroughputs
-bedrock:ListInferenceProfiles
-sagemaker:DescribeEndpoint
-sagemaker:DescribeEndpointConfig
-sagemaker:ListEndpoints
-application-autoscaling:DescribeScalableTargets
-application-autoscaling:DescribeScalingActivities
+## Uploading to AWS DevOps Agent
+
+> Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
+
+Package from inside the skill directory so `SKILL.md` sits at the archive root, excluding development-only files:
+
+```bash
+cd skills/aws-performance-efficiency-review
+zip -r ../aws-performance-efficiency-review.zip . -x 'README.md' 'CHANGELOG.md' 'evals/*'
 ```
 
-Why some of these actions are listed:
+Then in the Agent Space Operator Web App:
 
-- `ec2:DescribeInstanceCreditSpecifications`: burstable-credit checks.
-- `logs:StartQuery`, `logs:GetQueryResults`: Logs Insights queries for per-request timings.
-- `sqs:GetQueueAttributes`, `sqs:ListQueues`: queue mapping and visibility-timeout checks.
-- `cloudwatch:GetInsightRuleReport`: Contributor Insights top-N contributors.
-- `servicequotas:GetServiceQuota`, `servicequotas:ListServiceQuotas`: quota checks.
-- `autoscaling:DescribeAutoScalingGroups`: also used for the Auto Scaling group-at-maximum check.
-- `lambda:ListEventSourceMappings` and `lambda:GetEventSourceMapping`: map a queue or stream to its consuming function in Step 2, and read the mapping's maximum concurrency and batch settings for the effective-concurrency check.
-- `lambda:ListProvisionedConcurrencyConfigs`: read provisioned concurrency for the Lambda deep check and the cold-start and masking-fix rules.
-- `ec2:DescribeVolumes`: read volume type, size, provisioned IOPS and provisioned throughput for the storage hidden-limits checks (gp2 burst baseline, gp3 provisioned limits).
-- `cloudtrail:LookupEvents`: read configuration-change events in the window for the change rule-out (timing, scope, history), and as a fallback source for a configuration value when a describe call fails.
-- `trustedadvisor:ListChecks`, `ListRecommendations`, `GetRecommendation`, `ListRecommendationResources`: performance-pillar checks and their flagged resources as a second evidence source (Step 5).
-- `bedrock:GetProvisionedModelThroughput`, `GetInferenceProfile`, `GetModelInvocationLoggingConfiguration` and the matching `List*` actions: model units, inference profile Regions and logging state for the Bedrock deep check; `servicequotas:ListServiceQuotas` with service code `bedrock` gives the applied tokens-per-minute and requests-per-minute quotas.
-- `sagemaker:DescribeEndpoint`, `DescribeEndpointConfig`, `ListEndpoints`, `application-autoscaling:DescribeScalableTargets`, `DescribeScalingActivities`: instance type and count per variant, scaling policy and failed scaling activities for the SageMaker AI deep check.
-- `cloudwatch:GetMetricData` also covers the `AWS/Bedrock`, `AWS/SageMaker`, `/aws/sagemaker/InferenceComponents`, `AWS/Bedrock-AgentCore` and `LambdaInsights` namespaces; Accelerated Compute Insights and ElastiCache OpenTelemetry metrics are read through CloudWatch PromQL queries (IAM action to verify; the managed policy includes cloudwatch:StartTelemetryQuery and cloudwatch:GetTelemetryQueryResults).
+1. Open **Skills**, then **Add skill**, then **Upload skill**.
+2. Drop `aws-performance-efficiency-review.zip`.
+3. Select agent types **Chat tasks** and **Incident RCA** (or **All agents**).
+4. Review the validation result, then **Upload**.
 
-All of them are read-only. If the agent role uses a custom policy instead of `AIDevOpsAgentAccessPolicy`, grant the full list above.
+Or with the DevOps Agent CLI: `devops-agent skills upload-skill --skill-dir skills/aws-performance-efficiency-review --agent-space-id <id> --agent-types "CHAT,INCIDENT_RCA"`.
 
 ## Example prompts
 
@@ -200,39 +104,24 @@ Investigation:
 - "p99 latency on the orders API went above 2 seconds at 14:00 UTC. Find the cause."
 - "Requests to the inventory service started timing out after this morning's deployment."
 
-## Files
+## Skill contents
 
 ```
 aws-performance-efficiency-review/
-├── SKILL.md                               # Workflow the agent follows
+├── SKILL.md                          # Workflow the agent follows: intake, path, RED, USE, differential, report
 ├── references/
-│   ├── metrics-by-service.md              # Metric names, dimensions, statistics, deep checks per service
-│   ├── bottleneck-patterns.md             # Starting thresholds and symptom-to-cause patterns
-│   ├── hidden-limits.md                   # Limits that look like headroom (credits, burst, allowances, caps)
-│   ├── logs-and-statistics.md             # Logs Insights patterns; baselines, SLOs, async RED, Little's law
-│   ├── diagnosis-rules.md                 # Confidence labels, differential, magnitude arithmetic, twins, masking fixes
-│   ├── report-and-delegation.md           # Report template, hygiene, sub-agent task text
-│   ├── well-architected-mapping.md        # PERF01 to PERF05 best-practice IDs and typical findings
-│   └── telemetry-sources.md               # Capabilities to enable per telemetry gap: measure, detect, cost direction, permissions
-├── evals/
-│   ├── evals.json                         # Chat, investigation and negative test cases with assertions
-│   ├── additional-permissions.json        # Extra read permissions for the functional test spaces
-│   ├── structure/                         # skill-eval structure results
-│   ├── best-practices/                    # skill-eval best-practices results
-│   └── functional/                        # skill-eval functional results (with and without the skill)
+│   ├── metrics-by-service.md         # Metric names, dimensions, statistics and deep checks per service
+│   ├── bottleneck-patterns.md        # Starting thresholds and symptom-to-cause patterns
+│   ├── hidden-limits.md              # Limits that look like headroom: credits, burst, allowances, caps, quotas
+│   ├── logs-and-statistics.md        # Logs Insights patterns; baselines, SLOs, async RED, Little's law
+│   ├── diagnosis-rules.md            # Confidence labels, differential, magnitude arithmetic, twins, masking fixes
+│   ├── report-and-delegation.md      # Report template, hygiene, sub-agent task text
+│   ├── well-architected-mapping.md   # PERF01 to PERF05 best-practice IDs
+│   └── telemetry-sources.md          # Capability to enable per telemetry gap, with cost direction and permissions
+├── evals/                            # skill-eval cases and results (development only, not published)
 ├── README.md
 └── CHANGELOG.md
 ```
-
-## References
-
-- [Performance efficiency pillar, AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/framework/performance-efficiency.html)
-- [AWS DevOps Agent Skills](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html)
-- [AWS Compute Optimizer User Guide](https://docs.aws.amazon.com/compute-optimizer/latest/ug/what-is-compute-optimizer.html)
-- [CloudWatch Application Signals](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Application-Monitoring-Sections.html)
-- [AWS X-Ray Developer Guide](https://docs.aws.amazon.com/xray/latest/devguide/aws-xray.html)
-- [CloudWatch Database Insights](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Database-Insights.html)
-- [AWS Trusted Advisor API](https://docs.aws.amazon.com/awssupport/latest/user/get-started-with-aws-trusted-advisor-api.html)
 
 ## Further reading
 
