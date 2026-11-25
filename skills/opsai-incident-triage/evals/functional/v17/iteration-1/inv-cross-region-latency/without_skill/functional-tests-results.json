@@ -1,0 +1,74 @@
+{
+  "version": "v17",
+  "iteration": 1,
+  "eval_id": "inv-cross-region-latency",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The agent correctly identifies cross-region network latency as the cause, correctly computes ~2.4s compounding across 6 calls, and gives reasonable remediation steps (move to eu-west-1, cross-region inference profile, connection reuse, prompt caching, parallelization, streaming). However, it misses or contradicts several specific required points: (1) It instructs the user to check metrics.latencyMs/server-side latency to determine if the extra time is network vs model, implying that if server latency is unchanged it 'confirms' the network diagnosis - this is roughly the opposite of the expected point, which states that Bedrock's InvocationLatency metric (defined from request sent to last token received) cannot definitively rule the network hop in or out, since that latency metric could already include network-related waiting. The agent treats latencyMs as a clean separator of network vs server time, which contradicts the expected nuance. (2) It does not mention the impact on streaming time-to-first-token specifically, nor multi-turn flows, as called out in the expected output. (3) It mentions EU cross-region inference profiles correctly but frames the fix as 'call Bedrock in eu-west-1' rather than clearly presenting the two concrete options as equally valid alternatives with the geographic routing caveat (routing to any region in that geography) - it does mention this partially ('keeps inference inside EU regions') but doesn't explicitly state that requests may be routed to any region within the geography attribute as required. Given the metric-interpretation point is explicitly and critically present in the expected output and the agent's response actually contradicts that nuance by using latencyMs as a clear diagnostic signal, this is a meaningful gap given the expected output's specific guidance about the limits of Bedrock's InvocationLatency metric.</reasoning>\n<parameter name=\"confidence\">medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response attributes the latency to the cross-Region network path rather than to model performance",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'The slowdown is most likely network distance... A single round trip only accounts for about 80 ms... If connections aren't being reused, each call pays a new TCP and TLS handshake' and explicitly: 'Model inference time shouldn't change, because the model still runs in us-east-1.'",
+          "reasoning": "The agent clearly attributes the latency increase to the cross-region network path (round trips, TCP/TLS handshakes, congestion window), not to model performance, and explicitly states model inference time shouldn't change.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response explains why the effect compounds for streaming or multi-turn interactions",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'With 6 sequential calls, the extra cost compounds to about 2.4 s per user request.' Also mentions 'Stream responses (ConverseStream) so users see output sooner, even if total time doesn't change.'",
+          "reasoning": "The response explains compounding for the 6 sequential calls (multi-turn/sequential interactions) with a concrete number (2.4s). However, it does not specifically explain why the effect compounds for streaming interactions - it only mentions streaming as a UX mitigation, not an explanation of why the network effect compounds under streaming. The assertion bundles 'streaming or multi-turn' with 'or', so satisfying multi-turn compounding is sufficient.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The response gives concrete options including the data routing implication",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Call Bedrock in eu-west-1... If it isn't available on-demand, use an EU cross-region inference profile (model IDs prefixed eu.)... check data residency too. Prompts and responses are currently crossing the Atlantic.' Also concrete options: reuse connections, prompt caching, parallel calls, streaming, latency-optimized inference.",
+          "reasoning": "The response gives multiple concrete, actionable options (call Bedrock in eu-west-1, use EU inference profile, reuse connections, prompt caching, parallelize, stream, latency-optimized inference) and explicitly addresses data routing/residency implications ('Prompts and responses are currently crossing the Atlantic').",
+          "confidence": "high"
+        },
+        {
+          "text": "At least one finding carries a INV/TEL/AC catalog check-id",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "The response does not rule the cross-Region hop in or out from Bedrock's InvocationLatency metric alone and does not claim that metric excludes network time",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent recommends: 'Compare your client-side latency with metrics.latencyMs in the Converse response, which is the server-side time. If server-side time is still about 1.2 s, the extra 0.4 s is network and connection overhead... If server-side time also rose, something else is going on and we should look further.' The response does not mention InvocationLatency CloudWatch metric at all.",
+          "reasoning": "The assertion specifically concerns Bedrock's InvocationLatency CloudWatch metric and whether the response avoids claiming it excludes network time or using it alone to rule in/out the network hop. The response never references InvocationLatency by name; it instead discusses metrics.latencyMs from the Converse API response. Since the response doesn't make any claim about InvocationLatency specifically, it technically doesn't violate the assertion, but it also doesn't demonstrate careful handling of that specific metric - it substitutes a different metric (latencyMs) for diagnosis. The assertion's spirit is that the response should not misuse a single latency metric to definitively attribute cause; the response does use metrics.latencyMs somewhat definitively ('If server-side time is still about 1.2s, the extra 0.4s is network and connection overhead. That confirms the diagnosis.') but this is a different metric than InvocationLatency, and the claim is reasonably hedged with 'if' conditions and acknowledging further investigation needed if server time also rose. Since InvocationLatency specifically is never mentioned or misused, the assertion is not violated.",
+          "confidence": "low"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "0s",
+    "cost": "$0.00",
+    "context_window": {
+      "utilization": "4.4%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "version": "v17",
+  "iteration": 1,
+  "eval_id": "self-hosted-model-locus-not-provider",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'opsai-incident-triage' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output specifies several precise criteria:\n\n1. \"locus=INFRASTRUCTURE, not PROVIDER\" - The agent reported \"locus=UNDETERMINED\" instead of INFRASTRUCTURE. This is a deviation, though the agent's narrative does argue that the provider-side explanation doesn't apply and that faults would be \"yours, not a model provider outage.\" However, the explicit locus label is UNDETERMINED, not INFRASTRUCTURE as expected.\n\n2. \"provider health as not-applicable rather than no-datapoints\" - The agent explicitly states \"Provider health: not-applicable (self-hosted, so you are the provider).\" This matches the expected criterion well.\n\n3. \"binds the error slots to AWS/ApplicationELB HTTPCode_Target_4XX_Count and HTTPCode_Target_5XX_Count\" - The agent mentions \"SERVER_ERRORS (ALB target 5XX count)\" and \"CLIENT_ERRORS (ALB target 4XX count)\" as metrics, and later references \"Target 5XX\" and \"ELB-generated 503s\" - this is conceptually binding to the correct metrics but doesn't use the exact CloudWatch metric names (HTTPCode_Target_4XX_Count / HTTPCode_Target_5XX_Count or HTTPCode_ELB_5XX_Count). The agent does correctly distinguish between ELB-generated 503s and target-generated 5XX, which is the correct technical distinction (ELB_5XX vs Target_5XX), showing good technical understanding even if exact metric names aren't cited.\n\n4. \"does not look for an AWS Health event for a model service or suggest a cross-region inference profile\" - The agent does NOT suggest a cross-region inference profile, which is good. However, it does mention checking \"AWS Health dashboard... for ELB, EC2 or EKS\" - this is a regional infrastructure health check, not a \"model service\" health event, so this seems compliant with the expectation (it's checking infra health, not Bedrock/SageMaker model service health).\n\n5. \"The serving layer is handed to the host investigation\" - Yes, the agent clearly hands off investigation to the user for pod logs, ALB metrics, etc.\n\nOverall, the agent's response is substantively aligned with the expected output in spirit - it correctly identifies that this is a self-hosted infrastructure issue, treats provider health as not-applicable, avoids suggesting cross-region inference profiles or model-service AWS Health lookups, and hands off the serving layer investigation to the host. The main shortfall is the explicit locus label being \"UNDETERMINED\" rather than \"INFRASTRUCTURE\" and not using the exact metric names (HTTPCode_Target_4XX_Count / HTTPCode_Target_5XX_Count).\n\nThis is a partial match - strong on substance but weak on the explicit labeling requirements that the expected output seems to want verbatim (locus=INFRASTRUCTURE, specific metric names). Given the explicit mismatch on locus classification (a core taxonomy requirement) and lack of precise metric naming, I lean toward this being a failure on the specific grading criteria, though the agent's reasoning process was sound.",
+      "evidence": "Agent output: \"TRIAGE: locus=UNDETERMINED, transience=UNKNOWN, binding=self-hosted-alb\" and \"Provider health: not-applicable (self-hosted, so you are the provider)\" and \"SERVER_ERRORS (ALB target 5XX count): not-queried\" vs expected \"locus=INFRASTRUCTURE\" and \"HTTPCode_Target_4XX_Count and HTTPCode_Target_5XX_Count\"",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The locus is INFRASTRUCTURE and not PROVIDER",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Agent states: 'With vLLM on EKS behind an ALB, you run the serving layer. Any fault there counts as yours, not as a model provider outage, and there is no model provider incident to look for.' The TRIAGE line sets locus=UNDETERMINED but the narrative explicitly rules out PROVIDER and attributes the issue to the self-hosted infrastructure (ALB, target group, vLLM pods, nodes).",
+          "reasoning": "While the literal TRIAGE header says locus=UNDETERMINED (not resolved to INFRASTRUCTURE explicitly), the substance of the response clearly rules out PROVIDER as the locus and frames the entire investigation around infrastructure components (ALB, target groups, pods, nodes). The assertion is about substance - the agent treats this as an infrastructure issue, not a provider issue, consistent with self-hosted setup. However, the explicit label is UNDETERMINED, which is a partial mismatch against a strict reading of 'locus is INFRASTRUCTURE'.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Provider health is recorded as not-applicable rather than as a missing or zero signal",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Agent writes: 'Provider health: not-applicable (self-hosted, so you are the provider).'",
+          "reasoning": "The output explicitly labels provider health as 'not-applicable' with a clear rationale, rather than marking it as a missing/zero/not-queried signal. This directly satisfies the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not propose a cross-region inference profile or any Bedrock-specific failover",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'cross-region inference profile,' 'Bedrock failover,' or any Bedrock-specific remediation anywhere in the output. The response only discusses ALB, target groups, vLLM pods, EKS nodes, and CloudWatch metrics for the self-hosted stack.",
+          "reasoning": "The output contains zero references to Bedrock or any inference-profile/failover mechanism. The assertion is satisfied by absence of this content.",
+          "confidence": "high"
+        },
+        {
+          "text": "The error signals are bound to load balancer or application metrics rather than AWS/Bedrock",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent lists metrics as 'SERVER_ERRORS (ALB target 5XX count)', 'CLIENT_ERRORS (ALB target 4XX count)', 'THROTTLES (ALB rejected connections, queue depth)', 'Target group healthy and unhealthy host counts' and recommends pulling 'ALB's CloudWatch metrics... with the target group's HealthyHostCount alongside.' No Bedrock or AWS-provider-side error signals are referenced.",
+          "reasoning": "All error signals discussed are explicitly bound to ALB/target-group/application-level metrics (5XX, 4XX, healthy host count, pod logs), not to any Bedrock or AWS model-provider metrics. This matches the assertion precisely.",
+          "confidence": "high"
+        },
+        {
+          "text": "No Bedrock namespace is asserted for a self-hosted model",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "33s",
+    "cost": "$0.28",
+    "context_window": {
+      "utilization": "5.3%",
+      "compaction_count": 0
+    }
+  }
+}
