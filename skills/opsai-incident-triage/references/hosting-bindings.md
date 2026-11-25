@@ -51,7 +51,7 @@ token, and names what the signal is folded into.
 | `sagemaker` | `AWS/SageMaker` `Invocation4XXErrors` | `AWS/SageMaker` `Invocation5XXErrors` | `not-separable` — 429 folds into `Invocation4XXErrors` | `health:DescribeEvents`, service `sagemaker` | [SageMaker CloudWatch metrics](https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.html) |
 | `agentcore` | the model stage binds to `bedrock`; the runtime stage is workload-emitted | same | same | `health:DescribeEvents`, service `bedrock` | [Agentic AI Lens — observability](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/agentrel08-bp02.html) |
 | `self-hosted-alb` | `AWS/ApplicationELB` `HTTPCode_Target_4XX_Count` | `AWS/ApplicationELB` `HTTPCode_Target_5XX_Count` | `RejectedConnectionCount`, plus app-emitted queue depth | `not-applicable` — the customer is the provider | [ALB CloudWatch metrics](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-cloudwatch-metrics.html) |
-| `self-hosted-lambda` | `AWS/Lambda` `Errors` split by the function's own error taxonomy | same metric, same caveat | `AWS/Lambda` `Throttles` | `not-applicable` | [Lambda metrics](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics.html) |
+| `self-hosted-lambda` | `AWS/Lambda` `Errors` split by the function's own error taxonomy | same metric, same caveat | `AWS/Lambda` `Throttles` | `not-applicable` | [Lambda metrics](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html) |
 | `third-party` | no AWS signal | no AWS signal | no AWS signal | `not-visible` | — |
 
 **`agentcore` is a composite, not a third namespace.** An AgentCore runtime still calls a model, and

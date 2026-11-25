@@ -55,6 +55,7 @@ walk establishes how far in the failure reaches. Three rules:
 | "returns nothing", "empty answer" | 3, then 7, then 5 | an empty body with a successful call is assembly, filtering or missing context — not an error |
 | "errors", "5xx", "429" | 4 | the only stage that emits a provider-shaped error code |
 | "slow" | 4, then 6 | tool latency is routinely mistaken for model latency |
+| "slower since we moved the app to another Region than the model" | 1, then 4 | the cross-Region hop is paid by the caller on every call and multiplies across sequential calls; `InvocationLatency` (request sent to last token received) cannot rule it in or out alone, and missing client-side timing is LLM-TEL-001. Options: call Bedrock in the caller's Region, or a geographic [cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html) profile for the caller's geography (requests may be routed within that geography) |
 | "wrong or stale answers" | 5 | retrieval before the model; this is also where the `output-quality` track takes over |
 | "blocked", "refused to answer" | 7 | a working filter presents as an outage |
 | "worked in test, not in production" | 3, then 4 | configuration divergence between environments, not a service fault |

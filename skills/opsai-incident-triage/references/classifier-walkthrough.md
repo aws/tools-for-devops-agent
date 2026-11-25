@@ -170,7 +170,8 @@ Step 5b — Resolve every error to its CODE and its PRINCIPAL, never to its 4xx/
   role <role-name>`.
   Then reconcile: the per-code counts must SUM to the metric total over the same window
   (the bound CLIENT_ERRORS + SERVER_ERRORS + THROTTLES slots; on the bedrock binding a
-  ThrottlingException is counted in InvocationThrottles, not in InvocationClientErrors).
+  throttled request is counted only in InvocationThrottles, not in InvocationClientErrors;
+  a request rejected for exceeding a service quota is counted in InvocationClientErrors).
     → Sum equals the metric?        Report the enumeration; each code gets its own cause
                                     and its own remediation.
     → Sum does NOT equal?           Say so, give both numbers, name what is unaccounted for,
@@ -219,9 +220,9 @@ Step 6 — Rule. A TOTAL PRECEDENCE LADDER on COUNTS, never a share calculation.
       successes. One 4xx in 21 calls with zero 5xx is an APPLICATION ruling, not noise: a
       client error is a rejected request, and this slot pair cannot express a share.
       transience=PERSISTENT — a rejected request shape does not clear on retry. EXCEPTION:
-      where THROTTLES is the only non-zero slot (ThrottlingException is counted there, not
-      in CLIENT_ERRORS), transience=TRANSIENT if Step 4 shows the throttle cleared within
-      the window, and the locus moves to INFRASTRUCTURE if quota posture rather than
+      where THROTTLES is the only non-zero slot (throttled requests are counted only there,
+      not in CLIENT_ERRORS; a quota-exceeded rejection lands in CLIENT_ERRORS),
+      transience=TRANSIENT if Step 4 shows the throttle cleared within the window, and the locus moves to INFRASTRUCTURE if quota posture rather than
       request shape is the cause.
       BINDING CAVEAT: on self-hosted-lambda the platform metric cannot split client from
       server (references/hosting-bindings.md). An undifferentiated error count does NOT

@@ -8,7 +8,7 @@ All metric names are as published by AWS. "AWS-published" means the metric/names
 
 ## AWS/Bedrock — model invocation metrics
 
-Namespace: `AWS/Bedrock`. Common dimensions: `ModelId` (and for some, operation/region). Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html
+Namespace: `AWS/Bedrock`. Common dimensions: `ModelId` (and for some metrics `ModelId + ContextWindow` or `ModelId + ImageSize + BucketedStepSize`); every metric is also published without a dimension. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-runtime-metrics.html
 
 | Metric | Unit | Meaning | Typical statistic |
 |---|---|---|---|
@@ -21,7 +21,7 @@ Namespace: `AWS/Bedrock`. Common dimensions: `ModelId` (and for some, operation/
 | `OutputTokenCount` | Count | Tokens generated in the output | Sum, Average |
 | `OutputImageCount` | Count | Images generated (image models) | Sum |
 | `TimeToFirstToken` | Milliseconds | Latency to first streamed token (streaming calls) | Average, p90 |
-| `EstimatedTPMQuotaUsage` | Count | Estimated tokens-per-minute quota consumption across `Converse`, `ConverseStream`, `InvokeModel` and `InvokeModelWithResponseStream`; an approximation in tokens, not a percentage. There is no `EstimatedQuotaConsumption` metric | Sum |
+| `EstimatedTPMQuotaUsage` | Count | Estimated tokens-per-minute quota consumption across `Converse`, `ConverseStream`, `InvokeModel` and `InvokeModelWithResponseStream`; an approximation in tokens, not a percentage, and not the reservation-based consumption (input tokens plus `max_tokens`) that drives throttling. This is the only quota-usage metric AWS publishes in `AWS/Bedrock` | Sum |
 
 Token metrics (`InputTokenCount` / `OutputTokenCount`) are the primary signal for cost analysis — see `cost-analysis.md`.
 
@@ -44,7 +44,7 @@ A spike in `InvocationsIntervened` can indicate an attack campaign or a prompt/m
 
 ## AWS/Bedrock/Agents — agent metrics
 
-Namespace: `AWS/Bedrock/Agents`. Dimensions include agent id/alias. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-agents-cw-metrics.html
+Namespace: `AWS/Bedrock/Agents`. Dimensions include `Operation`, `ModelId` and `AgentAliasArn`. Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/monitoring-agents-cw-metrics.html
 
 | Metric | Meaning |
 |---|---|
