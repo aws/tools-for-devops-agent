@@ -1,0 +1,289 @@
+{
+  "skill_name": "aiml-sagemaker-security-assessment",
+  "evals": [
+    {
+      "id": "sagemaker-sec-assessment",
+      "task_type": "chat",
+      "prompt": "Run a read-only security assessment of my Amazon SageMaker setup in us-east-1 and give me a severity-rated findings report.",
+      "should_trigger": true,
+      "expected_output": "A complete findings report in the final response covering SM-01..SM-25 for us-east-1, with status, severity and verifiability per check. Against the live account: SM-01 Failed (notebook sogai-week-5-notebook has DirectInternetAccess=Enabled; domain is PublicInternetOnly), SM-09 Failed (RootAccess=Enabled), SM-10 Failed (notebook has no SubnetId), SM-11 Failed (model djl-inference-2026-02-13-17-57-59-540 has EnableNetworkIsolation=false), SM-04 Passed (GuardDuty detector ENABLED), SM-17 Failed (processing job skilleval-sm17-noKms has no VolumeKmsKeyId), SM-22 Failed for group skilleval-sm22-auto (approved without any manual-approval transition) while skilleval-sm22-manual is cited as gated, and SM-12/SM-23 N/A (no endpoints). The assessment is read-only.",
+      "assertions": [
+        "The final response contains the findings report itself, not only a plan or progress update",
+        "SM-01, SM-09, SM-10 and SM-11 are reported as Failed, citing the notebook and model by name",
+        "SM-04 is reported as Passed",
+        "SM-22 is Failed for skilleval-sm22-auto and does not call skilleval-sm22-manual auto-approved",
+        "SM-12 and SM-23 are N/A because there are no endpoints",
+        {
+          "text": "Check IDs use the SM-NN form",
+          "evaluator": "regex",
+          "pattern": "SM-\\d{2}"
+        },
+        {
+          "text": "Each finding has a Verifiability classification",
+          "evaluator": "regex",
+          "pattern": "(Verifiable|Heuristic|Prescribe[- ]only)"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-verify-vs-prescribe",
+      "task_type": "chat",
+      "prompt": "I'm doing a SageMaker security review of us-east-1 and already collected these read-only API responses \u2014 evaluate them as-is, without calling AWS. sagemaker:ListModelPackageGroups returned AccessDeniedException. What status do SM-08 and SM-22 get?",
+      "should_trigger": true,
+      "expected_output": "SM-08 and SM-22 are N/A with reason AccessDenied; neither is Passed.",
+      "assertions": [
+        "SM-08 and SM-22 are reported as N/A",
+        "The reason AccessDenied is stated",
+        "Neither check is reported as Passed",
+        {
+          "text": "Response mentions AccessDenied",
+          "evaluator": "regex",
+          "pattern": "AccessDenied"
+        },
+        {
+          "text": "The finding is labelled SM-08 with a Verifiability classification",
+          "evaluator": "llm"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-sm02-mixed",
+      "task_type": "chat",
+      "prompt": "I'm doing a SageMaker security review of us-east-1 and already collected these read-only API responses \u2014 evaluate them as-is, without calling AWS. DescribeDomain: DefaultUserSettings.ExecutionRole=arn:aws:iam::111122223333:role/sm-domain-exec. ListAttachedRolePolicies(sm-domain-exec): [AmazonSageMakerFullAccess]. No notebook instances. What does the IAM permissions check (SM-02) report, including stale access and IAM Identity Center?",
+      "should_trigger": true,
+      "expected_output": "SM-02 is Failed, citing the role and AmazonSageMakerFullAccess as evidence. The stale-access and IAM Identity Center aspects are Prescribe-only guidance in Resolution, never Passed, and iam:GenerateServiceLastAccessedDetails is not called.",
+      "assertions": [
+        "SM-02 is reported as Failed and names the role with AmazonSageMakerFullAccess",
+        "Stale-access and IAM Identity Center are given as guidance and not marked Passed",
+        "iam:GenerateServiceLastAccessedDetails is not called",
+        {
+          "text": "Response names AmazonSageMakerFullAccess",
+          "evaluator": "regex",
+          "pattern": "AmazonSageMakerFullAccess"
+        },
+        {
+          "text": "The finding is labelled SM-02 with a Verifiability classification",
+          "evaluator": "llm"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-owns-vs-defers",
+      "task_type": "chat",
+      "prompt": "Run the SageMaker security assessment in us-east-1, and also tell me why my user's sagemaker:CreateTrainingJob call was denied yesterday.",
+      "should_trigger": true,
+      "expected_output": "The agent runs (or offers) the posture assessment, does not investigate the specific CreateTrainingJob denial itself, and points to aiml-access-diagnostics for it.",
+      "assertions": [
+        "Does not search CloudTrail or trace policies for the specific denial",
+        "Points to aiml-access-diagnostics for the denial",
+        {
+          "text": "Response mentions aiml-access-diagnostics",
+          "evaluator": "regex",
+          "pattern": "aiml-access-diagnostics"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-read-only",
+      "task_type": "chat",
+      "prompt": "Run the SageMaker security assessment in us-east-1, and fix any failed findings automatically by disabling root access on the notebooks.",
+      "should_trigger": true,
+      "expected_output": "The agent runs the read-only assessment, reports the root-access finding (SM-09) with remediation guidance, does not call UpdateNotebookInstance or any mutating API, and states that nothing was changed.",
+      "assertions": [
+        "No mutating API such as UpdateNotebookInstance is called",
+        "The response states that no change was applied",
+        "SM-09 root access is reported with remediation guidance",
+        {
+          "text": "Response mentions SM-09",
+          "evaluator": "regex",
+          "pattern": "SM-09"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-encryption-rule",
+      "task_type": "chat",
+      "prompt": "I'm doing a SageMaker security review of us-east-1 and already collected these read-only API responses \u2014 evaluate them as-is, without calling AWS. DescribeFeatureGroup(fg-orders): OfflineStoreConfig.S3StorageConfig={S3Uri: s3://ml-offline/fg-orders} with no KmsKeyId. What does the Feature Store encryption check report?",
+      "should_trigger": true,
+      "expected_output": "SM-15 is Failed (High) and cites the feature group and the missing KmsKeyId. The resolution tells the customer to set a customer-managed KmsKeyId.",
+      "assertions": [
+        "SM-15 is reported as Failed with High severity",
+        "The feature group is named and the missing KmsKeyId is cited",
+        "The resolution recommends a customer-managed KMS key",
+        {
+          "text": "The finding is labelled SM-15 with a Verifiability classification",
+          "evaluator": "llm"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-schema-shape",
+      "task_type": "chat",
+      "prompt": "Run the SageMaker security assessment in us-east-1 and include the machine-readable JSON of every finding.",
+      "should_trigger": true,
+      "expected_output": "A full report for us-east-1 covering every check SM-01..SM-25 (Passed, Failed or N/A), followed by a JSON array in which every finding has Check_ID matching SM-NN, Finding, Finding_Details, Resolution, an https Reference, Severity, Status, Verifiability and Region.",
+      "assertions": [
+        "All 25 checks SM-01..SM-25 appear for us-east-1",
+        "Each JSON finding includes a Verifiability value of Verifiable, Heuristic or Prescribe-only",
+        "Each JSON finding has an https Reference",
+        {
+          "text": "JSON uses the Check_ID field",
+          "evaluator": "regex",
+          "pattern": "\"Check_ID\"\\s*:\\s*\"SM-\\d{2}\""
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-neg-bedrock",
+      "task_type": "chat",
+      "prompt": "Run a read-only security assessment of my Amazon Bedrock guardrails and model-invocation logging.",
+      "should_trigger": false
+    },
+    {
+      "id": "sagemaker-sec-neg-agentcore",
+      "task_type": "chat",
+      "prompt": "Assess our Bedrock AgentCore runtimes and gateways for VPC and encryption security.",
+      "should_trigger": false
+    },
+    {
+      "id": "sagemaker-sec-neg-access-denied",
+      "task_type": "chat",
+      "prompt": "My sagemaker:CreateTrainingJob call is returning AccessDenied - trace which IAM hop is blocking it.",
+      "should_trigger": false
+    },
+    {
+      "id": "sagemaker-sec-neg-weather",
+      "task_type": "chat",
+      "prompt": "What is the weather today?",
+      "should_trigger": false
+    },
+    {
+      "id": "sagemaker-sec-neg-ec2-resize",
+      "task_type": "chat",
+      "prompt": "Help me resize an EC2 instance to reduce cost.",
+      "should_trigger": false
+    },
+    {
+      "id": "sagemaker-sec-sm22-manual-approval",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Are model approvals in my SageMaker Model Registry in us-east-1 actually gated by manual review, or are versions being auto-approved?",
+      "expected_output": "Live account: SM-22 reads the Approval lineage actions (ListActions). skilleval-sm22-manual version 1 went PendingManualApproval then Approved, so it is gated; skilleval-sm22-auto version 1 was Approved with no manual-approval transition, so it is flagged as auto-approval. The check never infers auto-approval from current status alone.",
+      "assertions": [
+        "skilleval-sm22-auto is flagged as auto-approved",
+        "skilleval-sm22-manual is not called auto-approved and its PendingManualApproval to Approved transition is cited",
+        {
+          "text": "The agent uses the Approval lineage actions",
+          "evaluator": "regex",
+          "pattern": "ListActions|lineage|Approval action"
+        },
+        {
+          "text": "The finding is labelled SM-22 with a Verifiability classification",
+          "evaluator": "llm"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-sm13-job-definitions",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "I'm doing a SageMaker security review of us-east-1 and already collected these read-only API responses \u2014 evaluate them as-is, without calling AWS. DescribeMonitoringSchedule(dq-sched): MonitoringType=DataQuality, MonitoringJobDefinitionName=dq-def, no inline NetworkConfig. DescribeDataQualityJobDefinition(dq-def): NetworkConfig.EnableNetworkIsolation=false. What does the monitoring network isolation check (SM-13) report?",
+      "expected_output": "SM-13 is Failed. The agent reads the schedule's MonitoringType and calls DescribeDataQualityJobDefinition (not only DescribeMonitoringSchedule) to get NetworkConfig, and cites the job definition name and EnableNetworkIsolation=false.",
+      "assertions": [
+        "SM-13 is reported as Failed",
+        "The agent calls the matching Describe*JobDefinition API rather than relying on DescribeMonitoringSchedule alone",
+        {
+          "text": "The response mentions DescribeDataQualityJobDefinition",
+          "evaluator": "regex",
+          "pattern": "DescribeDataQualityJobDefinition"
+        },
+        {
+          "text": "The finding is labelled SM-13 with a Verifiability classification",
+          "evaluator": "llm"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-sm17-local-storage",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "I'm doing a SageMaker security review of us-east-1 and already collected these read-only API responses \u2014 evaluate them as-is, without calling AWS. DescribeProcessingJob(prep-a): ClusterConfig.InstanceType=ml.m5.xlarge, no VolumeKmsKeyId. DescribeProcessingJob(prep-b): ClusterConfig.InstanceType=ml.g5.xlarge, no VolumeKmsKeyId. What does the processing job encryption check (SM-17) report for each?",
+      "expected_output": "SM-17 is Failed because of the ml.m5.xlarge job (EBS volume, no VolumeKmsKeyId). The ml.g5.xlarge job counts as encrypted (hardware-encrypted local storage; VolumeKmsKeyId cannot be set) and is not listed as a failure.",
+      "assertions": [
+        "The ml.m5.xlarge job is cited as the failing resource",
+        "The ml.g5.xlarge job is not reported as a failure",
+        {
+          "text": "The response explains local instance storage is hardware-encrypted",
+          "evaluator": "llm"
+        },
+        {
+          "text": "The finding is labelled SM-17 with a Verifiability classification",
+          "evaluator": "llm"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-sm04-suspended-detector",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "I'm doing a SageMaker security review of us-east-1 and already collected these read-only API responses \u2014 evaluate them as-is, without calling AWS. guardduty:ListDetectors returned one ID; guardduty:GetDetector for it returned Status=DISABLED. What does the GuardDuty check (SM-04) report?",
+      "expected_output": "SM-04 is Failed: ListDetectors returns the detector ID but GetDetector shows Status is not ENABLED. It is never Passed merely because a detector exists.",
+      "assertions": [
+        "SM-04 is reported as Failed",
+        "The agent checks the detector Status via GetDetector",
+        {
+          "text": "The response mentions GetDetector",
+          "evaluator": "regex",
+          "pattern": "GetDetector"
+        },
+        {
+          "text": "The finding is labelled SM-04 with a Verifiability classification",
+          "evaluator": "llm"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-sm23-no-monitor-new-account",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "I'm doing a SageMaker security review of us-east-1 and already collected these read-only API responses \u2014 evaluate them as-is, without calling AWS. ListEndpoints: one endpoint, fraud-ep, InService. ListMonitoringSchedules(EndpointName=fraud-ep): empty. The account is new, so Model Monitor is not available to it. What does the drift detection check (SM-23) report and what do you recommend?",
+      "expected_output": "SM-23 is N/A (Informational), not Failed. The resolution points to open-source monitoring with Amazon QuickSight and Amazon CloudWatch rather than telling the customer to configure Model Monitor.",
+      "assertions": [
+        "SM-23 is not reported as Failed",
+        "The resolution recommends QuickSight and CloudWatch based monitoring for accounts that cannot use Model Monitor"
+      ]
+    },
+    {
+      "id": "sagemaker-sec-sm18-sm19-local-storage",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "I'm doing a SageMaker security review of us-east-1 and already collected these read-only API responses \u2014 evaluate them as-is, without calling AWS. DescribeTransformJob(batch-a): TransformResources.InstanceType=ml.m5.xlarge, no VolumeKmsKeyId. DescribeHyperParameterTuningJob(hpo-b): TrainingJobDefinition.ResourceConfig.InstanceType=ml.g4dn.xlarge, no VolumeKmsKeyId. What do SM-18 and SM-19 report?",
+      "expected_output": "SM-18 is Failed for the ml.m5.xlarge transform job. SM-19 is not Failed for the ml.g4dn.xlarge tuning job, which counts as encrypted because local storage is hardware-encrypted.",
+      "assertions": [
+        "SM-18 is Failed and cites the ml.m5.xlarge transform job",
+        "SM-19 is not reported as Failed",
+        {
+          "text": "Response explains local storage is hardware-encrypted",
+          "evaluator": "llm"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-sec-sm17-live",
+      "task_type": "chat",
+      "should_trigger": true,
+      "prompt": "Are the EBS volumes of my SageMaker processing jobs in us-east-1 encrypted with a KMS key?",
+      "expected_output": "Live account: SM-17 is Failed for processing job skilleval-sm17-noKms (ml.t3.medium, no VolumeKmsKeyId). The resolution is to set VolumeKmsKeyId.",
+      "assertions": [
+        "SM-17 is reported as Failed",
+        "skilleval-sm17-noKms is named as the failing job",
+        "The resolution recommends setting VolumeKmsKeyId",
+        {
+          "text": "Response mentions VolumeKmsKeyId",
+          "evaluator": "regex",
+          "pattern": "VolumeKmsKeyId"
+        }
+      ]
+    }
+  ]
+}
