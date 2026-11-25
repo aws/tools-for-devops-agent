@@ -1,0 +1,78 @@
+{
+  "version": "v4",
+  "iteration": 1,
+  "eval_id": "tgw-ecmp-behavior",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output describes a nuanced technical picture: (1) AWS recommends one DXGW with multiple transit VIFs, where ECMP happens at the DXGW level across VIFs when BGP attributes are equal, and the TGW route table just shows one DXGW attachment; (2) across MULTIPLE DXGW attachments, BGP attributes (local preference incl. LP communities, then AS_PATH, then MED) are compared on the DX side per-VIF and do NOT pass to TGW, and if they all match (same prefix/prefix-length/AS_PATH), every DXGW attachment becomes an ECMP next hop (similar to multiple VPN connections) - otherwise only a single attachment is installed; (3) LP communities are honored across DXGWs; (4) no ECMP across different attachment types; (5) failover between attachments can take up to 60 seconds.\n\nThe agent's response gets some things right: it recommends one DXGW with multiple VIFs for ECMP, mentions same prefix/prefix-length/AS_PATH as a condition, and correctly states no ECMP across different attachment types. However, it misses several key nuanced points:\n- It incorrectly claims ECMP does NOT work across different DXGWs/ASNs as a blanket rule, when the expected answer says that across multiple DXGW attachments, ECMP CAN occur if BGP attributes match (same prefix, prefix length, AS_PATH) - this is presented as a valid scenario, not a failure case. The agent frames multiple DXGGWs as a case where TGW \"picks just one path\" exclusively, which contradicts the expected output's nuance that multiple DXGWs CAN be ECMP'd if attributes match.\n- It completely omits the local preference (LP) communities and MED comparison order on the DX side.\n- It omits that BGP attributes don't pass to TGW.\n- It omits the 60-second failover detail.\n- The ASN point is partially inaccurate \u2014 the expected output doesn't frame \"same ASN\" as a strict requirement in the way the agent does; rather it's about local preference, AS_PATH, MED comparison on the DX side.\n\nGiven these significant gaps and a key contradiction (treating multiple DXGWs as always non-ECMP rather than conditionally ECMP when attributes match), the response does not substantively meet the expected criteria.",
+      "evidence": "Agent said: \"The two Direct Connect connections terminate on different Direct Connect Gateways rather than a single DXGW... since ECMP across separate DXGWs isn't the supported pattern\" \u2014 this contradicts the expected output's statement that \"If they all match (same prefix, prefix length and AS_PATH), every DXGW attachment is installed as an ECMP next hop.\" The agent also omits LP communities, MED, the 60-second failover detail, and the point that BGP attributes don't pass to TGW.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "recommends a single DXGW with multiple transit VIFs to get ECMP",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"AWS explicitly recommends using **one** DXGW with multiple transit virtual interfaces for ECMP, not multiple DXGWs, since ECMP across separate DXGWs isn't the supported pattern\"",
+          "reasoning": "The output explicitly recommends using one DXGW with multiple transit VIFs for ECMP.",
+          "confidence": "high"
+        },
+        {
+          "text": "explains ECMP across DXGW attachments happens only when the BGP attributes match, with the TGW route table listing both attachments",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "\"Both paths use the **same ASN**... When those conditions hold, traffic is spread across both Direct Connect transit virtual interfaces, effectively aggregating their bandwidth.\" - no mention of the TGW route table showing both attachments listed as a specific route table entry detail.",
+          "reasoning": "The output explains ECMP happens when BGP attributes (prefix, prefix length, AS_PATH, ASN) match, but it never mentions the TGW route table listing both attachments as entries - it only describes the general behavior of traffic spreading across both DX VIFs.",
+          "confidence": "medium"
+        },
+        {
+          "text": "notes the TGW installs a single attachment when the attributes differ",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The prefix, prefix length, or AS_PATH **differ** between the two paths \u2014 TGW then evaluates the routes and picks the preferred one rather than balancing, following standard route evaluation order\"",
+          "reasoning": "The output states that when attributes differ, TGW evaluates and picks one preferred path rather than balancing.",
+          "confidence": "high"
+        },
+        {
+          "text": "does not claim the TGW keeps the oldest route or that LP communities are ignored across DXGW attachments",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No mention of 'oldest route' or 'LP communities' anywhere in the output; the closest statement is 'TGW then evaluates the routes and picks the preferred one rather than balancing, following standard route evaluation order.'",
+          "reasoning": "The output never mentions oldest route retention or local preference (LP) communities being ignored; it focuses on prefix/prefix-length/AS_PATH/ASN matching and standard route evaluation order.",
+          "confidence": "high"
+        },
+        {
+          "text": "does not contain 'error'",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "No occurrence of the word 'error' found in the response text.",
+          "reasoning": "The word 'error' does not appear anywhere in the output.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 4,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.8
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "9s",
+    "cost": "$0.08",
+    "context_window": {
+      "utilization": "4.2%",
+      "compaction_count": 0
+    }
+  }
+}

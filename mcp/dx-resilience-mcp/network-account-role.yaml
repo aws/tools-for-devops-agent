@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Read-only Direct Connect access role for dx-resilience-mcp. Deploy this in
+  the account that OWNS the Direct Connect resources (e.g. a Landing Zone
+  network account) when the MCP server runs in a different account. Pass the
+  created role ARN as TargetAccountRoleArn when deploying the MCP server stack.
+  Sample code: validate in a non-production environment before use.
+
+Parameters:
+  McpLambdaExecutionRoleArn:
+    Type: String
+    Description: >-
+      ARN of the dx-resilience-mcp Lambda execution role in the ops account
+      (from the MCP server stack). Only this principal may assume the role.
+
+Resources:
+  DxResilienceReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dx-resilience-mcp-readonly
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref McpLambdaExecutionRoleArn
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DirectConnectReadOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Strictly read-only: no mutating Direct Connect action is
+              # grantable through this role.
+              - Effect: Allow
+                Action:
+                  - directconnect:DescribeVirtualInterfaces
+                  - directconnect:DescribeConnections
+                  - directconnect:DescribeLags
+                  - directconnect:DescribeDirectConnectGateways
+                  - directconnect:DescribeDirectConnectGatewayAssociations
+                  - directconnect:ListVirtualInterfaceRoutes
+                  - directconnect:ListResiliencyGroups
+                  - directconnect:ListResiliencyGroupAssociations
+                  - directconnect:GetResiliencyGroup
+                Resource: '*'
+
+Outputs:
+  ReadOnlyRoleArn:
+    Description: Pass this as TargetAccountRoleArn to the MCP server stack.
+    Value: !GetAtt DxResilienceReadOnlyRole.Arn

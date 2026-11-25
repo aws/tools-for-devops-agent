@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.8.3] - 2026-11-10
+- `metadata.author` is the author's GitHub username, `andrehass`, rather than the `aws-samples` organization, so catalogs link to their profile.
+
 ## [1.8.2] - 2026-10-21
 - README: corrected the agent types to the names the operator app shows (`Chat tasks`, `Incident triage`, `All agents`) and removed `Evaluation` and `On-demand`, which are not agent types.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.6
+- Added the `Streaming Data` technical domain next to `Analytics`, as `firehose-operation-review` has, so catalogs list the skill with the other streaming skills.
+- `metadata.author` is the contributor's GitHub username, `kalyanjanaki`, so catalogs link to their profile.
+
 ## 1.0.5
 - Updated the link to the skill IAM policies template, which moved to `cloudformation/devops-agent-skill-policies/`.
 

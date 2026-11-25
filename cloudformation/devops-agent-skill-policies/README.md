@@ -51,11 +51,13 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableDmsOperationReview` | `database-migration-service-expertise` | `dms:TestConnection` |
 | `EnableEcsOperationReview` | `ecs-operation-review` | `compute-optimizer:GetECSServiceRecommendations` |
 | `EnableAwsBackupCoverageReview` | `aws-backup-coverage-review` | `backup:GetSupportedResourceTypes`, `config:SelectResourceConfig`, `dsql:ListClusters`, `storagegateway:ListFileShares`, `storagegateway:ListGateways`, `storagegateway:ListVolumes` |
+| `EnableAuroraIncidentBusinessContext` | `aurora-incident-business-context` | `config:GetResourceConfigHistory` |
 | `EnableAgentCoreObservabilitySetup` | `agentcore-observability-setup` | `bedrock-agentcore:GetAgentRuntime`, `bedrock-agentcore:ListAgentRuntimes`, `xray:GetTraceSegmentDestination`, `logs:DescribeDeliveries`, `logs:DescribeDeliverySources`, `logs:DescribeDeliveryDestinations`, `logs:DescribeResourcePolicies`, `lambda:GetFunctionConfiguration`, `ecs:DescribeTaskDefinition`, `ecs:DescribeServices`, `ecs:ListTasks`, `eks:DescribeCluster` |
 | `EnableAgentCoreOpsReview` | `agentcore-ops-review` | `bedrock-agentcore` read-only List/Get for runtimes, memories, gateways, browsers, code interpreters and workload identities; `bedrock-agentcore:ListMemoryRecords`; `ec2:DescribeSubnets` |
 | `EnableSageMakerAIOpsReview` | `sagemaker-ai-ops-review` | `savingsplans:DescribeSavingsPlans` |
 | `EnableLiveStreamingEventReadinessReview` | `live-streaming-event-readiness-review` | `mediatailor:ListPlaybackConfigurations`, `mediatailor:GetPlaybackConfiguration`, `mediatailor:ListPrefetchSchedules`, `route53-recovery-cluster:ListRoutingControls` |
 | `EnableEosCostAnalysis` | `eos-cost-analysis` | `pricing:GetProducts`, `pricing:GetAttributeValues`, `pricing:DescribeServices`. Resource discovery is already covered by the managed policy |
+| `EnableStorageEbsOperations` | `storage-ebs-operations` | `ec2:GetEbsEncryptionByDefault`, `ec2:GetEbsDefaultKmsKeyId`, `dlm:GetLifecyclePolicies`, `dlm:GetLifecyclePolicy`, `rbin:ListRules`, `rbin:GetRule`, `fis:GetExperiment`, `compute-optimizer:GetEBSVolumeRecommendations` |
 | `EnableResilienceReview` | `resilience-review` | `drs:DescribeSourceServers`, `lambda:GetFunction` |
 | `EnableEksOperationReview` | `aws-eks-operations-review` | None — already covered by the managed policy |
 | `EnableEnrichWithSecurityAgent` | `enrich-with-aws-security-agent` | None — already covered by the managed policy |
@@ -73,6 +75,7 @@ Support plan for the underlying APIs to return data.
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `EnableConfigAthenaCiAnalysis` | `'false'` | For `config-cost-optimization`'s Athena CI-driver path: adds `athena:StartQueryExecution`, `athena:GetQueryExecution`, `athena:GetQueryResults`, `athena:GetWorkGroup`, `glue:GetDatabase`, `glue:GetTable`, `glue:GetPartitions`, and `s3:GetObject` on the Config delivery data. |
+| `EnableSsmAutomationExecutionRead` | `'false'` | For the `aws-systems-manager` custom agent: adds read-only `ssm:GetAutomationExecution`, scoped to this account's automation executions, so the agent can inspect the per-location rate-control and alarm settings of multi-account executions. Without it those checks are reported as Not checked. |
 | `ConfigDataBucketArn` | `''` | Config delivery bucket ARN; scopes the `s3:GetObject` grant to `<arn>/*`. Empty grants `s3:GetObject` on all buckets (testing only). Used only when `EnableConfigAthenaCiAnalysis=true`. |
 
 The Athena path also needs a workgroup with Athena-managed query results, because the

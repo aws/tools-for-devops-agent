@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+- `aws-services` lists `AWS DevOps Agent`, the service this skill reports on, plus the approved names `Amazon CloudWatch` and `AWS CloudTrail`. It no longer lists `AIDevOps`, which is a metric namespace rather than a service name.
+- `metadata.author` uses the co-authors' GitHub usernames, `tipuq, inesttia`, so catalogs link to their profiles.
+
 ## 1.0.1
 - Agent types now use the API values in `metadata.aws-devops-agent-skills.agent-types` (`CHAT`, `INCIDENT_RCA`, `INCIDENT_TRIAGE`), the field that sets which agents load the skill.
 

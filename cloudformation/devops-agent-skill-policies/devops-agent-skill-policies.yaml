@@ -29,12 +29,14 @@ Metadata:
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
           - EnableAwsBackupCoverageReview
+          - EnableAuroraIncidentBusinessContext
           - EnableAgentCoreObservabilitySetup
           - EnableAgentCoreOpsReview
           - EnableSageMakerAIOpsReview
           - EnableResilienceReview
           - EnableAwsFsxnOperationsReview
           - EnableEosCostAnalysis
+          - EnableStorageEbsOperations
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -43,6 +45,7 @@ Metadata:
           default: Optional Add-On Permissions
         Parameters:
           - EnableConfigAthenaCiAnalysis
+          - EnableSsmAutomationExecutionRead
 
 Parameters:
   ExistingRoleName:
@@ -136,6 +139,13 @@ Parameters:
       config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*).
     AllowedValues: ['true', 'false']
     Default: 'true'
+  EnableAuroraIncidentBusinessContext:
+    Type: String
+    Description: >
+      Aurora Incident Business Context skill (adds config:GetResourceConfigHistory
+      for the recent-change check).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
 
   EnableAgentCoreObservabilitySetup:
     Type: String
@@ -209,6 +219,27 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableStorageEbsOperations:
+    Type: String
+    Description: >
+      Amazon EBS Operations skill (adds read-only ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId,
+      dlm:GetLifecyclePolicies/GetLifecyclePolicy, rbin:ListRules/GetRule, fis:GetExperiment, and
+      compute-optimizer:GetEBSVolumeRecommendations).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableSsmAutomationExecutionRead:
+    Type: String
+    Description: >
+      Optional add-on for the aws-systems-manager custom agent: grants read-only
+      ssm:GetAutomationExecution so the agent can inspect the per-location rate-control and
+      alarm settings (TargetLocations) of multi-account Automation executions, which
+      DescribeAutomationExecutions does not return. OFF by default. Without it the agent
+      still detects multi-account runs and reports their per-location checks as Not checked.
+      The aws-systems-manager skill itself needs no extra permissions.
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -220,6 +251,7 @@ Conditions:
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
   SkillAwsBackupCoverageReview: !Equals [!Ref EnableAwsBackupCoverageReview, 'true']
+  SkillAuroraIncidentBusinessContext: !Equals [!Ref EnableAuroraIncidentBusinessContext, 'true']
   SkillAgentCoreObservabilitySetup: !Equals [!Ref EnableAgentCoreObservabilitySetup, 'true']
   SkillAgentCoreOpsReview: !Equals [!Ref EnableAgentCoreOpsReview, 'true']
   SkillSageMakerAIOpsReview: !Equals [!Ref EnableSageMakerAIOpsReview, 'true']
@@ -227,7 +259,9 @@ Conditions:
   SkillLiveStreamingEventReadinessReview: !Equals [!Ref EnableLiveStreamingEventReadinessReview, 'true']
   SkillResilienceReview: !Equals [!Ref EnableResilienceReview, 'true']
   SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
+  SkillStorageEbsOperations: !Equals [!Ref EnableStorageEbsOperations, 'true']
   ConfigAthenaCiAnalysis: !Equals [!Ref EnableConfigAthenaCiAnalysis, 'true']
+  SsmAutomationExecutionRead: !Equals [!Ref EnableSsmAutomationExecutionRead, 'true']
   HasConfigDataBucketArn: !Not [!Equals [!Ref ConfigDataBucketArn, '']]
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
@@ -460,6 +494,27 @@ Resources:
               - storagegateway:ListFileShares
               - storagegateway:ListGateways
               - storagegateway:ListVolumes
+            Resource: '*'
+
+  # aurora-incident-business-context: AIDevOpsAgentAccessPolicy already grants the
+  # skill's rds:List*, tag:GetResources and cloudtrail:LookupEvents calls. Its AWS
+  # Config grant covers Describe*/List* and the aggregate reads but not the
+  # single-resource history the recent-change check uses. Read-only.
+  PolicyAuroraIncidentBusinessContext:
+    Type: AWS::IAM::Policy
+    Condition: SkillAuroraIncidentBusinessContext
+    Properties:
+      PolicyName: DevOpsAgentSkill-AuroraIncidentBusinessContext
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AuroraIncidentBusinessContextDelta
+            Effect: Allow
+            Action:
+              # Configuration timeline for the cluster and its parameter group
+              - config:GetResourceConfigHistory
             Resource: '*'
 
   # agentcore-observability-setup: adds read-only AgentCore control-plane, X-Ray Transaction Search,
@@ -734,6 +789,61 @@ Resources:
               - route53-recovery-cluster:ListRoutingControls
             Resource: '*'
 
+  # storage-ebs-operations: adds only the read actions the skill uses that
+  # AIDevOpsAgentAccessPolicy does not grant: the account's EBS encryption-by-default
+  # settings, Amazon Data Lifecycle Manager and Recycle Bin rules (snapshot management
+  # and reversibility), AWS FIS experiment details (injected-latency check), and the
+  # optional Compute Optimizer EBS recommendations. Every other API the skill calls
+  # (ec2:Describe*, ec2:GetSnapshotBlockPublicAccessState, CloudWatch, Service Quotas,
+  # AWS Backup, AWS KMS, Cost Explorer, fis:ListExperiments, AWS Health, CloudTrail) is
+  # already covered by the managed policy. Strictly read-only; no Modify*, Create*,
+  # Delete* or Put* is granted. Without this policy the skill lists the denied calls
+  # under Gaps and reports the dependent conclusions as unconfirmed.
+  PolicyStorageEbsOperations:
+    Type: AWS::IAM::Policy
+    Condition: SkillStorageEbsOperations
+    Properties:
+      PolicyName: DevOpsAgentSkill-StorageEbsOperations
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: StorageEbsOperationsReadOnly
+            Effect: Allow
+            Action:
+              - ec2:GetEbsEncryptionByDefault
+              - ec2:GetEbsDefaultKmsKeyId
+              - dlm:GetLifecyclePolicies
+              - dlm:GetLifecyclePolicy
+              - rbin:ListRules
+              - rbin:GetRule
+              - fis:GetExperiment
+              - compute-optimizer:GetEBSVolumeRecommendations
+            Resource: '*'
+
+  # aws-systems-manager custom agent add-on: read the per-location settings of
+  # multi-account Automation executions. GetAutomationExecution is the only
+  # Automation read the review needs that AIDevOpsAgentAccessPolicy does not
+  # grant; it is scoped to this account's automation executions and grants no
+  # write.
+  PolicySsmAutomationExecutionRead:
+    Type: AWS::IAM::Policy
+    Condition: SsmAutomationExecutionRead
+    Properties:
+      PolicyName: DevOpsAgentAddOn-SsmAutomationExecutionRead
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SsmGetAutomationExecution
+            Effect: Allow
+            Action:
+              - ssm:GetAutomationExecution
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:automation-execution/*'
+
   # resilience-review: only the read actions NOT already granted by
   # AIDevOpsAgentAccessPolicy. Checked with iam:SimulateCustomPolicy against the
   # managed policy: 60 of the 62 actions the skill uses are already allowed.
@@ -782,6 +892,7 @@ Outputs:
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
         - aws-backup-coverage-review: ${EnableAwsBackupCoverageReview} (backup:GetSupportedResourceTypes, config:SelectResourceConfig, dsql:ListClusters, storagegateway:List*)
+        - aurora-incident-business-context: ${EnableAuroraIncidentBusinessContext} (config:GetResourceConfigHistory)
         - agentcore-observability-setup: ${EnableAgentCoreObservabilitySetup} (bedrock-agentcore:Get/ListAgentRuntime, xray:GetTraceSegmentDestination, logs:DescribeDeliveries/DeliverySources/DeliveryDestinations/ResourcePolicies, lambda:GetFunctionConfiguration, ecs:DescribeTaskDefinition/DescribeServices/ListTasks, eks:DescribeCluster)
         - agentcore-ops-review: ${EnableAgentCoreOpsReview} (bedrock-agentcore read-only List/Get for runtimes/memories/gateways/browsers/code-interpreters/workload-identities, ec2:DescribeSubnets)
         - config-cost-optimization Athena add-on: ${EnableConfigAthenaCiAnalysis} (athena:StartQueryExecution/GetQueryExecution/GetQueryResults, s3:GetObject on the Config data bucket; also needs an Athena-managed-results workgroup. Glue reads and athena:GetWorkGroup are already in the managed policy)
@@ -790,6 +901,8 @@ Outputs:
         - live-streaming-event-readiness-review: ${EnableLiveStreamingEventReadinessReview} (mediatailor:ListPlaybackConfigurations/GetPlaybackConfiguration/ListPrefetchSchedules, route53-recovery-cluster:ListRoutingControls)
         - resilience-review: ${EnableResilienceReview} (drs:DescribeSourceServers, lambda:GetFunction)
         - eos-cost-analysis: ${EnableEosCostAnalysis} (pricing:GetProducts/GetAttributeValues/DescribeServices — resource discovery is covered by the managed policy)
+        - storage-ebs-operations: ${EnableStorageEbsOperations} (ec2:GetEbsEncryptionByDefault/GetEbsDefaultKmsKeyId, dlm:GetLifecyclePolicies/GetLifecyclePolicy, rbin:ListRules/GetRule, fis:GetExperiment, compute-optimizer:GetEBSVolumeRecommendations)
+        - aws-systems-manager custom agent add-on: ${EnableSsmAutomationExecutionRead} (ssm:GetAutomationExecution on this account's automation executions, for the per-location settings of multi-account runs; the aws-systems-manager skill itself needs no extra policy)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - aws-eks-operations-review, eks-upgrade-readiness, enrich-with-aws-security-agent, crm-production-investigation-guidelines
         - cloudtrail-cost-optimization, config-cost-optimization, guardduty-cost-optimization (ce:Get* and s3:GetLifecycleConfiguration already granted on * by the managed policy)

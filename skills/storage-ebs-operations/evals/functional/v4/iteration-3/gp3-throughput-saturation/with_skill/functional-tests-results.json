@@ -1,0 +1,79 @@
+{
+  "version": "v4",
+  "iteration": 3,
+  "eval_id": "gp3-throughput-saturation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'storage-ebs-operations' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'storage-ebs-operations' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies that vol-0123456789abcdef0 is throughput-bound at its provisioned 125 MiB/s, with VolumeThroughputExceededCheck=1 while IOPS usage (~500) is far below the provisioned 3000 IOPS limit (IOPSExceededCheck=0). It explicitly notes the mismatch: \"leaving 83% of the 3,000 IOPS unused\" and that throughput is the binding dimension, matching the expected root cause that gp3 IOPS and throughput are independently provisioned and throughput is the bottleneck. It also correctly notes the instance-level EBS baseline (c6i.xlarge ~156.25 MB/s, combined volume traffic ~133 MiB/s) as a constraint on how much throughput increase would be useful, and mentions scaling to larger instance types (c6i.2xlarge/4xlarge) as alternatives - consistent with the expected recommendation to increase throughput while respecting the IOPS:throughput ratio and instance baseline. The core causal chain (gp3 throughput cap reached, IOPS not binding, fix is to raise provisioned throughput within instance baseline) is present and correctly derived.",
+      "evidence": "\"VolumeThroughputExceededCheck was 1 in every minute since 18:07, while the volume and instance IOPS checks and the instance throughput check were 0... leaving 83% of the 3,000 IOPS unused... All volumes combined use 132.8 MiB/s, below the c6i.xlarge baseline of 149.01 MiB/s.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says gp3 IOPS and throughput are provisioned independently and identifies throughput as the binding dimension.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The summary states the volume is 'held at its provisioned 125 MiB/s throughput' while 'leaving 83% of the 3,000 IOPS unused' and 'VolumeThroughputExceededCheck was 1 in every minute since 18:07, while the volume and instance IOPS checks and the instance throughput check were 0.' This explicitly separates IOPS from throughput and identifies throughput as the binding dimension, consistent with gp3's independent provisioning of IOPS and throughput.",
+          "reasoning": "The output clearly distinguishes IOPS (3000, unused at 500) from throughput (125 MiB/s, fully saturated) and names throughput as the limiting factor, which demonstrates understanding that gp3 provisions these independently.",
+          "confidence": "high"
+        },
+        {
+          "text": "The instance EBS baseline is checked before the volume is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The supporting observation 'Instance i-1234567890abcdef0_5 is not at its EBS limits (c6i.xlarge baseline 156.25 MB/s)' explicitly checks InstanceEBSIOPSExceededCheck, InstanceEBSThroughputExceededCheck, EBSIOBalance%, and EBSByteBalance%, concluding the instance is not the bottleneck, before/alongside the root cause section naming the volume as the binding layer.",
+          "reasoning": "The output includes a dedicated finding checking the instance-level EBS baseline (156.25 MB/s for c6i.xlarge) and shows the instance is not saturated, supporting the conclusion that the volume itself is the binding layer. This check is present as a supporting observation under the Root Cause finding, satisfying the ordering/presence requirement in substance.",
+          "confidence": "high"
+        },
+        {
+          "text": "The proposed throughput target respects the gp3 rule of at most 0.25 MiB/s per provisioned IOPS.",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The output states a Gap: 'True throughput demand of the job unknown... To size the target, run `nvme amzn stats /dev/<device>` twice on the instance while the job runs and compare the throughput-exceeded counter.' No specific numeric throughput target (e.g., MiB/s value) is proposed anywhere in the output, nor is the 0.25 MiB/s per IOPS ratio mentioned or respected in a concrete recommendation.",
+          "reasoning": "The assertion requires a proposed throughput target that respects the gp3 rule of max 0.25 MiB/s per IOPS. The output does not provide any concrete throughput value to change to (e.g., 'increase throughput to X MiB/s') - it only identifies the problem and says the true demand is unknown, deferring the sizing decision to a gap/follow-up action. Since no explicit target throughput number is proposed, this assertion cannot be satisfied.",
+          "confidence": "medium"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        },
+        {
+          "text": "The gp3 throughput per IOPS rule is cited",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 2,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 0.6
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m58s",
+    "cost": "$2.97",
+    "context_window": {
+      "utilization": "10.8%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -3,8 +3,10 @@ name: aws-eks-healthdashboard
 description: "Use this skill when the user wants to know whether an Amazon EKS cluster is healthy right now, or asks you to assess, triage, or report on the state of an EKS cluster, its control plane, or its nodes — even when they don't say \"dashboard\" or name a specific subsystem. It produces a read-only, point-in-time health snapshot grading control-plane signals (etcd, API Priority & Fairness, API-server latency and errors, scheduler) and node/data-plane signals (node conditions, utilization, EC2/ENA/EBS, NAT, CoreDNS, Karpenter, nodegroup registration), from whatever observability is connected (CloudWatch, native EKS metrics, Prometheus, Datadog, New Relic, Dynatrace, or Splunk). Reach for it for \"is my cluster okay\" questions, control-plane or node-health checks, and latency/throttling spikes; it only reads state and does not remediate. This is a current-state snapshot, not a best-practices audit — for a full EKS Best Practices operational review use aws-eks-operations-review instead."
 metadata:
   author: kuntshah
-  version: 1.0.0
+  version: "1.0.1"
   aws-devops-agent-skills.agent-types: "CHAT"
+  aws-devops-agent-skills.aws-services: "Amazon EKS"
+  aws-devops-agent-skills.technical-domains: "Containers, Observability"
 ---
 
 # EKS Health Dashboard — DevOps Agent Skill

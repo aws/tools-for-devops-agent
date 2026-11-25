@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "bizctx-recent-change-correlation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aurora-incident-business-context' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'aurora-incident-business-context' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation identifies a connection storm on the writer (admin idle connections from the bastion, reaching 90 connections, triggering the alarm) found via DatabaseConnections metrics and Performance Insights (PI load = 0, confirming idle connections). It explicitly checks the recent-change hypothesis: the cluster parameter group switches to example-cluster-params (via RDS events / CloudTrail ModifyDBClusterParameterGroup at 23:17:19-21 by example-session), correlating each switch with the connection surge, including the most recent switch ~1 min before the alarm. It also notes AWS Config has no history for this cluster, so it relied on RDS events/CloudTrail instead - consistent with the expected approach. The summary also covers affected services (checkout-service, dependent services), cost impact (quantified upper bound ~$40,800, SLA breach assessment), and compliance exposure (DataClassification=Confidential, admin account usage, flagged as a gap for compliance owner). This matches all elements of the expected root cause description, including the caveat that the exact causal link (parameter group setting driving the admin connections) remains a hypothesis/gap rather than fully confirmed - but the investigation clearly ties the connection storm to the parameter group change in time, which is the core expectation.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response checks AWS Config history or CloudTrail for recent changes to the cluster or its parameter group",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"AWS Config has no history for the Aurora cluster: get_resource_config_history for AWS::RDS::DBCluster cluster-EXAMPLERESOURCEID000000000 ... returned ResourceNotDiscoveredException\" and \"RDS events show example-cluster switching between example-cluster-params ... and default.aurora-mysql8.0 six times on 2026-11-13\" and \"CloudTrail shows no SSM StartSession events between 17:00 and 23:25 UTC\" and \"ModifyDBClusterParameterGroup and ModifyDBCluster by example-session at 23:17:19-21 UTC\"",
+          "reasoning": "The response explicitly attempted AWS Config history (got ResourceNotDiscoveredException) and used CloudTrail (ModifyDBClusterParameterGroup/ModifyDBCluster events, SSM StartSession checks) and RDS events to find recent changes.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any recent change found is placed in time relative to the incident start, or the response says no change was found",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The most recent switch to bizctx-eval was at 23:18:53, about 1 min before the alarm datapoint.\" and \"The latest cycle was manual: ModifyDBClusterParameterGroup and ModifyDBCluster by example-session at 23:17:19-21 UTC.\"",
+          "reasoning": "The change (parameter group switch) is explicitly placed in time relative to the alarm/incident start (23:21:46), showing it occurred ~1 minute before.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary covers all four business-impact categories, in the symptom description, findings or gaps: affected services, cost or SLA impact, compliance exposure, and recent changes",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Affected services: 'Impact on dependent services unverified: checkout-service (CRITICAL), order-history-api (HIGH) and analytics-etl (MEDIUM)...'; Cost/SLA: 'Business cost unconfirmed: Measured loss is $0... Upper bound... ~$40,800... SLA ... not breached'; Compliance: 'Reporting obligation undetermined: Cluster tagged DataClassification=Confidential...'; Recent changes: 'Cluster parameter group toggled repeatedly on 2026-11-13... switch to example-cluster-params... ModifyDBClusterParameterGroup and ModifyDBCluster by example-session at 23:17:19-21 UTC.'",
+          "reasoning": "All four categories (affected services, cost/SLA, compliance, recent changes) are present, though mostly in Gaps section with caveats rather than firm findings.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The investigation summary identifies the cluster parameter group change made shortly before the alarm as a recent change",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"The latest cycle was manual: ModifyDBClusterParameterGroup and ModifyDBCluster by example-session at 23:17:19-21 UTC.\" and \"The most recent switch to bizctx-eval was at 23:18:53, about 1 min before the alarm datapoint.\"",
+          "reasoning": "The summary explicitly identifies the parameter group change shortly before the alarm (23:17-23:18 UTC vs alarm at 23:21:46) as the recent change tied to the hypothesis.",
+          "confidence": "high"
+        },
+        {
+          "text": "Business-context tags such as DependentServices or RevenuePerMinute are cross-checked against evidence or labeled unverified, not repeated at face value",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Impact on dependent services unverified: checkout-service (CRITICAL), order-history-api (HIGH) and analytics-etl (MEDIUM) come only from the DependentServices tag; none has a network path to 3306 or a logged connection.\" and \"Business cost unconfirmed: Measured loss is $0... Upper bound, only if the tagged dependent services are really affected: RevenuePerMinute 5100 x ~8 min... No SLAPenaltyUsd tag.\"",
+          "reasoning": "The response explicitly labels DependentServices and RevenuePerMinute tags as unverified/unconfirmed rather than stating them as fact, satisfying the assertion.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "8m29s",
+    "cost": "$4.23",
+    "context_window": {
+      "utilization": "9.9%",
+      "compaction_count": 0
+    }
+  }
+}

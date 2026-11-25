@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "iteration": 1,
+  "eval_id": "bizctx-recent-change-correlation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aurora-incident-business-context' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'aurora-incident-business-context' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation correctly identifies the technical cause as a connection storm: DatabaseConnections metrics showing 90 idle connections (threshold 70) from ~90 connection attempts vs ~5/min baseline, confirmed via Performance Insights (db.load.avg = 0, showing connections are idle rather than active load). It explicitly checks for and finds a recent change - the ModifyDBClusterParameterGroup CloudTrail event at 23:17:19 (setting aurora_fwd_writer_idle_timeout=30) and ModifyDBCluster at 23:17:21, made by the Admin/example-session role - and correlates this precisely in time (parameter group switch followed ~3 min later by the connection burst at 23:20). It also shows a repeated pattern (six prior plateaus) strongly tying the parameter group toggling to the connection surges, which supports the recent-change correlation required by the expected root cause. Business impact (affected services: checkout-service, order-history-api, analytics-etl; cost estimate ~$35,700; SLA remaining time) and compliance exposure (DataClassification=Confidential tag, no framework tag, master user sessions) are also covered as findings/gaps, matching the expected scope. This aligns well with the expected root cause description of a connection storm found via metrics/PI, plus a recent parameter-group change found via CloudTrail placed in time relative to the incident, plus impact/compliance coverage.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response checks AWS Config history or CloudTrail for recent changes to the cluster or its parameter group",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The summary references 'CloudTrail shows ModifyDBClusterParameterGroup at 23:17:19... ModifyDBCluster at 23:17:21' and also attempts 'get_resource_config_history for AWS::RDS::DBCluster... returned ResourceNotDiscoveredException', showing both CloudTrail and AWS Config were checked.",
+          "reasoning": "Both AWS Config and CloudTrail were explicitly consulted for recent changes to the cluster/parameter group.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any recent change found is placed in time relative to the incident start, or the response says no change was found",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Both calls came from [redacted ARN]... The about-90-connection burst followed about 3 min later, at 23:20.' and alarm started 23:20 vs change at 23:17:19/23:17:21.",
+          "reasoning": "The parameter group change is explicitly timed relative to the alarm/incident start (3 minutes before the connection burst and alarm).",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary covers all four business-impact categories, in the symptom description, findings or gaps: affected services, cost or SLA impact, compliance exposure, and recent changes",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Affected services: 'checkout-service, order-history-api and analytics-etl come only from the DependentServices tag' (unverified but covered); Cost/SLA: 'The $35,700 estimate (5,100/min \u00d7 7 min)... SLA (20 min) had 13 min left'; Compliance: 'Cluster is tagged DataClassification=Confidential with no framework tag'; Recent changes: ModifyDBClusterParameterGroup/ModifyDBCluster at 23:17:19/21.",
+          "reasoning": "All four categories are addressed somewhere in the findings/gaps sections, even if some are flagged as unverified.",
+          "confidence": "high"
+        },
+        {
+          "text": "The investigation summary identifies the cluster parameter group change made shortly before the alarm as a recent change",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'Parameter changes made manually by the Admin role via the AWS CLI: CloudTrail shows ModifyDBClusterParameterGroup at 23:17:19, setting aurora_fwd_writer_idle_timeout=30 in example-cluster-params, then ModifyDBCluster at 23:17:21... The about-90-connection burst followed about 3 min later, at 23:20.'",
+          "reasoning": "The parameter group change shortly before the alarm is explicitly identified as a key recent change/cause candidate.",
+          "confidence": "high"
+        },
+        {
+          "text": "Business-context tags such as DependentServices or RevenuePerMinute are cross-checked against evidence or labeled unverified, not repeated at face value",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "'checkout-service, order-history-api and analytics-etl come only from the DependentServices tag... no app load or app clients are seen in Performance Insights, and no \\'Too many connections\\' errors were found... The $35,700 estimate... is unconfirmed; SLA (20 min) had 13 min left at 23:27.'",
+          "reasoning": "Business-context tags (DependentServices, implied RevenuePerMinute via the $35,700 estimate) are explicitly flagged as unverified rather than stated at face value.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 5,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "7m28s",
+    "cost": "$3.72",
+    "context_window": {
+      "utilization": "9.6%",
+      "compaction_count": 0
+    }
+  }
+}

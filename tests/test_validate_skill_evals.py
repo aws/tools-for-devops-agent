@@ -176,7 +176,7 @@ class EvalsJsonTests(unittest.TestCase):
 
     def test_the_tier_plays_no_part(self):
         """The waiver follows the claim, not who maintains the skill."""
-        for tier in ("partner-managed", "aws-managed", None):
+        for tier in ("partner-managed", "aws-managed", "aws-support-managed", None):
             with self.subTest(tier=tier, claims="all three"):
                 name = f"claimed-{tier}"
                 self.add_skill(name, tier=tier)

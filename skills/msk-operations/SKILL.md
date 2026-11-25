@@ -14,11 +14,11 @@ description: Amazon MSK Provisioned operations, troubleshooting, and health
   templates. Do NOT use for other AWS services (RDS, Aurora, S3, DynamoDB,
   Kinesis, Lambda, EC2) unless MSK is explicitly named.
 metadata:
-  author: kjjanaki
-  version: "1.0.5"
+  author: kalyanjanaki
+  version: "1.0.6"
   aws-devops-agent-skills.agent-types: "CHAT"
   aws-devops-agent-skills.aws-services: "Amazon MSK"
-  aws-devops-agent-skills.technical-domains: "Analytics"
+  aws-devops-agent-skills.technical-domains: "Analytics, Streaming Data"
 ---
 
 # Amazon MSK Operations

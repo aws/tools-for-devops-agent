@@ -1,0 +1,85 @@
+{
+  "version": "v4",
+  "iteration": 1,
+  "eval_id": "io2-iops-saturation",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'storage-ebs-operations' was triggered as expected",
+      "skill_loads_found": 2,
+      "warning": "Skill 'storage-ebs-operations' was triggered 2 times"
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The investigation's root cause matches the expected one closely. Both identify the io2 volume as the binding constraint: actual IOPS flat at the provisioned 1,000 IOPS, VolumeIOPSExceededCheck = 1, while the instance's EBS baseline (6,000 IOPS / 156.25 MB/s for c6i.xlarge) is not exceeded and has headroom. The investigation computed instance total demand (~1,502 IOPS, ~132.9 MiB/s) across all attached volumes, consistent with the expected approach of summing all volumes against the instance baseline. The fix proposed is also consistent: raise IOPS via ModifyVolume to about 3,000, bounded by remaining instance throughput headroom (described as the point where instance throughput baseline would start to bind). The investigation explicitly computed the online ModifyVolume as the fix, framed as a recommendation (not stated as already executed), matching the expected need for a proposed change. Minor differences: the expected cause explicitly lists volume types (gp3 reading 125 MiB/s, idle gp3, root volume) which the investigation aggregates into \"instance total demand\" without fully breaking down - but this does not change the fundamental root cause identification, which clearly matches: io2 volume pinned at provisioned IOPS, instance not binding, fix is to increase provisioned IOPS within instance headroom.",
+      "evidence": "\"vol-0123456789abcdef0 (io2, 10 GiB, 1,000 provisioned IOPS...) delivers exactly 1,000 write IOPS of 8 KiB, and VolumeIOPSExceededCheck was 1 in 87 of 88 minutes... c6i.xlarge EBS baseline: 6,000 IOPS and 156.25 MB/s... Instance total demand (18:25\u201319:33) is about 1,502 IOPS and about 132.9 MiB/s, so there are 4,498 IOPS but only 16.1 MiB/s left... InstanceEBSIOPSExceededCheck and InstanceEBSThroughputExceededCheck were 0 throughout. The instance isn't binding today... Fix: raise IOPS to about 3,000 with ModifyVolume (online).\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The io2 volume is judged by IOPS against its provisioned Iops, not by VolumeThroughputPercentage as a throughput signal.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'vol-0123456789abcdef0 (io2, 10 GiB, 1,000 provisioned IOPS...) delivers exactly 1,000 write IOPS of 8 KiB, and VolumeIOPSExceededCheck was 1 in 87 of 88 minutes' and explicitly checks 'Volume throughput (7.81 of 256 MiB/s)... are not limiting.' The volume is judged against its own provisioned IOPS (1,000) and VolumeIOPSExceededCheck, with throughput (MiB/s, VolumeThroughputExceededCheck) used as a separate, non-binding signal rather than VolumeThroughputPercentage being used for the IOPS judgment.",
+          "reasoning": "The output clearly separates IOPS analysis (using provisioned IOPS and IOPS exceeded check) from throughput analysis (using MiB/s and throughput exceeded check), satisfying the assertion that IOPS is judged against provisioned Iops and not conflated with a throughput percentage metric.",
+          "confidence": "high"
+        },
+        {
+          "text": "The summed IOPS and throughput of all attached volumes are compared with the instance EBS baseline from DescribeInstanceTypes before the volume is named as the binding layer.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent writes: 'c6i.xlarge EBS limits far exceed volume IOPS: c6i.xlarge EBS baseline: 6,000 IOPS and 156.25 MB/s (149.0 MiB/s). Instance total demand (18:25\u201319:33) is about 1,502 IOPS and about 132.9 MiB/s, so there are 4,498 IOPS but only 16.1 MiB/s left.' This instance-level total demand (summed across volumes) is compared to the instance baseline before concluding 'The instance isn't binding today, but its throughput baseline caps how far the io2 volume can be raised.'",
+          "reasoning": "The agent explicitly aggregates instance total IOPS/throughput demand (implying summation across attached volumes) and compares against the c6i.xlarge baseline limits before confirming the io2 volume (not the instance) is the binding constraint. This satisfies the assertion that the comparison was made before naming the volume as binding layer. The presence of 'instance total demand' terminology indicates a summed figure across the 4 attached volumes, consistent with DescribeInstanceTypes-based baseline check.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The recommendation gives an exact target IOPS and is presented as a proposal for operator approval, not as an executed change.",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The agent states: 'Fix: raise IOPS to about 3,000 with ModifyVolume (online).' This is phrased as a recommendation ('Fix:') rather than a statement that the action was already executed, and gives a specific target number (3,000) rather than vague guidance.",
+          "reasoning": "The output gives an exact target IOPS (about 3,000) and frames it as a suggested fix via ModifyVolume, consistent with a proposal for operator approval rather than confirmation of an already-executed change. There is no language indicating the change was carried out (e.g., 'I modified the volume to 3,000 IOPS'); it reads as a recommendation ('Fix: raise IOPS to about 3,000').",
+          "confidence": "high"
+        },
+        {
+          "text": "The binding layer is reported",
+          "evaluator": "regex",
+          "passed": false,
+          "evidence": "Pattern not found in the output"
+        },
+        {
+          "text": "Throughput is stated in MiB/s",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Matched 'MiB/s'"
+        },
+        {
+          "text": "No ModifyVolume call is reported as executed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 5,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 6,
+        "pass_rate": 0.8333
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "5m37s",
+    "cost": "$2.80",
+    "context_window": {
+      "utilization": "11.4%",
+      "compaction_count": 0
+    }
+  }
+}

@@ -3,6 +3,11 @@
 All notable changes to the `live-streaming-event-readiness-review` skill are
 documented here.
 
+## [1.0.1] - 2026-11-10
+
+### Changed
+- `aws-services` lists `Amazon Kinesis Data Streams`, the Kinesis service the skill reads, instead of `Amazon Kinesis`.
+
 ## [1.0.0] - 2026-10-30
 
 ### Added

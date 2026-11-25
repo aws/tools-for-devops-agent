@@ -4,13 +4,13 @@ This skill enables the AWS DevOps Agent to query the Wiz MCP server during an op
 
 ## ⚠️ Important Notice
 
-This skill is provided as sample code. It is read-only - it queries the Wiz MCP server for security context and does not take any action on your resources. Before relying on it in production, validate its behavior in a non-production environment and confirm the authenticating Wiz user has only the read permissions it needs.
+This skill is maintained by Wiz. It is read-only - it queries the Wiz MCP server for security context and does not take any action on your resources. Before relying on it in production, validate its behavior in a non-production environment and confirm the Wiz service account or user it connects with has only the read permissions it needs.
 
 ## Security and Trust
 
 This skill is intentionally a thin stub. Rather than embedding the workflow, it directs AWS DevOps Agent to fetch the current security-auditing workflow from the `devops_resource_auditing_skill` tool on your own Wiz MCP server. That workflow comes from a first-party, trusted source:
 
-- The Wiz MCP server is one you explicitly register, authenticate to via OAuth, and allowlist in your Agent Space - not arbitrary external content.
+- The Wiz MCP server is one you explicitly register, authenticate to with a Wiz service account or Wiz sign-in, and allowlist in your Agent Space - not arbitrary external content.
 - The fetched workflow is read-only guidance for querying Wiz; it drives no changes to your resources.
 - Keeping the workflow server-side lets Wiz maintain and improve it as new capabilities ship, so you always run the current version without updating this skill.
 
@@ -29,8 +29,8 @@ Operational incidents and security incidents often start with the same symptoms.
 ## Prerequisites
 
 - A Wiz tenant monitoring the affected AWS account
-- The Wiz MCP server registered in your Agent Space, with the `?toolset=devops` tools allowlisted. Register the endpoint `https://mcp.app.wiz.io/?toolset=devops`, which exposes the `devops_resource_auditing_skill` tool used to fetch the workflow. The fetched workflow directs the agent to call the other `?toolset=devops` tools, so allowlist the full toolset. All of these tools are read-only, so allowlisting the toolset preserves the read-only guarantee
-- OAuth authentication as a Wiz user with permission to read resources, findings, issues, threats, and detections
+- The Wiz connector, connected in your Agent Space with a Wiz service account or by signing in as a Wiz user, with permission to read resources, findings, issues, threats, and detections
+- All of the connector's tools enabled. The skill fetches its workflow with the `devops_resource_auditing_skill` tool, and the workflow then calls the other tools. All of them are read-only, so enabling the full set preserves the read-only guarantee
 
 ## Limitations
 
@@ -44,11 +44,12 @@ Operational incidents and security incidents often start with the same symptoms.
 This skill is used by the following agent types:
 
 - **Chat tasks** - conversational security-context lookups for a resource
+- **Incident triage** - an early check on whether an alert on a resource may have a security cause
 - **Incident RCA** - automated root cause analysis where an operational anomaly may have a security cause
 
 ## Uploading to AWS DevOps Agent
 
-To deploy this skill to your Agent Space, you can use any of three ways:
+If you connect the Wiz connector, the console offers this skill after you connect. You can also add it yourself in any of three ways:
 
 **Option A: Import from GitHub (recommended)**
 
@@ -68,12 +69,12 @@ If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsa
 2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
 3. Click **Add skill** → **Upload skill**.
 4. Drag and drop the `wiz-security-context.zip` file (max 6 MB).
-5. Select the agent types: **Chat tasks** and **Incident RCA**.
+5. Select the agent types: **Chat tasks**, **Incident triage** and **Incident RCA**.
 6. Click **Upload**.
 
 **Option C: Upload via the Asset API**
 
-Use the AWS DevOps Agent Asset API to programmatically manage skills - useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT` and `INCIDENT_RCA` agent types. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
+Use the AWS DevOps Agent Asset API to programmatically manage skills - useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT`, `INCIDENT_TRIAGE` and `INCIDENT_RCA` agent types. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
 
 For more details, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) in the AWS DevOps Agent User Guide.
 

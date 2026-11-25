@@ -22,6 +22,7 @@ This repository contains:
 - **Skills** — Domain-specific knowledge, decision trees, and step-by-step runbooks that the agent follows during investigations. Use them as-is or as templates for writing your own. Browse the [Skills Catalog](https://aws.github.io/tools-for-devops-agent/skills/).
 - **Custom Agents** — Pre-built agent configurations with system prompts and tool assignments for recurring operational workflows like health reports and operational reviews. Browse the [Custom Agents Catalog](https://aws.github.io/tools-for-devops-agent/custom-agents/).
 - **MCP Servers** — MCP servers tailored to work with skills and custom agents in this repo, extending their capabilities to retrieve necessary information. Browse the [MCP Servers Catalog](https://aws.github.io/tools-for-devops-agent/mcp-servers/).
+- **Connectors** — Definitions of MCP servers that partners host, which customers add to DevOps Agent with nothing to deploy. Browse the [Connectors Catalog](https://aws.github.io/tools-for-devops-agent/connectors/).
 - **CloudFormation Templates** — Infrastructure-as-code for provisioning IAM permissions that skills require and for [forwarding CloudWatch alarms to DevOps Agent investigations](cloudformation/devops-agent-alarm-investigations/).
 
 All tools are contributed and tested according to the [contribution guidelines](CONTRIBUTING.md).
