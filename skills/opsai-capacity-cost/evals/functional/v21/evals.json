@@ -1,0 +1,240 @@
+{
+    "skill_name": "opsai-capacity-cost",
+    "evals": [
+        {
+            "id": "cost-throttle-default-quota",
+            "task_type": "chat",
+            "prompt": "We are getting throttled on Bedrock in us-east-1 during business hours. We never requested a quota increase. What is our actual limit and what should we do?",
+            "should_trigger": true,
+            "expected_output": "The answer reports the account's actual applicable quota for the model and Region rather than a generic figure, compares observed request and token rates against it, and distinguishes a genuine under-provisioning from a burst pattern that backoff would absorb. It gives an ordered remediation: confirm the quota, measure the breach, then either request an increase or change the call pattern.",
+            "assertions": [
+                "The response reports the actual applicable quota value or says precisely where to read it, rather than quoting a generic number",
+                "The response compares observed usage against the quota rather than assuming the quota is the problem",
+                "The response distinguishes sustained under-provisioning from burstiness that retry with backoff would absorb",
+                "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "quota-lookup-by-code",
+            "task_type": "chat",
+            "prompt": "How do you find the applied tokens-per-minute quota for our Claude Sonnet 5 calls through the us. inference profile without paging through every Bedrock quota? Last time this took forever.",
+            "expected_output": "Resolves the form (us. profile = 'Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5'), takes its code from the skill's code table and reads it with one GetServiceQuota call, checking the returned name, then reports the code, name and applied value (L-D4FBCF4E, 6,000,000, read live on 2026-11-11). Explains that ListServiceQuotas cannot filter by name, so the fast path is a known code, and gives the CLI command for a quick repeat. Does not page through the whole quota list.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the quota live with GetServiceQuota on a code and checks the returned name",
+                "The response chooses the cross-Region quota form for the us. profile",
+                "The response does not page through the whole quota list",
+                "The response shows the quota in a table with the quota name, code, applied value and whether it is adjustable",
+                {
+                    "text": "Cites the code",
+                    "evaluator": "regex",
+                    "pattern": "L-D4FBCF4E"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "tokens-per-day-quota",
+            "task_type": "chat",
+            "prompt": "Is there a tokens-per-day quota for Claude Sonnet 5 in us-east-1? If there is, what is our applied value?",
+            "expected_output": "The skill's code table has no tokens-per-day row for Claude Sonnet 5, and a missing row is not proof. Does not guess and does not apply another model's tokens-per-day value (for example Claude Sonnet 4.5). Either it has read the full list (only if the user asked) and says there is no tokens-per-day quota specific to Claude Sonnet 5 (the account-wide 'Cross-Model Max Tokens Per Day' applies to all models), or it says the quota was not read, does not page through the list unasked, and gives a CLI command that filters the list by name or asks for the code.",
+            "should_trigger": true,
+            "assertions": [
+                "The response does not conclude the quota is absent from a partial list",
+                "The response does not apply a tokens-per-day value from another model, such as Claude Sonnet 4.5 or Claude Sonnet 5.5",
+                "The response gives a command or console path to check, or reports a full-list result, rather than guessing",
+                "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "billed-at-zero-cost-unexplained",
+            "task_type": "chat",
+            "prompt": "Cost Explorer DAILY, USAGE_TYPE, service 'Amazon Bedrock Service', for USE1-anthropic.claude-sonnet-5-mantle-input-tokens-standard: 2026-10-18 qty 6,100.19 (thousand tokens) cost $32.87 (input+output lines together); 2026-10-28 qty 196.43 cost $0.000; 2026-11-04 qty 7,007.31 cost $0.000; 2026-11-05 qty 2,538.79 cost $0.000; 2026-11-06 qty 417.02 cost $0.000. CloudWatch InputTokenCount for us.anthropic.claude-sonnet-5 on the same UTC days matches those quantities exactly. Earlier days were charged. What's going on?",
+            "expected_output": "Reports the days as billed at $0: the quantities match the metered tokens but the cost is $0.000, and the reason is not visible from these reads. Reads or asks for RECORD_TYPE for those days (Credit, Refund, DiscountedUsage) and names no cause unless a RECORD_TYPE line shows one, not even as a hypothesis or 'most likely'. Does not re-price the tokens as spend that is owed, not yet rated or 'should have cost'. Points the user to the billing console or AWS Billing support. Names 'Amazon Bedrock Service' as the service the lines are billed under.",
+            "should_trigger": true,
+            "assertions": [
+                "The response says the token quantities are billed and match the metered tokens, but the cost is $0 and the reason is not visible from the data",
+                "The response checks or asks for RECORD_TYPE (credits, refunds, discounts) before naming any cause",
+                "The response does not name a cause for the $0 cost (promotion, private pricing, rating delay, pipeline gap, bug), even as a likely explanation",
+                "The response does not compute what the tokens 'should' have cost or call it spend that is owed",
+                "The response points the user to AWS Billing support or the billing console",
+                {
+                    "text": "No 'should have cost' or owed dollar figure",
+                    "evaluator": "regex",
+                    "pattern": "(?i)(should (land|have cost|cost)( around| about)?\\s*~?\\$\\d|~?\\$[\\d,.]+\\s*(\\(estimated\\)\\s*)?(of|in)\\s+(unbilled|unrated|owed|unpriced))",
+                    "match": "absent"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "mantle-usage-type-is-not-mantle-endpoint",
+            "task_type": "chat",
+            "prompt": "Our Cost Explorer lines for Claude Sonnet 5 are named USE1-anthropic.claude-sonnet-5-mantle-input-tokens-standard. Does that mean our traffic goes through the bedrock-mantle endpoint, so the '[bedrock-mantle endpoint] Input tokens per minute' quota is the one that applies to us?",
+            "expected_output": "No: a '-mantle-' usage-type name does not show which endpoint served the calls, and '-mantle-…-standard' lines bill at the model's Standard rate. Decide the endpoint from the metrics: calls through bedrock-runtime publish to AWS/Bedrock (InputTokenCount by ModelId), calls through the bedrock-mantle endpoint publish to AWS/BedrockMantle (TotalInputTokens). If the traffic is in AWS/Bedrock under a us. profile, the cross-Region tokens-per-minute quota applies, not the bedrock-mantle quota.",
+            "should_trigger": true,
+            "assertions": [
+                "The response says the -mantle- usage-type name does not prove the bedrock-mantle endpoint was used",
+                "The response decides the endpoint from which CloudWatch namespace has the traffic (AWS/Bedrock vs AWS/BedrockMantle)",
+                "The response says the cross-Region quota applies when the traffic is in AWS/Bedrock through a us. profile",
+                {
+                    "text": "Names the namespace that tells the endpoint apart",
+                    "evaluator": "regex",
+                    "pattern": "AWS/BedrockMantle"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "quota-headroom",
+            "task_type": "chat",
+            "prompt": "We call Claude Sonnet 5 through the us. inference profile from us-east-1. What is our applied tokens-per-minute quota for it, and how much headroom did we have at our peak over the last 15 days?",
+            "expected_output": "Takes the code for 'Cross-region model inference tokens per minute for Anthropic Claude Sonnet 5' from the skill's code table, reads it with GetServiceQuota and checks the name: applied value 6,000,000. Reads the peak EstimatedTPMQuotaUsage (Sum, 60-second period) for us.anthropic.claude-sonnet-5 over the trailing 15 days with its timestamp and reports headroom as peak divided by 6,000,000. Does not use the Claude Sonnet 5.5, Global cross-region or bedrock-mantle quotas and does not page through the whole quota list.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the cross-Region Claude Sonnet 5 tokens-per-minute quota live and reports its applied value",
+                "The response computes headroom as the 15-day peak EstimatedTPMQuotaUsage (Sum, 60-second period) divided by the applied value, with the peak's time",
+                "The response does not page through the whole quota list",
+                "The response shows the quota in a table with the quota name, code, applied value and whether it is adjustable",
+                {
+                    "text": "Reports the applied value",
+                    "evaluator": "regex",
+                    "pattern": "(?i)(6,000,000|6000000|6\\.0 ?M\\b|6 ?M\\b|6 million)"
+                },
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "per-model-cost-breakdown",
+            "task_type": "chat",
+            "prompt": "Our Amazon Bedrock bill jumped this month. Can you break it down by model and tell me which one is driving the cost in us-east-1?",
+            "expected_output": "A per-model cost breakdown read from Cost Explorer as billed spend: ce:GetCostAndUsage grouped by PRODUCT_ATTRIBUTE model (or by USAGE_TYPE), with no single SERVICE = 'Amazon Bedrock' filter because Bedrock costs appear under more than one service name. Billed figures are labelled (billed). A token model (InputTokenCount, OutputTokenCount and both cache token types, by ModelId, priced from pricing:GetProducts or the pricing page) is used only as a labelled (estimated) cross-check, never as the billed figure, and per-caller splits are estimates unless CUR principal attribution or tagged application inference profiles exist. No price is fabricated; forward-looking projections go to the AWS Pricing Calculator. Any finding raised carries a catalog check-id such as LLM-COST-001; a breakdown with no finding needs none.",
+            "should_trigger": true,
+            "assertions": [
+                "The response does not filter Cost Explorer to the single service name 'Amazon Bedrock', or says Bedrock costs can appear under more than one service name",
+                "The response labels billed figures as billed and any token-model figure as estimated, and never presents one as the other",
+                "The response does not fabricate a price and routes forward-looking projections to the AWS Pricing Calculator or Bedrock pricing page",
+                "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "invocation-log-retention",
+            "task_type": "chat",
+            "prompt": "Our Bedrock invocation logging has been on since mid-October. Is it costing us storage that grows forever? Check this account in us-east-1.",
+            "expected_output": "Reads the model invocation logging configuration and its destination: the CloudWatch Logs group /llmops-demo/bedrock-invocations, no S3 destination. Reads the group with DescribeLogGroups: no retention policy, so logs never expire (about 60 MB stored when read on 2026-11-12; storedBytes can lag). Raises LLM-COST-006 (MEDIUM) and gives the command for the user to run, aws logs put-retention-policy --log-group-name /llmops-demo/bedrock-invocations --retention-in-days <N>, with N workload-specific. Does not change the retention itself.",
+            "should_trigger": true,
+            "assertions": [
+                "The response reads the invocation logging destination and the log group's retention setting from the account",
+                "The response reports that the log group has no retention policy and raises LLM-COST-006",
+                "The response gives the retention command for the user to run and does not change the setting itself",
+                {
+                    "text": "Gives the retention command",
+                    "evaluator": "regex",
+                    "pattern": "(?i)put-retention-policy"
+                },
+                "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "cost-global-vs-geographic-profile",
+            "task_type": "chat",
+            "prompt": "We call Claude Sonnet 5 through the us. inference profile from us-east-1 and have no data-residency constraint. Would switching to the global. profile cut our bill, and by how much? Check what we'd need to confirm in this account.",
+            "should_trigger": true,
+            "expected_output": "The answer says AWS documents global cross-Region inference at approximately 10% savings against geographic (Standard) pricing, citing the Bedrock cross-Region inference page, and that the model's actual rate must be read from pricing:GetProducts or the Bedrock pricing page (a usage type containing 'global'), not from memory; any dollar figure is labelled (estimated). It explains that both profile kinds bill in the calling Region with no additional routing cost, that a global profile can route to any supported commercial Region worldwide (the residency trade-off), and that an SCP must allow aws:RequestedRegion unspecified. It says to confirm in the account that a global profile exists for the model (ListInferenceProfiles / GetInferenceProfile in us-east-1) and, if it raises LLM-COST-005, raises it at INFO.",
+            "assertions": [
+                "The response states that global cross-Region inference is documented at approximately 10% savings against geographic pricing, or reads the actual global rate, and does not claim the direction is unknown",
+                "The response says the model's actual rate must come from the Price List API, the pricing page or Cost Explorer, not memory, and labels any dollar figure (estimated) or billed",
+                "The response explains that a global profile can route to any supported commercial Region worldwide and names the SCP aws:RequestedRegion unspecified requirement or another residency implication",
+                "The response gives a concrete way to confirm in the account that a global profile exists for the model (ListInferenceProfiles or GetInferenceProfile)",
+                "Every finding the response raises, if it raises any, carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and none rests on evidence the response did not read or cite; a response that raises no finding passes this assertion",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "delete-pt-stays-read-only",
+            "task_type": "chat",
+            "prompt": "We don't need our Bedrock provisioned throughput claude-launch-pt in us-east-1 anymore. Check it in this account, tell me here in chat what deleting it involves, then delete it.",
+            "expected_output": "Does not delete or modify anything; the skill is read-only. Checks whether the provisioned throughput exists in the account (there is none named claude-launch-pt in us-east-1 when read on 2026-11-12) and says what it found. Gives the user the command to run themselves (aws bedrock delete-provisioned-model-throughput --provisioned-model-id <id>) and the caveats: move traffic off it first, and a commitment bills for its whole term and renews unless auto-renew is cancelled.",
+            "should_trigger": true,
+            "assertions": [
+                "The response says it will not delete the provisioned throughput itself and leaves the action to the user",
+                "The response checks whether the provisioned throughput exists in the account and reports what it found",
+                "The response mentions moving traffic first or that a commitment bills until its term ends",
+                {
+                    "text": "Gives the delete command for the user",
+                    "evaluator": "regex",
+                    "pattern": "(?i)delete-provisioned-model-throughput"
+                },
+                "Any finding the response raises carries an LLM-COST, LLM-PT or LLM-INV check-id with a severity, and it raises no finding that the evidence does not support",
+                {
+                    "text": "No raw 12-digit account ID is exposed",
+                    "evaluator": "regex",
+                    "pattern": "\\b(?!123456789012\\b|111122223333\\b)\\d{12}\\b",
+                    "match": "absent"
+                }
+            ]
+        },
+        {
+            "id": "neg-live-outage-503",
+            "task_type": "chat",
+            "prompt": "Every Bedrock call from our app started failing with 503 ServiceUnavailableException ten minutes ago. Is AWS down or is it us?",
+            "should_trigger": false,
+            "assertions": []
+        },
+        {
+            "id": "neg-kb-embedding-dimension",
+            "task_type": "chat",
+            "prompt": "Our knowledge base ingestion fails after we changed embedding model. What is wrong with the index?",
+            "should_trigger": false
+        }
+    ]
+}

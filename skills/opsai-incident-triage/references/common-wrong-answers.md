@@ -1,0 +1,12 @@
+# Common wrong answers
+
+- "There is a 5xx in the logs, so prescribe a config change." A single 5xx among hundreds of successful invocations is transient noise. Measure the server-error rate across the window before ruling, and do not send a customer to fix configuration for a one-off blip.
+- "The metric shows no datapoints, so the value is zero." No datapoints usually means no traffic or the metric was not emitted, not a measured zero (`references/api-quirks.md` §10). Distinguish "nothing reported" from "zero measured" before calling a signal healthy.
+- "Throttling appeared, so the quota is too low." A `ThrottlingException` that cleared on retry is not a quota problem. Check whether backoff with jitter is present and whether the throttle climbs with your own traffic before touching quota (`references/incident-signatures.md`, LLM-INV-007).
+- "No AWS Health event is showing, so it must be the customer's config." Absence of a Health event is not proof of customer config. Keep working the classifier; let 5xx rate, blast radius and onset timing rule.
+- "The agent returns empty, so Bedrock is failing." `PREPARED` status is not what the alias serves (`references/api-quirks.md` §6), and a guardrail intervention looks like empty output but is the guardrail working (§11). Resolve alias to version and check interventions first.
+- "The knowledge base is ACTIVE, so retrieval should work." KB `ACTIVE` only means the wiring is valid (`references/api-quirks.md` §8). Verify a `StartIngestionJob` completed before blaming the service for an empty KB.
+- "5xx dominate, so it is definitely provider-side." Confirm the onset is not correlated with a customer deploy or IAM/model-ID change (classifier Step 4) before landing `PROVIDER`; a correlated onset leans `APPLICATION`.
+- "The operator said agent, so this is AgentCore." An agent loop runs in a Lambda, a container, an EC2 process, or off AWS. Bind from evidence (`references/hosting-bindings.md`); an unbindable path is `locus=UNDETERMINED`, not a Bedrock answer.
+- "The model is self-hosted and the serving layer failed, so this is PROVIDER." The customer is the provider on a self-hosted binding. `PROVIDER` has no referent and the locus is `INFRASTRUCTURE`; reporting otherwise sends the operator looking for a Health event that cannot exist.
+- "No LLM has been found yet, but the symptom sounds like one." Localize the failing component first. Loading this skill before the load condition holds produces a Bedrock-shaped answer to an unscoped question.
