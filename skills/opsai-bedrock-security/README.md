@@ -171,9 +171,9 @@ Guardrails:
 
 All optional. This skill uses them when they are installed:
 [`opsai-bedrock-review`](../../skills/opsai-bedrock-review/) (why a call fails, model access,
-knowledge bases), [`opsai-capacity-cost`](../../skills/opsai-capacity-cost/) (spend and quotas),
+knowledge bases), the OpsAI skill for Bedrock spend and quotas,
 [`opsai-bedrock-agentcore`](../../skills/opsai-bedrock-agentcore/) (agents),
-[`opsai-incident-triage`](../../skills/opsai-incident-triage/) (live failures), and the
+the OpsAI skill for live-failure triage, and the
 `opsai-ml-eval-check`, `opsai-sagemaker-inference` and `opsai-sagemaker-training` skills.
 
 ## Author

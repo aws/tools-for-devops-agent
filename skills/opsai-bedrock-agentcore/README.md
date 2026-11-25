@@ -33,9 +33,9 @@ Related skills are optional: when one is installed this skill uses it for that p
 
 - Bedrock model configuration, invocation logging and knowledge bases → `opsai-bedrock-review`
 - Guardrail policy content → `opsai-bedrock-security`
-- Quota & cost → `opsai-capacity-cost`
+- Quota & cost → the OpsAI skill for Bedrock spend and quotas
 - SageMaker → `opsai-sagemaker-inference`, `opsai-sagemaker-training`
-- Is-this-AWS-or-mine incident triage → `opsai-incident-triage`
+- Is-this-AWS-or-mine incident triage → the OpsAI skill for live-failure triage
 - Model-output quality / evaluation → `opsai-ml-eval-check`
 
 ## Prerequisites

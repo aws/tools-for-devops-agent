@@ -137,9 +137,9 @@ Knowledge bases and RAG:
 
 All optional. This skill uses them when they are installed:
 [`opsai-bedrock-security`](../../skills/opsai-bedrock-security/) (who can call Bedrock, guardrails),
-[`opsai-capacity-cost`](../../skills/opsai-capacity-cost/) (spend and quotas),
+the OpsAI skill for Bedrock spend and quotas,
 [`opsai-bedrock-agentcore`](../../skills/opsai-bedrock-agentcore/) (agents),
-[`opsai-incident-triage`](../../skills/opsai-incident-triage/) (live failures), and the `opsai-ml-eval-check`,
+the OpsAI skill for live-failure triage, and the `opsai-ml-eval-check`,
 `opsai-sagemaker-inference` and `opsai-sagemaker-training` skills.
 
 ## Author
