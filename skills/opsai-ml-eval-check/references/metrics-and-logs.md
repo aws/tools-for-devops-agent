@@ -130,7 +130,7 @@ not from the distribution:
 logs:DescribeMetricFilters --log-group-name <the group from §1>
 ```
 
-An absent `{ $.output.outputBodyJson.stopReason = "max_tokens" }` filter (or one written on the top-level `$.stopReason`, which never matches) is LLM-EVAL-013 — the shift is invisible,
+An absent `{ $.output.outputBodyJson.stopReason = "max_tokens" }` filter (or one written on a top-level `stopReason` field instead of `output.outputBodyJson.stopReason`, which never matches) is LLM-EVAL-013 — the shift is invisible,
 which is a finding in its own right even when the current distribution looks fine. The filter's
 definition and the derived alarm bar are in `references/finish-reason-analysis.md`; the
 telemetry-coverage view of the same filter is outside this skill.

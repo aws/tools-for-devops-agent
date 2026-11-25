@@ -78,7 +78,7 @@ Once logging is on:
    ```
    { $.output.outputBodyJson.stopReason = "max_tokens" }
    ```
-   A filter on the top-level `$.stopReason` matches nothing, because the field is nested under
+   A filter on a top-level `stopReason` field matches nothing, because the field is nested under
    `output.outputBodyJson`. Report such a filter under LLM-EVAL-013 as present but never matching.
 2. Publish it as a **custom metric** (for example namespace `OpsAI/FinishReason/MaxTokens` with a
    `ModelId` dimension).
