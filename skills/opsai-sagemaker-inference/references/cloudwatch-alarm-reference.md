@@ -35,7 +35,7 @@ Reference: https://docs.aws.amazon.com/sagemaker/latest/dg/async-inference-autos
 
 | alarm | namespace / metric | statistic | threshold approach | period | datapoints/eval | source |
 |---|---|---|---|---|---|---|
-| Async backlog growing | `AWS/SageMaker` / `ApproximateBacklogSizePerInstance` | Average | `>` target backlog (set the scaling target from observed burst depth) | 60s | 3 of 3 | Workload-specific |
+| Async backlog growing | `AWS/SageMaker` / `ApproximateBacklogSizePerInstance` (dimension `EndpointName` only; adding `VariantName` returns no datapoints, https://docs.aws.amazon.com/sagemaker/latest/dg/async-inference-monitor.html) | Average | `>` target backlog (set the scaling target from observed burst depth) | 60s | 3 of 3 | Workload-specific |
 | Async oldest-request age | `AWS/SageMaker` / `ApproximateAgeOfOldestRequest` | Maximum | `>` the caller's tolerated wait | 60s | 3 of 3 | Workload-specific |
 | Serverless cold-start | `AWS/SageMaker` / `ModelSetupTime` | p90 | `>` first-call latency budget | 300s | 3 of 3 | Workload-specific |
 
@@ -43,4 +43,4 @@ Use the async backlog metric (`ApproximateBacklogSizePerInstance`) as the **targ
 
 ## Batch transform (lifecycle, not a metric)
 
-Transform jobs are one-shot; alarm on lifecycle via an EventBridge `SageMaker Transform Job State Change` rule matching `TransformJobStatus = Failed` routed to SNS, not on a steady metric (LLM-SM-BATCH-001). Reference: https://docs.aws.amazon.com/sagemaker/latest/dg/batch-transform.html
+Transform jobs are one-shot; alarm on lifecycle via an EventBridge `SageMaker Transform Job State Change` rule matching `TransformJobStatus = Failed` routed to SNS, not on a steady metric (LLM-SM-BATCH-001). Reference: https://docs.aws.amazon.com/sagemaker/latest/dg/batch-transform.html and https://docs.aws.amazon.com/sagemaker/latest/dg/automating-sagemaker-with-eventbridge.html

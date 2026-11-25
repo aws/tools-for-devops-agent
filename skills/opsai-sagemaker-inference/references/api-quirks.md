@@ -7,7 +7,7 @@ SageMaker read-only API responses whose obvious reading is **wrong** or misleadi
 ## 1. SageMaker endpoint `InService` with `CurrentInstanceCount` = 0
 
 - **Trap:** `DescribeEndpoint` `EndpointStatus: InService` reads as healthy and serving.
-- **Correct reading:** A variant can be `InService` yet report `CurrentInstanceCount: 0` (scaled in, scale-to-zero async/serverless, or a misconfigured leftover). `InService` is control-plane state, not proof of serving capacity → check instance count and recent `Invocations` (LLM-SM-003).
+- **Correct reading:** A variant can be `InService` yet report `CurrentInstanceCount: 0` (scaled in, scale-to-zero async/serverless, or a misconfigured leftover). `InService` is control-plane state, not proof of serving capacity → check instance count and recent `Invocations`; async endpoints do not publish `Invocations`, so read the backlog metrics instead (LLM-SM-003).
 
 ## 2. `DescribeScalableTargets` empty ≠ no scaling intended
 
