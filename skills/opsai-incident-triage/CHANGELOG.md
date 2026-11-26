@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- Author is now the aws/aws-support team.
+- New summary, README heading and README introduction. No change to what the skill tells the agent.
+
+## 1.0.0
 
 - Evals: `inv-cross-region-latency` dropped (it scored lower with the skill than without). `incident-signature-match` asks for one reply with no status message first, and the "Answer in this chat" rule now forbids a sub-agent in a chat answer up front, where the agent reads it before delegating.
 - Round-1 functional eval fixes: a chat triage runs its reads itself instead of delegating to a sub-agent, because a sub-agent can return after the turn ends and leave an interim line as the answer. Throttles are read per `ModelId` and with no dimension. Operator-reported symptoms count as evidence, so R4 no longer fires when the account is not connected; a self-hosted serving-layer 5xx across callers rules at R2 as `INFRASTRUCTURE`. Bindings are chosen per stage, so a loop in Lambda calling Bedrock is `bedrock+self-hosted-lambda`. New router and signature row for a feature failing behind a broken dependency while Bedrock metrics look normal. The description names slower calls after a Region move.
