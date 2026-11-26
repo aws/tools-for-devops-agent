@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- Multi-account execution: the `start-automation-execution` example now pins `--document-version <version>`, as the single-account examples in `execution.md` do, so a change to the runbook's default version doesn't change what runs in every target account (#308).
+
 ## 1.0.1
 
 - Added a Demo videos subsection to the README's "How to Use This Skill" section, linking two demo recordings hosted as GitHub attachments. Only README text changes; the published skill package gains no files.
