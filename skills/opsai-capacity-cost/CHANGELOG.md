@@ -1,7 +1,6 @@
 # Changelog
 
-## 1.0.0
-- README heading is now "AI Operations Capacity and Cost Analysis" instead of the folder name; added an explanatory README introduction, which the catalog card shows, and a rewritten `metadata.summary`; the `llms.txt` entry matches.
+
 - Description: covers how-to questions (one run skipped the skill for `quota-lookup-by-code`).
 - Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
 - `related-skills.md` is a markdown link and is listed under References with its load condition (best-practices BP-05).
