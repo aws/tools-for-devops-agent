@@ -2,6 +2,9 @@
 
 All notable changes to this skill are documented here. New entries go at the top.
 
+## [1.0.4] - 2026-11-26
+- Selection matching in `references/data-collection.md` now treats `ListOfTags` entries as OR (a resource matches when at least one entry matches), as the `BackupSelection` API documents. It previously required every entry to match, so a resource tagged with one of several listed tags was reported as outside every selection. `Conditions` stays AND.
+
 ## [1.0.3] - 2026-10-22
 - Updated the link to the skill IAM policies template, which moved to `cloudformation/devops-agent-skill-policies/`.
 
