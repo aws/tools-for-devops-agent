@@ -1,4 +1,5 @@
-# opsai-incident-triage
+# AI Operations Incident Triage
+An incident triage skill for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that works out where a failing or slow model call breaks. It covers Amazon Bedrock, SageMaker endpoints, Bedrock AgentCore and models self-hosted on EC2, ECS, EKS or Lambda, reads the error, throttle and latency signals, and rules whether the fault sits with the provider, your infrastructure or your application before any fix is recommended.
 
 > **Non-production disclaimer.** This skill is an operational aid for triaging the LLM layer of an
 > incident on AWS. It performs **read-only** analysis and returns a fault-locus assessment; it does
