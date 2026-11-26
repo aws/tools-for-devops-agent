@@ -42,7 +42,7 @@ Region on its own before running the rest.
 
 ```bash
 aws ssm start-automation-execution --region <central-region> \
-  --document-name AWS-RestartEC2Instance \
+  --document-name AWS-RestartEC2Instance --document-version <version> \
   --parameters AutomationAssumeRole=arn:aws:iam::123456789012:role/AWS-SystemsManager-AutomationAdministrationRole \
   --target-parameter-name InstanceId \
   --targets Key=tag:<tag-key>,Values=<tag-value> \
@@ -56,6 +56,10 @@ aws ssm start-automation-execution --region <central-region> \
       "TargetLocationMaxErrors": "0"
   }]'
 ```
+
+Pin `--document-version` to the version `describe-document` returned, as in
+[references/automation/execution.md](references/automation/execution.md), so every target account
+runs the document you read.
 
 `Accounts` takes account IDs, OU IDs or the organization root ID. Add
 `"IncludeChildOrganizationUnits": true` to include child OUs, and `"ExcludeAccounts"` to leave
