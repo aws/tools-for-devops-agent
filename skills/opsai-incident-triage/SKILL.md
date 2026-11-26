@@ -15,7 +15,7 @@ metadata:
   author: ankitsri-aws
   version: "1.0.0"
   tier: "aws-support-managed"
-  summary: "Triages live model-call failures (errors, throttling, latency) and rules whether the fault is the provider, infrastructure or app."
+  summary: "An incident triage skill for failing or slow model calls on Bedrock, SageMaker, AgentCore or self-hosted models that rules whether the provider, infrastructure or app is at fault before any fix."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker AI, Amazon Bedrock AgentCore, Amazon CloudWatch"
   aws-devops-agent-skills.technical-domains: "AI/ML, Observability, Operations"

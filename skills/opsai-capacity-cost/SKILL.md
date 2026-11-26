@@ -15,7 +15,7 @@ metadata:
   author: inesttia
   version: "1.0.0"
   tier: "aws-support-managed"
-  summary: "Explains and reduces Amazon Bedrock spend and checks capacity: pricing tiers, Provisioned Throughput, quotas and token drift."
+  summary: "A cost and capacity review skill for Amazon Bedrock: what drives spend by model, team or IAM caller, billing that doesn't add up, quota headroom, and cheaper models and pricing tiers."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, AWS Service Quotas, Amazon CloudWatch"
   aws-devops-agent-skills.technical-domains: "AI/ML, Cost Optimization, Capacity Planning"

@@ -1,8 +1,6 @@
-# opsai-capacity-cost
+# OpsAI Capacity and Cost
 
-A skill for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that reviews Amazon Bedrock
-spend and capacity in your AWS account. It answers three questions: where your Bedrock spend goes,
-whether the capacity you pay for is used, and how close your traffic runs to your Bedrock quotas.
+A cost and capacity review skill for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that analyzes Amazon Bedrock spend and quota headroom. It shows what drives cost by model, team or IAM caller, explains billing that doesn't add up, and recommends more cost-efficient models, pricing tiers, prompt caching and right-sized Provisioned Throughput.
 
 The skill is read-only. It never creates, resizes or deletes a resource, and never changes a quota.
 When a change is recommended, it gives you the exact command to run.
@@ -239,11 +237,6 @@ instead of a new version, which leaves two active copies of the same skill.
 - **Newer models.** A model not yet in the quota code table requires you to supply the quota code
   (see "How quota limits are read").
   
-
-## Author
-
-Ines Attia
-
 ## Version History
 
 See the `CHANGELOG.md` file in this directory.
