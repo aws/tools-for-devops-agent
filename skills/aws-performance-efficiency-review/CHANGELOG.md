@@ -2,6 +2,11 @@
 
 ## [1.0.0] - 2026-11-03
 
+### Fixed
+
+- Well-Architected PERF best-practice IDs now follow the current Framework pages (PERF01 validate requirements, PERF05 monitor, test and improve, PERF02 renumbered); the retired pillar whitepaper numbering is gone from the mapping and every citation.
+- EBS volume deep dives are handed off to the `storage-ebs-operations` skill, the same way AI and ML hops are handed off.
+
 ### Added
 
 - Initial release: a cross-service performance review for AWS workloads, aligned with the Performance Efficiency pillar of the AWS Well-Architected Framework, for DevOps Agent Chat tasks and Incident RCA.

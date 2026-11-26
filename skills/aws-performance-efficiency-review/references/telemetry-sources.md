@@ -14,14 +14,14 @@ Cost direction words: **included** means the capability has no charge of its own
   - Benefit: Step 2 path mapping and Step 3 RED per hop without inference from configuration; SLOs give the target for Step 1.
   - Cost: adds cost (Application Signals requests and spans, CloudWatch pricing).
   - Enable: instrument with the CloudWatch agent or ADOT and turn on Application Signals in the account; read with `application-signals:ListServices`, `GetService`, `ListServiceDependencies`, `ListServiceLevelObjectives`, `GetServiceLevelObjective` and `cloudwatch:GetMetricData` (in the managed policy).
-  - PERF ID: PERF05-BP02
+  - PERF ID: PERF05-BP01
 - **AWS X-Ray.**
   - Measures: service graph with per-edge latency histograms and error rates, trace samples with subsegment timings.
   - Off when: `xray.GetServiceGraph` returns no nodes for the window.
   - Benefit: confirms which hop holds the time inside a request and whether a cache, database or external call is on the path (the cache rule in `diagnosis-rules.md` needs it).
   - Cost: adds cost (traces recorded and retrieved, X-Ray pricing).
   - Enable: X-Ray SDK or ADOT in the service, active tracing on Lambda and API Gateway; read with `xray:GetServiceGraph`, `GetTraceSummaries`, `BatchGetTraces`.
-  - PERF ID: PERF05-BP02
+  - PERF ID: PERF05-BP01
 - **CloudWatch Network Monitoring performance monitors.**
   - Measures: per-path latency, a network impact score and traffic volume for the paths a VPC's flows take, within and across Availability Zones, across Regions and to AWS services, with no agent.
   - Off when: no performance monitor exists for the VPC (list them with the Network Monitoring console or API; verify the metric namespace in the documentation before querying).
@@ -39,7 +39,7 @@ Cost direction words: **included** means the capability has no charge of its own
   - Benefit: memory saturation becomes measurable; Compute Optimizer EC2 recommendations then include memory instead of CPU and network only.
   - Cost: adds cost (custom metrics, CloudWatch pricing).
   - Enable: install and configure the CloudWatch agent on the instances; read with `cloudwatch:GetMetricData`.
-  - PERF ID: PERF02-BP03
+  - PERF ID: PERF02-BP02
 - **Container Insights (ECS, EKS) and enhanced observability or OTel Container Insights (EKS).**
   - Measures: task, pod, node and container CPU, memory, network, restarts and desired versus running counts (`ECS/ContainerInsights`, `ContainerInsights`; OTel Container Insights adds Kubernetes labels and PromQL).
   - Off when: those namespaces return no data for the cluster.
@@ -47,7 +47,7 @@ Cost direction words: **included** means the capability has no charge of its own
   - Cost: adds cost (per metric or per observation, CloudWatch pricing).
   - Enable: cluster setting `containerInsights` on ECS, the `amazon-cloudwatch-observability` add-on on EKS; read with `cloudwatch:GetMetricData`, `logs:StartQuery`.
   - Doc: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContainerInsights.html
-  - PERF ID: PERF02-BP03
+  - PERF ID: PERF02-BP02
 - **Lambda Insights.**
   - Measures: `cpu_total_time`, `init_duration`, `memory_utilization`, `used_memory_max`, `total_memory`, `rx_bytes`, `tx_bytes`, `tmp_used` in namespace `LambdaInsights` (dimension `function_name`), plus per-invocation embedded metric records.
   - Off when: `LambdaInsights` returns no data for the function.
@@ -55,21 +55,21 @@ Cost direction words: **included** means the capability has no charge of its own
   - Cost: adds cost (metrics and logs, CloudWatch pricing; the extension's execution time, Lambda pricing).
   - Enable: attach the Lambda Insights extension layer to the function; read with `cloudwatch:GetMetricData` and `logs:StartQuery`.
   - Doc: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Lambda-Insights.html
-  - PERF ID: PERF02-BP03
+  - PERF ID: PERF02-BP02
 - **AWS Compute Optimizer.**
   - Measures: right-sizing findings and options for EC2, Auto Scaling groups, EBS, Lambda, ECS on Fargate, RDS and Aurora, with projected utilization.
   - Off when: `compute-optimizer.GetEnrollmentStatus` is not `Active`, or a recommendation call returns `OptInRequiredException`.
   - Benefit: Step 6 with 14 days of history and a performance-risk rating per option.
   - Cost: included; enhanced infrastructure metrics (longer history) adds cost (Compute Optimizer pricing).
   - Enable: opt in from the console or `compute-optimizer:UpdateEnrollmentStatus`; read with the seven `compute-optimizer:Get*` actions in the skill's add-on policy.
-  - PERF ID: PERF02-BP04
+  - PERF ID: PERF02-BP03
 - **AWS Trusted Advisor (performance pillar).**
   - Measures: account-level checks that flag over-used or under-used resources and configuration that hurts throughput.
   - Off when: `trustedadvisor:ListRecommendations` returns AccessDenied or a support-plan error.
   - Benefit: a second, independent list of suspects to confirm with the workload's own metrics (Step 5).
   - Cost: requires a Business Support+, Enterprise Support or Unified Operations plan (existing Business Support and Enterprise On-Ramp plans keep access until they end on 2027-01-01; see the Support plans page); no charge per call.
   - Enable: the support plan; read with `trustedadvisor:ListChecks`, `ListRecommendations`, `GetRecommendation`, `ListRecommendationResources` (the skill's add-on policy).
-  - PERF ID: PERF01-BP02
+  - PERF ID: PERF05-BP05
 
 ## Data stores and caches
 
@@ -95,7 +95,7 @@ Cost direction words: **included** means the capability has no charge of its own
   - Benefit: identifies the hot partition key behind DynamoDB throttles and the caller behind a retry storm.
   - Cost: adds cost (per rule and matched log events, CloudWatch pricing).
   - Enable: create a rule, or `UpdateContributorInsights` on the table; read with `cloudwatch:GetInsightRuleReport`.
-  - PERF ID: PERF05-BP02
+  - PERF ID: PERF05-BP01
 
 ## AI and ML
 
@@ -106,7 +106,7 @@ Cost direction words: **included** means the capability has no charge of its own
   - Cost: metrics included; logging adds cost (CloudWatch Logs or S3 pricing).
   - Enable: `bedrock:PutModelInvocationLoggingConfiguration` with a destination in the same account and Region; read with `logs:StartQuery` and `cloudwatch:GetMetricData`.
   - Doc: https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html
-  - PERF ID: PERF05-BP02
+  - PERF ID: PERF05-BP01
 - **SageMaker AI Insights and inference component metrics.**
   - Measures: the CloudWatch dashboard (Performance, Capacity, Reliability) built on SageMaker detailed observability and OpenTelemetry metrics; `/aws/sagemaker/InferenceComponents` publishes `CPUUtilizationNormalized`, `MemoryUtilizationNormalized`, `GPUUtilizationNormalized`, `GPUMemoryUtilizationNormalized`.
   - Off when: no series in `/aws/sagemaker/InferenceComponents` (endpoint has no inference components) or no OTel series for the endpoint.
@@ -114,7 +114,7 @@ Cost direction words: **included** means the capability has no charge of its own
   - Cost: adds cost (OTel metrics, CloudWatch pricing).
   - Enable: inference component metrics need nothing (`EnableEnhancedMetrics` for per-container and per-GPU dimensions); SageMaker AI Insights needs `EnableDetailedObservability` on the endpoint configuration and OTel enrichment in the account. Read with `cloudwatch:GetMetricData`.
   - Doc: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/SageMaker-Insights.html
-  - PERF ID: PERF02-BP03
+  - PERF ID: PERF02-BP02
 - **Accelerated Compute Insights (NVIDIA GPUs on EKS).**
   - Measures: DCGM metrics (`DCGM_FI_DEV_GPU_UTIL`, framebuffer memory, temperature, power, `DCGM_FI_PROF_*` profiling) resolved to the pod and container that used the accelerator, stored as CloudWatch OpenTelemetry metrics and queried with PromQL; inference workloads are detected from engine metrics such as `vllm:num_requests_running`.
   - Off when: the `amazon-cloudwatch-observability` add-on is below v7.0.0 or OTel Container Insights is not enabled (no DCGM series).
@@ -122,7 +122,7 @@ Cost direction words: **included** means the capability has no charge of its own
   - Cost: no charge for the feature; adds cost for the OTel metrics ingested (CloudWatch pricing).
   - Enable: the add-on with OTel Container Insights; read through CloudWatch PromQL queries.
   - Doc: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Accelerated-Compute-Insights.html
-  - PERF ID: PERF02-BP06
+  - PERF ID: PERF02-BP05
 - **Amazon Bedrock AgentCore observability.**
   - Measures: runtime metrics in namespace `AWS/Bedrock-AgentCore` (invocations, throttles, system and user errors, `Latency` to the last token, `OverheadLatency` for the platform share, `SessionCount`, `ActiveSessionCount`), vended CPU and memory usage, and `InvokeAgentRuntime` spans with `latency_ms` and `error_type` once observability is enabled on the agent.
   - Off when: the metrics exist but spans are absent from the agent's log group, or CloudWatch Transaction Search is not enabled (a one-time setup the spans require).
@@ -130,7 +130,7 @@ Cost direction words: **included** means the capability has no charge of its own
   - Cost: metrics included; spans and logs add cost (CloudWatch pricing).
   - Enable: observability on the agent runtime and Transaction Search; read with `cloudwatch:GetMetricData`, `logs:StartQuery`, `xray:GetTraceSummaries`.
   - Doc: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-runtime-metrics.html
-  - PERF ID: PERF05-BP02
+  - PERF ID: PERF05-BP01
 
 ## Investigation experiences (not telemetry)
 

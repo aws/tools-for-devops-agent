@@ -68,8 +68,8 @@ The last four parameters exist so the skill list stays complete and self-documen
 toggling them changes nothing in the stack.
 
 `EnableAwsHealthEvents`, `EnableSupportCases` and the Trusted Advisor actions of
-`EnableAwsPerformanceEfficiencyReview` need an AWS Business or Enterprise Support
-plan for the underlying APIs to return data.
+`EnableAwsPerformanceEfficiencyReview` need a Business Support+, Enterprise Support or Unified Operations
+plan for the underlying APIs to return data (existing Business Support and Enterprise On-Ramp plans keep access until they end on 2027-01-01).
 
 ### Optional add-on permissions
 

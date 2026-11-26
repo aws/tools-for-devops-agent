@@ -1,6 +1,6 @@
 ---
 name: aws-performance-efficiency-review
-description: Cross-service performance analysis of an AWS application, aligned with the Performance Efficiency pillar of the AWS Well-Architected Framework. Use it when a user asks why an application or service is slow, where the latency comes from, what the bottleneck is, whether resources are right-sized, whether the workload will scale for a peak, or whether slow or empty model calls (Bedrock, SageMaker AI) are the model's fault or need a quota increase. Also use it in an investigation when the symptom is high latency, rising p99, timeouts, throttling, retries, backlog, or saturated CPU, memory, IOPS, connections, concurrency or tokens per minute. Finds the constraining resource on the path with the USE and RED methods and returns ranked fixes mapped to Well-Architected best practices. Covers Lambda, ECS, EKS, EC2, EBS, RDS, Aurora, DynamoDB, ElastiCache, SQS, ALB, API Gateway, Bedrock, SageMaker AI, AgentCore and GPU clusters. Triggers on "why is it slow", "bottleneck", "p99", "is Bedrock the problem", "quota".
+description: Cross-service performance analysis of an AWS application against the Performance Efficiency pillar of the AWS Well-Architected Framework. Use it for a performance review, or when a user asks why an application is slow, where the latency comes from, what the bottleneck is, whether resources are right-sized or will scale for a peak, or whether slow model calls (Bedrock, SageMaker AI) are the model's fault or a quota. Also use it in an investigation when the symptom is high latency, rising p99, timeouts, throttling, retries, backlog, or saturated CPU, memory, IOPS, connections, concurrency or token quota. Finds the constraining resource with USE and RED and returns ranked fixes mapped to Well-Architected best practices. Covers Lambda, ECS, EKS, EC2, EBS, RDS, Aurora, DynamoDB, ElastiCache, SQS, ALB, API Gateway, Bedrock, SageMaker AI, AgentCore and GPU clusters. Triggers on "performance review", "why is it slow", "bottleneck", "backlog", "p99", "is Bedrock the problem".
 metadata:
   author: kshtepa
   version: "1.0.0"
@@ -123,7 +123,7 @@ Call `compute-optimizer.GetEnrollmentStatus`; if it is not active, report it as 
 
 ## Step 7: Map to Well-Architected
 
-Map every finding to one Performance Efficiency area (architecture selection, compute and hardware, data management, networking and content delivery, process and culture) and a PERF best-practice ID from `references/well-architected-mapping.md`. Name a design principle in the rationale where it fits.
+Map every finding to one Performance Efficiency area (performance requirements; compute and hardware; data management; networking and content delivery; monitor, test and improve) and a PERF best-practice ID from `references/well-architected-mapping.md`. Name a design principle in the rationale where it fits.
 
 ## Step 8: Report
 

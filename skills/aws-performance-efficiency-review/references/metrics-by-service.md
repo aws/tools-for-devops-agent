@@ -52,6 +52,8 @@ Use one `cloudwatch.GetMetricData` call per resource containing all its metrics.
 | VolumeQueueLength | Average, Maximum | Saturation |
 | BurstBalance | Minimum | gp2, st1 and sc1 burst saturation |
 
+Hand-off: when the review places the bottleneck in the volume itself (sizing IOPS or throughput, a volume modification, snapshots, encryption, burst or quota errors), the skill `storage-ebs-operations` reviews the volume in depth; name it as the next step and keep this review's measurement (the hop's share of latency, the twin comparison, the limit read) as its input.
+
 ## Amazon ECS (namespace `AWS/ECS`, dimensions `ClusterName`, `ServiceName`)
 
 | Metric | Statistic | Use |

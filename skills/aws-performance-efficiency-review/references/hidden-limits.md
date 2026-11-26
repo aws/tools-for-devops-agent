@@ -26,7 +26,7 @@ For each limit: what the limit is, the metric that shows it, how it disguises it
 - **The limit.** gp3 gives a fixed baseline (for example 3,000 IOPS and 125 MB/s to verify against "General Purpose SSD volumes (gp3)") with no burst bucket; more must be explicitly provisioned, and throughput-to-IOPS ratios are capped.
 - **The metric.** `VolumeReadOps` + `VolumeWriteOps` per period against provisioned IOPS; `VolumeReadBytes` + `VolumeWriteBytes` against provisioned throughput.
 - **How it disguises itself.** There is no burst balance metric to watch, so a volume sitting exactly at its provisioned ceiling looks "steady" rather than throttled.
-- **How to confirm.** Read provisioned IOPS and throughput from the volume configuration; compare the computed rate against them.
+- **How to confirm.** Read provisioned IOPS and throughput from the volume configuration; compare the computed rate against them. When the finding is the volume's own sizing or a modification, hand off to the `storage-ebs-operations` skill (see the EBS hand-off in `metrics-by-service.md`).
 
 ## Instance-level EBS bandwidth burst (smaller instance sizes)
 
