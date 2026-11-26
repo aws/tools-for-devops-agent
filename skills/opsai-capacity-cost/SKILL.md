@@ -12,7 +12,7 @@ description: Use this skill when the user wants to understand or cut Amazon Bedr
   invocation-log retention cost; pasted CloudWatch or Cost Explorer output about Bedrock, how-to
   questions included. Not for outages happening now.
 metadata:
-  author: "aws-support"
+  author: "aws/aws-support"
   version: "1.0.0"
   tier: "aws-support-managed"
   summary: "A cost and capacity review skill for Amazon Bedrock: what drives spend by model, team or IAM caller, billing that doesn't add up, quota headroom, and cheaper models and pricing tiers."

@@ -12,7 +12,7 @@ description: Triage a live failure or slowdown where a model call is in the fail
   symptom that names no model call yet ("my agent is down") - localize first - or a failure with no
   model in its path. Never assume "agent" means AgentCore.
 metadata:
-  author: "aws-support"
+  author: "aws/aws-support"
   version: "1.0.0"
   tier: "aws-support-managed"
   summary: "An incident triage skill for Bedrock, SageMaker, AgentCore and self-hosted model calls across LLMOps scenarios. Classifies errors, throttling and latency to find the root cause and the fix."
