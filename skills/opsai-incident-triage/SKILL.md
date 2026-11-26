@@ -13,7 +13,7 @@ description: Triage a live failure or slowdown where a model call is in the fail
   model in its path. Never assume "agent" means AgentCore.
 metadata:
   author: "aws/aws-support"
-  version: "1.0.0"
+  version: "1.0.1"
   tier: "aws-support-managed"
   summary: "An incident triage skill for Bedrock, SageMaker, AgentCore and self-hosted model calls across LLMOps scenarios. Classifies errors, throttling and latency to find the root cause and the fix."
   aws-devops-agent-skills.agent-types: "GENERIC"
