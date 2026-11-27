@@ -1,0 +1,66 @@
+{
+  "version": "v29",
+  "iteration": 2,
+  "eval_id": "sg-block-on-health-check-port",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'elb-health-check-diagnostic' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent's response fully matches the expected output. It identifies Target.Timeout from target health checks, notes health check uses port 8080 while traffic uses port 80, examines the target security group and finds only TCP 80 is allowed from the ALB SG (not 8080), classifies this as SG_BLOCK, and provides both expected fixes: (1) add inbound rule for TCP 8080 from the ALB security group if 8080 is an intentional dedicated health-check port, and (2) set HealthCheckPort to traffic-port as an alternative if the separate port isn't needed. The response also avoids clarifying questions, provides a complete answer without opening a tracked investigation, and doesn't defer to background processing.",
+      "evidence": "\"Root cause: SG_BLOCK... Target security group sg-0b6bcfc734a1140d9: its only inbound rule is TCP 80 from the ALB security group... Nothing allows TCP 8080... Fix 1 (recommended): open the health-check port on the target security group... Fix 2 (alternative): don't use a separate health-check port. Set HealthCheckPort: traffic-port on the target group.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The output names the checks it ruled out or did not need after finding the security-group block (for example NACLs, routability, or resource exhaustion)",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output lists 'Other network checks came back clean' including NACLs ('Both subnets use the default NACL, which allows all traffic in both directions'), routability ('The instance is in us-east-1a, which is enabled on the ALB', 'The listener on port 80 forwards to this target group', 'The ALB security group allows all egress'), and resource exhaustion ('I didn't check CPU, network or EBS metrics. The security group failure explains the timeout, so I stopped there.')",
+          "reasoning": "The agent explicitly enumerates the checks it performed and ruled out (NACLs, AZ enablement, listener forwarding, ALB SG egress) and explains why it didn't need to check resource exhaustion, satisfying the assertion.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output gives both corrected options, with the health-check-port option conditional on 8080 being intentional, and recommends one of them with a reason",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Fix 1: 'open the health-check port on the target security group... add this inbound rule TCP 8080 from sg-07a987566de64b6e2' is marked (recommended). Fix 2: 'don't use a separate health-check port. Set HealthCheckPort: traffic-port... Use this if the 8080 server isn't meant to be a health endpoint.'",
+          "reasoning": "The output gives both options: opening the SG for port 8080 (recommended, with reasoning tied to 8080 being an intentional dedicated health-check port) and the traffic-port alternative explicitly conditioned on '8080 server isn't meant to be a health endpoint'. This matches the assertion's requirement that the health-check-port option be conditional on 8080 being intentional (or not), and one option is recommended with a reason.",
+          "confidence": "high"
+        },
+        {
+          "text": "The output labels the cause class as SG_BLOCK and presents the inbound rule as a change for the operator to apply, without modifying the security group itself",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "Header states '**Root cause: `SG_BLOCK`.**' and the fix section presents 'In the template, this means adding a second SecurityGroupIngress entry...' and ends with 'I haven't changed anything. Please apply the fix through your CloudFormation stack so it doesn't drift from the template.'",
+          "reasoning": "The cause is explicitly labeled SG_BLOCK, the inbound rule change is presented as a template/console change for the operator to apply rather than being executed by the agent, and the agent explicitly states it made no changes itself.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "32s",
+    "cost": "$0.27",
+    "context_window": {
+      "utilization": "6.1%",
+      "compaction_count": 0
+    }
+  }
+}

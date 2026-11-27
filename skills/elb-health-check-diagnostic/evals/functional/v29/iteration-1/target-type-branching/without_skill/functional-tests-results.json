@@ -1,0 +1,62 @@
+{
+  "version": "v29",
+  "iteration": 1,
+  "eval_id": "target-type-branching",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The agent correctly identified the target as a Lambda function behind the ALB and diagnosed the root cause entirely in terms relevant to Lambda targets: handler code returning HTTP 500, invoke resource policy permissions, CloudWatch logs/metrics for errors, and target group health check matcher settings. It did not apply EC2-style security group/NACL reasoning to the Lambda target itself. The only SG mention was about the ALB's own security group allowing 0.0.0.0/0 on port 80, which is a separate, correctly-scoped observation about the load balancer (not the target), explicitly noted as not causing the issue. This shows proper branching based on target type (Lambda vs EC2) and avoids misapplying EC2-specific SG/NACL troubleshooting logic to the Lambda target, matching the expected output criteria.\"",
+      "evidence": "\"Invoke permission: The function's resource policy allows elasticloadbalancing.amazonaws.com to invoke it, so this isn't a permission problem.\" and \"Separately, the ALB is internal but its security group allows port 80 from 0.0.0.0/0. That didn't cause this issue\" \u2014 the diagnosis focuses on Lambda-specific causes (handler code, invoke policy, CloudWatch logs) rather than EC2 SG/NACL logic for the target itself.",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The output recognizes that Lambda targets do not have a target-side security group",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'Separately, the ALB is internal but its security group allows port 80 from 0.0.0.0/0.' This refers to the ALB's security group, not a Lambda target-side SG, and no claim is made that the Lambda target has its own security group, consistent with correct recognition of Lambda's architecture.",
+          "reasoning": "The agent notes a security group issue only at ALB level, and nowhere claims Lambda targets have target-side security groups. It correctly treats the security group concern as an ALB-level SG, implicitly not attributing SG to the Lambda target itself. The output discusses invoke permissions and IAM, not network-level security groups for the Lambda target, which is consistent with recognizing Lambda targets don't have target-side SGs.",
+          "confidence": "medium"
+        },
+        {
+          "text": "The output shows where the 500 comes from by reading the function code or the owning CloudFormation stack template, or states which permission blocked that check",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output includes: 'Handler code: The CloudFormation stack nebula-demo-elb-lambda defines the inline code as: def handler(event, context): return {\"statusCode\": 500, ...}' and 'I couldn't read the deployed code directly because my role is denied lambda:GetFunction.'",
+          "reasoning": "The agent explicitly shows the 500 comes from the CloudFormation stack template's inline handler code, and states it could not read the deployed code directly due to a denied permission (lambda:GetFunction).",
+          "confidence": "high"
+        },
+        {
+          "text": "The output checks the function's resource policy for permission for elasticloadbalancing.amazonaws.com to invoke it, or checks the function's Errors/Throttles, or states why it could not",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The output states: 'Invoke permission: The function's resource policy allows elasticloadbalancing.amazonaws.com to invoke it, so this isn't a permission problem.' and 'Recent invocations complete in about 1\u201320 ms with no errors, timeouts or stack traces in CloudWatch Logs. The ALB's LambdaUserError and LambdaInternalError metrics were empty over the last 2 hours.'",
+          "reasoning": "The agent explicitly checked the function's resource policy for elasticloadbalancing.amazonaws.com invoke permission, and also checked CloudWatch metrics for errors (LambdaUserError, LambdaInternalError) and logs for errors/timeouts, satisfying the assertion via multiple paths.",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 0,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 3,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "42s",
+    "cost": "$0.36",
+    "context_window": {
+      "utilization": "5.7%",
+      "compaction_count": 0
+    }
+  }
+}
