@@ -1,0 +1,138 @@
+{
+  "version": "v8",
+  "iteration": 3,
+  "eval_id": "perf02-credits-chat",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "failed",
+      "message": "Skill 'aws-performance-efficiency-review' was NOT triggered. Other skills loaded: ['discovering-topology', 'exploring-metrics', 'discovering-topology', 'exploring-metrics']",
+      "skill_loads_found": 0
+    },
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a specific diagnosis: identifying that perf-demo-worker-a (t3.micro, standard credit mode) exhausts CPUCreditBalance a few hours into the afternoon and gets throttled to baseline while perf-demo-worker-b (unlimited) stays flat, tying backlog onset to credit exhaustion, checking CPUUtilization alongside credit balance to avoid misreading throttled CPU as idle, and giving ranked recommendations (switch to unlimited/non-burstable first, scale out as interim) each with cost direction and a verification metric. The agent's actual response did none of this \u2014 it explicitly stated it could not pull any AWS data (CloudWatch metrics, topology, consumer identification) due to a tool outage, and instead provided only a generic Little's Law/queueing-theory framework without identifying any specific instances, credit balance issues, or burstable CPU throttling. It asked the user to come back later for real numbers, which also conflicts with the prompt's instruction to answer now without opening a separate investigation or asking anything else. The response completely fails to meet the specific technical diagnosis and recommendations required by the expected output.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause is CPU credit exhaustion on perf-demo-worker-a (CPUCreditBalance drains to zero and the CPU is throttled to baseline in standard mode), separated from its symptoms (rising per-job duration and the growing queue backlog) and not attributed to the job code, SQS or the producer",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent explicitly states it could not pull data and offers no root cause at all: 'I wasn't able to pull the actual AWS data for this... Without that I can't responsibly tell you workers are sized at X, bump to Y'. No mention of CPU credits, CPUCreditBalance, or baseline throttling anywhere.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response breaks the two consumers down per instance, naming perf-demo-worker-a as the degraded consumer and perf-demo-worker-b as unaffected under the same code and load, using the twin to rule out the job code, the queue and the producer",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No per-instance breakdown exists. The agent says it couldn't identify 'what's actually consuming perf-demo-jobs (Lambda, ECS/Fargate, or EC2 ASG workers)' and never names perf-demo-worker-a or perf-demo-worker-b.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reads CPUCreditBalance together with CPUUtilization and notes that in standard mode the instance cannot borrow surplus (CPUSurplusCreditBalance stays at zero) so it is capped at baseline when the balance is exhausted",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of CPUCreditBalance, CPUUtilization, CPUSurplusCreditBalance, or standard mode burstable instance behavior anywhere in the response.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not read worker-a's low, baseline-pinned CPUUtilization as the instance being idle or fine (no false idle or false saturation finding)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "There is no discussion of worker-a's CPUUtilization at all, so no idle/fine misreading could occur, but the assertion requires the response to correctly avoid this specific error in context of actual findings, which are entirely absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states the onset time of the backlog and matches it to worker-a's CPUCreditBalance reaching zero, hours after the 12:00 arrival increase rather than at that increase",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No onset time is stated and no CPUCreditBalance-zero timestamp is given; the agent only discusses hypothetical framework concepts like 'whatever your worst-case backlog depth is when the afternoon ramp starts' without any actual timestamps or the 12:00 reference.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response applies a magnitude check: the backlog growth (NumberOfMessagesSent minus NumberOfMessagesDeleted) or worker-a's throughput drop matches the capacity worker-a lost net of what worker-b absorbs",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No magnitude check is performed; the agent provides no NumberOfMessagesSent/Deleted figures or worker throughput numbers, only a generic Little's Law explanation with hypothetical placeholder numbers like 'if per-job processing time is, say, 2s'.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response compares a busy afternoon window with a quiet morning or overnight window and states the arrival or throughput rate per period rather than a single snapshot",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent references the user-provided rates (82/min afternoon, 7/min overnight) only restating the prompt's numbers, but does not independently pull or compare actual CloudWatch metrics across windows; it explicitly says it could not pull SQS metrics for 'afternoon windows'. No comparison of actual observed rates is made beyond repeating the user's own figures in the Little's Law explanation.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any configuration change in or near the 12:00 window, if mentioned, is ruled out by timing, scope or history and not treated as the cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No configuration change near 12:00 is mentioned at all, so there is nothing to rule out; the assertion cannot be satisfied since the topic never comes up.",
+          "confidence": "low"
+        },
+        {
+          "text": "Each finding cites a metric name, a time window and an observed value",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No findings with metric name + time window + observed value are given anywhere; the response is explicitly a refusal with only a generic framework, using hypothetical placeholders like 'if per-job processing time is, say, 2s' rather than actual observed values.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommendations are ranked and each states both a cost direction (raises, lowers or does not change cost) and the metric that should change if it works",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No ranked recommendations are given. The agent explicitly defers: 'Could you give me a minute or two and ask me to pick this back up?' and gives no concrete recommendation list with cost direction and metric to watch.",
+          "confidence": "high"
+        },
+        {
+          "text": "Scaling out more consumers is ranked below removing the credit cap on worker-a and labelled as an interim or masking measure, because it leaves worker-a throttled",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of worker-a, credit cap removal, or scaling out being ranked as interim/masking; the agent gives no concrete recommendations at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "Treats the backlog on perf-demo-jobs as its own problem: if another backed-up queue in the account (for example perf-demo-08-jobs) is mentioned, it is kept out of scope and not blamed for perf-demo-jobs",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No other queue (e.g., perf-demo-08-jobs) is mentioned anywhere in the response, so there's nothing to check for scope creep, but also no demonstration that perf-demo-jobs was treated as its own isolated problem via actual analysis.",
+          "confidence": "low"
+        },
+        {
+          "text": "After the intake answers are given, the recommendations are sized against the stated target with arithmetic that reaches the expected result: two consumers at full per-job speed give about 110 jobs per minute of capacity against the stated 82 per minute afternoon peak, so the backlog drains and the oldest-message age returns under the stated 60 seconds, the stated growth to about 94 per minute is shown to sit inside that capacity with headroom, and every recommendation stays within the stated cost ceiling and leaves the job payload and the producer schedule unchanged",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No arithmetic sizing against the target is performed; the agent gives only abstract Little's Law commentary with placeholder values and explicitly declines to give concrete numbers, concluding 'I'll pull the real numbers and come back with a concrete worker-count/concurrency and autoscaling-policy recommendation' \u2014 i.e., deferred, not delivered.",
+          "confidence": "high"
+        },
+        {
+          "text": "No raw 12-digit account IDs, ARNs, VPC IDs, private hostnames or private IP addresses are exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 13,
+        "errored": 0,
+        "low_confidence": 2,
+        "total": 14,
+        "pass_rate": 0.0714
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "1m1s",
+    "cost": "$0.51",
+    "context_window": {
+      "utilization": "3.8%",
+      "compaction_count": 0
+    }
+  }
+}

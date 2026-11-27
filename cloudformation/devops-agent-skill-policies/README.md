@@ -60,6 +60,7 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 | `EnableOpsaiCapacityCost` | `opsai-capacity-cost` | `pricing:GetProducts` (published prices, a metadata read); `bedrock-agentcore:ListAgentRuntimes`, `GetAgentRuntime`, `ListGateways`, `GetGateway` for the AgentCore status hand-off. Bedrock, Cost Explorer, CloudWatch, Logs Insights, Service Quotas and `s3:GetLifecycleConfiguration` reads are already covered by the managed policy. Without it the skill prices tokens from the Bedrock pricing page or reports "unpriced: pricing:GetProducts denied"; billed, Provisioned Throughput and quota checks run unchanged |
 | `EnableOpsaiIncidentTriage` | `opsai-incident-triage` | `bedrock:GetFoundationModelAvailability`, `bedrock:GetIngestionJob`; `bedrock-agentcore:ListAgentRuntimes`, `GetAgentRuntime`, `ListGateways`, `GetGateway` for the AgentCore status hand-off. Without it the skill judges model access from the error text, model lifecycle and CloudTrail, and reads ingestion state from the job list |
 | `EnableStorageEbsOperations` | `storage-ebs-operations` | `ec2:GetEbsEncryptionByDefault`, `ec2:GetEbsDefaultKmsKeyId`, `dlm:GetLifecyclePolicies`, `dlm:GetLifecyclePolicy`, `rbin:ListRules`, `rbin:GetRule`, `fis:GetExperiment`, `compute-optimizer:GetEBSVolumeRecommendations` |
+| `EnableAwsPerformanceEfficiencyReview` | `aws-performance-efficiency-review` | `compute-optimizer:GetEnrollmentStatus`, `compute-optimizer:GetEC2InstanceRecommendations`, `compute-optimizer:GetAutoScalingGroupRecommendations`, `compute-optimizer:GetEBSVolumeRecommendations`, `compute-optimizer:GetLambdaFunctionRecommendations`, `compute-optimizer:GetECSServiceRecommendations`, `compute-optimizer:GetRDSDatabaseRecommendations`, `lambda:GetFunctionConcurrency`, `trustedadvisor:ListChecks`, `trustedadvisor:ListRecommendations`, `trustedadvisor:GetRecommendation`, `trustedadvisor:ListRecommendationResources` (Trusted Advisor needs a Business or higher Support plan) |
 | `EnableEksOperationReview` | `aws-eks-operations-review` | None — already covered by the managed policy |
 | `EnableEnrichWithSecurityAgent` | `enrich-with-aws-security-agent` | None — already covered by the managed policy |
 | `EnableCrmInvestigationGuidelines` | `crm-production-investigation-guidelines` | None — already covered by the managed policy |
@@ -68,8 +69,9 @@ Each parameter is `'true'` / `'false'` and defaults to `'true'`. Set a skill to
 The last four parameters exist so the skill list stays complete and self-documenting;
 toggling them changes nothing in the stack.
 
-`EnableAwsHealthEvents` and `EnableSupportCases` need an AWS Business or Enterprise
-Support plan for the underlying APIs to return data.
+`EnableAwsHealthEvents`, `EnableSupportCases` and the Trusted Advisor actions of
+`EnableAwsPerformanceEfficiencyReview` need a Business Support+, Enterprise Support or Unified Operations
+plan for the underlying APIs to return data (existing Business Support and Enterprise On-Ramp plans keep access until they end on 2027-01-01).
 
 ### Optional add-on permissions
 

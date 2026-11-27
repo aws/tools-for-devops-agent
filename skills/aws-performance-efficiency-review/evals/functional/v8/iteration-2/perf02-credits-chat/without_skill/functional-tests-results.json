@@ -1,0 +1,147 @@
+{
+  "version": "v8",
+  "iteration": 2,
+  "eval_id": "perf02-credits-chat",
+  "run_type": "without_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": null,
+    "expected_output": {
+      "result": "failed",
+      "reasoning": "The expected output requires a detailed technical analysis identifying that perf-demo-worker-a (t3.micro, standard credit mode) exhausts its CPU credit balance in the afternoon while perf-demo-worker-b (unlimited) stays flat, tying backlog onset to credit exhaustion, checking CPUUtilization alongside CPUCreditBalance, and providing ranked recommendations (switch to unlimited/non-burstable, scale out as interim) with cost direction and verification metrics. Instead, the agent's response is a generic failure message claiming a tool outage prevented any investigation, and explicitly states no data was pulled and no analysis was performed. It does not identify the CPU credit exhaustion issue, does not differentiate worker-a from worker-b, does not tie backlog timing to credit depletion, and provides no ranked recommendations with cost/verification details. This completely fails to meet the expected output criteria.\"",
+      "confidence": "high"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The root cause is CPU credit exhaustion on perf-demo-worker-a (CPUCreditBalance drains to zero and the CPU is throttled to baseline in standard mode), separated from its symptoms (rising per-job duration and the growing queue backlog) and not attributed to the job code, SQS or the producer",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The agent's response does not mention CPU credit exhaustion, worker-a, or any root cause at all. It states: 'The remote tool service... is unavailable right now... Without that data I can't responsibly size the fix.' No root cause analysis was performed.",
+          "reasoning": "The output explicitly declines to provide any findings due to a tool outage, so no root cause is identified.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response breaks the two consumers down per instance, naming perf-demo-worker-a as the degraded consumer and perf-demo-worker-b as unaffected under the same code and load, using the twin to rule out the job code, the queue and the producer",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of 'perf-demo-worker-a' or 'perf-demo-worker-b' anywhere in the response.",
+          "reasoning": "The response contains no per-instance breakdown of consumers since no data was retrieved.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response reads CPUCreditBalance together with CPUUtilization and notes that in standard mode the instance cannot borrow surplus (CPUSurplusCreditBalance stays at zero) so it is capped at baseline when the balance is exhausted",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of CPUCreditBalance, CPUUtilization, or CPUSurplusCreditBalance in the response.",
+          "reasoning": "These metrics are not referenced at all in the agent's final answer.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response does not read worker-a's low, baseline-pinned CPUUtilization as the instance being idle or fine (no false idle or false saturation finding)",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response does not discuss CPUUtilization for any worker, idle or otherwise.",
+          "reasoning": "No analysis of CPU utilization exists in the output to satisfy or violate this assertion, but since the claim requires a positive demonstration that is absent, it fails.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response states the onset time of the backlog and matches it to worker-a's CPUCreditBalance reaching zero, hours after the 12:00 arrival increase rather than at that increase",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No onset time, no 12:00 reference, no CPUCreditBalance zero-crossing mentioned.",
+          "reasoning": "The response contains no timeline analysis at all.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response applies a magnitude check: the backlog growth (NumberOfMessagesSent minus NumberOfMessagesDeleted) or worker-a's throughput drop matches the capacity worker-a lost net of what worker-b absorbs",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No mention of NumberOfMessagesSent, NumberOfMessagesDeleted, or any magnitude/capacity-loss calculation.",
+          "reasoning": "No magnitude check is performed; the agent explicitly states it could not pull any CloudWatch metrics.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response compares a busy afternoon window with a quiet morning or overnight window and states the arrival or throughput rate per period rather than a single snapshot",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No comparison of afternoon vs overnight/morning windows with rates is given; the response only lists what metrics it would have needed.",
+          "reasoning": "The assertion requires a stated comparison with rates per period, which is absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "Any configuration change in or near the 12:00 window, if mentioned, is ruled out by timing, scope or history and not treated as the cause",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No configuration change near 12:00 is mentioned or ruled out anywhere in the response.",
+          "reasoning": "This topic is entirely absent from the output.",
+          "confidence": "high"
+        },
+        {
+          "text": "Each finding cites a metric name, a time window and an observed value",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response contains no findings with metric name, time window, and observed value; it only lists the categories of data it was unable to pull: 'perf-demo-jobs queue attributes... CloudWatch metrics for queue depth, oldest-message age, and worker duration/throughput during afternoon peak vs overnight.'",
+          "reasoning": "No concrete metric values or time windows are cited for any finding since no findings were made.",
+          "confidence": "high"
+        },
+        {
+          "text": "Recommendations are ranked and each states both a cost direction (raises, lowers or does not change cost) and the metric that should change if it works",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No recommendations are given in the response at all; it states 'Once tools are back, I'll pull the queue and worker metrics and run the Little's-Law sizing math... then give you a concrete worker count/concurrency change.'",
+          "reasoning": "The agent explicitly defers all recommendations to a future turn, so no ranked recommendations with cost direction and metric exist.",
+          "confidence": "high"
+        },
+        {
+          "text": "Scaling out more consumers is ranked below removing the credit cap on worker-a and labelled as an interim or masking measure, because it leaves worker-a throttled",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No discussion of scaling out consumers vs removing a credit cap; these concepts are not mentioned in the response.",
+          "reasoning": "This specific comparison and ranking is entirely absent.",
+          "confidence": "high"
+        },
+        {
+          "text": "Treats the backlog on perf-demo-jobs as its own problem: if another backed-up queue in the account (for example perf-demo-08-jobs) is mentioned, it is kept out of scope and not blamed for perf-demo-jobs",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No other queue (e.g., perf-demo-08-jobs) is mentioned in the response, so there is no blaming of another queue, but also no explicit scoping statement confirming perf-demo-jobs is treated as its own problem.",
+          "reasoning": "Technically no violation occurs (no other queue is blamed), but the assertion's intent (demonstrating a scoped analysis) isn't substantively addressed since no analysis was done at all. Marking as fail since no analysis treating it as its own problem was performed, though absence of violation could be seen as trivially passing - low confidence due to ambiguity.",
+          "confidence": "low"
+        },
+        {
+          "text": "After the intake answers are given, the recommendations are sized against the stated target with arithmetic that reaches the expected result: two consumers at full per-job speed give about 110 jobs per minute of capacity against the stated 82 per minute afternoon peak, so the backlog drains and the oldest-message age returns under the stated 60 seconds, the stated growth to about 94 per minute is shown to sit inside that capacity with headroom, and every recommendation stays within the stated cost ceiling and leaves the job payload and the producer schedule unchanged",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "No arithmetic, capacity calculation (e.g., '110 jobs per minute'), or sizing analysis appears in the response. The response states only that it 'wasn't able to pull' the needed data and that it would run 'Little's-Law sizing math' once tools are back.",
+          "reasoning": "The assertion requires specific arithmetic results (110 jobs/min capacity, headroom vs 94/min, etc.) that are completely absent from this output.",
+          "confidence": "high"
+        },
+        {
+          "text": "No raw 12-digit account IDs, ARNs, VPC IDs, private hostnames or private IP addresses are exposed",
+          "evaluator": "regex",
+          "passed": true,
+          "evidence": "Pattern not found in the output"
+        }
+      ],
+      "summary": {
+        "passed": 1,
+        "failed": 13,
+        "errored": 0,
+        "low_confidence": 1,
+        "total": 14,
+        "pass_rate": 0.0714
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "31s",
+    "cost": "$0.26",
+    "context_window": {
+      "utilization": "3.8%",
+      "compaction_count": 0
+    }
+  }
+}
