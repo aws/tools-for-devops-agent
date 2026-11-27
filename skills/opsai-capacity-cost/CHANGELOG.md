@@ -1,6 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+- Author is now the aws/aws-support team.
+- New summary, README heading and README introduction. No change to what the skill tells the agent.
+
 ## 1.0.0
+
 - Description: covers how-to questions (one run skipped the skill for `quota-lookup-by-code`).
 - Evals: the 12-digit account-ID regex ignores the documentation example IDs `123456789012` and `111122223333`.
 - `related-skills.md` is a markdown link and is listed under References with its load condition (best-practices BP-05).

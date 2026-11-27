@@ -12,10 +12,10 @@ description: Triage a live failure or slowdown where a model call is in the fail
   symptom that names no model call yet ("my agent is down") - localize first - or a failure with no
   model in its path. Never assume "agent" means AgentCore.
 metadata:
-  author: ankitsri-aws
-  version: "1.0.0"
+  author: "aws/aws-support"
+  version: "1.0.1"
   tier: "aws-support-managed"
-  summary: "Triages live model-call failures (errors, throttling, latency) and rules whether the fault is the provider, infrastructure or app."
+  summary: "An incident triage skill for Bedrock, SageMaker, AgentCore and self-hosted model calls across LLMOps scenarios. Classifies errors, throttling and latency to find the root cause and the fix."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker AI, Amazon Bedrock AgentCore, Amazon CloudWatch"
   aws-devops-agent-skills.technical-domains: "AI/ML, Observability, Operations"
