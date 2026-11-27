@@ -337,10 +337,13 @@ Region satisfies **all** of:
 - `Resources` is empty, or contains the resource ARN, or contains a wildcard
   pattern the ARN satisfies (`arn:aws:ec2:*:*:volume/*`)
 - `NotResources` does not contain the ARN or a matching wildcard
-- every entry in `ListOfTags` matches the resource's tags (`StringEquals` on
-  `ConditionKey`/`ConditionValue`)
+- `ListOfTags` is empty, or **at least one** of its entries matches the
+  resource's tags (`StringEquals` on `ConditionKey`/`ConditionValue`).
+  `ListOfTags` entries are combined with OR, so a resource tagged with only one
+  of several listed tags is still selected
 - every entry in `Conditions` matches (`StringEquals`, `StringNotEquals`,
-  `StringLike`, `StringNotLike` on `aws:ResourceTag/<key>`)
+  `StringLike`, `StringNotLike` on `aws:ResourceTag/<key>`). `Conditions`
+  entries are combined with AND
 
 Normalize ARNs before comparison: lowercase the partition, service, and Region
 segments; preserve case in the resource identifier. Some services return ARNs
