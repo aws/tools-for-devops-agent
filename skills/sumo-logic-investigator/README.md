@@ -12,6 +12,8 @@ During an investigation the agent has to pick the right Sumo Logic tool, scope i
 - Run scoped log searches and aggregate the results
 - Check monitors, alerts and SIEM insights related to an incident
 - Inspect dashboards for context
+- Start from SIEM insights for security questions, and review detection rules
+- Hand open-ended or cross-signal questions (metrics, tracing, ingestion volume) to Mobot, Sumo Logic's AI investigation agent
 
 ## Prerequisites
 
@@ -19,6 +21,7 @@ During an investigation the agent has to pick the right Sumo Logic tool, scope i
 
 ## Limitations
 
+- Mobot investigations use the signed-in user's daily Mobot quota, and Mobot isn't enabled for every org. The skill asks before starting one and falls back to the direct tools when it's unavailable.
 - The agent acts as the user who signed in, so it sees only what that user's roles allow.
 - Tools that create dashboards or detection rules, or update insights, change Sumo Logic content. Leave them disabled or require approval.
 
@@ -40,6 +43,7 @@ When you add the Sumo Logic connector, the DevOps Agent console offers this skil
 
 - "Search Sumo Logic for errors from the checkout service in the last hour and group them by message."
 - "Which Sumo Logic monitors fired in the last 24 hours?"
+- "Show open Sumo Logic SIEM insights for this user from the past week."
 
 ### Investigation
 
