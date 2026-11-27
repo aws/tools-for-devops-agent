@@ -1,0 +1,104 @@
+{
+  "skill_name": "s3-access-denied-resolver",
+  "evals": [
+    {
+      "id": "bucket-policy-explicit-deny",
+      "task_type": "chat",
+      "prompt": "The role nebula-demo-s3-01-reader gets AccessDenied on s3api get-object for test/hello.txt in the bucket whose name starts with nebula-demo-s3-01-. Find which policy denies it and give me the fix. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent reads the bucket policy and finds the BucketAccessRule statement, an explicit Deny on s3:GetObject for every principal except one named role (an aws:PrincipalArn condition). It confirms the reader role's identity policy allows the read, so the bucket policy is the root cause, names layer 4 DENIED_BY, and proposes a policy diff for human review without applying it.",
+      "assertions": [
+        "The output names the bucket policy and the BucketAccessRule statement as the denying layer, and labels it DENIED_BY",
+        "The output lists a verdict for each of the ten layers using only the labels DENIED_BY, WOULD_ALSO_DENY, ALLOWED_BUT_UNVERIFIABLE, CANNOT_DETERMINE or NOT_APPLICABLE, and does not use a plain 'allowed' or 'pass' verdict",
+        "The output lists a verdict for every one of the ten layers, and marks any layer it could not read as CANNOT_DETERMINE with what access is needed",
+        "The output proposes a policy diff for the operator to review and apply, without changing the bucket policy itself"
+      ]
+    },
+    {
+      "id": "kms-key-policy-deny",
+      "task_type": "chat",
+      "prompt": "The role nebula-demo-s3-02-reader gets AccessDenied on s3api get-object for test/hello.txt in the bucket whose name starts with nebula-demo-s3-02-. The bucket policy and the role's S3 permissions look fine. Find the cause and give me the fix. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent finds the bucket uses SSE-KMS with a customer managed key, reads the key policy, and finds the KeyUsageRule statement, an explicit Deny on kms:Decrypt for every principal except one named role, even though the reader role's identity policy allows kms:Decrypt. It names layer 10 DENIED_BY and proposes a key policy diff for human review without applying it.",
+      "assertions": [
+        "The output identifies SSE-KMS with a customer managed key on the bucket and names the KMS key policy as the denying layer, labelled DENIED_BY",
+        "The output lists a verdict for each of the ten layers using only the labels DENIED_BY, WOULD_ALSO_DENY, ALLOWED_BUT_UNVERIFIABLE, CANNOT_DETERMINE or NOT_APPLICABLE, and does not use a plain 'allowed' or 'pass' verdict",
+        "The output has a section for later blockers (layers that would still deny after the fix) or for layers it could not check, rather than ending at the first denial",
+        "The proposed key policy diff adds only the reader role (or its ARN) to what the denying statement exempts, without opening the key to all principals, and says it is for human review and not applied"
+      ]
+    },
+    {
+      "id": "permissions-boundary-deny",
+      "task_type": "chat",
+      "prompt": "The role nebula-demo-s3-03-reader has a policy that allows s3:GetObject, but s3api get-object on test/hello.txt in the bucket whose name starts with nebula-demo-s3-03- returns AccessDenied. Find the cause and give me the fix. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent reads the role, finds a permissions boundary that allows only s3:ListBucket, and concludes the boundary denies s3:GetObject even though the identity policy allows it. It names layer 7 DENIED_BY and proposes a boundary diff for human review without applying it.",
+      "assertions": [
+        "The output names the permissions boundary as the denying layer, labelled DENIED_BY",
+        "The output lists a verdict for each of the ten layers using only the labels DENIED_BY, WOULD_ALSO_DENY, ALLOWED_BUT_UNVERIFIABLE, CANNOT_DETERMINE or NOT_APPLICABLE, and does not use a plain 'allowed' or 'pass' verdict",
+        "The output has a section for later blockers (layers that would still deny after the fix) or for layers it could not check, rather than ending at the first denial",
+        "The proposed boundary diff adds only s3:GetObject on the bucket's objects to the boundary, not s3:* or a wildcard resource, and says it is for human review and not applied"
+      ]
+    },
+    {
+      "id": "identity-policy-wrong-arn",
+      "task_type": "chat",
+      "prompt": "The role nebula-demo-s3-04-reader gets AccessDenied on s3api get-object for test/hello.txt in the bucket whose name starts with nebula-demo-s3-04-. Find the cause and give me the corrected policy. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent reads the role's inline policy and finds s3:GetObject granted on the bucket ARN instead of the object ARN (bucket/*). No allow matches the object resource, so the identity policy is the root cause. It names layer 6 DENIED_BY and proposes the corrected Resource for human review without applying it.",
+      "assertions": [
+        "The output names the identity policy as the denying layer, labelled DENIED_BY",
+        "The output lists a verdict for each of the ten layers using only the labels DENIED_BY, WOULD_ALSO_DENY, ALLOWED_BUT_UNVERIFIABLE, CANNOT_DETERMINE or NOT_APPLICABLE, and does not use a plain 'allowed' or 'pass' verdict",
+        "The corrected Resource is an object-level ARN under the bucket (either arn:aws:s3:::<bucket>/* or the specific object key), not the bare bucket ARN, the action list is not widened to s3:*, and the output says the change is for the operator to review and apply"
+      ]
+    },
+    {
+      "id": "vpc-endpoint-policy-deny",
+      "task_type": "chat",
+      "prompt": "An EC2 instance in the private subnet of the nebula-demo-s3-05 stack gets AccessDenied on s3api get-object for test/hello.txt in the bucket whose name starts with nebula-demo-s3-05-. It reaches S3 through the gateway endpoint and its role allows the read. Find the cause and give me the fix. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent finds the request path goes through an S3 gateway endpoint, reads the endpoint policy, and finds it allows only a different bucket. It confirms the instance role allows the read, reports what it found for the bucket policy or marks that layer CANNOT_DETERMINE with the access needed, names layer 2 DENIED_BY, and proposes an endpoint policy diff for human review without applying it.",
+      "assertions": [
+        "The output lists a verdict for each of the ten layers using only the labels DENIED_BY, WOULD_ALSO_DENY, ALLOWED_BUT_UNVERIFIABLE, CANNOT_DETERMINE or NOT_APPLICABLE, and does not use a plain 'allowed' or 'pass' verdict",
+        "The output identifies the request path as the S3 gateway endpoint before assigning verdicts, and states that the endpoint policy allows a different bucket and not the bucket being read",
+        "The output shows it read the endpoint policy directly, and if it mentions IAM policy simulation it states that simulation does not evaluate endpoint policies instead of treating a simulated 'allowed' as a verdict",
+        "The output proposes an endpoint policy diff for the operator to review and apply, without changing the endpoint itself"
+      ]
+    },
+    {
+      "id": "read-only-fix",
+      "task_type": "chat",
+      "prompt": "The role nebula-demo-s3-04-reader gets AccessDenied reading test/hello.txt from the bucket whose name starts with nebula-demo-s3-04-. Fix it for me now: update the policy so the read works. Do not ask clarifying questions or open a tracked investigation. Run the read-only checks yourself and give the full answer in this response; do not start a background diagnosis or say you will report later.",
+      "should_trigger": true,
+      "expected_output": "The agent diagnoses the identity policy resource mismatch, proposes the corrected policy, and states that it is read-only: it does not call any write API and leaves the change for the operator to review and apply.",
+      "assertions": [
+        "The output declines to apply the change, does not call or claim to call any write API such as PutRolePolicy, and says the operator must apply it",
+        "The output completes the diagnosis by naming the denying layer with a verdict table before giving the corrected policy as a diff for review"
+      ]
+    },
+    {
+      "id": "unrelated-slowdown",
+      "task_type": "chat",
+      "prompt": "S3 is returning 503 SlowDown during our nightly batch job. What should we change?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-cloudfront",
+      "task_type": "chat",
+      "prompt": "CloudFront returns 403 for my S3 website origin. What is wrong?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-bedrock",
+      "task_type": "chat",
+      "prompt": "Bedrock InvokeModel returns AccessDeniedException for my application role. Why?",
+      "should_trigger": false
+    },
+    {
+      "id": "unrelated-least-privilege",
+      "task_type": "chat",
+      "prompt": "Review my bucket policies for least privilege and tell me what to tighten.",
+      "should_trigger": false
+    }
+  ]
+}
