@@ -1,21 +1,19 @@
 ---
-name: opsai-incident-triage
-description: Triage a live failure or slowdown where a model call is in the failing path - Amazon
-  Bedrock, SageMaker endpoints, Bedrock AgentCore, or a model self-hosted on EC2, ECS, EKS or Lambda -
-  and rule whether the fault sits with the provider, the customer's infrastructure or the application
-  before any fix is prescribed. Use it when model invocations error or return 5xx, are throttled
-  (429s), time out, return empty, fail after a deploy, fail from a listed but unreachable model,
-  or fail because a dependency behind a model-backed feature broke; when Converse or
-  InvokeModel calls got slower or TimeToFirstToken degraded, including after the caller moved to
-  another Region; and for a bare status question such as "are we being throttled", "any errors", "is
-  this AWS or us". Naming Bedrock, SageMaker or a model API is enough to load it. Do not load it for a
-  symptom that names no model call yet ("my agent is down") - localize first - or a failure with no
-  model in its path. Never assume "agent" means AgentCore.
+name: incident-triage-for-ai-workloads
+description: Triage a live failure or slowdown where a model call is in the failing path. This
+  covers Amazon Bedrock, SageMaker endpoints, Bedrock AgentCore, and models self-hosted on EC2, ECS,
+  EKS or Lambda. Work out whether the fault sits with the provider, the customer's infrastructure or
+  the application before prescribing any fix. Use it when model invocations fail, slow down, hit
+  capacity limits or return unexpected results. It also covers problems that follow a change, problems
+  reaching or accessing a model, and problems in dependencies that model-backed features rely on. Use
+  it for broad status questions too, such as "are we being throttled" or "any errors". Do not load it
+  when no model call has been placed in the failing path yet, or for a failure with no model in its
+  path.
 metadata:
   author: "aws/aws-support"
-  version: "1.0.1"
+  version: "1.0.0"
   tier: "aws-support-managed"
-  summary: "An incident triage skill for Bedrock, SageMaker, AgentCore and self-hosted model calls across LLMOps scenarios. Classifies errors, throttling and latency to find the root cause and the fix."
+  summary: "An incident triage skill for Bedrock, SageMaker, AgentCore and self-hosted model calls. Classifies errors, throttling and latency in AI workloads to find the root cause and the fix."
   aws-devops-agent-skills.agent-types: "GENERIC"
   aws-devops-agent-skills.aws-services: "Amazon Bedrock, Amazon SageMaker AI, Amazon Bedrock AgentCore, Amazon CloudWatch"
   aws-devops-agent-skills.technical-domains: "AI/ML, Observability, Operations"
@@ -54,6 +52,15 @@ the one investigating and the one answering the operator. This skill is the proc
 - **Depth on another stage is optional.** Name the stage and its owner track
   (`references/request-path.md`). When the evidence points there, follow *Related skills (optional)*:
   load the track's skill if it is available, one at a time, otherwise run its fallback check.
+- **Throttling or quota pressure: use `capacity-and-cost-analysis-for-ai-workloads` for the quota, do
+  not discover quotas yourself.** When the finding is a `ThrottlingException`, `InvocationThrottles`
+  against an applied quota, or any "hitting a quota" locus, load
+  `capacity-and-cost-analysis-for-ai-workloads` if it is available and follow its quota-headroom step:
+  it reads the applied quota by its code (`references/quota-codes.md`) in one call. Latency-optimized
+  inference and the `us.`/`eu.`/`global.` cross-region profiles each have their OWN per-minute quota.
+  Never page the full `ListServiceQuotas` list and never hand that to a sub-agent: it is slow (one live
+  investigation blocked about 3.5 minutes on it) and misses the latency-optimized split. If the skill
+  is not available, use the fallback in `references/related-skills.md`.
 
 **Commit to the most likely cause; do not leave it a hypothesis.** "Confirmed" and "most likely" are
 both conclusions. When the evidence fits one cause and contradicts the alternatives, state it as the

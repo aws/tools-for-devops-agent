@@ -1,4 +1,4 @@
-# AI Operations Capacity and Cost Analysis
+# Capacity and Cost Analysis for AI Workloads
 
 A cost and capacity review skill for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that analyzes Amazon Bedrock spend and quota headroom. It shows what drives cost by model, team or IAM caller, explains billing that doesn't add up, and recommends more cost-efficient models, pricing tiers, prompt caching and right-sized Provisioned Throughput.
 
@@ -141,7 +141,7 @@ invocation-log storage. Questions outside that scope belong to these skills. Rel
 | Bedrock Agents and AgentCore | `opsai-bedrock-agentcore` |
 | SageMaker endpoints, batch and endpoint cost | `opsai-sagemaker-inference` |
 | SageMaker training and model registry | `opsai-sagemaker-training` |
-| Throttling or errors happening right now | `opsai-incident-triage` |
+| Throttling or errors happening right now | `incident-triage-for-ai-workloads` |
 | Model quality after a model change | `opsai-ml-eval-check` |
 | Price quotes for future usage | [AWS Pricing Calculator](https://calculator.aws/) |
 
@@ -188,7 +188,7 @@ Build the archive so that `SKILL.md` sits at the root of
 the zip:
 
 ```bash
-cd skills/opsai-capacity-cost && zip -r ../opsai-capacity-cost.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
+cd skills/capacity-and-cost-analysis-for-ai-workloads && zip -r ../capacity-and-cost-analysis-for-ai-workloads.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
 ```
 
 The archive contains `SKILL.md`, `references/` and `assets/`. In the Agent Space console, open

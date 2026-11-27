@@ -1,4 +1,4 @@
-# AI Operations Incident Triage
+# Incident Triage for AI Workloads
 An incident triage skill for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that works out where a failing or slow model call breaks. It covers Amazon Bedrock, SageMaker endpoints, Bedrock AgentCore and models self-hosted on EC2, ECS, EKS or Lambda, reads the error, throttle and latency signals, and rules whether the fault sits with the provider, your infrastructure or your application before any fix is recommended.
 
 > **Non-production disclaimer.** This skill is an operational aid for triaging the LLM layer of an
@@ -10,7 +10,7 @@ An incident triage skill for [AWS DevOps Agent](https://aws.amazon.com/devops-ag
 
 ## What It Does
 
-`opsai-incident-triage` triages the **LLM layer** of a live failure on AWS and answers the question
+`incident-triage-for-ai-workloads` triages the **LLM layer** of a live failure on AWS and answers the question
 customers ask during an incident — **"is this an AWS problem or mine?"** — with evidence instead of a
 guess.
 
@@ -103,10 +103,10 @@ Package the skill as a zip with `SKILL.md` at the **archive root** (not nested u
 from **inside** the skill directory:
 
 ```bash
-cd skills/opsai-incident-triage && zip -r ../opsai-incident-triage.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
+cd skills/incident-triage-for-ai-workloads && zip -r ../incident-triage-for-ai-workloads.zip . -x 'README.md' 'CHANGELOG.md' '.skilleval.yaml' 'evals/*'
 ```
 
-This produces `skills/opsai-incident-triage.zip` containing `SKILL.md` and `references/` at the top level, with
+This produces `skills/incident-triage-for-ai-workloads.zip` containing `SKILL.md` and `references/` at the top level, with
 the repo-management files excluded.
 
 > **CRITICAL:** When uploading, select **All agents** as the Agent Type. The custom `opsai-agent` can
