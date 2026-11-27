@@ -1,5 +1,6 @@
 ---
 name: opsai-capacity-cost
+title: Capacity and Cost Analysis for AI Workloads
 description: Use this skill when the user wants to understand or cut Amazon Bedrock spend, or check
   Bedrock capacity, even if they don't call it a cost review, for example why the bill is high or
   suspiciously low, which model costs the most; tokens billed at $0, or CloudWatch tokens that don't
@@ -13,7 +14,7 @@ description: Use this skill when the user wants to understand or cut Amazon Bedr
   questions included. Not for outages happening now.
 metadata:
   author: "aws/aws-support"
-  version: "1.0.1"
+  version: "1.0.2"
   tier: "aws-support-managed"
   summary: "A cost and capacity review skill for Amazon Bedrock: what drives spend by model, team or IAM caller, billing that doesn't add up, quota headroom, and cheaper models and pricing tiers."
   aws-devops-agent-skills.agent-types: "GENERIC"

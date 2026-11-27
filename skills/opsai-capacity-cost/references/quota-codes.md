@@ -16,7 +16,8 @@ returned name names its model, form and quota type with the Adjustable value sho
 model names (e.g. Claude Fable 5, GPT-6 Sol, Gemma 3) had no row.
 
 Form: `on-demand` = direct model ID; `cross-region` = geographic profile (`us.`, `eu.`, `apac.`, …);
-`global` = `global.` profile; `mantle` = bedrock-mantle endpoint (separate input and output TPM);
+`global` = `global.` profile; `latency-optimized` = `performanceConfig.latency = optimized` (its own
+quota, separate from on-demand and cross-region; api-quirks §23); `mantle` = bedrock-mantle endpoint (separate input and output TPM);
 `per-day` = `Model invocation max tokens per day` (applies to the model; the name says if cross-Region
 calls count double). Most models have no tokens-per-day quota, but this table is a snapshot, not
 proof: if a model or form is not listed, it is "not in the code table". Only a full
@@ -53,6 +54,8 @@ built. Read both codes, use the one whose returned `QuotaName` matches the model
 | Amazon Nova Pro | on-demand | RPM | `L-F2717A44` | no | us-east-1 only |
 | Amazon Nova Pro | on-demand | TPM | `L-CE33604C` | no | us-east-1 only |
 | Amazon Nova Pro | per-day | TPD | `L-D690997B` | no | ✓ |
+| Amazon Nova Pro V1 | latency-optimized | RPM | `L-98317D9C` | no | ✓ |
+| Amazon Nova Pro V1 | latency-optimized | TPM | `L-BF13118E` | no | ✓ |
 | Amazon Titan Text Embeddings V2 | on-demand | RPM | `L-26C560CE` | no | ✓ |
 | Amazon Titan Text Embeddings V2 | on-demand | TPM | `L-DE641971` | no | ✓ |
 | Anthropic Claude Haiku 4.5 | cross-region | RPM | `L-CCA5DF70` | yes | ✓ |

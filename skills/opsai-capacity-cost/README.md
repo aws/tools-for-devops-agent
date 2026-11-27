@@ -1,4 +1,4 @@
-# AI Operations Capacity and Cost Analysis
+# Capacity and Cost Analysis for AI Workloads
 
 A cost and capacity review skill for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that analyzes Amazon Bedrock spend and quota headroom. It shows what drives cost by model, team or IAM caller, explains billing that doesn't add up, and recommends more cost-efficient models, pricing tiers, prompt caching and right-sized Provisioned Throughput.
 
