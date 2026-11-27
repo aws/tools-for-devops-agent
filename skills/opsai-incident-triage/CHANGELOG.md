@@ -1,4 +1,9 @@
 # Changelog
+## 1.0.2
+- Added the `title` "Incident Triage for AI Workloads"; the README heading matches.
+- New `description` and `metadata.summary`.
+- Throttling and quota findings read the quota by its code instead of listing every quota.
+
 
 ## 1.0.1
 

@@ -1,4 +1,8 @@
 # Changelog
+## 1.0.2
+- Added the `title` "Capacity and Cost Analysis for AI Workloads"; the README heading matches.
+- Latency-optimized quotas: where their throttles are reported, and the Nova Pro quota codes.
+
 
 ## 1.0.1
 
