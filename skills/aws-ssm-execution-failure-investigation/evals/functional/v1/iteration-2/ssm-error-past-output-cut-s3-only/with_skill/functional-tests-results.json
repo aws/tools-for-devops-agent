@@ -1,0 +1,73 @@
+{
+  "version": "v1",
+  "iteration": 2,
+  "eval_id": "ssm-error-past-output-cut-s3-only",
+  "run_type": "with_skill",
+  "success": true,
+  "error": null,
+  "understanding_agent_space_skill": null,
+  "tests": {
+    "trigger": {
+      "result": "passed",
+      "message": "Skill 'aws-ssm-execution-failure-investigation' was triggered as expected",
+      "skill_loads_found": 1
+    },
+    "expected_output": {
+      "result": "passed",
+      "reasoning": "The expected output allows for the scenario where the command/instance IDs are fictitious examples and not found in the account. In that case, the agent should state it could not find the command, not guess a cause, explain what it checked, and tell the operator what to send instead. The agent's response does exactly this: it explicitly states it tried to find the command and instance (command lookup, instance invocations, managed-node check, EC2 lookup), all returned empty/invalid, it refuses to guess a cause (\"I don't want to guess a cause for a command I couldn't read\"), explains that output truncation usually means API truncation not script truncation, and provides clear next steps including sending status/StatusDetails/exit code/last 50-100 lines of output, checking CloudWatch Logs stream naming convention, and checking local SSM log files on the instance, plus recommending enabling CloudWatch Logs output to avoid future truncation. While the response does not explicitly mention the S3 StandardOutputUrl specifically (since it couldn't retrieve any command details due to not-found IDs), it does mention CloudWatch Logs as an alternative source, which aligns with \"asks the operator for the end of the output or to enable CloudWatch output.\" Given the IDs were not found, the agent appropriately pivoted to the \"not found\" case described in the expected output, satisfying its requirements: says so, does not guess a cause, explains what it would read, and what the operator should send.",
+      "confidence": "medium"
+    },
+    "assertions": {
+      "assertion_results": [
+        {
+          "text": "The response says the visible output is cut by the API, not that the script stopped there",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"Cut-off output usually means the API stopped returning text, not that the script stopped there.\"",
+          "reasoning": "The response explicitly states the output appears cut by the API's return mechanism, not that the script itself stopped there.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response says the full output is in S3 and is not observable to it, and names the object location",
+          "evaluator": "llm",
+          "passed": false,
+          "evidence": "The response mentions '/var/lib/amazon/ssm/<instance ID>/document/orchestration/<command ID>/' on the instance and CloudWatch Logs stream '<command ID>/<instance ID>/<step>/stdout', but never mentions S3 as the location of full output.",
+          "reasoning": "The assertion specifically requires the response to say the full output is in S3 with an object location named. The response instead references local instance filesystem paths and CloudWatch Logs, not S3.",
+          "confidence": "high"
+        },
+        {
+          "text": "The response asks the operator for the output or to enable CloudWatch output before a fix",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "\"send me the real IDs and I'll walk the command properly. If you can't, send the command's status, StatusDetails, exit code, and the last 50\u2013100 lines of its output... To avoid cut-off output next time, enable CloudWatch Logs output for the command.\"",
+          "reasoning": "The response asks the operator to provide output/logs and suggests enabling CloudWatch Logs output, and this request comes before any 'fix' step (step 5 mentions re-running only after it's fixed, but no actual fix/cause is given).",
+          "confidence": "high"
+        },
+        {
+          "text": "Any cause offered is labelled as an inference, not as proven",
+          "evaluator": "llm",
+          "passed": true,
+          "evidence": "The response states 'I don't want to guess a cause for a command I couldn't read' and does not offer any specific cause for the failure at all, only listing 'Not observable' items as possibilities not proven causes.",
+          "reasoning": "No cause is offered as proven; the response explicitly avoids guessing a cause and instead lists what it could not observe as unproven possibilities, satisfying the requirement that any cause be labeled as inference rather than proven (trivially true since no definitive cause was given).",
+          "confidence": "high"
+        }
+      ],
+      "summary": {
+        "passed": 3,
+        "failed": 1,
+        "errored": 0,
+        "low_confidence": 0,
+        "total": 4,
+        "pass_rate": 0.75
+      }
+    }
+  },
+  "metrics": {
+    "runtime": "21s",
+    "cost": "$0.18",
+    "context_window": {
+      "utilization": "5.9%",
+      "compaction_count": 0
+    }
+  }
+}
