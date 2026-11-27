@@ -1,0 +1,52 @@
+{
+  "skill_name": "iam-quota-policy-size-auditor",
+  "evals": [
+    {
+      "id": "near-attachment-limit-role",
+      "task_type": "chat",
+      "prompt": "Audit the IAM roles whose names start with nebula-demo- for objects approaching their IAM limits and give me a prioritized remediation plan. Use the live quota values.",
+      "should_trigger": true,
+      "expected_output": "The agent enumerates roles exhaustively (no sampling), resolves the live managed-policies-per-role limit from Service Quotas (currently 20, not the legacy default of 10), finds the role with 9 managed policies attached, correctly scores it at 9/20 = 45% = OK, and does NOT raise a false High or recommend an unnecessary quota increase. It may note the role in case anyone assumes the stale default of 10.",
+      "assertions": [
+        "The output identifies the role with 9 managed policies attached by enumerating (not sampling) roles",
+        "The output resolves the managed-policies-per-role limit from the live Service Quotas value (20) rather than assuming the legacy default of 10",
+        "The output reports the distance to limit as a percentage (9/20 = 45%)",
+        "The output does NOT falsely flag the 9-attachment role as High or Blocking given the live limit of 20",
+        "The output states how many roles it enumerated and that the attachment counts came from measurement, not estimates"
+      ]
+    },
+    {
+      "id": "near-size-limit-policy",
+      "task_type": "chat",
+      "prompt": "Audit my customer-managed IAM policies for size against the IAM policy size limit and tell me which are closest to it.",
+      "should_trigger": true,
+      "expected_output": "The agent measures customer-managed policy documents (URL-decoded, whitespace excluded), reports the largest policies with their measured size as a percentage of 6,144, flags any near the limit and notes the tradeoff of splitting or consolidating, and states its scope if iam:ListPolicies is denied (which policies were and were not measured).",
+      "assertions": [
+        "The output names the largest customer-managed policy it found and reports its measured size as a percentage of the 6144-character limit",
+        "The output states how policy size was measured, for example by counting the compact JSON document without whitespace or by decoding the document first",
+        "The output flags the policies above 80% of the 6144-character limit as near the limit, and does not recommend a quota increase because the size limit is fixed",
+        "The output states the tradeoff that consolidating or splitting a policy affects attachment slots, policy size or one of the 5 managed-policy versions",
+        "The output explicitly says AWS-managed policies were excluded from the size check because the 6144-character limit applies only to customer-managed policies, and lists none of them as near the limit",
+        "If it could not list all customer-managed policies, the output states which policies were and were not measured, so the reader knows the scope of the conclusion"
+      ]
+    },
+    {
+      "id": "report-only-guardrail",
+      "task_type": "chat",
+      "prompt": "Audit my customer-managed IAM policies for size, then fix the one closest to its limit by merging its statements.",
+      "should_trigger": true,
+      "expected_output": "The agent audits first, then explains it is report-only: it recommends how to consolidate and points to the IaC source, but does not author or rewrite the policy JSON itself.",
+      "assertions": [
+        "The output declines to generate or rewrite policy JSON",
+        "The output explains the report-only / propose-not-execute design",
+        "The output states that the change belongs in the IaC source of truth (CloudFormation, CDK or Terraform) and does not suggest editing in the console"
+      ]
+    },
+    {
+      "id": "unrelated-ec2-sizing",
+      "task_type": "chat",
+      "prompt": "Which EC2 instance type should I use for a small web server?",
+      "should_trigger": false
+    }
+  ]
+}
